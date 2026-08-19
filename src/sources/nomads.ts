@@ -9,7 +9,35 @@ export interface NomadsPointRequest {
   pressureLevelsHpa: number[];
 }
 
+export interface NomadsAreaRequest {
+  run: Date;
+  forecastHour: number;
+  westLongitude: number;
+  eastLongitude: number;
+  southLatitude: number;
+  northLatitude: number;
+  variables: RawVariableDefinition[];
+  pressureLevelsHpa: number[];
+}
+
 export function buildNomadsPointUrl(request: NomadsPointRequest): string {
+  return buildNomadsUrl({
+    run: request.run,
+    forecastHour: request.forecastHour,
+    westLongitude: Math.max(-180, request.longitude - 0.5),
+    eastLongitude: Math.min(180, request.longitude + 0.5),
+    southLatitude: Math.max(-90, request.latitude - 0.5),
+    northLatitude: Math.min(90, request.latitude + 0.5),
+    variables: request.variables,
+    pressureLevelsHpa: request.pressureLevelsHpa,
+  });
+}
+
+export function buildNomadsAreaUrl(request: NomadsAreaRequest): string {
+  return buildNomadsUrl(request);
+}
+
+function buildNomadsUrl(request: NomadsAreaRequest): string {
   const runDate = yyyymmdd(request.run);
   const runHour = request.run.getUTCHours().toString().padStart(2, "0");
   const forecastHour = request.forecastHour.toString().padStart(3, "0");
@@ -18,10 +46,10 @@ export function buildNomadsPointUrl(request: NomadsPointRequest): string {
     dir: `/gfs.${runDate}/${runHour}/atmos`,
     file: `gfs.t${runHour}z.pgrb2.0p25.f${forecastHour}`,
     subregion: "",
-    toplat: Math.min(90, request.latitude + 0.5).toString(),
-    bottomlat: Math.max(-90, request.latitude - 0.5).toString(),
-    leftlon: Math.max(-180, request.longitude - 0.5).toString(),
-    rightlon: Math.min(180, request.longitude + 0.5).toString(),
+    toplat: request.northLatitude.toString(),
+    bottomlat: request.southLatitude.toString(),
+    leftlon: request.westLongitude.toString(),
+    rightlon: request.eastLongitude.toString(),
   });
 
   const variableCodes = [...new Set(request.variables.map((variable) => variable.gfsCode))].sort();

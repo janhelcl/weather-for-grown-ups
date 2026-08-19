@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { getGfsPressureCatalog } from "./catalog/catalog.js";
+import { AreaSummaryService } from "./core/area-summary.js";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
-import type { ProfileSourceId, VariableId } from "./schema/query.js";
+import type { ProfileSourceId, RawVariableId, VariableId } from "./schema/query.js";
 
 const program = new Command();
 program.name("wfg").description("Weather for Grown Ups — agent-native NOAA GFS access").version("0.1.0");
@@ -53,8 +54,7 @@ program
   .option("--source <nomads|s3>", "Data access path", "nomads")
   .option("--json", "Output JSON")
   .action(async (options) => {
-    const service = new ProfileService();
-    const result = await service.getProfile({
+    const result = await new ProfileService().getProfile({
       latitude: options.lat,
       longitude: options.lon,
       run: options.run,
@@ -63,12 +63,7 @@ program
       pressureLevelsHpa: parseLevels(options.levels),
       source: options.source as ProfileSourceId,
     });
-
-    if (options.json) {
-      console.log(JSON.stringify(result, null, 2));
-      return;
-    }
-
+    if (options.json) return console.log(JSON.stringify(result, null, 2));
     console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
     console.log(`Source ${result.source.provider} (${result.source.access})`);
     console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
@@ -100,18 +95,44 @@ program
       source: options.source as ProfileSourceId,
       maxSteps: options.maxSteps,
     });
-
-    if (options.json) {
-      console.log(JSON.stringify(result, null, 2));
-      return;
-    }
-
+    if (options.json) return console.log(JSON.stringify(result, null, 2));
     console.log(`GFS ${result.run}  ${result.requestedStartTime} → ${result.requestedEndTime}`);
     console.log(`Source ${result.source.provider} (${result.source.access})`);
     console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
     console.table(result.series.flatMap((step) =>
       step.levels.map((level) => ({ valid: step.validTime, f: step.forecastHour, ...level, cacheHit: step.cacheHit })),
     ));
+  });
+
+program
+  .command("area")
+  .description("Summarize one raw GFS pressure field over a bounded area")
+  .requiredOption("--west <number>", "Western longitude", Number)
+  .requiredOption("--east <number>", "Eastern longitude", Number)
+  .requiredOption("--south <number>", "Southern latitude", Number)
+  .requiredOption("--north <number>", "Northern latitude", Number)
+  .option("--run <iso|latest>", "GFS run initialization, or latest complete run", "latest")
+  .requiredOption("--valid <iso>", "Forecast valid time")
+  .requiredOption("--var <id>", "One raw pressure-level variable")
+  .requiredOption("--level <hpa>", "Pressure level in hPa", Number)
+  .option("--max-grid-points <number>", "Maximum estimated GFS grid points", Number, 50000)
+  .option("--json", "Output JSON")
+  .action(async (options) => {
+    const result = await new AreaSummaryService().summarize({
+      westLongitude: options.west,
+      eastLongitude: options.east,
+      southLatitude: options.south,
+      northLatitude: options.north,
+      run: options.run,
+      validTime: options.valid,
+      variable: options.var as RawVariableId,
+      pressureLevelHpa: options.level,
+      maxGridPoints: options.maxGridPoints,
+    });
+    if (options.json) return console.log(JSON.stringify(result, null, 2));
+    console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+    console.log(`${result.variable.id} ${result.variable.pressureHpa} hPa [${result.variable.unit}]`);
+    console.table([result.statistics]);
   });
 
 await program.parseAsync();
