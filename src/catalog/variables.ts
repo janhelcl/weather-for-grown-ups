@@ -15,7 +15,18 @@ export const SUPPORTED_GFS_CODES = [
   "O3MR",
 ] as const;
 
-export type GfsCode = (typeof SUPPORTED_GFS_CODES)[number];
+export const ALL_SUPPORTED_GFS_CODES = [
+  ...SUPPORTED_GFS_CODES,
+  "PRES",
+  "GUST",
+  "CAPE",
+  "CIN",
+  "HPBL",
+  "DPT",
+  "APCP",
+] as const;
+
+export type GfsCode = (typeof ALL_SUPPORTED_GFS_CODES)[number];
 export type RawVariableId = Exclude<VariableId, "wind">;
 
 export interface VariableOutput {
