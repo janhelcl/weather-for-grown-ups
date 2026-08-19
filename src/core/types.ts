@@ -1,4 +1,4 @@
-import type { NonIsobaricFieldId, NonIsobaricLevel } from "../catalog/non-isobaric-fields.js";
+import type { NonIsobaricFieldId } from "../catalog/non-isobaric-fields.js";
 import type { GfsCode } from "../catalog/variables.js";
 import type { RawVariableId } from "../schema/query.js";
 import type { ProfileAccessMethod, ProfileProvider } from "../sources/types.js";
@@ -49,9 +49,13 @@ export type FieldTemporalResult =
       endTime: string;
     };
 
+export type NonIsobaricFieldLevelResult =
+  | { type: "surface" }
+  | { type: "height_above_ground_m"; heightM: number };
+
 export interface NonIsobaricFieldResult {
   id: NonIsobaricFieldId;
-  level: Omit<NonIsobaricLevel, "gribLevel" | "nomadsLevel">;
+  level: NonIsobaricFieldLevelResult;
   temporal: FieldTemporalResult;
   values: Record<string, number>;
 }
