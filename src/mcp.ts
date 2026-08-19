@@ -6,7 +6,7 @@ import { LatestRunResolver } from "./core/latest-run.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
 import { handleGetGfsAreaSummary, handleGetGfsCatalog, handleGetGfsProfile, handleGetGfsTimeSeries, handleGetLatestGfsRun } from "./mcp-tool.js";
-import { areaSummaryQuerySchema, profileQuerySchema, timeSeriesQuerySchema } from "./schema/query.js";
+import { areaSummaryQuerySchema, nonIsobaricFieldIdSchema, profileQuerySchema, timeSeriesQuerySchema } from "./schema/query.js";
 
 const sourceProvenanceSchema = z.object({
   provider: z.union([z.literal("NOAA NOMADS"), z.literal("NOAA AWS Open Data")]),
@@ -23,10 +23,33 @@ const profileLevelSchema = z.object({
   ozoneMixingRatioKgKg: z.number().optional(), windSpeedMs: z.number().optional(), windDirectionDeg: z.number().optional(),
 });
 
+const nonIsobaricLevelSchema = z.union([
+  z.object({ type: z.literal("surface") }),
+  z.object({ type: z.literal("height_above_ground_m"), heightM: z.number() }),
+]);
+
+const fieldTemporalSchema = z.union([
+  z.object({ type: z.literal("instantaneous") }),
+  z.object({
+    type: z.literal("accumulation"),
+    startForecastHour: z.number(),
+    endForecastHour: z.number(),
+    startTime: z.string(),
+    endTime: z.string(),
+  }),
+]);
+
+const nonIsobaricFieldResultSchema = z.object({
+  id: nonIsobaricFieldIdSchema,
+  level: nonIsobaricLevelSchema,
+  temporal: fieldTemporalSchema,
+  values: z.record(z.string(), z.number()),
+});
+
 function createServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
-    { instructions: "Use get_gfs_catalog to discover supported pressure-level fields. Use get_gfs_profile for a point/time, get_gfs_timeseries for a point/range, and summarize_gfs_area for bounded regional min/max/mean. Area means are unweighted grid-point means. Values are model data, not interpretation or safety advice." },
+    { instructions: "Use get_gfs_catalog to discover pressure-level and non-isobaric GFS fields. get_gfs_profile and get_gfs_timeseries can mix isobaric variables with surface, height-above-ground, and accumulation fields. Accumulations carry explicit start/end intervals. summarize_gfs_area remains pressure-level only. Values are model data, not interpretation or safety advice." },
   );
   const latestRunResolver = new LatestRunResolver();
   const profileService = new ProfileService({ latestRunProvider: latestRunResolver });
@@ -34,8 +57,8 @@ function createServer(): McpServer {
   const areaSummaryService = new AreaSummaryService({ latestRunProvider: latestRunResolver });
 
   server.registerTool("get_gfs_catalog", {
-    title: "Get supported GFS pressure catalog",
-    description: "List pressure-level variables, canonical output fields/units, raw GFS codes, and supported isobaric levels.",
+    title: "Get supported GFS field catalog",
+    description: "List pressure-level variables and supported non-isobaric surface, height-above-ground, and accumulation fields with canonical outputs and units.",
     inputSchema: z.object({}),
   }, async () => handleGetGfsCatalog());
 
@@ -46,23 +69,27 @@ function createServer(): McpServer {
   }, async () => handleGetLatestGfsRun(latestRunResolver));
 
   server.registerTool("get_gfs_profile", {
-    title: "Get GFS pressure profile", description: "Return supported atmospheric fields from NOAA GFS 0.25° at requested pressure levels for one point and valid time.",
+    title: "Get GFS point fields", description: "Return supported NOAA GFS 0.25° pressure levels and/or non-isobaric surface, height-above-ground, and accumulation fields for one point and valid time.",
     inputSchema: profileQuerySchema,
     outputSchema: z.object({
       model: z.literal("gfs_0p25"), run: z.string(), validTime: z.string(), forecastHour: z.number(),
       requestedPoint: z.object({ latitude: z.number(), longitude: z.number() }), gridPoint: z.object({ latitude: z.number(), longitude: z.number() }),
-      levels: z.array(profileLevelSchema), source: sourceProvenanceSchema.extend({ cacheHit: z.boolean() }),
+      levels: z.array(profileLevelSchema), fields: z.array(nonIsobaricFieldResultSchema).optional(),
+      source: sourceProvenanceSchema.extend({ cacheHit: z.boolean() }),
     }),
   }, async (query) => handleGetGfsProfile(profileService, query));
 
   server.registerTool("get_gfs_timeseries", {
-    title: "Get GFS point time series", description: "Return native GFS outputs inside a valid-time range for one point and selected pressure-level variables.",
+    title: "Get GFS point time series", description: "Return native GFS outputs inside a valid-time range for one point, including pressure-level and/or non-isobaric fields.",
     inputSchema: timeSeriesQuerySchema,
     outputSchema: z.object({
       model: z.literal("gfs_0p25"), run: z.string(), requestedStartTime: z.string(), requestedEndTime: z.string(),
       requestedPoint: z.object({ latitude: z.number(), longitude: z.number() }), gridPoint: z.object({ latitude: z.number(), longitude: z.number() }),
       source: sourceProvenanceSchema,
-      series: z.array(z.object({ validTime: z.string(), forecastHour: z.number(), levels: z.array(profileLevelSchema), cacheHit: z.boolean() })),
+      series: z.array(z.object({
+        validTime: z.string(), forecastHour: z.number(), levels: z.array(profileLevelSchema),
+        fields: z.array(nonIsobaricFieldResultSchema).optional(), cacheHit: z.boolean(),
+      })),
     }),
   }, async (query) => handleGetGfsTimeSeries(timeSeriesService, query));
 
