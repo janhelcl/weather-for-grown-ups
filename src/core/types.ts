@@ -22,6 +22,12 @@ export interface ProfileLevel {
   windDirectionDeg?: number;
 }
 
+export interface SourceProvenance {
+  provider: ProfileProvider;
+  access: ProfileAccessMethod;
+  decoder: "wgrib2";
+}
+
 export interface ProfileResult {
   model: "gfs_0p25";
   run: string;
@@ -30,10 +36,25 @@ export interface ProfileResult {
   requestedPoint: GridPoint;
   gridPoint: GridPoint;
   levels: ProfileLevel[];
-  source: {
-    provider: ProfileProvider;
-    access: ProfileAccessMethod;
-    decoder: "wgrib2";
+  source: SourceProvenance & {
     cacheHit: boolean;
   };
+}
+
+export interface TimeSeriesStep {
+  validTime: string;
+  forecastHour: number;
+  levels: ProfileLevel[];
+  cacheHit: boolean;
+}
+
+export interface TimeSeriesResult {
+  model: "gfs_0p25";
+  run: string;
+  requestedStartTime: string;
+  requestedEndTime: string;
+  requestedPoint: GridPoint;
+  gridPoint: GridPoint;
+  source: SourceProvenance;
+  series: TimeSeriesStep[];
 }
