@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import { ProfileService } from "./core/profile.js";
+import { handleGetGfsProfile } from "./mcp-tool.js";
 import { profileQuerySchema } from "./schema/query.js";
 
 function createServer(): McpServer {
@@ -44,20 +45,7 @@ function createServer(): McpServer {
         }),
       }),
     },
-    async (query) => {
-      try {
-        const output = await profileService.getProfile(query);
-        return {
-          content: [{ type: "text", text: JSON.stringify(output) }],
-          structuredContent: { ...output },
-        };
-      } catch (error) {
-        return {
-          content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
-          isError: true,
-        };
-      }
-    },
+    async (query) => handleGetGfsProfile(profileService, query),
   );
 
   return server;

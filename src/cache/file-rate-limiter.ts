@@ -3,6 +3,9 @@ import { join } from "node:path";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export const DEFAULT_NOMADS_COOLDOWN_MS = 11_000;
+export const DEFAULT_STALE_LOCK_MS = 120_000;
+
 interface State {
   lastRequestCompletedAt: number;
 }
@@ -13,8 +16,8 @@ export class FileRateLimiter {
 
   constructor(
     private readonly rootDir: string,
-    private readonly cooldownMs = 11_000,
-    private readonly staleLockMs = 120_000,
+    private readonly cooldownMs = DEFAULT_NOMADS_COOLDOWN_MS,
+    private readonly staleLockMs = DEFAULT_STALE_LOCK_MS,
   ) {
     this.lockDir = join(rootDir, "nomads.lock");
     this.statePath = join(rootDir, "nomads-state.json");

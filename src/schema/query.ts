@@ -9,15 +9,15 @@ export const variableIdSchema = z.enum([
 ]);
 
 export const isoDateTimeSchema = z.string().refine(
-  (value) => Number.isFinite(Date.parse(value)),
-  "Expected an ISO-8601 date-time",
+  (value) => /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) && Number.isFinite(Date.parse(value)),
+  "Expected an ISO-8601 date-time with timezone",
 );
 
 export const profileQuerySchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
-  run: isoDateTimeSchema.describe("GFS model initialization time, UTC"),
-  validTime: isoDateTimeSchema.describe("Forecast valid time, UTC"),
+  run: isoDateTimeSchema.describe("GFS model initialization time"),
+  validTime: isoDateTimeSchema.describe("Forecast valid time"),
   variables: z.array(variableIdSchema).min(1),
   pressureLevelsHpa: z.array(z.number().int().min(1).max(1100)).min(1),
 });
