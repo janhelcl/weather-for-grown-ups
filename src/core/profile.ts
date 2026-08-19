@@ -5,9 +5,10 @@ import { NomadsCache, type CachedFile } from "../cache/nomads-cache.js";
 import { expandRequestedVariables } from "../catalog/variables.js";
 import { deriveWind } from "../derived/wind.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
-import { profileQuerySchema, type ProfileQuery } from "../schema/query.js";
+import { profileQuerySchema, type ProfileQueryInput } from "../schema/query.js";
 import { buildNomadsPointUrl } from "../sources/nomads.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
+import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
 import type { DecodedValue, ProfileLevel, ProfileResult } from "./types.js";
 
 export interface ProfileCache {
@@ -24,11 +25,13 @@ export interface ProfileServiceOptions {
   wgrib2Path?: string;
   cache?: ProfileCache;
   decoder?: PointDecoder;
+  latestRunProvider?: LatestRunProvider;
 }
 
 export class ProfileService {
   private readonly decoder: PointDecoder;
   private readonly cache: ProfileCache;
+  private readonly latestRunProvider: LatestRunProvider;
 
   constructor(options: ProfileServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
@@ -44,11 +47,14 @@ export class ProfileService {
     }
 
     this.decoder = options.decoder ?? new Wgrib2Decoder(options.wgrib2Path);
+    this.latestRunProvider = options.latestRunProvider ?? new LatestRunResolver();
   }
 
-  async getProfile(input: ProfileQuery): Promise<ProfileResult> {
+  async getProfile(input: ProfileQueryInput): Promise<ProfileResult> {
     const query = profileQuerySchema.parse(input);
-    const run = parseGfsRun(query.run);
+    const run = query.run === "latest"
+      ? await this.latestRunProvider.resolveLatestRun()
+      : parseGfsRun(query.run);
     const validTime = new Date(query.validTime);
     const fh = forecastHour(run, validTime);
     const variables = expandRequestedVariables(query.variables);

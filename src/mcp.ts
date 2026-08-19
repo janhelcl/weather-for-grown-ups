@@ -1,8 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
+import { LatestRunResolver } from "./core/latest-run.js";
 import { ProfileService } from "./core/profile.js";
-import { handleGetGfsProfile } from "./mcp-tool.js";
+import { handleGetGfsProfile, handleGetLatestGfsRun } from "./mcp-tool.js";
 import { profileQuerySchema } from "./schema/query.js";
 
 function createServer(): McpServer {
@@ -10,17 +11,34 @@ function createServer(): McpServer {
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
       instructions:
-        "Use get_gfs_profile for precise GFS pressure-level data. Values are model data, not interpretation or safety advice.",
+        "Use get_gfs_profile for precise GFS pressure-level data. Omit run to use the latest complete GFS cycle. Values are model data, not interpretation or safety advice.",
     },
   );
-  const profileService = new ProfileService();
+  const latestRunResolver = new LatestRunResolver();
+  const profileService = new ProfileService({ latestRunProvider: latestRunResolver });
+
+  server.registerTool(
+    "get_latest_gfs_run",
+    {
+      title: "Get latest complete GFS run",
+      description: "Resolve the latest complete NOAA GFS 0.25° cycle using NOAA's public cloud mirror.",
+      inputSchema: z.object({}),
+      outputSchema: z.object({
+        model: z.literal("gfs_0p25"),
+        run: z.string(),
+        completeness: z.literal("f384"),
+        discoverySource: z.literal("NOAA AWS Open Data"),
+      }),
+    },
+    async () => handleGetLatestGfsRun(latestRunResolver),
+  );
 
   server.registerTool(
     "get_gfs_profile",
     {
       title: "Get GFS pressure profile",
       description:
-        "Return temperature, relative humidity and/or wind from NOAA GFS 0.25° at requested pressure levels for one point and valid time.",
+        "Return temperature, relative humidity and/or wind from NOAA GFS 0.25° at requested pressure levels for one point and valid time. Run defaults to the latest complete cycle.",
       inputSchema: profileQuerySchema,
       outputSchema: z.object({
         model: z.literal("gfs_0p25"),

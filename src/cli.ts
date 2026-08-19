@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { LatestRunResolver } from "./core/latest-run.js";
 import { ProfileService } from "./core/profile.js";
 import type { VariableId } from "./schema/query.js";
 
@@ -7,11 +8,24 @@ const program = new Command();
 program.name("wfg").description("Weather for Grown Ups — agent-native NOAA GFS access").version("0.1.0");
 
 program
+  .command("latest")
+  .description("Resolve the latest complete GFS 0.25° run")
+  .option("--json", "Output JSON")
+  .action(async (options) => {
+    const run = await new LatestRunResolver().resolveLatestRun();
+    if (options.json) {
+      console.log(JSON.stringify({ model: "gfs_0p25", run: run.toISOString(), completeness: "f384" }, null, 2));
+      return;
+    }
+    console.log(run.toISOString());
+  });
+
+program
   .command("profile")
   .description("Fetch a vertical GFS pressure profile for a point")
   .requiredOption("--lat <number>", "Latitude", Number)
   .requiredOption("--lon <number>", "Longitude", Number)
-  .requiredOption("--run <iso>", "GFS run initialization, e.g. 2026-08-19T06:00:00Z")
+  .option("--run <iso|latest>", "GFS run initialization, or latest complete run", "latest")
   .requiredOption("--valid <iso>", "Forecast valid time")
   .option("--vars <list>", "Comma-separated variables", "temperature,relative_humidity,wind")
   .option("--levels <list>", "Comma-separated pressure levels in hPa", "1000,925,850,700,500")
