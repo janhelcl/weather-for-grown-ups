@@ -7,7 +7,7 @@ const atForecastHour = (run: Date, hour: number) => new Date(run.getTime() + hou
 describe("parseGfsRun", () => {
   it.each(["00", "06", "12", "18"])("accepts the %sZ GFS cycle", (hour) => {
     const value = `2026-08-19T${hour}:00:00Z`;
-    expect(parseGfsRun(value).toISOString()).toBe(value);
+    expect(parseGfsRun(value).toISOString()).toBe(`2026-08-19T${hour}:00:00.000Z`);
   });
 
   it("accepts an offset timestamp that resolves to a GFS UTC cycle", () => {
