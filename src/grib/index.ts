@@ -45,22 +45,34 @@ export function selectPressureByteRanges(
   variableCodes: Iterable<string>,
   pressureLevelsHpa: Iterable<number>,
 ): ByteRange[] {
-  const codes = new Set(variableCodes);
-  const levels = new Set(pressureLevelsHpa);
+  const codes = [...new Set(variableCodes)];
+  const levels = [...new Set(pressureLevelsHpa)];
+  const availablePairs = new Set(
+    records
+      .filter((record) => record.pressureHpa !== undefined)
+      .map((record) => `${record.variable}@${record.pressureHpa}`),
+  );
+  const missing = codes.flatMap((code) =>
+    levels
+      .filter((level) => !availablePairs.has(`${code}@${level}`))
+      .map((level) => `${code}@${level}mb`),
+  );
+  if (missing.length > 0) {
+    throw new Error(`GFS index is missing requested fields: ${missing.join(", ")}`);
+  }
+
+  const codeSet = new Set(codes);
+  const levelSet = new Set(levels);
   const selectedStarts = new Set(
     records
       .filter(
         (record) =>
-          codes.has(record.variable) &&
+          codeSet.has(record.variable) &&
           record.pressureHpa !== undefined &&
-          levels.has(record.pressureHpa),
+          levelSet.has(record.pressureHpa),
       )
       .map((record) => record.startByte),
   );
-
-  if (selectedStarts.size === 0) {
-    throw new Error("No matching pressure-level fields found in GFS index");
-  }
 
   const allStarts = [...new Set(records.map((record) => record.startByte))].sort((a, b) => a - b);
   const indexByStart = new Map(allStarts.map((start, index) => [start, index]));

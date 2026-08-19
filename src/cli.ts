@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { getGfsPressureCatalog } from "./catalog/catalog.js";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
@@ -7,6 +8,25 @@ import type { ProfileSourceId, VariableId } from "./schema/query.js";
 
 const program = new Command();
 program.name("wfg").description("Weather for Grown Ups — agent-native NOAA GFS access").version("0.1.0");
+
+program
+  .command("catalog")
+  .description("Show supported GFS pressure-level variables and levels")
+  .option("--json", "Output JSON")
+  .action((options) => {
+    const catalog = getGfsPressureCatalog();
+    if (options.json) {
+      console.log(JSON.stringify(catalog, null, 2));
+      return;
+    }
+    console.table(catalog.variables.map((variable) => ({
+      id: variable.id,
+      kind: variable.kind,
+      gfs: "gfsCode" in variable ? variable.gfsCode : "derived",
+      output: variable.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
+    })));
+    console.log(`Pressure levels (hPa): ${catalog.pressureLevelsHpa.join(", ")}`);
+  });
 
 program
   .command("latest")
@@ -34,16 +54,13 @@ program
   .option("--json", "Output JSON")
   .action(async (options) => {
     const service = new ProfileService();
-    const variables = parseVariables(options.vars);
-    const pressureLevelsHpa = parseLevels(options.levels);
-
     const result = await service.getProfile({
       latitude: options.lat,
       longitude: options.lon,
       run: options.run,
       validTime: options.valid,
-      variables,
-      pressureLevelsHpa,
+      variables: parseVariables(options.vars),
+      pressureLevelsHpa: parseLevels(options.levels),
       source: options.source as ProfileSourceId,
     });
 
@@ -55,7 +72,7 @@ program
     console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
     console.log(`Source ${result.source.provider} (${result.source.access})`);
     console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
-    console.table(result.levels.map(formatLevel));
+    console.table(result.levels);
   });
 
 program
@@ -92,14 +109,9 @@ program
     console.log(`GFS ${result.run}  ${result.requestedStartTime} → ${result.requestedEndTime}`);
     console.log(`Source ${result.source.provider} (${result.source.access})`);
     console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
-    console.table(
-      result.series.flatMap((step) => step.levels.map((level) => ({
-        valid: step.validTime,
-        f: step.forecastHour,
-        ...formatLevel(level),
-        cache: step.cacheHit ? "hit" : "miss",
-      }))),
-    );
+    console.table(result.series.flatMap((step) =>
+      step.levels.map((level) => ({ valid: step.validTime, f: step.forecastHour, ...level, cacheHit: step.cacheHit })),
+    ));
   });
 
 await program.parseAsync();
@@ -110,24 +122,4 @@ function parseVariables(value: unknown): VariableId[] {
 
 function parseLevels(value: unknown): number[] {
   return String(value).split(",").map((level) => Number(level.trim()));
-}
-
-function formatLevel(level: {
-  pressureHpa: number;
-  temperatureC?: number;
-  relativeHumidityPct?: number;
-  windSpeedMs?: number;
-  windDirectionDeg?: number;
-}) {
-  return {
-    hPa: level.pressureHpa,
-    tempC: round(level.temperatureC),
-    rhPct: round(level.relativeHumidityPct),
-    windMs: round(level.windSpeedMs),
-    windDeg: round(level.windDirectionDeg),
-  };
-}
-
-function round(value: number | undefined): number | undefined {
-  return value === undefined ? undefined : Math.round(value * 10) / 10;
 }

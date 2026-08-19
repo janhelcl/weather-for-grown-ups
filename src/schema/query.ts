@@ -1,10 +1,19 @@
 import * as z from "zod/v4";
+import { isSupportedGfsPressureLevel } from "../catalog/pressure-levels.js";
 
 export const variableIdSchema = z.enum([
   "temperature",
   "relative_humidity",
   "u_wind",
   "v_wind",
+  "geopotential_height",
+  "specific_humidity",
+  "vertical_velocity",
+  "geometric_vertical_velocity",
+  "absolute_vorticity",
+  "total_cloud_cover",
+  "cloud_water_mixing_ratio",
+  "ozone_mixing_ratio",
   "wind",
 ]);
 
@@ -20,6 +29,11 @@ export const runSelectorSchema = z.union([
   isoDateTimeSchema,
 ]).default("latest").describe("GFS model initialization time, or 'latest' for the latest complete cycle");
 
+export const pressureLevelSchema = z.number().refine(
+  isSupportedGfsPressureLevel,
+  "Pressure level is not published by the GFS 0.25° isobaric product",
+);
+
 const pointSchema = {
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
@@ -27,7 +41,7 @@ const pointSchema = {
 
 const atmosphericSelectionSchema = {
   variables: z.array(variableIdSchema).min(1),
-  pressureLevelsHpa: z.array(z.number().int().min(1).max(1100)).min(1),
+  pressureLevelsHpa: z.array(pressureLevelSchema).min(1),
 };
 
 export const profileQuerySchema = z.object({

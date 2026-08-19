@@ -1,7 +1,9 @@
 import { execa } from "execa";
+import { SUPPORTED_GFS_CODES, type GfsCode } from "../catalog/variables.js";
 import type { DecodedValue } from "../core/types.js";
 
-const SUPPORTED_CODES = new Set(["TMP", "RH", "UGRD", "VGRD"] as const);
+const SUPPORTED_CODE_SET = new Set<string>(SUPPORTED_GFS_CODES);
+const CODE_PATTERN = new RegExp(`:(${SUPPORTED_GFS_CODES.join("|")}):`);
 
 export class Wgrib2Decoder {
   constructor(private readonly executable = process.env.WGRIB2_PATH ?? "wgrib2") {}
@@ -40,7 +42,7 @@ export class Wgrib2Decoder {
 }
 
 export function parseWgrib2PointLine(line: string): DecodedValue | null {
-  const codeMatch = line.match(/:(TMP|RH|UGRD|VGRD):/);
+  const codeMatch = line.match(CODE_PATTERN);
   const levelMatch = line.match(/:(\d+(?:\.\d+)?) mb:/);
   const pointMatch = line.match(/lon=([-+\d.eE]+),lat=([-+\d.eE]+)/);
   const valueMatch = line.match(/val=([-+\d.eE]+)/);
@@ -48,10 +50,10 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
   if (!codeMatch || !levelMatch || !pointMatch || !valueMatch) return null;
 
   const code = codeMatch[1];
-  if (!code || !SUPPORTED_CODES.has(code as DecodedValue["code"])) return null;
+  if (!code || !SUPPORTED_CODE_SET.has(code)) return null;
 
   return {
-    code: code as DecodedValue["code"],
+    code: code as GfsCode,
     pressureHpa: Number(levelMatch[1]),
     value: Number(valueMatch[1]),
     gridPoint: {

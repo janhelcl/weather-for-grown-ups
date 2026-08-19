@@ -72,27 +72,15 @@ export class ProfileService {
       pressureLevelsHpa: query.pressureLevelsHpa,
     });
     const values = await this.decoder.extractPoint(cached.path, query.longitude, query.latitude);
-    const levelMap = new Map<number, ProfileLevel>();
+    assertComplete(values, variables.map((variable) => variable.gfsCode), query.pressureLevelsHpa);
 
+    const levelMap = new Map<number, ProfileLevel>();
     for (const pressureHpa of query.pressureLevelsHpa) levelMap.set(pressureHpa, { pressureHpa });
 
     for (const value of values) {
       const level = levelMap.get(value.pressureHpa);
       if (!level) continue;
-      switch (value.code) {
-        case "TMP":
-          level.temperatureC = value.value - 273.15;
-          break;
-        case "RH":
-          level.relativeHumidityPct = value.value;
-          break;
-        case "UGRD":
-          level.uWindMs = value.value;
-          break;
-        case "VGRD":
-          level.vWindMs = value.value;
-          break;
-      }
+      applyDecodedValue(level, value);
     }
 
     if (query.variables.includes("wind")) {
@@ -122,5 +110,34 @@ export class ProfileService {
         cacheHit: cached.cacheHit,
       },
     };
+  }
+}
+
+function applyDecodedValue(level: ProfileLevel, value: DecodedValue): void {
+  switch (value.code) {
+    case "TMP": level.temperatureC = value.value - 273.15; break;
+    case "RH": level.relativeHumidityPct = value.value; break;
+    case "UGRD": level.uWindMs = value.value; break;
+    case "VGRD": level.vWindMs = value.value; break;
+    case "HGT": level.geopotentialHeightGpm = value.value; break;
+    case "SPFH": level.specificHumidityKgKg = value.value; break;
+    case "VVEL": level.verticalVelocityPaS = value.value; break;
+    case "DZDT": level.geometricVerticalVelocityMs = value.value; break;
+    case "ABSV": level.absoluteVorticityS1 = value.value; break;
+    case "TCDC": level.totalCloudCoverPct = value.value; break;
+    case "CLWMR": level.cloudWaterMixingRatioKgKg = value.value; break;
+    case "O3MR": level.ozoneMixingRatioKgKg = value.value; break;
+  }
+}
+
+function assertComplete(values: DecodedValue[], codes: string[], levels: number[]): void {
+  const seen = new Set(values.map((value) => `${value.code}@${value.pressureHpa}`));
+  const missing = [...new Set(codes)].flatMap((code) =>
+    [...new Set(levels)]
+      .filter((level) => !seen.has(`${code}@${level}`))
+      .map((level) => `${code}@${level}mb`),
+  );
+  if (missing.length > 0) {
+    throw new Error(`Decoded GFS data is missing requested fields: ${missing.join(", ")}`);
   }
 }

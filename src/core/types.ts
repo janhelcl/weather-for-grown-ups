@@ -1,3 +1,4 @@
+import type { GfsCode } from "../catalog/variables.js";
 import type { ProfileAccessMethod, ProfileProvider } from "../sources/types.js";
 
 export interface GridPoint {
@@ -6,7 +7,7 @@ export interface GridPoint {
 }
 
 export interface DecodedValue {
-  code: "TMP" | "RH" | "UGRD" | "VGRD";
+  code: GfsCode;
   pressureHpa: number;
   value: number;
   gridPoint: GridPoint;
@@ -18,6 +19,14 @@ export interface ProfileLevel {
   relativeHumidityPct?: number;
   uWindMs?: number;
   vWindMs?: number;
+  geopotentialHeightGpm?: number;
+  specificHumidityKgKg?: number;
+  verticalVelocityPaS?: number;
+  geometricVerticalVelocityMs?: number;
+  absoluteVorticityS1?: number;
+  totalCloudCoverPct?: number;
+  cloudWaterMixingRatioKgKg?: number;
+  ozoneMixingRatioKgKg?: number;
   windSpeedMs?: number;
   windDirectionDeg?: number;
 }
