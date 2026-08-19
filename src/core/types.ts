@@ -1,3 +1,4 @@
+import type { NonIsobaricFieldId, NonIsobaricLevel } from "../catalog/non-isobaric-fields.js";
 import type { GfsCode } from "../catalog/variables.js";
 import type { RawVariableId } from "../schema/query.js";
 import type { ProfileAccessMethod, ProfileProvider } from "../sources/types.js";
@@ -5,9 +6,17 @@ import type { ProfileAccessMethod, ProfileProvider } from "../sources/types.js";
 export interface GridPoint { latitude: number; longitude: number; }
 export interface BoundingBox { westLongitude: number; eastLongitude: number; southLatitude: number; northLatitude: number; }
 
+export interface AccumulationInterval {
+  startForecastHour: number;
+  endForecastHour: number;
+}
+
 export interface DecodedValue {
   code: GfsCode;
-  pressureHpa: number;
+  pressureHpa?: number;
+  surface?: true;
+  heightAboveGroundM?: number;
+  accumulation?: AccumulationInterval;
   value: number;
   gridPoint: GridPoint;
 }
@@ -30,6 +39,23 @@ export interface ProfileLevel {
   windDirectionDeg?: number;
 }
 
+export type FieldTemporalResult =
+  | { type: "instantaneous" }
+  | {
+      type: "accumulation";
+      startForecastHour: number;
+      endForecastHour: number;
+      startTime: string;
+      endTime: string;
+    };
+
+export interface NonIsobaricFieldResult {
+  id: NonIsobaricFieldId;
+  level: Omit<NonIsobaricLevel, "gribLevel" | "nomadsLevel">;
+  temporal: FieldTemporalResult;
+  values: Record<string, number>;
+}
+
 export interface SourceProvenance {
   provider: ProfileProvider;
   access: ProfileAccessMethod;
@@ -44,10 +70,17 @@ export interface ProfileResult {
   requestedPoint: GridPoint;
   gridPoint: GridPoint;
   levels: ProfileLevel[];
+  fields?: NonIsobaricFieldResult[];
   source: SourceProvenance & { cacheHit: boolean };
 }
 
-export interface TimeSeriesStep { validTime: string; forecastHour: number; levels: ProfileLevel[]; cacheHit: boolean; }
+export interface TimeSeriesStep {
+  validTime: string;
+  forecastHour: number;
+  levels: ProfileLevel[];
+  fields?: NonIsobaricFieldResult[];
+  cacheHit: boolean;
+}
 
 export interface TimeSeriesResult {
   model: "gfs_0p25";
