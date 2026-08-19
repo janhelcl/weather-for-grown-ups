@@ -1,4 +1,5 @@
 import * as z from "zod/v4";
+import { NON_ISOBARIC_FIELD_IDS } from "../catalog/non-isobaric-fields.js";
 import { isSupportedGfsPressureLevel } from "../catalog/pressure-levels.js";
 
 export const rawVariableIdSchema = z.enum([
@@ -17,6 +18,7 @@ export const rawVariableIdSchema = z.enum([
 ]);
 
 export const variableIdSchema = z.enum([...rawVariableIdSchema.options, "wind"]);
+export const nonIsobaricFieldIdSchema = z.enum(NON_ISOBARIC_FIELD_IDS);
 export const profileSourceIdSchema = z.enum(["nomads", "s3"]);
 
 export const isoDateTimeSchema = z.string().refine(
@@ -40,9 +42,34 @@ const pointSchema = {
 };
 
 const atmosphericSelectionSchema = {
-  variables: z.array(variableIdSchema).min(1),
-  pressureLevelsHpa: z.array(pressureLevelSchema).min(1),
+  variables: z.array(variableIdSchema).min(1).optional(),
+  pressureLevelsHpa: z.array(pressureLevelSchema).min(1).optional(),
+  fields: z.array(nonIsobaricFieldIdSchema).min(1).optional(),
 };
+
+function validateAtmosphericSelection(
+  query: { variables?: unknown[]; pressureLevelsHpa?: unknown[]; fields?: unknown[] },
+  context: z.RefinementCtx,
+): void {
+  const hasVariables = query.variables !== undefined;
+  const hasPressureLevels = query.pressureLevelsHpa !== undefined;
+  const hasFields = query.fields !== undefined;
+
+  if (hasVariables !== hasPressureLevels) {
+    context.addIssue({
+      code: "custom",
+      path: hasVariables ? ["pressureLevelsHpa"] : ["variables"],
+      message: "Pressure-level variables and pressureLevelsHpa must be supplied together",
+    });
+  }
+  if (!hasVariables && !hasFields) {
+    context.addIssue({
+      code: "custom",
+      path: ["fields"],
+      message: "Request at least one pressure-level variable or non-isobaric field",
+    });
+  }
+}
 
 export const profileQuerySchema = z.object({
   ...pointSchema,
@@ -50,7 +77,7 @@ export const profileQuerySchema = z.object({
   validTime: isoDateTimeSchema.describe("Forecast valid time"),
   ...atmosphericSelectionSchema,
   source: profileSourceIdSchema.default("nomads").describe("Data access path: NOMADS geographic subset or NOAA AWS byte ranges"),
-});
+}).superRefine(validateAtmosphericSelection);
 
 export const DEFAULT_TIME_SERIES_MAX_STEPS = 160;
 export const GFS_TOTAL_NATIVE_FORECAST_STEPS = 209;
@@ -63,7 +90,7 @@ export const timeSeriesQuerySchema = z.object({
   ...atmosphericSelectionSchema,
   source: profileSourceIdSchema.default("s3").describe("S3 is the default for multi-time access; NOMADS remains available explicitly"),
   maxSteps: z.number().int().min(1).max(GFS_TOTAL_NATIVE_FORECAST_STEPS).default(DEFAULT_TIME_SERIES_MAX_STEPS),
-});
+}).superRefine(validateAtmosphericSelection);
 
 export const DEFAULT_AREA_MAX_GRID_POINTS = 50_000;
 export const GFS_GRID_SPACING_DEG = 0.25;
@@ -97,6 +124,7 @@ export const areaSummaryQuerySchema = z.object({
 
 export type RawVariableId = z.infer<typeof rawVariableIdSchema>;
 export type VariableId = z.infer<typeof variableIdSchema>;
+export type NonIsobaricFieldId = z.infer<typeof nonIsobaricFieldIdSchema>;
 export type ProfileSourceId = z.infer<typeof profileSourceIdSchema>;
 export type ProfileQuery = z.output<typeof profileQuerySchema>;
 export type ProfileQueryInput = z.input<typeof profileQuerySchema>;
