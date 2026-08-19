@@ -3,6 +3,7 @@ name: Live E2E
 on:
   push:
     branches: [e2e-live-20260819]
+  pull_request:
 
 jobs:
   live-e2e:
