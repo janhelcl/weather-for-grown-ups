@@ -55,8 +55,9 @@ export class TimeSeriesService {
         longitude: query.longitude,
         run: run.toISOString(),
         validTime: validTimeForForecastHour(run, forecastHourValue).toISOString(),
-        variables: query.variables,
-        pressureLevelsHpa: query.pressureLevelsHpa,
+        ...(query.variables === undefined ? {} : { variables: query.variables }),
+        ...(query.pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa: query.pressureLevelsHpa }),
+        ...(query.fields === undefined ? {} : { fields: query.fields }),
         source: query.source,
       }),
     );
@@ -95,6 +96,7 @@ export class TimeSeriesService {
         validTime: profile.validTime,
         forecastHour: profile.forecastHour,
         levels: profile.levels,
+        ...(profile.fields === undefined ? {} : { fields: profile.fields }),
         cacheHit: profile.source.cacheHit,
       })),
     };

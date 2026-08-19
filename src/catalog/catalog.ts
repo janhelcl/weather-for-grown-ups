@@ -1,3 +1,4 @@
+import { NON_ISOBARIC_FIELD_CATALOG } from "./non-isobaric-fields.js";
 import { GFS_PRESSURE_LEVELS_HPA } from "./pressure-levels.js";
 import { VARIABLE_CATALOG } from "./variables.js";
 
@@ -23,6 +24,30 @@ export function getGfsPressureCatalog() {
             id: definition.id,
             kind: definition.kind,
             levelType: definition.levelType,
+            dependencies: [...definition.dependencies],
+            description: definition.description,
+            outputs: [...definition.outputs],
+          },
+    ),
+    fieldSemanticsNote:
+      "Non-isobaric fields carry explicit vertical and temporal semantics. Accumulation results include their exact GFS forecast-hour interval.",
+    fields: Object.values(NON_ISOBARIC_FIELD_CATALOG).map((definition) =>
+      definition.kind === "raw"
+        ? {
+            id: definition.id,
+            kind: definition.kind,
+            level: { ...definition.level },
+            temporalSemantics: definition.temporalSemantics,
+            gfsCode: definition.gfsCode,
+            sourceUnit: definition.sourceUnit,
+            description: definition.description,
+            outputs: [...definition.outputs],
+          }
+        : {
+            id: definition.id,
+            kind: definition.kind,
+            level: { ...definition.level },
+            temporalSemantics: definition.temporalSemantics,
             dependencies: [...definition.dependencies],
             description: definition.description,
             outputs: [...definition.outputs],

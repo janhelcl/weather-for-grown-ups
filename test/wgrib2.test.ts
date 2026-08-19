@@ -29,8 +29,7 @@ describe("parseWgrib2PointLine", () => {
 
   it.each([
     "",
-    "1:0:d=2026081906:CAPE:850 mb:6 hour fcst:lon=14.5,lat=50,val=1500",
-    "1:0:d=2026081906:TMP:surface:6 hour fcst:lon=14.5,lat=50,val=285",
+    "1:0:d=2026081906:NOTREAL:850 mb:6 hour fcst:lon=14.5,lat=50,val=1500",
     "1:0:d=2026081906:TMP:850 mb:6 hour fcst:val=285",
     "1:0:d=2026081906:TMP:850 mb:6 hour fcst:lon=14.5,lat=50",
   ])("ignores unsupported or malformed line: %s", (line) => {

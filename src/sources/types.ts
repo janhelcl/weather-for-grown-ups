@@ -1,3 +1,4 @@
+import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
 import type { RawVariableDefinition } from "../catalog/variables.js";
 
 export type ProfileSourceId = "nomads" | "s3";
@@ -11,6 +12,7 @@ export interface ProfileDataRequest {
   longitude: number;
   variables: RawVariableDefinition[];
   pressureLevelsHpa: number[];
+  fields?: RawNonIsobaricFieldDefinition[];
 }
 
 export interface ProfileSourceFile {

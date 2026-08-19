@@ -3,6 +3,13 @@ import { join } from "node:path";
 import { DEFAULT_NOMADS_COOLDOWN_MS, FileRateLimiter } from "../cache/file-rate-limiter.js";
 import { NomadsCache, type CachedFile } from "../cache/nomads-cache.js";
 import { GfsS3SubsetCache } from "../cache/s3-subset-cache.js";
+import {
+  expandRequestedFields,
+  NON_ISOBARIC_FIELD_CATALOG,
+  type NonIsobaricFieldDefinition,
+  type NonIsobaricLevel,
+  type RawNonIsobaricFieldDefinition,
+} from "../catalog/non-isobaric-fields.js";
 import { expandRequestedVariables } from "../catalog/variables.js";
 import { deriveWind } from "../derived/wind.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
@@ -11,7 +18,13 @@ import { NomadsProfileSource, S3ProfileSource } from "../sources/profile-source.
 import type { ProfileDataSource } from "../sources/types.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
 import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
-import type { DecodedValue, ProfileLevel, ProfileResult } from "./types.js";
+import type {
+  DecodedValue,
+  FieldTemporalResult,
+  NonIsobaricFieldResult,
+  ProfileLevel,
+  ProfileResult,
+} from "./types.js";
 
 export interface ProfileCache {
   fetch(url: string): Promise<CachedFile>;
@@ -60,7 +73,11 @@ export class ProfileService {
       : parseGfsRun(query.run);
     const validTime = new Date(query.validTime);
     const fh = forecastHour(run, validTime);
-    const variables = expandRequestedVariables(query.variables);
+    const requestedVariables = query.variables ?? [];
+    const pressureLevelsHpa = query.pressureLevelsHpa ?? [];
+    const requestedFields = query.fields ?? [];
+    const variables = expandRequestedVariables(requestedVariables);
+    const fields = expandRequestedFields(requestedFields);
     const source = this.sources[query.source];
 
     const cached = await source.fetch({
@@ -69,24 +86,27 @@ export class ProfileService {
       latitude: query.latitude,
       longitude: query.longitude,
       variables,
-      pressureLevelsHpa: query.pressureLevelsHpa,
+      pressureLevelsHpa,
+      fields,
     });
     const values = await this.decoder.extractPoint(cached.path, query.longitude, query.latitude);
     const firstValue = values[0];
     if (!firstValue) throw new Error("No values decoded from GFS response");
 
-    assertComplete(values, variables.map((variable) => variable.gfsCode), query.pressureLevelsHpa);
+    assertPressureComplete(values, variables.map((variable) => variable.gfsCode), pressureLevelsHpa);
+    assertFieldsComplete(values, fields);
 
     const levelMap = new Map<number, ProfileLevel>();
-    for (const pressureHpa of query.pressureLevelsHpa) levelMap.set(pressureHpa, { pressureHpa });
+    for (const pressureHpa of pressureLevelsHpa) levelMap.set(pressureHpa, { pressureHpa });
 
     for (const value of values) {
+      if (value.pressureHpa === undefined) continue;
       const level = levelMap.get(value.pressureHpa);
       if (!level) continue;
-      applyDecodedValue(level, value);
+      applyDecodedPressureValue(level, value);
     }
 
-    if (query.variables.includes("wind")) {
+    if (requestedVariables.includes("wind")) {
       for (const level of levelMap.values()) {
         if (level.uWindMs === undefined || level.vWindMs === undefined) continue;
         const wind = deriveWind(level.uWindMs, level.vWindMs);
@@ -94,6 +114,10 @@ export class ProfileService {
         level.windDirectionDeg = wind.directionDeg;
       }
     }
+
+    const fieldResults = requestedFields.map((id) =>
+      buildFieldResult(NON_ISOBARIC_FIELD_CATALOG[id], values, run),
+    );
 
     return {
       model: "gfs_0p25",
@@ -103,6 +127,7 @@ export class ProfileService {
       requestedPoint: { latitude: query.latitude, longitude: query.longitude },
       gridPoint: firstValue.gridPoint,
       levels: [...levelMap.values()].sort((a, b) => b.pressureHpa - a.pressureHpa),
+      ...(fieldResults.length > 0 ? { fields: fieldResults } : {}),
       source: {
         provider: source.provider,
         access: source.access,
@@ -113,7 +138,7 @@ export class ProfileService {
   }
 }
 
-function applyDecodedValue(level: ProfileLevel, value: DecodedValue): void {
+function applyDecodedPressureValue(level: ProfileLevel, value: DecodedValue): void {
   switch (value.code) {
     case "TMP": level.temperatureC = value.value - 273.15; break;
     case "RH": level.relativeHumidityPct = value.value; break;
@@ -130,13 +155,99 @@ function applyDecodedValue(level: ProfileLevel, value: DecodedValue): void {
   }
 }
 
-function assertComplete(values: DecodedValue[], codes: string[], levels: number[]): void {
-  const seen = new Set(values.map((value) => `${value.code}@${value.pressureHpa}`));
+function buildFieldResult(
+  definition: NonIsobaricFieldDefinition,
+  values: DecodedValue[],
+  run: Date,
+): NonIsobaricFieldResult {
+  if (definition.kind === "raw") {
+    const decoded = values.find((value) => matchesRawField(definition, value));
+    if (!decoded) throw new Error(`Internal completeness error for ${definition.id}`);
+    const output = definition.outputs[0];
+    return {
+      id: definition.id,
+      level: publicLevel(definition.level),
+      temporal: temporalResult(definition, decoded, run),
+      values: { [output.field]: normalizeFieldValue(definition, decoded.value) },
+    };
+  }
+
+  const uDefinition = NON_ISOBARIC_FIELD_CATALOG[definition.dependencies[0]] as RawNonIsobaricFieldDefinition;
+  const vDefinition = NON_ISOBARIC_FIELD_CATALOG[definition.dependencies[1]] as RawNonIsobaricFieldDefinition;
+  const u = values.find((value) => matchesRawField(uDefinition, value));
+  const v = values.find((value) => matchesRawField(vDefinition, value));
+  if (!u || !v) throw new Error(`Internal completeness error for ${definition.id}`);
+  const windValue = deriveWind(u.value, v.value);
+  return {
+    id: definition.id,
+    level: publicLevel(definition.level),
+    temporal: { type: "instantaneous" },
+    values: {
+      windSpeedMs: windValue.speedMs,
+      windDirectionDeg: windValue.directionDeg,
+    },
+  };
+}
+
+function publicLevel(level: NonIsobaricLevel): NonIsobaricFieldResult["level"] {
+  return level.type === "surface"
+    ? { type: "surface" }
+    : { type: "height_above_ground_m", heightM: level.heightM };
+}
+
+function temporalResult(
+  definition: RawNonIsobaricFieldDefinition,
+  value: DecodedValue,
+  run: Date,
+): FieldTemporalResult {
+  if (definition.temporalSemantics === "instantaneous") return { type: "instantaneous" };
+  const interval = value.accumulation;
+  if (!interval) throw new Error(`Decoded ${definition.id} is missing its accumulation interval`);
+  return {
+    type: "accumulation",
+    ...interval,
+    startTime: new Date(run.getTime() + interval.startForecastHour * 3_600_000).toISOString(),
+    endTime: new Date(run.getTime() + interval.endForecastHour * 3_600_000).toISOString(),
+  };
+}
+
+function normalizeFieldValue(definition: RawNonIsobaricFieldDefinition, value: number): number {
+  const output = definition.outputs[0];
+  if (definition.sourceUnit === "K" && output.unit === "degC") return value - 273.15;
+  return value;
+}
+
+function matchesRawField(definition: RawNonIsobaricFieldDefinition, value: DecodedValue): boolean {
+  if (definition.gfsCode !== value.code) return false;
+  const levelMatches = definition.level.type === "surface"
+    ? value.surface === true
+    : value.heightAboveGroundM === definition.level.heightM;
+  if (!levelMatches) return false;
+  return definition.temporalSemantics === "accumulation"
+    ? value.accumulation !== undefined
+    : value.accumulation === undefined;
+}
+
+function assertPressureComplete(values: DecodedValue[], codes: string[], levels: number[]): void {
+  const seen = new Set(
+    values
+      .filter((value) => value.pressureHpa !== undefined)
+      .map((value) => `${value.code}@${value.pressureHpa}`),
+  );
   const missing = [...new Set(codes)].flatMap((code) =>
     [...new Set(levels)]
       .filter((level) => !seen.has(`${code}@${level}`))
       .map((level) => `${code}@${level}mb`),
   );
+  if (missing.length > 0) {
+    throw new Error(`Decoded GFS data is missing requested fields: ${missing.join(", ")}`);
+  }
+}
+
+function assertFieldsComplete(values: DecodedValue[], fields: RawNonIsobaricFieldDefinition[]): void {
+  const missing = fields
+    .filter((field) => !values.some((value) => matchesRawField(field, value)))
+    .map((field) => `${field.id} (${field.gfsCode}@${field.level.gribLevel})`);
   if (missing.length > 0) {
     throw new Error(`Decoded GFS data is missing requested fields: ${missing.join(", ")}`);
   }

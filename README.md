@@ -2,7 +2,7 @@
 
 Agent-native access to NOAA GFS data: one TypeScript core, thin CLI and MCP surfaces.
 
-The project intentionally exposes the atmospheric model rather than interpreting it. It normalizes NOAA/GFS naming, handles pressure-level queries, manages upstream access constraints, caches immutable forecast slices, and returns structured values suitable for agents.
+The project intentionally exposes the atmospheric model rather than interpreting it. It normalizes NOAA/GFS naming, handles pressure-level and non-isobaric field queries, manages upstream access constraints, caches immutable forecast slices, and returns structured values suitable for agents.
 
 ## Discover the atmospheric catalog
 
@@ -13,11 +13,21 @@ wfg catalog --json
 
 MCP exposes the same information through `get_gfs_catalog`. WFG only accepts pressure levels published by the GFS 0.25° isobaric product, including fractional upper-atmosphere levels down to 0.01 hPa. An arbitrary level such as 842 hPa is rejected before any network request.
 
-Currently supported pressure-level variables include temperature, relative humidity, U/V wind, geopotential height, specific humidity, pressure/geometric vertical velocity, absolute vorticity, total cloud cover, cloud-water mixing ratio, ozone mixing ratio, plus derived wind speed/direction.
+Supported pressure-level variables include temperature, relative humidity, U/V wind, geopotential height, specific humidity, pressure/geometric vertical velocity, absolute vorticity, total cloud cover, cloud-water mixing ratio, ozone mixing ratio, plus derived wind speed/direction.
 
-The catalog distinguishes source units from normalized output units. If a requested variable/level combination is absent from a GFS file, WFG fails with the exact missing fields rather than returning a partial profile.
+The catalog also exposes non-isobaric fields with explicit vertical and temporal semantics:
 
-## Point profile
+- surface pressure, surface geopotential height, surface temperature, gust, surface CAPE/CIN, and boundary-layer height
+- 2 m temperature, relative humidity, specific humidity, and dew point
+- U/V and derived wind at 10, 20, 30, 40, 50, 80, and 100 m above ground
+- 80 m temperature, specific humidity, and pressure; 100 m temperature
+- accumulated total precipitation, with its exact GFS forecast-hour accumulation interval
+
+The catalog distinguishes source units from normalized output units. If a requested variable/level combination or exact non-isobaric field is absent from a GFS file, WFG fails with the missing field rather than returning a partial result.
+
+## Point query
+
+Pressure profile:
 
 ```bash
 wfg profile \
@@ -27,6 +37,21 @@ wfg profile \
   --vars temperature,relative_humidity,geopotential_height,wind \
   --levels 1000,925,850,700,500
 ```
+
+Fields-only query:
+
+```bash
+wfg profile \
+  --lat 50.08 \
+  --lon 14.43 \
+  --valid 2026-08-20T12:00:00Z \
+  --fields temperature_2m,wind_10m,surface_cape,boundary_layer_height,total_precipitation \
+  --json
+```
+
+Pressure-level variables and non-isobaric fields can be requested together in the same call by providing `--vars`, `--levels`, and `--fields`.
+
+Non-isobaric results are records with three explicit pieces of semantics: `level`, `temporal`, and normalized `values`. For example, `total_precipitation` is returned with `temporal.type="accumulation"`, start/end forecast hours, and start/end UTC timestamps rather than being presented as an instantaneous value.
 
 The run defaults to the latest **complete** GFS cycle. Use `wfg latest` to inspect it or pass `--run ...` for reproducibility.
 
@@ -38,8 +63,8 @@ wfg timeseries \
   --lon 14.43 \
   --from 2026-08-20T06:00:00Z \
   --to 2026-08-22T18:00:00Z \
-  --vars temperature,relative_humidity,wind \
-  --levels 850,700,500
+  --fields temperature_2m,wind_10m,total_precipitation \
+  --json
 ```
 
 Time series returns every native GFS output inside the requested range: hourly through forecast hour 120 and every three hours afterwards. It defaults to the S3 byte-range source and processes at most four forecast files concurrently. A default `maxSteps=160` guard prevents accidentally producing very large tool responses; callers can raise it up to the full 209 native GFS outputs.
@@ -57,13 +82,13 @@ wfg area \
 
 MCP exposes the same primitive as `summarize_gfs_area`. It returns **min, max, and an unweighted grid-point mean** for one raw variable, one pressure level, one valid time, and one bbox. The raw grid is never returned to the agent.
 
-Area summaries intentionally use NOMADS only in v1: Grib Filter crops the requested region before transfer, then `wgrib2` computes the statistics locally. A conservative 50,000-grid-point default guard bounds the requested area. Antimeridian-crossing boxes and derived/vector statistics are not supported yet.
+Area summaries intentionally remain pressure-level-only for now: Grib Filter crops the requested region before transfer, then `wgrib2` computes the statistics locally. A conservative 50,000-grid-point default guard bounds the requested area. Antimeridian-crossing boxes and derived/vector statistics are not supported yet.
 
 ## Two data paths
 
-NOMADS is the default for single profiles and the area-summary path because its Grib Filter can geographically subset before transfer. All physical NOMADS downloads pass through the shared courtesy limiter.
+NOMADS is the default for single point queries and the area-summary path because its Grib Filter can geographically subset before transfer. Surface and height-above-ground selections use the same Grib Filter request as pressure levels, so all physical NOMADS downloads continue to pass through the shared courtesy limiter.
 
-For multi-time workflows, NOAA AWS Open Data is the default. The S3 path fetches the `.idx` inventory, identifies only requested variable/pressure GRIB messages, derives byte ranges, and downloads those messages with HTTP Range requests. Each selected message contains the global grid, so it usually transfers more bytes than NOMADS for a single point, but avoids NOMADS pacing and can be reused for any point on that grid.
+For multi-time workflows, NOAA AWS Open Data is the default. The S3 path fetches the `.idx` inventory, identifies only requested pressure and non-isobaric GRIB messages, derives byte ranges, and downloads those messages with HTTP Range requests. Accumulation selectors require an accumulation inventory record instead of matching only by variable and vertical level.
 
 Both data paths feed `wgrib2` and return normalized data with explicit provenance.
 
@@ -111,21 +136,24 @@ Default cache/state location: `~/.cache/wfg/`. Override with `WFG_CACHE_DIR`.
 
 Implemented:
 
-- discoverable pressure-level variable/level catalog
+- discoverable pressure-level and non-isobaric field catalog
 - automatic latest-complete-run discovery via NOAA AWS Open Data
 - pressure-level point profiles with completeness validation
+- surface and height-above-ground point fields with exact-level validation
+- accumulation fields with explicit forecast intervals
 - native-cadence point time series with bounded concurrency and step guard
-- bounded raw-field area min/max/unweighted mean without returning grids
+- bounded raw pressure-field area min/max/unweighted mean without returning grids
 - 12 raw pressure-level fields plus derived wind
+- surface diagnostics plus 2/10/20/30/40/50/80/100 m fields and derived winds
 - deterministic NOMADS geographic-subset path with 11 s cross-process limiter
 - NOAA AWS `.idx` + selected-message byte-range path with reusable subset cache
-- `wgrib2` point extraction and area statistics adapters
+- `wgrib2` point extraction for isobaric/non-isobaric semantics and area statistics adapters
 - CLI `catalog`, `latest`, `profile`, `timeseries`, and `area`
 - MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_timeseries`, and `summarize_gfs_area`
 - comprehensive deterministic offline test suite plus opt-in real NOAA profile smoke tests
 
 Next:
 
-1. model surface/height/accumulation fields as separate level/time semantics
+1. model cloud layers and other layer-valued products
 2. optionally add extrema locations to bounded area summaries
-3. add a live time-series smoke after the S3 path has been exercised manually
+3. add a live non-isobaric/time-series smoke after the S3 path has been exercised manually
