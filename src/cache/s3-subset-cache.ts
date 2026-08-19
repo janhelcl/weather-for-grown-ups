@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { parseGribIndex, selectPressureByteRanges, type ByteRange } from "../grib/index.js";
+import {
+  mergeByteRanges,
+  parseGribIndex,
+  selectNonIsobaricByteRanges,
+  selectPressureByteRanges,
+  type ByteRange,
+} from "../grib/index.js";
 import { buildGfsS3ForecastIndexUrl, buildGfsS3ForecastUrl } from "../sources/gfs-s3.js";
 import type { ProfileDataRequest, ProfileSourceFile } from "../sources/types.js";
 
@@ -35,11 +41,13 @@ export class GfsS3SubsetCache {
     const indexUrl = buildGfsS3ForecastIndexUrl(request.run, request.forecastHour);
     const indexText = await this.fetchIndex(indexUrl);
     const records = parseGribIndex(indexText);
-    const ranges = selectPressureByteRanges(
+    const pressureRanges = selectPressureByteRanges(
       records,
       request.variables.map((variable) => variable.gfsCode),
       request.pressureLevelsHpa,
     );
+    const fieldRanges = selectNonIsobaricByteRanges(records, request.fields ?? []);
+    const ranges = mergeByteRanges(pressureRanges, fieldRanges);
 
     const chunks = await Promise.all(ranges.map((range) => this.fetchRange(gribUrl, range)));
     const totalBytes = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
@@ -107,6 +115,7 @@ function subsetKey(request: ProfileDataRequest): string {
     forecastHour: request.forecastHour,
     variables: [...new Set(request.variables.map((variable) => variable.gfsCode))].sort(),
     pressureLevelsHpa: [...new Set(request.pressureLevelsHpa)].sort((a, b) => b - a),
+    fields: [...new Set((request.fields ?? []).map((field) => field.id))].sort(),
   });
   return createHash("sha256").update(canonical).digest("hex");
 }
