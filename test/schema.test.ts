@@ -30,8 +30,16 @@ describe("isoDateTimeSchema", () => {
 });
 
 describe("profileQuerySchema", () => {
-  it("accepts a valid profile query", () => {
-    expect(profileQuerySchema.parse(baseQuery)).toEqual(baseQuery);
+  it("accepts a valid profile query and defaults the source to NOMADS", () => {
+    expect(profileQuerySchema.parse(baseQuery)).toEqual({ ...baseQuery, source: "nomads" });
+  });
+
+  it.each(["nomads", "s3"])("accepts source %s", (source) => {
+    expect(parses({ source }).success).toBe(true);
+  });
+
+  it("rejects unknown source selectors", () => {
+    expect(parses({ source: "ftp" }).success).toBe(false);
   });
 
   it.each([-90, 90])("accepts latitude boundary %s", (latitude) => {
