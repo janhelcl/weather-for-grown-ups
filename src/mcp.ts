@@ -11,7 +11,7 @@ function createServer(): McpServer {
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
       instructions:
-        "Use get_gfs_profile for precise GFS pressure-level data. Omit run to use the latest complete GFS cycle. Values are model data, not interpretation or safety advice.",
+        "Use get_gfs_profile for precise GFS pressure-level data. Omit run to use the latest complete GFS cycle. NOMADS is the default source; use source=s3 to bypass NOMADS pacing by fetching selected GRIB messages from NOAA AWS. Values are model data, not interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
@@ -38,7 +38,7 @@ function createServer(): McpServer {
     {
       title: "Get GFS pressure profile",
       description:
-        "Return temperature, relative humidity and/or wind from NOAA GFS 0.25° at requested pressure levels for one point and valid time. Run defaults to the latest complete cycle.",
+        "Return temperature, relative humidity and/or wind from NOAA GFS 0.25° at requested pressure levels for one point and valid time. Run defaults to the latest complete cycle. Source defaults to NOMADS; source=s3 uses NOAA AWS byte-range access.",
       inputSchema: profileQuerySchema,
       outputSchema: z.object({
         model: z.literal("gfs_0p25"),
@@ -57,7 +57,8 @@ function createServer(): McpServer {
           windDirectionDeg: z.number().optional(),
         })),
         source: z.object({
-          provider: z.literal("NOAA NOMADS"),
+          provider: z.union([z.literal("NOAA NOMADS"), z.literal("NOAA AWS Open Data")]),
+          access: z.union([z.literal("nomads_grib_filter"), z.literal("s3_range")]),
           decoder: z.literal("wgrib2"),
           cacheHit: z.boolean(),
         }),

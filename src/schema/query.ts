@@ -8,6 +8,8 @@ export const variableIdSchema = z.enum([
   "wind",
 ]);
 
+export const profileSourceIdSchema = z.enum(["nomads", "s3"]);
+
 export const isoDateTimeSchema = z.string().refine(
   (value) => /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) && Number.isFinite(Date.parse(value)),
   "Expected an ISO-8601 date-time with timezone",
@@ -25,8 +27,10 @@ export const profileQuerySchema = z.object({
   validTime: isoDateTimeSchema.describe("Forecast valid time"),
   variables: z.array(variableIdSchema).min(1),
   pressureLevelsHpa: z.array(z.number().int().min(1).max(1100)).min(1),
+  source: profileSourceIdSchema.default("nomads").describe("Data access path: NOMADS geographic subset or NOAA AWS byte ranges"),
 });
 
 export type VariableId = z.infer<typeof variableIdSchema>;
+export type ProfileSourceId = z.infer<typeof profileSourceIdSchema>;
 export type ProfileQuery = z.output<typeof profileQuerySchema>;
 export type ProfileQueryInput = z.input<typeof profileQuerySchema>;

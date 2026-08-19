@@ -1,3 +1,5 @@
+import type { ProfileAccessMethod, ProfileProvider } from "../sources/types.js";
+
 export interface GridPoint {
   latitude: number;
   longitude: number;
@@ -29,7 +31,8 @@ export interface ProfileResult {
   gridPoint: GridPoint;
   levels: ProfileLevel[];
   source: {
-    provider: "NOAA NOMADS";
+    provider: ProfileProvider;
+    access: ProfileAccessMethod;
     decoder: "wgrib2";
     cacheHit: boolean;
   };
