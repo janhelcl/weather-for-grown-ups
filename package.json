@@ -17,7 +17,7 @@
     "mcp": "tsx src/mcp.ts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:smoke": "node dist/cli.js --help && node dist/cli.js latest --help && node dist/cli.js profile --help",
+    "test:smoke": "node dist/cli.js --help && node dist/cli.js latest --help && node dist/cli.js profile --help && node dist/cli.js timeseries --help",
     "test:live": "tsx scripts/live-smoke.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

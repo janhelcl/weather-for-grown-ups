@@ -1,6 +1,6 @@
 # Testing
 
-The default test suite is intentionally deterministic and offline. No test is allowed to contact NOAA/NOMADS or NOAA AWS unless it explicitly replaces the global `fetch` stub. This prevents CI from depending on upstream availability and ensures the test suite itself can never violate NOMADS request-spacing rules.
+The default test suite is intentionally deterministic and offline. No test is allowed to contact NOAA/NOMADS or NOAA AWS unless it explicitly replaces the global `fetch` stub.
 
 ## Commands
 
@@ -12,31 +12,23 @@ npm run build
 npm run test:smoke
 ```
 
-`npm run test:smoke` runs the compiled CLI help paths and therefore requires `npm run build` first.
-
 ## Layers covered
 
-- Query schema boundaries, timezone handling, `run: latest` defaulting, and source selection.
-- GFS run validation, forecast-hour cadence, and 384-hour horizon.
-- Latest-complete-run cycle flooring, backward search, UTC date rollover, TTL caching, and failure behavior.
-- NOAA AWS complete-run marker URL construction and HEAD-response handling.
-- wgrib2 `.idx` parsing, byte offsets, submessage/duplicate-offset handling, inclusive range derivation, and open-ended final ranges.
-- S3 subset fetching, HTTP 206 enforcement, GRIB signature validation, canonical subset cache keys, cached index reuse, and concurrent in-process deduplication.
-- Variable catalog expansion and dependency deduplication.
-- NOMADS Grib Filter URL construction, canonical ordering, and geographic clipping.
-- Wind vector derivation and normalization invariants.
-- `wgrib2` output parsing, command invocation, and failure behavior.
-- Cross-caller file locking, stale-lock recovery, failure cleanup, and the 11-second default courtesy interval.
-- NOMADS GRIB cache hits, concurrent request deduplication, HTTP failures, invalid upstream content, and atomic writes.
-- End-to-end profile orchestration with fake source/decoder/latest-run dependencies, including NOMADS vs S3 provenance, units, explicit-vs-latest run selection, level filtering, and derived wind.
-- MCP profile and latest-run success/error response mapping.
+- Query schema boundaries, timezone handling, run/source defaults, and time-series step guards.
+- GFS run validation, single-time forecast-hour validation, full native cadence, range intersection, and 384-hour horizon.
+- Bounded asynchronous mapping, stable output ordering, and failure propagation.
+- Latest-complete-run discovery and caching.
+- NOAA AWS `.idx` parsing, byte-range selection, subset caching, and failure paths.
+- NOMADS URL planning, pacing, cache behavior, and failure paths.
+- `wgrib2` parsing/invocation and wind derivation.
+- Point profile orchestration across NOMADS/S3.
+- Point time-series orchestration, native cadence around f120, latest-run resolution, source consistency, grid consistency, bounded concurrency, cache-hit propagation, and max-step rejection.
+- MCP latest/profile/time-series success and error mappings.
 - Compiled CLI smoke tests on Node 20 and Node 24.
 
 ## Coverage gates
 
-The V8 coverage job includes production code under `src/` except the process-boundary entrypoints `src/cli.ts` and `src/mcp.ts`. Those entrypoints are covered by compilation and smoke checks; their underlying logic is tested through the core service and MCP handlers.
-
-CI fails below these global thresholds:
+CI fails below:
 
 - Lines: 90%
 - Statements: 90%
@@ -45,13 +37,11 @@ CI fails below these global thresholds:
 
 ## Live NOAA smoke tests
 
-The real upstream smoke test is deliberately opt-in:
+The real upstream profile smoke remains opt-in:
 
 ```bash
 npm run test:live
 WFG_LIVE_SOURCE=s3 npm run test:live
 ```
 
-It requires network access and a working `wgrib2` binary. The first form uses the normal NOMADS path; the second uses NOAA AWS `.idx` + Range access. Both first resolve the latest **complete** GFS cycle and then request the same small Prague pressure profile.
-
-Do not add this command to normal PR CI. If we later schedule it, it should remain low-frequency and use production access/caching behavior.
+Normal PR CI remains offline. A live multi-time smoke should only be added after manually exercising the S3 time-series path, and should stay low-frequency to avoid unnecessary upstream load.
