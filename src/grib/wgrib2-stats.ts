@@ -16,13 +16,23 @@ export interface GridStatistics {
   max: number;
 }
 
+export type Wgrib2CommandRunner = (executable: string, args: string[]) => Promise<{ stdout: string }>;
+
+const defaultRunner: Wgrib2CommandRunner = async (executable, args) => {
+  const { stdout } = await execa(executable, args);
+  return { stdout };
+};
+
 export class Wgrib2StatsDecoder {
-  constructor(private readonly executable = process.env.WGRIB2_PATH ?? "wgrib2") {}
+  constructor(
+    private readonly executable = process.env.WGRIB2_PATH ?? "wgrib2",
+    private readonly runner: Wgrib2CommandRunner = defaultRunner,
+  ) {}
 
   async summarizeBox(path: string, box: AreaBox): Promise<GridStatistics> {
     let stdout: string;
     try {
-      ({ stdout } = await execa(this.executable, [
+      ({ stdout } = await this.runner(this.executable, [
         path,
         "-s",
         "-undefine",
