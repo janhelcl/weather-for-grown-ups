@@ -113,14 +113,16 @@ function raw(
   };
 }
 
-function wind(heightM: number): DerivedNonIsobaricFieldDefinition {
+function wind(heightM: 10 | 20 | 30 | 40 | 50 | 80 | 100): DerivedNonIsobaricFieldDefinition {
   const id = `wind_${heightM}m` as DerivedNonIsobaricFieldDefinition["id"];
+  const uId = `u_wind_${heightM}m` as RawNonIsobaricFieldId;
+  const vId = `v_wind_${heightM}m` as RawNonIsobaricFieldId;
   return {
     id,
     kind: "derived",
     level: aboveGround(heightM),
     temporalSemantics: "instantaneous",
-    dependencies: [`u_wind_${heightM}m`, `v_wind_${heightM}m`] as DerivedNonIsobaricFieldDefinition["dependencies"],
+    dependencies: [uId, vId],
     description: `Wind speed and meteorological direction at ${heightM} m above ground derived from U/V components`,
     outputs: [
       { field: "windSpeedMs", unit: "m/s", description: "Wind speed" },
@@ -143,9 +145,9 @@ const definitions: NonIsobaricFieldDefinition[] = [
   raw("specific_humidity_2m", "SPFH", aboveGround(2), "kg/kg", "Specific humidity at 2 m above ground", "specificHumidityKgKg", "kg/kg", "Specific humidity"),
   raw("dew_point_2m", "DPT", aboveGround(2), "K", "Dew-point temperature at 2 m above ground", "dewPointC", "degC", "Dew-point temperature converted to degrees Celsius"),
 
-  ...[10, 20, 30, 40, 50].flatMap((heightM) => [
-    raw(`u_wind_${heightM}m` as RawNonIsobaricFieldId, "UGRD", aboveGround(heightM), "m/s", `Eastward wind component at ${heightM} m above ground`, "uWindMs", "m/s", "Eastward wind component"),
-    raw(`v_wind_${heightM}m` as RawNonIsobaricFieldId, "VGRD", aboveGround(heightM), "m/s", `Northward wind component at ${heightM} m above ground`, "vWindMs", "m/s", "Northward wind component"),
+  ...([10, 20, 30, 40, 50] as const).flatMap((heightM) => [
+    raw(`u_wind_${heightM}m`, "UGRD", aboveGround(heightM), "m/s", `Eastward wind component at ${heightM} m above ground`, "uWindMs", "m/s", "Eastward wind component"),
+    raw(`v_wind_${heightM}m`, "VGRD", aboveGround(heightM), "m/s", `Northward wind component at ${heightM} m above ground`, "vWindMs", "m/s", "Northward wind component"),
     wind(heightM),
   ]),
 
