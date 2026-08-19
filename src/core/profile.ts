@@ -1,24 +1,49 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { NomadsCache } from "../cache/nomads-cache.js";
-import { FileRateLimiter } from "../cache/file-rate-limiter.js";
+import { DEFAULT_NOMADS_COOLDOWN_MS, FileRateLimiter } from "../cache/file-rate-limiter.js";
+import { NomadsCache, type CachedFile } from "../cache/nomads-cache.js";
 import { expandRequestedVariables } from "../catalog/variables.js";
 import { deriveWind } from "../derived/wind.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
 import { profileQuerySchema, type ProfileQuery } from "../schema/query.js";
 import { buildNomadsPointUrl } from "../sources/nomads.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
-import type { ProfileLevel, ProfileResult } from "./types.js";
+import type { DecodedValue, ProfileLevel, ProfileResult } from "./types.js";
+
+export interface ProfileCache {
+  fetch(url: string): Promise<CachedFile>;
+}
+
+export interface PointDecoder {
+  extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]>;
+}
+
+export interface ProfileServiceOptions {
+  cacheDir?: string;
+  cooldownMs?: number;
+  wgrib2Path?: string;
+  cache?: ProfileCache;
+  decoder?: PointDecoder;
+}
 
 export class ProfileService {
-  private readonly decoder: Wgrib2Decoder;
-  private readonly cache: NomadsCache;
+  private readonly decoder: PointDecoder;
+  private readonly cache: ProfileCache;
 
-  constructor(options?: { cacheDir?: string; cooldownMs?: number; wgrib2Path?: string }) {
-    const cacheDir = options?.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
-    const limiter = new FileRateLimiter(join(cacheDir, "state"), options?.cooldownMs ?? 11_000);
-    this.cache = new NomadsCache(join(cacheDir, "grib"), limiter);
-    this.decoder = new Wgrib2Decoder(options?.wgrib2Path);
+  constructor(options: ProfileServiceOptions = {}) {
+    const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
+
+    if (options.cache) {
+      this.cache = options.cache;
+    } else {
+      const limiter = new FileRateLimiter(
+        join(cacheDir, "state"),
+        options.cooldownMs ?? DEFAULT_NOMADS_COOLDOWN_MS,
+      );
+      this.cache = new NomadsCache(join(cacheDir, "grib"), limiter);
+    }
+
+    this.decoder = options.decoder ?? new Wgrib2Decoder(options.wgrib2Path);
   }
 
   async getProfile(input: ProfileQuery): Promise<ProfileResult> {
