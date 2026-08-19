@@ -5,14 +5,17 @@ import { AreaSummaryService } from "./core/area-summary.js";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
-import type { ProfileSourceId, RawVariableId, VariableId } from "./schema/query.js";
+import type { NonIsobaricFieldId, ProfileSourceId, RawVariableId, VariableId } from "./schema/query.js";
+
+const DEFAULT_VARIABLES = "temperature,relative_humidity,wind";
+const DEFAULT_LEVELS = "1000,925,850,700,500";
 
 const program = new Command();
 program.name("wfg").description("Weather for Grown Ups — agent-native NOAA GFS access").version("0.1.0");
 
 program
   .command("catalog")
-  .description("Show supported GFS pressure-level variables and levels")
+  .description("Show supported GFS pressure-level and non-isobaric fields")
   .option("--json", "Output JSON")
   .action((options) => {
     const catalog = getGfsPressureCatalog();
@@ -20,6 +23,7 @@ program
       console.log(JSON.stringify(catalog, null, 2));
       return;
     }
+    console.log("Pressure-level variables");
     console.table(catalog.variables.map((variable) => ({
       id: variable.id,
       kind: variable.kind,
@@ -27,6 +31,15 @@ program
       output: variable.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
     })));
     console.log(`Pressure levels (hPa): ${catalog.pressureLevelsHpa.join(", ")}`);
+    console.log("Non-isobaric fields");
+    console.table(catalog.fields.map((field) => ({
+      id: field.id,
+      kind: field.kind,
+      level: field.level.type === "surface" ? "surface" : `${field.level.heightM} m AGL`,
+      temporal: field.temporalSemantics,
+      gfs: "gfsCode" in field ? field.gfsCode : "derived",
+      output: field.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
+    })));
   });
 
 program
@@ -44,54 +57,57 @@ program
 
 program
   .command("profile")
-  .description("Fetch a vertical GFS pressure profile for a point")
+  .description("Fetch GFS pressure levels and/or non-isobaric fields for a point")
   .requiredOption("--lat <number>", "Latitude", Number)
   .requiredOption("--lon <number>", "Longitude", Number)
   .option("--run <iso|latest>", "GFS run initialization, or latest complete run", "latest")
   .requiredOption("--valid <iso>", "Forecast valid time")
-  .option("--vars <list>", "Comma-separated variables", "temperature,relative_humidity,wind")
-  .option("--levels <list>", "Comma-separated pressure levels in hPa", "1000,925,850,700,500")
+  .option("--vars <list>", "Comma-separated pressure-level variables")
+  .option("--levels <list>", "Comma-separated pressure levels in hPa")
+  .option("--fields <list>", "Comma-separated non-isobaric field IDs")
   .option("--source <nomads|s3>", "Data access path", "nomads")
   .option("--json", "Output JSON")
   .action(async (options) => {
+    const selection = pointSelection(options.vars, options.levels, options.fields);
     const result = await new ProfileService().getProfile({
       latitude: options.lat,
       longitude: options.lon,
       run: options.run,
       validTime: options.valid,
-      variables: parseVariables(options.vars),
-      pressureLevelsHpa: parseLevels(options.levels),
+      ...selection,
       source: options.source as ProfileSourceId,
     });
     if (options.json) return console.log(JSON.stringify(result, null, 2));
     console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
     console.log(`Source ${result.source.provider} (${result.source.access})`);
     console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
-    console.table(result.levels);
+    if (result.levels.length > 0) console.table(result.levels);
+    if (result.fields) console.dir(result.fields, { depth: null });
   });
 
 program
   .command("timeseries")
-  .description("Fetch native GFS forecast steps for a point over a valid-time range")
+  .description("Fetch native GFS forecast steps for pressure levels and/or non-isobaric fields")
   .requiredOption("--lat <number>", "Latitude", Number)
   .requiredOption("--lon <number>", "Longitude", Number)
   .option("--run <iso|latest>", "GFS run initialization, or latest complete run", "latest")
   .requiredOption("--from <iso>", "Inclusive valid-time range start")
   .requiredOption("--to <iso>", "Inclusive valid-time range end")
-  .option("--vars <list>", "Comma-separated variables", "temperature,relative_humidity,wind")
-  .option("--levels <list>", "Comma-separated pressure levels in hPa", "1000,925,850,700,500")
+  .option("--vars <list>", "Comma-separated pressure-level variables")
+  .option("--levels <list>", "Comma-separated pressure levels in hPa")
+  .option("--fields <list>", "Comma-separated non-isobaric field IDs")
   .option("--source <nomads|s3>", "Data access path", "s3")
   .option("--max-steps <number>", "Maximum native forecast steps", Number, 160)
   .option("--json", "Output JSON")
   .action(async (options) => {
+    const selection = pointSelection(options.vars, options.levels, options.fields);
     const result = await new TimeSeriesService().getTimeSeries({
       latitude: options.lat,
       longitude: options.lon,
       run: options.run,
       startTime: options.from,
       endTime: options.to,
-      variables: parseVariables(options.vars),
-      pressureLevelsHpa: parseLevels(options.levels),
+      ...selection,
       source: options.source as ProfileSourceId,
       maxSteps: options.maxSteps,
     });
@@ -99,9 +115,18 @@ program
     console.log(`GFS ${result.run}  ${result.requestedStartTime} → ${result.requestedEndTime}`);
     console.log(`Source ${result.source.provider} (${result.source.access})`);
     console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
-    console.table(result.series.flatMap((step) =>
+    const pressureRows = result.series.flatMap((step) =>
       step.levels.map((level) => ({ valid: step.validTime, f: step.forecastHour, ...level, cacheHit: step.cacheHit })),
-    ));
+    );
+    if (pressureRows.length > 0) console.table(pressureRows);
+    if (result.series.some((step) => step.fields)) {
+      console.dir(result.series.map((step) => ({
+        validTime: step.validTime,
+        forecastHour: step.forecastHour,
+        fields: step.fields,
+        cacheHit: step.cacheHit,
+      })), { depth: null });
+    }
   });
 
 program
@@ -137,10 +162,42 @@ program
 
 await program.parseAsync();
 
+function pointSelection(vars: unknown, levels: unknown, fields: unknown): {
+  variables?: VariableId[];
+  pressureLevelsHpa?: number[];
+  fields?: NonIsobaricFieldId[];
+} {
+  const parsedFields = parseFields(fields);
+  const hasExplicitPressureSelection = vars !== undefined || levels !== undefined;
+  const includeDefaultPressureSelection = !hasExplicitPressureSelection && parsedFields.length === 0;
+
+  const variables = vars !== undefined
+    ? parseVariables(vars)
+    : hasExplicitPressureSelection || includeDefaultPressureSelection
+      ? parseVariables(DEFAULT_VARIABLES)
+      : undefined;
+  const pressureLevelsHpa = levels !== undefined
+    ? parseLevels(levels)
+    : hasExplicitPressureSelection || includeDefaultPressureSelection
+      ? parseLevels(DEFAULT_LEVELS)
+      : undefined;
+
+  return {
+    ...(variables === undefined ? {} : { variables }),
+    ...(pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa }),
+    ...(parsedFields.length === 0 ? {} : { fields: parsedFields }),
+  };
+}
+
 function parseVariables(value: unknown): VariableId[] {
-  return String(value).split(",").map((variable) => variable.trim()) as VariableId[];
+  return String(value).split(",").map((variable) => variable.trim()).filter(Boolean) as VariableId[];
 }
 
 function parseLevels(value: unknown): number[] {
-  return String(value).split(",").map((level) => Number(level.trim()));
+  return String(value).split(",").map((level) => level.trim()).filter(Boolean).map(Number);
+}
+
+function parseFields(value: unknown): NonIsobaricFieldId[] {
+  if (value === undefined) return [];
+  return String(value).split(",").map((field) => field.trim()).filter(Boolean) as NonIsobaricFieldId[];
 }
