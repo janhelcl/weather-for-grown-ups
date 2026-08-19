@@ -6,17 +6,24 @@ The project intentionally exposes the atmospheric model rather than interpreting
 
 ## First vertical slice
 
+The default is now the latest **complete** GFS cycle, so callers do not need to know model run times:
+
 ```bash
 wfg profile \
   --lat 50.08 \
   --lon 14.43 \
-  --run 2026-08-19T06:00:00Z \
-  --valid 2026-08-19T12:00:00Z \
+  --valid 2026-08-20T12:00:00Z \
   --vars temperature,relative_humidity,wind \
   --levels 1000,925,850,700,500
 ```
 
-Flow: CLI/MCP → typed profile query → variable expansion + forecast-hour planning → NOAA NOMADS Grib Filter → 11-second cross-process request gate → content-addressed GRIB2 cache → `wgrib2 -s -lon` extraction → normalized structured result.
+Use `wfg latest` to inspect the resolved cycle. Pass `--run 2026-08-19T06:00:00Z` when reproducibility or an older run matters.
+
+Flow: CLI/MCP → typed profile query → latest-run resolution when needed → variable expansion + forecast-hour planning → NOAA NOMADS Grib Filter → 11-second cross-process request gate → content-addressed GRIB2 cache → `wgrib2 -s -lon` extraction → normalized structured result.
+
+## Latest-run discovery
+
+`latest` means the newest **complete** GFS 0.25° run. WFG checks NOAA's public AWS Open Data copy for the run's `f384.idx` marker, starting with the current 6-hour cycle and walking backwards. This avoids spending NOMADS requests on run discovery and avoids selecting a partially published cycle. Results are cached in-process for five minutes.
 
 ## Requirements
 
@@ -31,9 +38,20 @@ Flow: CLI/MCP → typed profile query → variable expansion + forecast-hour pla
 npm install
 npm test
 npm run typecheck
+npm run build
+npm run test:smoke
+npm run dev -- latest
 npm run dev -- profile --help
 npm run mcp
 ```
+
+An opt-in real upstream smoke test is available with:
+
+```bash
+npm run test:live
+```
+
+It resolves the latest complete cycle through NOAA AWS, makes one small Prague pressure-profile request through the normal NOMADS limiter/cache, decodes it with real `wgrib2`, and asserts the returned shape. It is intentionally excluded from normal CI.
 
 ## NOMADS pacing
 
@@ -45,6 +63,7 @@ Default cache/state location: `~/.cache/wfg/`. Override with `WFG_CACHE_DIR`.
 
 Implemented:
 
+- automatic latest-complete-run discovery via NOAA AWS Open Data
 - explicit GFS run + valid-time → forecast-hour planning
 - pressure-level temperature, RH, U/V wind
 - derived wind speed/direction
@@ -52,14 +71,13 @@ Implemented:
 - 11 s cross-process NOMADS limiter
 - immutable GRIB cache
 - `wgrib2 -s -lon` point extraction adapter, including 0..360 longitude normalization
-- CLI `profile` command
-- MCP `get_gfs_profile` with structured output
+- CLI `latest` and `profile` commands
+- MCP `get_latest_gfs_run` and `get_gfs_profile` with structured output
+- deterministic offline test suite plus opt-in real NOAA smoke test
 
 Next:
 
-1. resolve `run: latest` without wasteful NOMADS traffic
-2. broaden the variable/level catalog
-3. integration-test against real GFS GRIB samples
-4. add time-series queries
-5. add bounded-area summaries
-6. add an alternate cloud/S3 source if useful
+1. broaden the variable/level catalog
+2. add time-series queries
+3. add bounded-area summaries
+4. consider direct S3 data access as an alternate source
