@@ -4,9 +4,7 @@ Agent-native access to NOAA GFS data: one TypeScript core, thin CLI and MCP surf
 
 The project intentionally exposes the atmospheric model rather than interpreting it. It normalizes NOAA/GFS naming, handles pressure-level queries, manages upstream access constraints, caches immutable forecast slices, and returns structured values suitable for agents.
 
-## First vertical slice
-
-The default is the latest **complete** GFS cycle, so callers do not need to know model run times:
+## Point profile
 
 ```bash
 wfg profile \
@@ -17,36 +15,49 @@ wfg profile \
   --levels 1000,925,850,700,500
 ```
 
-Use `wfg latest` to inspect the resolved cycle. Pass `--run 2026-08-19T06:00:00Z` when reproducibility or an older run matters.
+The run defaults to the latest **complete** GFS cycle. Use `wfg latest` to inspect it or pass `--run ...` for reproducibility.
+
+## Point time series
+
+```bash
+wfg timeseries \
+  --lat 50.08 \
+  --lon 14.43 \
+  --from 2026-08-20T06:00:00Z \
+  --to 2026-08-22T18:00:00Z \
+  --vars temperature,relative_humidity,wind \
+  --levels 850,700,500
+```
+
+Time series returns every native GFS output inside the requested range: hourly through forecast hour 120 and every three hours afterwards. It defaults to the S3 byte-range source and processes at most four forecast files concurrently. A default `maxSteps=160` guard prevents accidentally producing very large tool responses; CLI callers can raise it up to the full 209 native GFS outputs with `--max-steps`.
 
 ## Two data paths
 
-NOMADS remains the default because its Grib Filter can geographically subset a point-sized region and therefore transfers little data:
+NOMADS remains the default for single profiles because its Grib Filter can geographically subset a point-sized region and therefore transfers little data:
 
 ```bash
 wfg profile ... --source nomads
 ```
 
-For workflows where NOMADS's request pacing is the bottleneck, use NOAA AWS Open Data:
+For multi-time workflows, NOAA AWS Open Data is the default:
 
 ```bash
 wfg profile ... --source s3
+wfg timeseries ... --source s3
 ```
 
-The S3 path fetches the small `.idx` inventory, identifies only the requested variable/pressure GRIB messages, derives their byte ranges, and downloads those messages with HTTP Range requests. It does **not** download the whole GFS file. Because each selected GRIB message still contains the global grid, S3 usually transfers more bytes than NOMADS for a single point, but it avoids the NOMADS 10-second scripted-request constraint and the cached subset can be reused for any point on that forecast field.
+The S3 path fetches the small `.idx` inventory, identifies only requested variable/pressure GRIB messages, derives their byte ranges, and downloads those messages with HTTP Range requests. Each selected GRIB message contains the global grid, so it usually transfers more bytes than NOMADS for a single point, but it avoids NOMADS pacing and its cached field subset can answer any point on that grid.
 
-Both paths feed the same `wgrib2 -s -lon` decoder and return the same result schema with explicit provenance.
+Both paths feed the same `wgrib2 -s -lon` decoder and return the same normalized atmospheric fields with explicit provenance.
 
 ## Latest-run discovery
 
-`latest` means the newest **complete** GFS 0.25° run. WFG checks NOAA's public AWS Open Data copy for the run's `f384.idx` marker, starting with the current 6-hour cycle and walking backwards. This avoids spending NOMADS requests on run discovery and avoids selecting a partially published cycle. Results are cached in-process for five minutes.
+`latest` means the newest **complete** GFS 0.25° run. WFG checks NOAA's public AWS Open Data copy for the run's `f384.idx` marker, starting with the current 6-hour cycle and walking backwards. Results are cached in-process for five minutes.
 
 ## Requirements
 
 - Node.js 20+
 - `wgrib2` on `PATH` (or set `WGRIB2_PATH`)
-
-`wgrib2` is deliberately an infrastructure dependency rather than reimplementing GRIB2 decoding in TypeScript.
 
 ## Development
 
@@ -58,17 +69,18 @@ npm run build
 npm run test:smoke
 npm run dev -- latest
 npm run dev -- profile --help
+npm run dev -- timeseries --help
 npm run mcp
 ```
 
-Opt-in real upstream smoke tests:
+Opt-in real upstream profile smoke tests:
 
 ```bash
 npm run test:live
 WFG_LIVE_SOURCE=s3 npm run test:live
 ```
 
-They resolve the latest complete cycle through NOAA AWS, make one Prague pressure-profile request through the selected production data path, decode it with real `wgrib2`, and assert the returned shape. They are intentionally excluded from normal CI.
+They are intentionally excluded from normal CI.
 
 ## NOMADS pacing
 
@@ -81,20 +93,18 @@ Default cache/state location: `~/.cache/wfg/`. Override with `WFG_CACHE_DIR`.
 Implemented:
 
 - automatic latest-complete-run discovery via NOAA AWS Open Data
-- explicit GFS run + valid-time → forecast-hour planning
-- pressure-level temperature, RH, U/V wind
-- derived wind speed/direction
-- deterministic NOMADS query planning
-- 11 s cross-process NOMADS limiter
-- immutable NOMADS GRIB cache
-- NOAA AWS `.idx` parsing + selected-message HTTP byte-range fetch + subset cache
-- `wgrib2 -s -lon` point extraction adapter, including 0..360 longitude normalization
-- CLI `latest` and `profile` commands with `--source nomads|s3`
-- MCP `get_latest_gfs_run` and `get_gfs_profile` with structured provenance
-- deterministic offline test suite plus opt-in real NOAA smoke tests
+- pressure-level point profiles
+- native-cadence point time series with bounded concurrency and step guard
+- temperature, RH, U/V wind, derived wind speed/direction
+- deterministic NOMADS geographic-subset path with 11 s cross-process limiter
+- NOAA AWS `.idx` + selected-message byte-range path with reusable subset cache
+- `wgrib2 -s -lon` point extraction
+- CLI `latest`, `profile`, and `timeseries`
+- MCP `get_latest_gfs_run`, `get_gfs_profile`, and `get_gfs_timeseries`
+- comprehensive deterministic offline test suite plus opt-in real NOAA profile smoke tests
 
 Next:
 
 1. broaden the variable/level catalog
-2. add time-series queries, preferentially using the S3 range source
-3. add bounded-area summaries
+2. add bounded-area summaries
+3. add a live time-series smoke after the S3 path has been exercised manually
