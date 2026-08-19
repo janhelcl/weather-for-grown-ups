@@ -1,10 +1,9 @@
 import type { GfsCode } from "../catalog/variables.js";
+import type { RawVariableId } from "../schema/query.js";
 import type { ProfileAccessMethod, ProfileProvider } from "../sources/types.js";
 
-export interface GridPoint {
-  latitude: number;
-  longitude: number;
-}
+export interface GridPoint { latitude: number; longitude: number; }
+export interface BoundingBox { westLongitude: number; eastLongitude: number; southLatitude: number; northLatitude: number; }
 
 export interface DecodedValue {
   code: GfsCode;
@@ -45,17 +44,10 @@ export interface ProfileResult {
   requestedPoint: GridPoint;
   gridPoint: GridPoint;
   levels: ProfileLevel[];
-  source: SourceProvenance & {
-    cacheHit: boolean;
-  };
+  source: SourceProvenance & { cacheHit: boolean };
 }
 
-export interface TimeSeriesStep {
-  validTime: string;
-  forecastHour: number;
-  levels: ProfileLevel[];
-  cacheHit: boolean;
-}
+export interface TimeSeriesStep { validTime: string; forecastHour: number; levels: ProfileLevel[]; cacheHit: boolean; }
 
 export interface TimeSeriesResult {
   model: "gfs_0p25";
@@ -66,4 +58,26 @@ export interface TimeSeriesResult {
   gridPoint: GridPoint;
   source: SourceProvenance;
   series: TimeSeriesStep[];
+}
+
+export interface AreaSummaryResult {
+  model: "gfs_0p25";
+  run: string;
+  validTime: string;
+  forecastHour: number;
+  bbox: BoundingBox;
+  variable: { id: RawVariableId; pressureHpa: number; field: string; unit: string };
+  statistics: {
+    definedGridPoints: number;
+    mean: number;
+    min: number;
+    max: number;
+    meanKind: "unweighted_grid_point_mean";
+  };
+  source: {
+    provider: "NOAA NOMADS";
+    access: "nomads_grib_filter";
+    decoder: "wgrib2";
+    cacheHit: boolean;
+  };
 }

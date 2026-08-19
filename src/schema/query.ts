@@ -1,7 +1,7 @@
 import * as z from "zod/v4";
 import { isSupportedGfsPressureLevel } from "../catalog/pressure-levels.js";
 
-export const variableIdSchema = z.enum([
+export const rawVariableIdSchema = z.enum([
   "temperature",
   "relative_humidity",
   "u_wind",
@@ -14,9 +14,9 @@ export const variableIdSchema = z.enum([
   "total_cloud_cover",
   "cloud_water_mixing_ratio",
   "ozone_mixing_ratio",
-  "wind",
 ]);
 
+export const variableIdSchema = z.enum([...rawVariableIdSchema.options, "wind"]);
 export const profileSourceIdSchema = z.enum(["nomads", "s3"]);
 
 export const isoDateTimeSchema = z.string().refine(
@@ -65,9 +65,42 @@ export const timeSeriesQuerySchema = z.object({
   maxSteps: z.number().int().min(1).max(GFS_TOTAL_NATIVE_FORECAST_STEPS).default(DEFAULT_TIME_SERIES_MAX_STEPS),
 });
 
+export const DEFAULT_AREA_MAX_GRID_POINTS = 50_000;
+export const GFS_GRID_SPACING_DEG = 0.25;
+
+export const areaSummaryQuerySchema = z.object({
+  westLongitude: z.number().min(-180).max(180),
+  eastLongitude: z.number().min(-180).max(180),
+  southLatitude: z.number().min(-90).max(90),
+  northLatitude: z.number().min(-90).max(90),
+  run: runSelectorSchema,
+  validTime: isoDateTimeSchema.describe("Forecast valid time"),
+  variable: rawVariableIdSchema,
+  pressureLevelHpa: pressureLevelSchema,
+  maxGridPoints: z.number().int().min(1).max(1_100_000).default(DEFAULT_AREA_MAX_GRID_POINTS),
+}).superRefine((query, context) => {
+  if (query.eastLongitude <= query.westLongitude) {
+    context.addIssue({
+      code: "custom",
+      path: ["eastLongitude"],
+      message: "eastLongitude must be greater than westLongitude; antimeridian-crossing boxes are not supported yet",
+    });
+  }
+  if (query.northLatitude <= query.southLatitude) {
+    context.addIssue({
+      code: "custom",
+      path: ["northLatitude"],
+      message: "northLatitude must be greater than southLatitude",
+    });
+  }
+});
+
+export type RawVariableId = z.infer<typeof rawVariableIdSchema>;
 export type VariableId = z.infer<typeof variableIdSchema>;
 export type ProfileSourceId = z.infer<typeof profileSourceIdSchema>;
 export type ProfileQuery = z.output<typeof profileQuerySchema>;
 export type ProfileQueryInput = z.input<typeof profileQuerySchema>;
 export type TimeSeriesQuery = z.output<typeof timeSeriesQuerySchema>;
 export type TimeSeriesQueryInput = z.input<typeof timeSeriesQuerySchema>;
+export type AreaSummaryQuery = z.output<typeof areaSummaryQuerySchema>;
+export type AreaSummaryQueryInput = z.input<typeof areaSummaryQuerySchema>;

@@ -14,19 +14,21 @@ npm run test:smoke
 
 ## Layers covered
 
-- Query schema boundaries, timezone handling, run/source defaults, authoritative GFS pressure-level validation, and time-series step guards.
+- Query schema boundaries, timezone handling, run/source defaults, authoritative GFS pressure-level validation, area bbox rules, and context/work guards.
 - Variable catalog metadata, source-vs-output units, derived dependencies, and agent-facing catalog serialization.
 - Full configured GFS pressure-level list, including fractional upper-atmosphere levels.
 - GFS run validation, single-time forecast-hour validation, full native cadence, range intersection, and 384-hour horizon.
 - Bounded asynchronous mapping, stable output ordering, and failure propagation.
 - Latest-complete-run discovery and caching.
 - NOAA AWS `.idx` parsing, exact variable × pressure-level completeness validation, byte-range selection, subset caching, and failure paths.
-- NOMADS URL planning, pacing, cache behavior, and failure paths.
-- `wgrib2` parsing for all supported raw pressure variables, invocation behavior, and wind derivation.
+- NOMADS point/area URL planning, pacing, cache behavior, and failure paths.
+- `wgrib2` parsing for all supported raw pressure variables and point invocation behavior.
+- `wgrib2` area-statistics parsing, longitude normalization, defined-grid counts, missing-data behavior, and command-runner failures.
 - Point profile orchestration across NOMADS/S3, all canonical raw output mappings, no-data behavior, and rejection of partial decoded profiles.
-- Point time-series orchestration, native cadence around f120, latest-run resolution, source consistency, grid consistency, bounded concurrency, cache-hit propagation, and max-step rejection.
-- MCP catalog/latest/profile/time-series success and error mappings.
-- Compiled CLI smoke tests on Node 20 and Node 24, including the catalog command.
+- Point time-series orchestration, native cadence around f120, latest-run resolution, source/grid consistency, bounded concurrency, cache-hit propagation, and max-step rejection.
+- Area-summary orchestration, estimated grid-size rejection before network access, temperature normalization, raw-unit preservation, provenance, and explicit unweighted-mean semantics.
+- MCP catalog/latest/profile/time-series/area success and error mappings.
+- Compiled CLI smoke tests on Node 20 and Node 24, including all five commands.
 
 ## Coverage gates
 
@@ -46,4 +48,4 @@ npm run test:live
 WFG_LIVE_SOURCE=s3 npm run test:live
 ```
 
-Normal PR CI remains offline. A live multi-time smoke should only be added after manually exercising the S3 time-series path, and should stay low-frequency to avoid unnecessary upstream load.
+Normal PR CI remains offline. Live time-series/area checks should only be added after manual upstream exercises and should stay low-frequency to avoid unnecessary upstream load.
