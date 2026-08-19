@@ -4,31 +4,17 @@ import { DEFAULT_NOMADS_COOLDOWN_MS, FileRateLimiter } from "../cache/file-rate-
 import { NomadsCache } from "../cache/nomads-cache.js";
 import { VARIABLE_CATALOG, type RawVariableDefinition } from "../catalog/variables.js";
 import { Wgrib2StatsDecoder, type AreaBox, type GridStatistics } from "../grib/wgrib2-stats.js";
-import {
-  areaSummaryQuerySchema,
-  GFS_GRID_SPACING_DEG,
-  type AreaSummaryQueryInput,
-  type RawVariableId,
-} from "../schema/query.js";
+import { areaSummaryQuerySchema, GFS_GRID_SPACING_DEG, type AreaSummaryQueryInput, type RawVariableId } from "../schema/query.js";
 import { buildNomadsAreaUrl } from "../sources/nomads.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
 import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
+import type { AreaSummaryResult } from "./types.js";
 
-export interface AreaFileCache {
-  fetch(url: string): Promise<{ path: string; cacheHit: boolean }>;
-}
-
-export interface AreaStatsDecoder {
-  summarizeBox(path: string, box: AreaBox): Promise<GridStatistics>;
-}
-
+export interface AreaFileCache { fetch(url: string): Promise<{ path: string; cacheHit: boolean }>; }
+export interface AreaStatsDecoder { summarizeBox(path: string, box: AreaBox): Promise<GridStatistics>; }
 export interface AreaSummaryServiceOptions {
-  cacheDir?: string;
-  cooldownMs?: number;
-  wgrib2Path?: string;
-  cache?: AreaFileCache;
-  decoder?: AreaStatsDecoder;
-  latestRunProvider?: LatestRunProvider;
+  cacheDir?: string; cooldownMs?: number; wgrib2Path?: string;
+  cache?: AreaFileCache; decoder?: AreaStatsDecoder; latestRunProvider?: LatestRunProvider;
 }
 
 export class AreaSummaryService {
@@ -44,13 +30,11 @@ export class AreaSummaryService {
     this.latestRunProvider = options.latestRunProvider ?? new LatestRunResolver();
   }
 
-  async summarize(input: AreaSummaryQueryInput) {
+  async summarize(input: AreaSummaryQueryInput): Promise<AreaSummaryResult> {
     const query = areaSummaryQuerySchema.parse(input);
     const estimatedGridPoints = estimateGridPoints(query);
     if (estimatedGridPoints > query.maxGridPoints) {
-      throw new Error(
-        `Requested bbox is approximately ${estimatedGridPoints} GFS grid points, exceeding maxGridPoints=${query.maxGridPoints}`,
-      );
+      throw new Error(`Requested bbox is approximately ${estimatedGridPoints} GFS grid points, exceeding maxGridPoints=${query.maxGridPoints}`);
     }
 
     const run = query.run === "latest" ? await this.latestRunProvider.resolveLatestRun() : parseGfsRun(query.run);
@@ -58,17 +42,11 @@ export class AreaSummaryService {
     const fh = forecastHour(run, validTime);
     const variable = VARIABLE_CATALOG[query.variable] as RawVariableDefinition;
     const box: AreaBox = {
-      westLongitude: query.westLongitude,
-      eastLongitude: query.eastLongitude,
-      southLatitude: query.southLatitude,
-      northLatitude: query.northLatitude,
+      westLongitude: query.westLongitude, eastLongitude: query.eastLongitude,
+      southLatitude: query.southLatitude, northLatitude: query.northLatitude,
     };
     const url = buildNomadsAreaUrl({
-      run,
-      forecastHour: fh,
-      ...box,
-      variables: [variable],
-      pressureLevelsHpa: [query.pressureLevelHpa],
+      run, forecastHour: fh, ...box, variables: [variable], pressureLevelsHpa: [query.pressureLevelHpa],
     });
     const cached = await this.cache.fetch(url);
     const rawStats = await this.decoder.summarizeBox(cached.path, box);
@@ -76,30 +54,14 @@ export class AreaSummaryService {
     const output = variable.outputs[0];
 
     return {
-      model: "gfs_0p25" as const,
-      run: run.toISOString(),
-      validTime: validTime.toISOString(),
-      forecastHour: fh,
+      model: "gfs_0p25", run: run.toISOString(), validTime: validTime.toISOString(), forecastHour: fh,
       bbox: box,
-      variable: {
-        id: query.variable,
-        pressureHpa: query.pressureLevelHpa,
-        field: output.field,
-        unit: output.unit,
-      },
+      variable: { id: query.variable, pressureHpa: query.pressureLevelHpa, field: output.field, unit: output.unit },
       statistics: {
-        definedGridPoints: rawStats.definedGridPoints,
-        mean: stats.mean,
-        min: stats.min,
-        max: stats.max,
-        meanKind: "unweighted_grid_point_mean" as const,
+        definedGridPoints: rawStats.definedGridPoints, mean: stats.mean, min: stats.min, max: stats.max,
+        meanKind: "unweighted_grid_point_mean",
       },
-      source: {
-        provider: "NOAA NOMADS" as const,
-        access: "nomads_grib_filter" as const,
-        decoder: "wgrib2" as const,
-        cacheHit: cached.cacheHit,
-      },
+      source: { provider: "NOAA NOMADS", access: "nomads_grib_filter", decoder: "wgrib2", cacheHit: cached.cacheHit },
     };
   }
 }

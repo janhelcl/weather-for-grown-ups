@@ -1,11 +1,11 @@
 import { getGfsPressureCatalog } from "./catalog/catalog.js";
 import type { LatestRunProvider } from "./core/latest-run.js";
-import type { ProfileResult, TimeSeriesResult } from "./core/types.js";
+import type { AreaSummaryResult, ProfileResult, TimeSeriesResult } from "./core/types.js";
 import type { AreaSummaryQueryInput, ProfileQueryInput, TimeSeriesQueryInput } from "./schema/query.js";
 
 export interface ProfileGetter { getProfile(query: ProfileQueryInput): Promise<ProfileResult>; }
 export interface TimeSeriesGetter { getTimeSeries(query: TimeSeriesQueryInput): Promise<TimeSeriesResult>; }
-export interface AreaSummaryGetter { summarize(query: AreaSummaryQueryInput): Promise<unknown>; }
+export interface AreaSummaryGetter { summarize(query: AreaSummaryQueryInput): Promise<AreaSummaryResult>; }
 
 export function handleGetGfsCatalog() {
   const output = getGfsPressureCatalog();
@@ -15,7 +15,7 @@ export function handleGetGfsCatalog() {
 export async function handleGetGfsAreaSummary(areaService: AreaSummaryGetter, query: AreaSummaryQueryInput) {
   try {
     const output = await areaService.summarize(query);
-    return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: output as Record<string, unknown> };
+    return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } };
   } catch (error) { return toolError(error); }
 }
 
