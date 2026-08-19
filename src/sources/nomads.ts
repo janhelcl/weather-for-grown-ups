@@ -36,7 +36,7 @@ export function buildNomadsPointUrl(request: NomadsPointRequest): string {
     northLatitude: Math.min(90, request.latitude + 0.5),
     variables: request.variables,
     pressureLevelsHpa: request.pressureLevelsHpa,
-    fields: request.fields,
+    ...(request.fields === undefined ? {} : { fields: request.fields }),
   });
 }
 
