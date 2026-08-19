@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { LatestRunResolver } from "../src/core/latest-run.js";
 import { ProfileService } from "../src/core/profile.js";
+import type { ProfileSourceId } from "../src/schema/query.js";
+
+const source = (process.env.WFG_LIVE_SOURCE ?? "nomads") as ProfileSourceId;
+assert(["nomads", "s3"].includes(source), "WFG_LIVE_SOURCE must be nomads or s3");
 
 const latestRunResolver = new LatestRunResolver();
 const run = await latestRunResolver.resolveLatestRun();
@@ -14,6 +18,7 @@ const result = await service.getProfile({
   validTime: validTime.toISOString(),
   variables: ["temperature", "relative_humidity", "wind"],
   pressureLevelsHpa: [850, 700, 500],
+  source,
 });
 
 assert.equal(result.model, "gfs_0p25");

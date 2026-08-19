@@ -2,7 +2,7 @@
 import { Command } from "commander";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ProfileService } from "./core/profile.js";
-import type { VariableId } from "./schema/query.js";
+import type { ProfileSourceId, VariableId } from "./schema/query.js";
 
 const program = new Command();
 program.name("wfg").description("Weather for Grown Ups — agent-native NOAA GFS access").version("0.1.0");
@@ -29,6 +29,7 @@ program
   .requiredOption("--valid <iso>", "Forecast valid time")
   .option("--vars <list>", "Comma-separated variables", "temperature,relative_humidity,wind")
   .option("--levels <list>", "Comma-separated pressure levels in hPa", "1000,925,850,700,500")
+  .option("--source <nomads|s3>", "Data access path", "nomads")
   .option("--json", "Output JSON")
   .action(async (options) => {
     const service = new ProfileService();
@@ -42,6 +43,7 @@ program
       validTime: options.valid,
       variables,
       pressureLevelsHpa,
+      source: options.source as ProfileSourceId,
     });
 
     if (options.json) {
@@ -50,6 +52,7 @@ program
     }
 
     console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+    console.log(`Source ${result.source.provider} (${result.source.access})`);
     console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
     console.table(
       result.levels.map((level) => ({

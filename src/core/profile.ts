@@ -2,11 +2,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_NOMADS_COOLDOWN_MS, FileRateLimiter } from "../cache/file-rate-limiter.js";
 import { NomadsCache, type CachedFile } from "../cache/nomads-cache.js";
+import { GfsS3SubsetCache } from "../cache/s3-subset-cache.js";
 import { expandRequestedVariables } from "../catalog/variables.js";
 import { deriveWind } from "../derived/wind.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
-import { profileQuerySchema, type ProfileQueryInput } from "../schema/query.js";
-import { buildNomadsPointUrl } from "../sources/nomads.js";
+import { profileQuerySchema, type ProfileQueryInput, type ProfileSourceId } from "../schema/query.js";
+import { NomadsProfileSource, S3ProfileSource } from "../sources/profile-source.js";
+import type { ProfileDataSource } from "../sources/types.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
 import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
 import type { DecodedValue, ProfileLevel, ProfileResult } from "./types.js";
@@ -26,26 +28,27 @@ export interface ProfileServiceOptions {
   cache?: ProfileCache;
   decoder?: PointDecoder;
   latestRunProvider?: LatestRunProvider;
+  sources?: Partial<Record<ProfileSourceId, ProfileDataSource>>;
 }
 
 export class ProfileService {
   private readonly decoder: PointDecoder;
-  private readonly cache: ProfileCache;
   private readonly latestRunProvider: LatestRunProvider;
+  private readonly sources: Record<ProfileSourceId, ProfileDataSource>;
 
   constructor(options: ProfileServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
+    const limiter = new FileRateLimiter(
+      join(cacheDir, "state"),
+      options.cooldownMs ?? DEFAULT_NOMADS_COOLDOWN_MS,
+    );
+    const nomadsCache = options.cache ?? new NomadsCache(join(cacheDir, "grib"), limiter);
 
-    if (options.cache) {
-      this.cache = options.cache;
-    } else {
-      const limiter = new FileRateLimiter(
-        join(cacheDir, "state"),
-        options.cooldownMs ?? DEFAULT_NOMADS_COOLDOWN_MS,
-      );
-      this.cache = new NomadsCache(join(cacheDir, "grib"), limiter);
-    }
-
+    this.sources = {
+      nomads: new NomadsProfileSource(nomadsCache as NomadsCache),
+      s3: new S3ProfileSource(new GfsS3SubsetCache(join(cacheDir, "s3"))),
+      ...options.sources,
+    };
     this.decoder = options.decoder ?? new Wgrib2Decoder(options.wgrib2Path);
     this.latestRunProvider = options.latestRunProvider ?? new LatestRunResolver();
   }
@@ -58,8 +61,9 @@ export class ProfileService {
     const validTime = new Date(query.validTime);
     const fh = forecastHour(run, validTime);
     const variables = expandRequestedVariables(query.variables);
+    const source = this.sources[query.source];
 
-    const url = buildNomadsPointUrl({
+    const cached = await source.fetch({
       run,
       forecastHour: fh,
       latitude: query.latitude,
@@ -67,8 +71,6 @@ export class ProfileService {
       variables,
       pressureLevelsHpa: query.pressureLevelsHpa,
     });
-
-    const cached = await this.cache.fetch(url);
     const values = await this.decoder.extractPoint(cached.path, query.longitude, query.latitude);
     const levelMap = new Map<number, ProfileLevel>();
 
@@ -114,7 +116,8 @@ export class ProfileService {
       gridPoint: firstValue.gridPoint,
       levels: [...levelMap.values()].sort((a, b) => b.pressureHpa - a.pressureHpa),
       source: {
-        provider: "NOAA NOMADS",
+        provider: source.provider,
+        access: source.access,
         decoder: "wgrib2",
         cacheHit: cached.cacheHit,
       },

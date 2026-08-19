@@ -5,11 +5,19 @@ export interface RunAvailabilityProbe {
   isRunComplete(run: Date): Promise<boolean>;
 }
 
-export function buildGfsS3RunMarkerUrl(run: Date): string {
+export function buildGfsS3ForecastUrl(run: Date, forecastHour: number): string {
   const date = yyyymmdd(run);
   const hour = run.getUTCHours().toString().padStart(2, "0");
-  const forecastHour = COMPLETE_RUN_MARKER_FORECAST_HOUR.toString().padStart(3, "0");
-  return `${GFS_S3_BASE_URL}/gfs.${date}/${hour}/atmos/gfs.t${hour}z.pgrb2.0p25.f${forecastHour}.idx`;
+  const fh = forecastHour.toString().padStart(3, "0");
+  return `${GFS_S3_BASE_URL}/gfs.${date}/${hour}/atmos/gfs.t${hour}z.pgrb2.0p25.f${fh}`;
+}
+
+export function buildGfsS3ForecastIndexUrl(run: Date, forecastHour: number): string {
+  return `${buildGfsS3ForecastUrl(run, forecastHour)}.idx`;
+}
+
+export function buildGfsS3RunMarkerUrl(run: Date): string {
+  return buildGfsS3ForecastIndexUrl(run, COMPLETE_RUN_MARKER_FORECAST_HOUR);
 }
 
 export class GfsS3RunProbe implements RunAvailabilityProbe {
