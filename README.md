@@ -4,6 +4,32 @@ Agent-native access to NOAA GFS data: one TypeScript core, thin CLI and MCP surf
 
 The project intentionally exposes the atmospheric model rather than interpreting it. It normalizes NOAA/GFS naming, handles pressure-level queries, manages upstream access constraints, caches immutable forecast slices, and returns structured values suitable for agents.
 
+## Discover the atmospheric catalog
+
+```bash
+wfg catalog
+wfg catalog --json
+```
+
+MCP exposes the same information through `get_gfs_catalog`. The pressure-level catalog is explicit: WFG only accepts pressure levels published by the GFS 0.25° isobaric product, including fractional upper-atmosphere levels down to 0.01 hPa. An arbitrary level such as 842 hPa is rejected before any network request.
+
+Currently supported pressure-level variables:
+
+- `temperature` -> `temperatureC`
+- `relative_humidity` -> `relativeHumidityPct`
+- `u_wind`, `v_wind`
+- `wind` -> derived speed + meteorological direction
+- `geopotential_height`
+- `specific_humidity`
+- `vertical_velocity` (pressure coordinates, Pa/s)
+- `geometric_vertical_velocity` (m/s)
+- `absolute_vorticity`
+- `total_cloud_cover`
+- `cloud_water_mixing_ratio`
+- `ozone_mixing_ratio`
+
+The catalog distinguishes source units from normalized output units. Not every variable exists at every published pressure level; if a requested variable/level combination is absent from a GFS file, WFG fails with the exact missing fields rather than returning a partial profile.
+
 ## Point profile
 
 ```bash
@@ -11,7 +37,7 @@ wfg profile \
   --lat 50.08 \
   --lon 14.43 \
   --valid 2026-08-20T12:00:00Z \
-  --vars temperature,relative_humidity,wind \
+  --vars temperature,relative_humidity,geopotential_height,wind \
   --levels 1000,925,850,700,500
 ```
 
@@ -67,6 +93,7 @@ npm test
 npm run typecheck
 npm run build
 npm run test:smoke
+npm run dev -- catalog
 npm run dev -- latest
 npm run dev -- profile --help
 npm run dev -- timeseries --help
@@ -92,19 +119,20 @@ Default cache/state location: `~/.cache/wfg/`. Override with `WFG_CACHE_DIR`.
 
 Implemented:
 
+- discoverable pressure-level variable/level catalog
 - automatic latest-complete-run discovery via NOAA AWS Open Data
-- pressure-level point profiles
+- pressure-level point profiles with completeness validation
 - native-cadence point time series with bounded concurrency and step guard
-- temperature, RH, U/V wind, derived wind speed/direction
+- 12 raw pressure-level fields plus derived wind
 - deterministic NOMADS geographic-subset path with 11 s cross-process limiter
 - NOAA AWS `.idx` + selected-message byte-range path with reusable subset cache
 - `wgrib2 -s -lon` point extraction
-- CLI `latest`, `profile`, and `timeseries`
-- MCP `get_latest_gfs_run`, `get_gfs_profile`, and `get_gfs_timeseries`
+- CLI `catalog`, `latest`, `profile`, and `timeseries`
+- MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, and `get_gfs_timeseries`
 - comprehensive deterministic offline test suite plus opt-in real NOAA profile smoke tests
 
 Next:
 
-1. broaden the variable/level catalog
-2. add bounded-area summaries
+1. add bounded-area summaries
+2. model surface/height/accumulation fields as separate level/time semantics
 3. add a live time-series smoke after the S3 path has been exercised manually

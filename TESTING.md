@@ -14,17 +14,19 @@ npm run test:smoke
 
 ## Layers covered
 
-- Query schema boundaries, timezone handling, run/source defaults, and time-series step guards.
+- Query schema boundaries, timezone handling, run/source defaults, authoritative GFS pressure-level validation, and time-series step guards.
+- Variable catalog metadata, source-vs-output units, derived dependencies, and agent-facing catalog serialization.
+- Full configured GFS pressure-level list, including fractional upper-atmosphere levels.
 - GFS run validation, single-time forecast-hour validation, full native cadence, range intersection, and 384-hour horizon.
 - Bounded asynchronous mapping, stable output ordering, and failure propagation.
 - Latest-complete-run discovery and caching.
-- NOAA AWS `.idx` parsing, byte-range selection, subset caching, and failure paths.
+- NOAA AWS `.idx` parsing, exact variable × pressure-level completeness validation, byte-range selection, subset caching, and failure paths.
 - NOMADS URL planning, pacing, cache behavior, and failure paths.
-- `wgrib2` parsing/invocation and wind derivation.
-- Point profile orchestration across NOMADS/S3.
+- `wgrib2` parsing for all supported raw pressure variables, invocation behavior, and wind derivation.
+- Point profile orchestration across NOMADS/S3, all canonical raw output mappings, no-data behavior, and rejection of partial decoded profiles.
 - Point time-series orchestration, native cadence around f120, latest-run resolution, source consistency, grid consistency, bounded concurrency, cache-hit propagation, and max-step rejection.
-- MCP latest/profile/time-series success and error mappings.
-- Compiled CLI smoke tests on Node 20 and Node 24.
+- MCP catalog/latest/profile/time-series success and error mappings.
+- Compiled CLI smoke tests on Node 20 and Node 24, including the catalog command.
 
 ## Coverage gates
 
