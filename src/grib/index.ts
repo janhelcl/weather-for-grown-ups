@@ -3,7 +3,7 @@ export interface GribIndexRecord {
   startByte: number;
   variable: string;
   level: string;
-  pressureHpa?: number;
+  pressureHpa: number | undefined;
   raw: string;
 }
 
