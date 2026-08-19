@@ -1,0 +1,27 @@
+name: Live E2E
+
+on:
+  push:
+    branches: [e2e-live-20260819]
+
+jobs:
+  live-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install wgrib2
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wgrib2
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Live profile via NOMADS
+        run: npm run test:live
+      - name: Live profile via NOAA S3 byte ranges
+        run: WFG_LIVE_SOURCE=s3 npm run test:live
