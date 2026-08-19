@@ -72,6 +72,9 @@ export class ProfileService {
       pressureLevelsHpa: query.pressureLevelsHpa,
     });
     const values = await this.decoder.extractPoint(cached.path, query.longitude, query.latitude);
+    const firstValue = values[0];
+    if (!firstValue) throw new Error("No values decoded from GFS response");
+
     assertComplete(values, variables.map((variable) => variable.gfsCode), query.pressureLevelsHpa);
 
     const levelMap = new Map<number, ProfileLevel>();
@@ -91,9 +94,6 @@ export class ProfileService {
         level.windDirectionDeg = wind.directionDeg;
       }
     }
-
-    const firstValue = values[0];
-    if (!firstValue) throw new Error("No values decoded from GFS response");
 
     return {
       model: "gfs_0p25",

@@ -63,16 +63,25 @@ describe("profileQuerySchema", () => {
     expect(parses({ variables: ["made_up_weather"] }).success).toBe(false);
   });
 
-  it.each([1, 1100])("accepts pressure-level boundary %s hPa", (level) => {
+  it.each([1000, 925, 1, 0.7, 0.01])("accepts published pressure level %s hPa", (level) => {
     expect(parses({ pressureLevelsHpa: [level] }).success).toBe(true);
   });
 
-  it.each([0, 1101, 850.5])("rejects invalid pressure level %s", (level) => {
+  it.each([1100, 842, 850.5, 0, -1, 0.05])("rejects unpublished pressure level %s", (level) => {
     expect(parses({ pressureLevelsHpa: [level] }).success).toBe(false);
   });
 
   it("requires at least one pressure level", () => {
     expect(parses({ pressureLevelsHpa: [] }).success).toBe(false);
+  });
+
+  it("accepts every newly supported pressure-level variable", () => {
+    const variables = [
+      "geopotential_height", "specific_humidity", "vertical_velocity",
+      "geometric_vertical_velocity", "absolute_vorticity", "total_cloud_cover",
+      "cloud_water_mixing_ratio", "ozone_mixing_ratio",
+    ];
+    expect(parses({ variables }).success).toBe(true);
   });
 
   it("rejects ambiguous run and valid times before orchestration starts", () => {
