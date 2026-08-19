@@ -1,63 +1,78 @@
 import type { VariableId } from "../schema/query.js";
 
-export type GfsCode = "TMP" | "RH" | "UGRD" | "VGRD";
+export const SUPPORTED_GFS_CODES = [
+  "TMP",
+  "RH",
+  "UGRD",
+  "VGRD",
+  "HGT",
+  "SPFH",
+  "VVEL",
+  "DZDT",
+  "ABSV",
+  "TCDC",
+  "CLWMR",
+  "O3MR",
+] as const;
 
-export interface RawVariableDefinition {
-  id: Exclude<VariableId, "wind">;
-  kind: "raw";
-  gfsCode: GfsCode;
+export type GfsCode = (typeof SUPPORTED_GFS_CODES)[number];
+export type RawVariableId = Exclude<VariableId, "wind">;
+
+export interface VariableOutput {
+  field: string;
   unit: string;
   description: string;
+}
+
+export interface RawVariableDefinition {
+  id: RawVariableId;
+  kind: "raw";
+  levelType: "isobaric_hpa";
+  gfsCode: GfsCode;
+  sourceUnit: string;
+  description: string;
+  outputs: readonly [VariableOutput];
 }
 
 export interface DerivedVariableDefinition {
   id: "wind";
   kind: "derived";
-  dependencies: ["u_wind", "v_wind"];
+  levelType: "isobaric_hpa";
+  dependencies: readonly ["u_wind", "v_wind"];
   description: string;
+  outputs: readonly VariableOutput[];
 }
 
 export type VariableDefinition = RawVariableDefinition | DerivedVariableDefinition;
 
 export const VARIABLE_CATALOG: Record<VariableId, VariableDefinition> = {
-  temperature: {
-    id: "temperature",
-    kind: "raw",
-    gfsCode: "TMP",
-    unit: "K",
-    description: "Air temperature on an isobaric pressure level",
-  },
-  relative_humidity: {
-    id: "relative_humidity",
-    kind: "raw",
-    gfsCode: "RH",
-    unit: "%",
-    description: "Relative humidity on an isobaric pressure level",
-  },
-  u_wind: {
-    id: "u_wind",
-    kind: "raw",
-    gfsCode: "UGRD",
-    unit: "m/s",
-    description: "Eastward wind component on an isobaric pressure level",
-  },
-  v_wind: {
-    id: "v_wind",
-    kind: "raw",
-    gfsCode: "VGRD",
-    unit: "m/s",
-    description: "Northward wind component on an isobaric pressure level",
-  },
+  temperature: raw("temperature", "TMP", "K", "Air temperature", "temperatureC", "degC", "Air temperature converted to degrees Celsius"),
+  relative_humidity: raw("relative_humidity", "RH", "%", "Relative humidity", "relativeHumidityPct", "%", "Relative humidity"),
+  u_wind: raw("u_wind", "UGRD", "m/s", "Eastward wind component", "uWindMs", "m/s", "Eastward wind component"),
+  v_wind: raw("v_wind", "VGRD", "m/s", "Northward wind component", "vWindMs", "m/s", "Northward wind component"),
+  geopotential_height: raw("geopotential_height", "HGT", "gpm", "Geopotential height", "geopotentialHeightGpm", "gpm", "Geopotential height"),
+  specific_humidity: raw("specific_humidity", "SPFH", "kg/kg", "Specific humidity", "specificHumidityKgKg", "kg/kg", "Specific humidity"),
+  vertical_velocity: raw("vertical_velocity", "VVEL", "Pa/s", "Vertical velocity in pressure coordinates", "verticalVelocityPaS", "Pa/s", "Pressure-coordinate vertical velocity"),
+  geometric_vertical_velocity: raw("geometric_vertical_velocity", "DZDT", "m/s", "Vertical velocity in geometric coordinates", "geometricVerticalVelocityMs", "m/s", "Geometric vertical velocity"),
+  absolute_vorticity: raw("absolute_vorticity", "ABSV", "1/s", "Absolute vorticity", "absoluteVorticityS1", "1/s", "Absolute vorticity"),
+  total_cloud_cover: raw("total_cloud_cover", "TCDC", "%", "Total cloud cover on an isobaric surface", "totalCloudCoverPct", "%", "Total cloud cover"),
+  cloud_water_mixing_ratio: raw("cloud_water_mixing_ratio", "CLWMR", "kg/kg", "Cloud water mixing ratio", "cloudWaterMixingRatioKgKg", "kg/kg", "Cloud water mixing ratio"),
+  ozone_mixing_ratio: raw("ozone_mixing_ratio", "O3MR", "kg/kg", "Ozone mixing ratio", "ozoneMixingRatioKgKg", "kg/kg", "Ozone mixing ratio"),
   wind: {
     id: "wind",
     kind: "derived",
+    levelType: "isobaric_hpa",
     dependencies: ["u_wind", "v_wind"],
     description: "Wind speed and meteorological direction derived from U/V components",
+    outputs: [
+      { field: "windSpeedMs", unit: "m/s", description: "Wind speed" },
+      { field: "windDirectionDeg", unit: "degree", description: "Meteorological wind direction" },
+    ],
   },
 };
 
 export function expandRequestedVariables(ids: VariableId[]): RawVariableDefinition[] {
-  const rawIds = new Set<Exclude<VariableId, "wind">>();
+  const rawIds = new Set<RawVariableId>();
 
   for (const id of ids) {
     const definition = VARIABLE_CATALOG[id];
@@ -69,4 +84,24 @@ export function expandRequestedVariables(ids: VariableId[]): RawVariableDefiniti
   }
 
   return [...rawIds].map((id) => VARIABLE_CATALOG[id] as RawVariableDefinition);
+}
+
+function raw(
+  id: RawVariableId,
+  gfsCode: GfsCode,
+  sourceUnit: string,
+  description: string,
+  field: string,
+  outputUnit: string,
+  outputDescription: string,
+): RawVariableDefinition {
+  return {
+    id,
+    kind: "raw",
+    levelType: "isobaric_hpa",
+    gfsCode,
+    sourceUnit,
+    description,
+    outputs: [{ field, unit: outputUnit, description: outputDescription }],
+  };
 }

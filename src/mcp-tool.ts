@@ -1,3 +1,4 @@
+import { getGfsPressureCatalog } from "./catalog/catalog.js";
 import type { LatestRunProvider } from "./core/latest-run.js";
 import type { ProfileResult, TimeSeriesResult } from "./core/types.js";
 import type { ProfileQueryInput, TimeSeriesQueryInput } from "./schema/query.js";
@@ -8,6 +9,14 @@ export interface ProfileGetter {
 
 export interface TimeSeriesGetter {
   getTimeSeries(query: TimeSeriesQueryInput): Promise<TimeSeriesResult>;
+}
+
+export function handleGetGfsCatalog() {
+  const output = getGfsPressureCatalog();
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(output) }],
+    structuredContent: { ...output },
+  };
 }
 
 export async function handleGetGfsProfile(profileService: ProfileGetter, query: ProfileQueryInput) {
