@@ -1,4 +1,5 @@
 import { execa } from "execa";
+import { findNamedNonIsobaricLevel } from "../catalog/non-isobaric-fields.js";
 import { ALL_SUPPORTED_GFS_CODES, type GfsCode } from "../catalog/variables.js";
 import type { DecodedValue } from "../core/types.js";
 
@@ -42,24 +43,32 @@ export class Wgrib2Decoder {
 }
 
 export function parseWgrib2PointLine(line: string): DecodedValue | null {
+  const parts = line.split(":");
+  const gribLevel = parts[4] ?? "";
   const codeMatch = line.match(CODE_PATTERN);
-  const pressureMatch = line.match(/:(\d+(?:\.\d+)?) mb:/);
-  const surfaceMatch = line.match(/:surface:/);
-  const heightMatch = line.match(/:(\d+(?:\.\d+)?) m above ground:/);
+  const pressureMatch = gribLevel.match(/^(\d+(?:\.\d+)?) mb$/);
+  const surfaceMatch = gribLevel === "surface";
+  const heightMatch = gribLevel.match(/^(\d+(?:\.\d+)?) m above ground$/);
+  const namedLevel = findNamedNonIsobaricLevel(gribLevel);
   const pointMatch = line.match(/lon=([-+\d.eE]+),lat=([-+\d.eE]+)/);
   const valueMatch = line.match(/val=([-+\d.eE]+)/);
 
-  if (!codeMatch || (!pressureMatch && !surfaceMatch && !heightMatch) || !pointMatch || !valueMatch) return null;
+  if (!codeMatch || (!pressureMatch && !surfaceMatch && !heightMatch && !namedLevel) || !pointMatch || !valueMatch) {
+    return null;
+  }
 
   const code = codeMatch[1];
   if (!code || !SUPPORTED_CODE_SET.has(code)) return null;
 
   const accumulationMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour acc(?: fcst)?:/i);
+  const averageMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour ave(?: fcst)?:/i);
   const level = pressureMatch?.[1] !== undefined
     ? { pressureHpa: Number(pressureMatch[1]) }
     : heightMatch?.[1] !== undefined
       ? { heightAboveGroundM: Number(heightMatch[1]) }
-      : { surface: true as const };
+      : surfaceMatch
+        ? { surface: true as const }
+        : { namedVertical: namedLevel!.gribLevel };
 
   return {
     code: code as GfsCode,
@@ -69,6 +78,14 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
           accumulation: {
             startForecastHour: Number(accumulationMatch[1]),
             endForecastHour: Number(accumulationMatch[2]),
+          },
+        }
+      : {}),
+    ...(averageMatch?.[1] !== undefined && averageMatch[2] !== undefined
+      ? {
+          average: {
+            startForecastHour: Number(averageMatch[1]),
+            endForecastHour: Number(averageMatch[2]),
           },
         }
       : {}),

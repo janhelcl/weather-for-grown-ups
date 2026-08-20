@@ -30,7 +30,7 @@ export function getGfsPressureCatalog() {
           },
     ),
     fieldSemanticsNote:
-      "Non-isobaric fields carry explicit vertical and temporal semantics. Accumulation results include their exact GFS forecast-hour interval.",
+      "Non-isobaric fields carry explicit vertical and temporal semantics. Named layers/levels remain distinct from pressure surfaces; accumulation and average results include their exact GFS forecast-hour interval.",
     fields: Object.values(NON_ISOBARIC_FIELD_CATALOG).map((definition) =>
       definition.kind === "raw"
         ? {

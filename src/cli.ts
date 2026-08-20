@@ -35,7 +35,7 @@ program
     console.table(catalog.fields.map((field) => ({
       id: field.id,
       kind: field.kind,
-      level: field.level.type === "surface" ? "surface" : `${field.level.heightM} m AGL`,
+      level: formatFieldLevel(field.level),
       temporal: field.temporalSemantics,
       gfs: "gfsCode" in field ? field.gfsCode : "derived",
       output: field.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
@@ -161,6 +161,15 @@ program
   });
 
 await program.parseAsync();
+
+function formatFieldLevel(level: ReturnType<typeof getGfsPressureCatalog>["fields"][number]["level"]): string {
+  switch (level.type) {
+    case "surface": return "surface";
+    case "height_above_ground_m": return `${level.heightM} m AGL`;
+    case "named_layer": return level.id.replaceAll("_", " ");
+    case "named_level": return level.id.replaceAll("_", " ");
+  }
+}
 
 function pointSelection(vars: unknown, levels: unknown, fields: unknown): {
   variables?: VariableId[];

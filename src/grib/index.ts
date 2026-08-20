@@ -1,4 +1,7 @@
-import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
+import type {
+  FieldTemporalSemantics,
+  RawNonIsobaricFieldDefinition,
+} from "../catalog/non-isobaric-fields.js";
 
 export interface GribIndexRecord {
   message: string;
@@ -90,10 +93,10 @@ export function selectNonIsobaricByteRanges(
     const match = records.find((record) =>
       record.variable === field.gfsCode &&
       record.level === field.level.gribLevel &&
-      (field.temporalSemantics !== "accumulation" || isAccumulationRecord(record)),
+      matchesTemporalSemantics(record, field.temporalSemantics),
     );
     if (!match) {
-      missing.push(`${field.id} (${field.gfsCode}@${field.level.gribLevel}${field.temporalSemantics === "accumulation" ? ", accumulation" : ""})`);
+      missing.push(`${field.id} (${field.gfsCode}@${field.level.gribLevel}, ${field.temporalSemantics})`);
       continue;
     }
     selectedStarts.add(match.startByte);
@@ -111,9 +114,18 @@ export function mergeByteRanges(...groups: ByteRange[][]): ByteRange[] {
   return [...byStart.values()].sort((a, b) => a.start - b.start);
 }
 
-function isAccumulationRecord(record: GribIndexRecord): boolean {
-  const forecastDescriptor = record.raw.split(":")[5] ?? "";
-  return /\bacc\b/i.test(forecastDescriptor);
+function matchesTemporalSemantics(
+  record: GribIndexRecord,
+  semantics: FieldTemporalSemantics,
+): boolean {
+  const descriptor = forecastDescriptor(record);
+  if (semantics === "accumulation") return /\bacc\b/i.test(descriptor);
+  if (semantics === "average") return /\bave\b/i.test(descriptor);
+  return !/\b(?:acc|ave)\b/i.test(descriptor);
+}
+
+function forecastDescriptor(record: GribIndexRecord): string {
+  return record.raw.split(":")[5] ?? "";
 }
 
 function rangesForStarts(records: GribIndexRecord[], selectedStarts: Set<number>): ByteRange[] {

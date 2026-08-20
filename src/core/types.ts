@@ -1,4 +1,8 @@
-import type { NonIsobaricFieldId } from "../catalog/non-isobaric-fields.js";
+import type {
+  NonIsobaricFieldId,
+  NonIsobaricNamedLayerId,
+  NonIsobaricNamedLevelId,
+} from "../catalog/non-isobaric-fields.js";
 import type { GfsCode } from "../catalog/variables.js";
 import type { RawVariableId } from "../schema/query.js";
 import type { ProfileAccessMethod, ProfileProvider } from "../sources/types.js";
@@ -6,7 +10,7 @@ import type { ProfileAccessMethod, ProfileProvider } from "../sources/types.js";
 export interface GridPoint { latitude: number; longitude: number; }
 export interface BoundingBox { westLongitude: number; eastLongitude: number; southLatitude: number; northLatitude: number; }
 
-export interface AccumulationInterval {
+export interface ForecastInterval {
   startForecastHour: number;
   endForecastHour: number;
 }
@@ -16,7 +20,9 @@ export interface DecodedValue {
   pressureHpa?: number;
   surface?: true;
   heightAboveGroundM?: number;
-  accumulation?: AccumulationInterval;
+  namedVertical?: string;
+  accumulation?: ForecastInterval;
+  average?: ForecastInterval;
   value: number;
   gridPoint: GridPoint;
 }
@@ -47,11 +53,20 @@ export type FieldTemporalResult =
       endForecastHour: number;
       startTime: string;
       endTime: string;
+    }
+  | {
+      type: "average";
+      startForecastHour: number;
+      endForecastHour: number;
+      startTime: string;
+      endTime: string;
     };
 
 export type NonIsobaricFieldLevelResult =
   | { type: "surface" }
-  | { type: "height_above_ground_m"; heightM: number };
+  | { type: "height_above_ground_m"; heightM: number }
+  | { type: "named_layer"; id: NonIsobaricNamedLayerId }
+  | { type: "named_level"; id: NonIsobaricNamedLevelId };
 
 export interface NonIsobaricFieldResult {
   id: NonIsobaricFieldId;

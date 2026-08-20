@@ -22,8 +22,13 @@ The catalog also exposes non-isobaric fields with explicit vertical and temporal
 - U/V and derived wind at 10, 20, 30, 40, 50, 80, and 100 m above ground
 - 80 m temperature, specific humidity, and pressure; 100 m temperature
 - accumulated total precipitation, with its exact GFS forecast-hour accumulation interval
+- whole-atmosphere products including precipitable water, cloud water, relative humidity, total ozone, and cloud work function
+- low/middle/high and whole-atmosphere cloud cover, including both instantaneous and forecast-window-average products where GFS publishes both
+- cloud ceiling, convective cloud base/top pressure, low/middle/high cloud base/top pressure, low/middle/high cloud-top temperature, convective cloud cover, and boundary-layer cloud cover
 
-The catalog distinguishes source units from normalized output units. If a requested variable/level combination or exact non-isobaric field is absent from a GFS file, WFG fails with the missing field rather than returning a partial result.
+Named cloud layers and named cloud levels are modeled separately from pressure surfaces and height-above-ground levels. Forecast-window averages are also distinct from instantaneous values and accumulations; their exact start/end forecast hours and UTC timestamps are returned with the value.
+
+The catalog distinguishes source units from normalized output units. If a requested variable/level combination or exact non-isobaric field is absent from a GFS file, WFG fails with the missing field rather than returning a partial result. Some interval products are not present in the analysis (`f000`) file, so asking for them at that valid time intentionally fails rather than substituting a different temporal product.
 
 ## Point query
 
@@ -45,13 +50,13 @@ wfg profile \
   --lat 50.08 \
   --lon 14.43 \
   --valid 2026-08-20T12:00:00Z \
-  --fields temperature_2m,wind_10m,surface_cape,boundary_layer_height,total_precipitation \
+  --fields temperature_2m,wind_10m,low_cloud_cover,low_cloud_base_pressure,precipitable_water \
   --json
 ```
 
 Pressure-level variables and non-isobaric fields can be requested together in the same call by providing `--vars`, `--levels`, and `--fields`.
 
-Non-isobaric results are records with three explicit pieces of semantics: `level`, `temporal`, and normalized `values`. For example, `total_precipitation` is returned with `temporal.type="accumulation"`, start/end forecast hours, and start/end UTC timestamps rather than being presented as an instantaneous value.
+Non-isobaric results are records with three explicit pieces of semantics: `level`, `temporal`, and normalized `values`. For example, `total_precipitation` is returned with `temporal.type="accumulation"`, while `low_cloud_base_pressure` is returned with `temporal.type="average"`; both interval-valued products include start/end forecast hours and start/end UTC timestamps.
 
 The run defaults to the latest **complete** GFS cycle. Use `wfg latest` to inspect it or pass `--run ...` for reproducibility.
 
@@ -63,7 +68,7 @@ wfg timeseries \
   --lon 14.43 \
   --from 2026-08-20T06:00:00Z \
   --to 2026-08-22T18:00:00Z \
-  --fields temperature_2m,wind_10m,total_precipitation \
+  --fields temperature_2m,wind_10m,low_cloud_cover,precipitable_water \
   --json
 ```
 
@@ -86,9 +91,9 @@ Area summaries intentionally remain pressure-level-only for now: Grib Filter cro
 
 ## Two data paths
 
-NOMADS is the default for single point queries and the area-summary path because its Grib Filter can geographically subset before transfer. Surface and height-above-ground selections use the same Grib Filter request as pressure levels, so all physical NOMADS downloads continue to pass through the shared courtesy limiter.
+NOMADS is the default for single point queries and the area-summary path because its Grib Filter can geographically subset before transfer. Surface, height-above-ground, named-layer, and named-level selections use the same Grib Filter request as pressure levels, so all physical NOMADS downloads continue to pass through the shared courtesy limiter.
 
-For multi-time workflows, NOAA AWS Open Data is the default. The S3 path fetches the `.idx` inventory, identifies only requested pressure and non-isobaric GRIB messages, derives byte ranges, and downloads those messages with HTTP Range requests. Accumulation selectors require an accumulation inventory record instead of matching only by variable and vertical level.
+For multi-time workflows, NOAA AWS Open Data is the default. The S3 path fetches the `.idx` inventory, identifies only requested pressure and non-isobaric GRIB messages, derives byte ranges, and downloads those messages with HTTP Range requests. Non-isobaric selectors match variable, exact vertical semantics, and exact temporal semantics, so an instantaneous cloud-cover request cannot silently select the forecast-window-average record at the same layer.
 
 Both data paths feed `wgrib2` and return normalized data with explicit provenance.
 
@@ -140,20 +145,21 @@ Implemented:
 - automatic latest-complete-run discovery via NOAA AWS Open Data
 - pressure-level point profiles with completeness validation
 - surface and height-above-ground point fields with exact-level validation
-- accumulation fields with explicit forecast intervals
+- named cloud layers/levels and whole-atmosphere column products with exact vertical semantics
+- accumulation and forecast-window-average fields with explicit forecast intervals
 - native-cadence point time series with bounded concurrency and step guard
 - bounded raw pressure-field area min/max/unweighted mean without returning grids
 - 12 raw pressure-level fields plus derived wind
 - surface diagnostics plus 2/10/20/30/40/50/80/100 m fields and derived winds
+- instantaneous and averaged cloud-cover layers, cloud boundaries/top temperatures, cloud ceiling, precipitable/cloud water, ozone, and cloud work function
 - deterministic NOMADS geographic-subset path with 11 s cross-process limiter
 - NOAA AWS `.idx` + selected-message byte-range path with reusable subset cache
-- `wgrib2` point extraction for isobaric/non-isobaric semantics and area statistics adapters
+- `wgrib2` point extraction for isobaric/non-isobaric named-layer and temporal semantics plus area statistics adapters
 - CLI `catalog`, `latest`, `profile`, `timeseries`, and `area`
 - MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_timeseries`, and `summarize_gfs_area`
 - comprehensive deterministic offline test suite plus opt-in real NOAA profile smoke tests
 
 Next:
 
-1. model cloud layers and other layer-valued products
-2. optionally add extrema locations to bounded area summaries
-3. add a live non-isobaric/time-series smoke after the S3 path has been exercised manually
+1. optionally add extrema locations to bounded area summaries
+2. add a live non-isobaric/time-series smoke after the S3 path has been exercised manually
