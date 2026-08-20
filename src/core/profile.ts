@@ -21,6 +21,7 @@ import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
 import type {
   DecodedValue,
   FieldTemporalResult,
+  ForecastInterval,
   NonIsobaricFieldResult,
   ProfileLevel,
   ProfileResult,
@@ -190,9 +191,12 @@ function buildFieldResult(
 }
 
 function publicLevel(level: NonIsobaricLevel): NonIsobaricFieldResult["level"] {
-  return level.type === "surface"
-    ? { type: "surface" }
-    : { type: "height_above_ground_m", heightM: level.heightM };
+  switch (level.type) {
+    case "surface": return { type: "surface" };
+    case "height_above_ground_m": return { type: "height_above_ground_m", heightM: level.heightM };
+    case "named_layer": return { type: "named_layer", id: level.id };
+    case "named_level": return { type: "named_level", id: level.id };
+  }
 }
 
 function temporalResult(
@@ -201,10 +205,23 @@ function temporalResult(
   run: Date,
 ): FieldTemporalResult {
   if (definition.temporalSemantics === "instantaneous") return { type: "instantaneous" };
-  const interval = value.accumulation;
-  if (!interval) throw new Error(`Decoded ${definition.id} is missing its accumulation interval`);
+
+  const interval = definition.temporalSemantics === "accumulation"
+    ? value.accumulation
+    : value.average;
+  if (!interval) {
+    throw new Error(`Decoded ${definition.id} is missing its ${definition.temporalSemantics} interval`);
+  }
+  return intervalResult(definition.temporalSemantics, interval, run);
+}
+
+function intervalResult(
+  type: "accumulation" | "average",
+  interval: ForecastInterval,
+  run: Date,
+): Exclude<FieldTemporalResult, { type: "instantaneous" }> {
   return {
-    type: "accumulation",
+    type,
     ...interval,
     startTime: new Date(run.getTime() + interval.startForecastHour * 3_600_000).toISOString(),
     endTime: new Date(run.getTime() + interval.endForecastHour * 3_600_000).toISOString(),
@@ -219,13 +236,19 @@ function normalizeFieldValue(definition: RawNonIsobaricFieldDefinition, value: n
 
 function matchesRawField(definition: RawNonIsobaricFieldDefinition, value: DecodedValue): boolean {
   if (definition.gfsCode !== value.code) return false;
+
   const levelMatches = definition.level.type === "surface"
     ? value.surface === true
-    : value.heightAboveGroundM === definition.level.heightM;
+    : definition.level.type === "height_above_ground_m"
+      ? value.heightAboveGroundM === definition.level.heightM
+      : value.namedVertical === definition.level.gribLevel;
   if (!levelMatches) return false;
-  return definition.temporalSemantics === "accumulation"
-    ? value.accumulation !== undefined
-    : value.accumulation === undefined;
+
+  switch (definition.temporalSemantics) {
+    case "instantaneous": return value.accumulation === undefined && value.average === undefined;
+    case "accumulation": return value.accumulation !== undefined;
+    case "average": return value.average !== undefined;
+  }
 }
 
 function assertPressureComplete(values: DecodedValue[], codes: string[], levels: number[]): void {
@@ -247,7 +270,7 @@ function assertPressureComplete(values: DecodedValue[], codes: string[], levels:
 function assertFieldsComplete(values: DecodedValue[], fields: RawNonIsobaricFieldDefinition[]): void {
   const missing = fields
     .filter((field) => !values.some((value) => matchesRawField(field, value)))
-    .map((field) => `${field.id} (${field.gfsCode}@${field.level.gribLevel})`);
+    .map((field) => `${field.id} (${field.gfsCode}@${field.level.gribLevel}, ${field.temporalSemantics})`);
   if (missing.length > 0) {
     throw new Error(`Decoded GFS data is missing requested fields: ${missing.join(", ")}`);
   }
