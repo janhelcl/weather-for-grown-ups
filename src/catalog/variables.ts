@@ -24,6 +24,13 @@ export const ALL_SUPPORTED_GFS_CODES = [
   "HPBL",
   "DPT",
   "APCP",
+  "PWAT",
+  "CWAT",
+  "TOZNE",
+  "LCDC",
+  "MCDC",
+  "HCDC",
+  "CWORK",
 ] as const;
 
 export type GfsCode = (typeof ALL_SUPPORTED_GFS_CODES)[number];
