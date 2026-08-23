@@ -14,6 +14,7 @@ import {
   type GefsEnsembleProfileResult,
 } from "../schema/gefs-ensemble-profile.js";
 import { mapConcurrent } from "./concurrency.js";
+import { summarizeNumericDistribution } from "./ensemble-statistics.js";
 import { DEFAULT_GEFS_MEMBER_CONCURRENCY, type GefsPointDecoder } from "./gefs-ensemble.js";
 import { GefsLatestRunResolver, type GefsLatestRunProvider } from "./gefs-latest-run.js";
 import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
@@ -100,15 +101,7 @@ export class GefsEnsembleProfileService {
           pressureLevelHpa,
           outputField: output.field,
           unit: output.unit,
-          memberCount: values.length,
-          mean: mean(values),
-          populationStdDev: populationStdDev(values),
-          min: Math.min(...values),
-          max: Math.max(...values),
-          quantiles: quantiles.map((quantileValue) => ({
-            quantile: quantileValue,
-            value: quantile(values, quantileValue),
-          })),
+          ...summarizeNumericDistribution(values, quantiles),
         };
       }),
     );
@@ -194,26 +187,4 @@ function normalizeValue(variable: RawVariableDefinition, value: number): number 
   const output = variable.outputs[0];
   if (variable.sourceUnit === "K" && output.unit === "degC") return value - 273.15;
   return value;
-}
-
-function mean(values: readonly number[]): number {
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function populationStdDev(values: readonly number[]): number {
-  const average = mean(values);
-  const variance = values.reduce((sum, value) => sum + (value - average) ** 2, 0) / values.length;
-  return Math.sqrt(variance);
-}
-
-function quantile(values: readonly number[], q: number): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const position = q * (sorted.length - 1);
-  const lowerIndex = Math.floor(position);
-  const upperIndex = Math.ceil(position);
-  const lower = sorted[lowerIndex];
-  const upper = sorted[upperIndex];
-  if (lower === undefined || upper === undefined) throw new Error("Cannot compute GEFS profile quantile from an empty ensemble");
-  if (lowerIndex === upperIndex) return lower;
-  return lower + (upper - lower) * (position - lowerIndex);
 }
