@@ -4,6 +4,7 @@ import type {
   NonIsobaricNamedLayerId,
   NonIsobaricNamedLevelId,
 } from "../catalog/non-isobaric-fields.js";
+import type { ParcelComputation } from "../derived/parcel-diagnostics.js";
 import type { GfsCode } from "../catalog/variables.js";
 import type {
   FreezingLevelCrossing,
@@ -143,6 +144,19 @@ export interface ProfileDiagnosticsResult {
   sampledPressureLevelsHpa: number[];
   levels: ProfileLevel[];
   diagnostics: ProfileDiagnosticResult[];
+  source: SourceProvenance & { cacheHit: boolean };
+}
+
+export interface ParcelDiagnosticsResult {
+  model: "gfs_0p25";
+  run: string;
+  validTime: string;
+  forecastHour: number;
+  requestedPoint: GridPoint;
+  gridPoint: GridPoint;
+  sampledPressureLevelsHpa: number[];
+  levels: ProfileLevel[];
+  parcel: ParcelComputation;
   source: SourceProvenance & { cacheHit: boolean };
 }
 
