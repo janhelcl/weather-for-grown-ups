@@ -1,4 +1,4 @@
-import type { VariableId } from "../schema/query.js";
+import type { RawVariableId, VariableId } from "../schema/query.js";
 
 export const SUPPORTED_GFS_CODES = [
   "TMP",
@@ -34,7 +34,7 @@ export const ALL_SUPPORTED_GFS_CODES = [
 ] as const;
 
 export type GfsCode = (typeof ALL_SUPPORTED_GFS_CODES)[number];
-export type RawVariableId = Exclude<VariableId, "wind">;
+export type DerivedVariableId = Exclude<VariableId, RawVariableId>;
 
 export interface VariableOutput {
   field: string;
@@ -53,10 +53,10 @@ export interface RawVariableDefinition {
 }
 
 export interface DerivedVariableDefinition {
-  id: "wind";
+  id: DerivedVariableId;
   kind: "derived";
   levelType: "isobaric_hpa";
-  dependencies: readonly ["u_wind", "v_wind"];
+  dependencies: readonly RawVariableId[];
   description: string;
   outputs: readonly VariableOutput[];
 }
@@ -76,17 +76,45 @@ export const VARIABLE_CATALOG: Record<VariableId, VariableDefinition> = {
   total_cloud_cover: raw("total_cloud_cover", "TCDC", "%", "Total cloud cover on an isobaric surface", "totalCloudCoverPct", "%", "Total cloud cover"),
   cloud_water_mixing_ratio: raw("cloud_water_mixing_ratio", "CLWMR", "kg/kg", "Cloud water mixing ratio", "cloudWaterMixingRatioKgKg", "kg/kg", "Cloud water mixing ratio"),
   ozone_mixing_ratio: raw("ozone_mixing_ratio", "O3MR", "kg/kg", "Ozone mixing ratio", "ozoneMixingRatioKgKg", "kg/kg", "Ozone mixing ratio"),
-  wind: {
-    id: "wind",
-    kind: "derived",
-    levelType: "isobaric_hpa",
-    dependencies: ["u_wind", "v_wind"],
-    description: "Wind speed and meteorological direction derived from U/V components",
-    outputs: [
+  wind: derived(
+    "wind",
+    ["u_wind", "v_wind"],
+    "Wind speed and meteorological direction derived from U/V components",
+    [
       { field: "windSpeedMs", unit: "m/s", description: "Wind speed" },
       { field: "windDirectionDeg", unit: "degree", description: "Meteorological wind direction" },
     ],
-  },
+  ),
+  dew_point: derived(
+    "dew_point",
+    ["temperature", "relative_humidity"],
+    "Dew point derived from temperature and relative humidity with the Magnus approximation",
+    [{ field: "dewPointC", unit: "degC", description: "Dew-point temperature" }],
+  ),
+  potential_temperature: derived(
+    "potential_temperature",
+    ["temperature"],
+    "Potential temperature derived with Poisson's equation using the isobaric level pressure and a 1000 hPa reference",
+    [{ field: "potentialTemperatureK", unit: "K", description: "Potential temperature" }],
+  ),
+  mixing_ratio: derived(
+    "mixing_ratio",
+    ["specific_humidity"],
+    "Water-vapor mixing ratio derived exactly from specific humidity",
+    [{ field: "mixingRatioKgKg", unit: "kg/kg", description: "Water-vapor mixing ratio" }],
+  ),
+  virtual_temperature: derived(
+    "virtual_temperature",
+    ["temperature", "specific_humidity"],
+    "Virtual temperature derived from temperature and specific humidity",
+    [{ field: "virtualTemperatureC", unit: "degC", description: "Virtual temperature" }],
+  ),
+  air_density: derived(
+    "air_density",
+    ["temperature", "specific_humidity"],
+    "Moist-air density derived from isobaric pressure and virtual temperature using the ideal-gas relation",
+    [{ field: "airDensityKgM3", unit: "kg/m^3", description: "Moist-air density" }],
+  ),
 };
 
 export function expandRequestedVariables(ids: VariableId[]): RawVariableDefinition[] {
@@ -122,4 +150,13 @@ function raw(
     description,
     outputs: [{ field, unit: outputUnit, description: outputDescription }],
   };
+}
+
+function derived(
+  id: DerivedVariableId,
+  dependencies: readonly RawVariableId[],
+  description: string,
+  outputs: readonly VariableOutput[],
+): DerivedVariableDefinition {
+  return { id, kind: "derived", levelType: "isobaric_hpa", dependencies, description, outputs };
 }
