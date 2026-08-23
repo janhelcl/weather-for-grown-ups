@@ -14,7 +14,7 @@ import {
 
 const DRY_AIR_GAS_CONSTANT_J_KG_K = 287.05;
 const DRY_AIR_CP_J_KG_K = 1004;
-const GRAVITY_MS2 = 9.80665;
+const LATENT_HEAT_VAPORIZATION_J_KG = 2.5e6;
 const EPSILON = 0.622;
 const MAX_MOIST_LOG_PRESSURE_STEP = 0.0025;
 
@@ -372,19 +372,26 @@ export function integratePseudoAdiabaticTemperatureC(
   return temperatureK - 273.15;
 }
 
+/**
+ * Pseudo-adiabatic saturated ascent in pressure coordinates.
+ *
+ * This is dT/dln(p) obtained directly from the standard moist-lapse ODE,
+ * avoiding a hydrostatic height conversion that would incorrectly introduce
+ * virtual temperature into the parcel-temperature tendency.
+ */
 function moistTemperatureDerivativeKPerLogPressure(logPressure: number, temperatureK: number): number {
   const pressureHpa = Math.exp(logPressure);
   const temperatureC = temperatureK - 273.15;
   const saturationMixingRatio = deriveSaturationMixingRatioKgKg(temperatureC, pressureHpa);
-  const saturationSpecificHumidity = deriveSpecificHumidityFromMixingRatioKgKg(saturationMixingRatio);
-  const virtualTemperatureK = deriveVirtualTemperatureK(temperatureC, saturationSpecificHumidity);
-  const latentHeatJkg = 2.501e6 - 2360 * temperatureC;
-  const moistLapseRateKPerM = GRAVITY_MS2
-    * (1 + latentHeatJkg * saturationMixingRatio / (DRY_AIR_GAS_CONSTANT_J_KG_K * temperatureK))
-    / (DRY_AIR_CP_J_KG_K
-      + latentHeatJkg * latentHeatJkg * saturationMixingRatio * EPSILON
-        / (DRY_AIR_GAS_CONSTANT_J_KG_K * temperatureK * temperatureK));
-  return moistLapseRateKPerM * DRY_AIR_GAS_CONSTANT_J_KG_K * virtualTemperatureK / GRAVITY_MS2;
+  return (
+    DRY_AIR_GAS_CONSTANT_J_KG_K * temperatureK
+    + LATENT_HEAT_VAPORIZATION_J_KG * saturationMixingRatio
+  ) / (
+    DRY_AIR_CP_J_KG_K
+    + LATENT_HEAT_VAPORIZATION_J_KG * LATENT_HEAT_VAPORIZATION_J_KG
+      * saturationMixingRatio * EPSILON
+      / (DRY_AIR_GAS_CONSTANT_J_KG_K * temperatureK * temperatureK)
+  );
 }
 
 function insertBuoyancyCrossings(path: readonly ParcelPathLevel[]): ParcelPathLevel[] {
