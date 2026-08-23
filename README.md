@@ -29,6 +29,7 @@ The ensemble surface adds model-native NOAA GEFS access without pretending GEFS 
 - control `c00` plus perturbed members `p01` through `p30`;
 - one-point distributions at one valid time;
 - native three-hour ensemble time series from one fixed model cycle;
+- aligned deterministic GFS-vs-GEFS distribution comparison from one shared initialization cycle;
 - raw pressure-level variable and pressure-surface selection;
 - native three-hour cadence through `f384` in the current WFG contract;
 - member values plus mean, population spread, extrema and caller-selected quantiles;
@@ -36,7 +37,7 @@ The ensemble surface adds model-native NOAA GEFS access without pretending GEFS 
 - compact time-series summaries by default, with full member trajectories only on request;
 - direct NOAA AWS `.idx` byte-range access and immutable local caching.
 
-See [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) for the exact model/member/pressure-level contract and semantics.
+See [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) for the model/member/time-series contract and [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md) for aligned cross-model comparison semantics.
 
 Both model families are available through local stdio MCP and remotely hostable Streamable HTTP MCP. CLI and MCP use the same core services and schemas.
 
@@ -123,6 +124,21 @@ wfg ensemble-timeseries \
 
 The series resolves one model cycle for the complete range. Per-step member values are omitted by default; add `--include-members` only when the full trajectories are needed.
 
+### Compare deterministic GFS with GEFS
+
+```bash
+wfg compare-gfs-gefs \
+  --lat 50.08 \
+  --lon 14.43 \
+  --valid 2026-08-24T12:00:00Z \
+  --var temperature \
+  --level 850 \
+  --quantiles 0.1,0.5,0.9 \
+  --json
+```
+
+`latest` resolves one shared initialization cycle that can satisfy both deterministic GFS and every requested GEFS member. The result reports the deterministic-minus-ensemble-mean difference, standardized difference, empirical member rank fractions, and whether deterministic GFS falls outside the selected member range. It does not invent an `isOutlier` threshold.
+
 ### Explicit parcel diagnostics
 
 ```bash
@@ -184,6 +200,7 @@ wfg area \
 | `latest` | Resolve the newest GFS cycle published through `f384` |
 | `ensemble` | GEFS member values and distribution summary for one raw pressure-level field at one point/time |
 | `ensemble-timeseries` | GEFS distribution summaries across native three-hour steps from one fixed run; optional member trajectories |
+| `compare-gfs-gefs` | Deterministic GFS positioned inside an aligned GEFS member distribution from the same initialization cycle |
 | `profile` | One GFS point/time pressure profile and/or non-isobaric fields |
 | `layer` | Deterministic diagnostics between two GFS pressure surfaces |
 | `profile-diagnostics` | Freezing-level crossings and sampled inversion layers |
@@ -227,6 +244,7 @@ Current MCP tools:
 - `get_latest_gfs_run`
 - `get_gefs_ensemble`
 - `get_gefs_ensemble_timeseries`
+- `compare_gfs_to_gefs`
 - `get_gfs_profile`
 - `get_gfs_layer_diagnostics`
 - `get_gfs_profile_diagnostics`
@@ -255,6 +273,8 @@ GEFS has a separate explicit catalog because the 0.5° `pgrb2a` inventory is not
 
 Member order is canonicalized to `c00,p01,...,p30`. All members in one point result come from the same model initialization cycle and valid time. Ensemble time series additionally guarantee that every forecast step belongs to one fixed model cycle.
 
+Cross-model comparisons preserve the distinct sampled GFS 0.25° and GEFS 0.5° grid points. They compare one raw variable in the same normalized units, same initialization cycle, and same valid time; WFG does not silently resample the two products onto a common grid for this point primitive.
+
 ## Deterministic meteorology
 
 WFG deliberately separates raw model fields from deterministic physical transforms.
@@ -275,6 +295,8 @@ Area queries use a bounded NOMADS geographic subset and compute statistics local
 
 GEFS time series compose the existing one-time member-distribution service over native three-hour steps. Query-aware range resolution chooses one initialization that can satisfy the complete interval, and each underlying step receives that explicit run. Summary-only output is the default to avoid multiplying agent context by `members × forecast steps` unless the caller explicitly requests member trajectories.
 
+The GFS-vs-GEFS comparison composes the existing deterministic GFS profile and GEFS ensemble primitives after resolving one shared cycle. The comparison layer owns alignment and descriptive distribution metrics, not a second GRIB access implementation.
+
 ## Run selection
 
 ### GFS
@@ -287,7 +309,7 @@ GFS query tools support:
 
 Query-aware `latest` checks requested dependencies and valid time/range so WFG does not choose a newer run that has not published enough data yet.
 
-### GEFS
+### GEFS and aligned comparison
 
 `get_gefs_ensemble` / `wfg ensemble` support:
 
@@ -296,13 +318,15 @@ Query-aware `latest` checks requested dependencies and valid time/range so WFG d
 
 `get_gefs_ensemble_timeseries` / `wfg ensemble-timeseries` use the same explicit-run option. For `latest`, the resolver selects the newest cycle that starts no later than the first requested valid time and has the selected members published at both ends of the complete range. That run is then fixed across every intermediate step.
 
+`compare_gfs_to_gefs` / `wfg compare-gfs-gefs` use a stricter aligned `latest`: the chosen cycle must contain the selected deterministic GFS field and all requested GEFS members at the same valid time. Both model calls then receive that explicit shared run.
+
 The current WFG GEFS contract requires native three-hour output and caps forecast hour at `f384`.
 
 ## NOAA data paths
 
 **NOMADS Grib Filter** is the default for deterministic GFS single-point requests and the bounded-area path because it can subset geographically before transfer. Every physical NOMADS request passes through one file-backed cross-process limiter with an **11-second post-request cooldown**, deliberately conservative relative to NOAA's 10-second scripted-request guidance. Cache hits do not consume the limiter.
 
-**NOAA AWS Open Data** is used for deterministic GFS batch/transect/time-series/run-comparison work and for GEFS member access. WFG reads `.idx` inventories, calculates byte ranges for selected GRIB messages, downloads only those ranges, caches immutable slices, and samples locally with `wgrib2`.
+**NOAA AWS Open Data** is used for deterministic GFS batch/transect/time-series/run-comparison work, aligned GFS-vs-GEFS comparison, and GEFS member access. WFG reads `.idx` inventories, calculates byte ranges for selected GRIB messages, downloads only those ranges, caches immutable slices, and samples locally with `wgrib2`.
 
 Default cache/state location: `~/.cache/wfg/`. Override with `WFG_CACHE_DIR`.
 
@@ -323,13 +347,14 @@ The real-upstream suite is separate:
 npm run test:live:all
 ```
 
-It exercises deterministic GFS AWS/NOMADS paths plus a small GEFS control-plus-two-member point query and two-step ensemble time series. GitHub Actions runs it on a deliberately low-frequency weekly schedule and also supports manual dispatch. Normal PR/main CI remains offline.
+It exercises deterministic GFS AWS/NOMADS paths plus a small GEFS control-plus-two-member point query, two-step ensemble time series, and aligned deterministic GFS-vs-GEFS comparison. GitHub Actions runs it on a deliberately low-frequency weekly schedule and also supports manual dispatch. Normal PR/main CI remains offline.
 
 ## Documentation map
 
 - [INSTALL.md](INSTALL.md) — installation, Docker/npm distribution, stdio/HTTP MCP, hosting and release behavior
 - [ARCHITECTURE.md](ARCHITECTURE.md) — core boundaries, data paths, caching and surface design
 - [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — GEFS model/member contract, point/time-series distribution semantics and examples
+- [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md) — aligned deterministic GFS vs GEFS distribution semantics
 - [CATALOG_SEARCH.md](CATALOG_SEARCH.md) — deterministic GFS atmospheric discovery/search semantics
 - [DIAGNOSTIC_TIME_SERIES.md](DIAGNOSTIC_TIME_SERIES.md) — native-cadence layer/profile/parcel diagnostic composition
 - [TRANSECT.md](TRANSECT.md) — great-circle cross-section primitive
@@ -357,4 +382,4 @@ The executable CLI is intentionally thin: `src/cli.ts` creates one Commander roo
 
 ## Non-goals
 
-WFG returns model data, ensemble-member distributions, and deterministic physical derivations. It does not provide activity-specific suitability scores, safety advice, hidden meteorological interpretation, or present raw ensemble member fractions as calibrated probabilities.
+WFG returns model data, ensemble-member distributions, descriptive cross-model comparisons, and deterministic physical derivations. It does not provide activity-specific suitability scores, safety advice, hidden meteorological interpretation, or present raw ensemble/member-rank evidence as calibrated probabilities or uncertainty.
