@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { GefsEnsembleProfileService } from "../src/core/gefs-ensemble-profile.js";
 import { GefsEnsembleTimeSeriesService } from "../src/core/gefs-ensemble-timeseries.js";
 import { GefsEnsembleService } from "../src/core/gefs-ensemble.js";
 import { GefsLatestRunResolver } from "../src/core/gefs-latest-run.js";
@@ -11,6 +12,7 @@ const startTime = new Date(endTime.getTime() - 3 * 3_600_000);
 const latestRunResolver = new GefsLatestRunResolver();
 const run = await latestRunResolver.resolveLatestRunRange(startTime, endTime, members);
 const ensembleService = new GefsEnsembleService({ latestRunProvider: latestRunResolver });
+const profileService = new GefsEnsembleProfileService({ latestRunProvider: latestRunResolver });
 const timeSeriesService = new GefsEnsembleTimeSeriesService({
   ensembleGetter: ensembleService,
   latestRunRangeProvider: latestRunResolver,
@@ -43,6 +45,33 @@ assert.equal(result.summary.threshold.interpretation, "raw_member_fraction_not_c
 assert.equal(result.source.provider, "NOAA AWS Open Data");
 assert.equal(result.source.access, "s3_range");
 assert.equal(result.source.product, "pgrb2a_0p50");
+
+const profile = await profileService.getProfile({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: run.toISOString(),
+  validTime: endTime.toISOString(),
+  variables: ["temperature", "geopotential_height"],
+  pressureLevelsHpa: [850, 500],
+  members: [...members],
+  quantiles: [0.1, 0.5, 0.9],
+});
+
+assert.equal(profile.model, "gefs_0p50");
+assert.equal(profile.run, run.toISOString());
+assert.equal(profile.validTime, endTime.toISOString());
+assert.equal(profile.forecastHour, result.forecastHour);
+assert.deepEqual(profile.selection.members, members);
+assert.deepEqual(profile.selection.pressureLevelsHpa, [850, 500]);
+assert.equal(profile.summaries.length, 4);
+assert.equal(profile.members, undefined);
+assert(profile.summaries.every((summary) => summary.memberCount === members.length));
+assert(profile.summaries.every((summary) => Number.isFinite(summary.mean)));
+assert(profile.summaries.every((summary) => Number.isFinite(summary.populationStdDev)));
+assert(profile.summaries.every((summary) => summary.quantiles.length === 3));
+assert.equal(profile.source.provider, "NOAA AWS Open Data");
+assert.equal(profile.source.access, "s3_range");
+assert.equal(profile.source.product, "pgrb2a_0p50");
 
 const series = await timeSeriesService.getTimeSeries({
   latitude: 50.08,
@@ -112,6 +141,14 @@ console.log(JSON.stringify({
     quantiles: result.summary.quantiles,
     cacheHit: result.source.allCacheHit,
   },
+  ensembleProfile: profile.summaries.map((summary) => ({
+    variable: summary.variable,
+    pressureLevelHpa: summary.pressureLevelHpa,
+    unit: summary.unit,
+    mean: summary.mean,
+    populationStdDev: summary.populationStdDev,
+    quantiles: summary.quantiles,
+  })),
   ensembleTimeSeries: series.series.map((step) => ({
     validTime: step.validTime,
     forecastHour: step.forecastHour,
@@ -128,5 +165,6 @@ console.log(JSON.stringify({
     rangePosition: comparison.comparison.rangePosition,
     fractionMembersAtOrBelowDeterministic: comparison.comparison.fractionMembersAtOrBelowDeterministic,
   },
+  profileCacheHit: profile.source.allCacheHit,
   seriesCacheHit: series.source.allCacheHit,
 }, null, 2));
