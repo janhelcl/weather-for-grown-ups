@@ -6,6 +6,7 @@ import { BatchPointsService } from "./core/batch-points.js";
 import { LayerDiagnosticsService } from "./core/layer-diagnostics.js";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ParcelDiagnosticsService } from "./core/parcel-diagnostics.js";
+import { PointsTimeSeriesService } from "./core/points-time-series.js";
 import { ProfileDiagnosticsService } from "./core/profile-diagnostics.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
@@ -15,6 +16,7 @@ import {
   handleGetGfsLayerDiagnostics,
   handleGetGfsParcelDiagnostics,
   handleGetGfsPoints,
+  handleGetGfsPointsTimeSeries,
   handleGetGfsProfile,
   handleGetGfsProfileDiagnostics,
   handleGetGfsTimeSeries,
@@ -25,6 +27,7 @@ import {
   batchPointsQuerySchema,
   layerDiagnosticsQuerySchema,
   parcelDiagnosticsQuerySchema,
+  pointsTimeSeriesQuerySchema,
   profileDiagnosticsQuerySchema,
   profileQuerySchema,
   timeSeriesQuerySchema,
@@ -35,6 +38,7 @@ import {
   layerDiagnosticsResultSchema,
   latestGfsRunResultSchema,
   parcelDiagnosticsResultSchema,
+  pointsTimeSeriesResultSchema,
   profileDiagnosticsResultSchema,
   profileResultSchema,
   timeSeriesResultSchema,
@@ -44,7 +48,7 @@ function createServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "Use get_gfs_catalog to discover pressure-level variables, deterministic pressure-layer, whole-profile, and parcel diagnostics, and non-isobaric GFS fields. For profile, diagnostics, batched-point, time-series, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_points when comparing multiple locations at one valid time. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
+      instructions: "Use get_gfs_catalog to discover pressure-level variables, deterministic pressure-layer, whole-profile, and parcel diagnostics, and non-isobaric GFS fields. For profile, diagnostics, batched-point, time-series, multi-point time-series, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_points when comparing multiple locations at one valid time, and get_gfs_points_timeseries when the same locations must be compared across a valid-time range. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
@@ -54,6 +58,10 @@ function createServer(): McpServer {
   const parcelDiagnosticsService = new ParcelDiagnosticsService({ profileGetter: profileService });
   const batchPointsService = new BatchPointsService({ latestRunProvider: latestRunResolver, profileGetter: profileService });
   const timeSeriesService = new TimeSeriesService({ latestRunProvider: latestRunResolver, profileGetter: profileService });
+  const pointsTimeSeriesService = new PointsTimeSeriesService({
+    latestRunProvider: latestRunResolver,
+    batchPointsGetter: batchPointsService,
+  });
   const areaSummaryService = new AreaSummaryService({ latestRunProvider: latestRunResolver });
 
   server.registerTool("get_gfs_catalog", {
@@ -110,6 +118,13 @@ function createServer(): McpServer {
     inputSchema: timeSeriesQuerySchema,
     outputSchema: timeSeriesResultSchema,
   }, async (query) => handleGetGfsTimeSeries(timeSeriesService, query));
+
+  server.registerTool("get_gfs_points_timeseries", {
+    title: "Get GFS time series for multiple points",
+    description: "Return one atmospheric selection for up to 20 points across native GFS outputs in a valid-time range. Resolves one model cycle, fetches one shared NOAA AWS S3 GRIB slice per forecast step, and samples all requested points from that slice. maxSteps and maxSamples bound response size.",
+    inputSchema: pointsTimeSeriesQuerySchema,
+    outputSchema: pointsTimeSeriesResultSchema,
+  }, async (query) => handleGetGfsPointsTimeSeries(pointsTimeSeriesService, query));
 
   server.registerTool("summarize_gfs_area", {
     title: "Summarize GFS field over an area",
