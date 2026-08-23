@@ -4,6 +4,7 @@ import type {
   AreaSummaryResult,
   BatchPointsResult,
   LayerDiagnosticsResult,
+  ParcelDiagnosticsResult,
   ProfileDiagnosticsResult,
   ProfileResult,
   TimeSeriesResult,
@@ -12,6 +13,7 @@ import type {
   AreaSummaryQueryInput,
   BatchPointsQueryInput,
   LayerDiagnosticsQueryInput,
+  ParcelDiagnosticsQueryInput,
   ProfileDiagnosticsQueryInput,
   ProfileQueryInput,
   TimeSeriesQueryInput,
@@ -21,6 +23,7 @@ import {
   batchPointsResultSchema,
   layerDiagnosticsResultSchema,
   latestGfsRunResultSchema,
+  parcelDiagnosticsResultSchema,
   profileDiagnosticsResultSchema,
   profileResultSchema,
   timeSeriesResultSchema,
@@ -29,6 +32,7 @@ import {
 export interface ProfileGetter { getProfile(query: ProfileQueryInput): Promise<ProfileResult>; }
 export interface LayerDiagnosticsGetter { getLayerDiagnostics(query: LayerDiagnosticsQueryInput): Promise<LayerDiagnosticsResult>; }
 export interface ProfileDiagnosticsGetter { getProfileDiagnostics(query: ProfileDiagnosticsQueryInput): Promise<ProfileDiagnosticsResult>; }
+export interface ParcelDiagnosticsGetter { getParcelDiagnostics(query: ParcelDiagnosticsQueryInput): Promise<ParcelDiagnosticsResult>; }
 export interface BatchPointsGetter { getPoints(query: BatchPointsQueryInput): Promise<BatchPointsResult>; }
 export interface TimeSeriesGetter { getTimeSeries(query: TimeSeriesQueryInput): Promise<TimeSeriesResult>; }
 export interface AreaSummaryGetter { summarize(query: AreaSummaryQueryInput): Promise<AreaSummaryResult>; }
@@ -62,6 +66,13 @@ export async function handleGetGfsLayerDiagnostics(layerService: LayerDiagnostic
 export async function handleGetGfsProfileDiagnostics(profileDiagnosticsService: ProfileDiagnosticsGetter, query: ProfileDiagnosticsQueryInput) {
   try {
     const output = profileDiagnosticsResultSchema.parse(await profileDiagnosticsService.getProfileDiagnostics(query));
+    return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } };
+  } catch (error) { return toolError(error); }
+}
+
+export async function handleGetGfsParcelDiagnostics(parcelService: ParcelDiagnosticsGetter, query: ParcelDiagnosticsQueryInput) {
+  try {
+    const output = parcelDiagnosticsResultSchema.parse(await parcelService.getParcelDiagnostics(query));
     return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } };
   } catch (error) { return toolError(error); }
 }
