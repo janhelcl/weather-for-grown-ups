@@ -69,6 +69,16 @@ describe("variable catalog", () => {
       dependencies: ["temperature", "specific_humidity"],
       outputs: [{ field: "airDensityKgM3", unit: "kg/m^3" }],
     });
+    expect(VARIABLE_CATALOG.wet_bulb_temperature).toMatchObject({
+      kind: "derived",
+      dependencies: ["temperature", "specific_humidity"],
+      outputs: [{ field: "wetBulbTemperatureC", unit: "degC" }],
+    });
+    expect(VARIABLE_CATALOG.equivalent_potential_temperature).toMatchObject({
+      kind: "derived",
+      dependencies: ["temperature", "specific_humidity"],
+      outputs: [{ field: "equivalentPotentialTemperatureK", unit: "K" }],
+    });
   });
 });
 
@@ -88,6 +98,8 @@ describe("expandRequestedVariables", () => {
       "mixing_ratio",
       "virtual_temperature",
       "air_density",
+      "wet_bulb_temperature",
+      "equivalent_potential_temperature",
     ]).map((variable) => variable.id)).toEqual([
       "temperature",
       "relative_humidity",
@@ -104,7 +116,8 @@ describe("expandRequestedVariables", () => {
   });
 
   it("never returns derived definitions to the NOAA source layer", () => {
-    expect(expandRequestedVariables(["wind", "dew_point", "air_density", "absolute_vorticity"])
-      .every((variable) => variable.kind === "raw")).toBe(true);
+    expect(expandRequestedVariables([
+      "wind", "dew_point", "air_density", "wet_bulb_temperature", "equivalent_potential_temperature", "absolute_vorticity",
+    ]).every((variable) => variable.kind === "raw")).toBe(true);
   });
 });
