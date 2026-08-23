@@ -3,6 +3,7 @@ import { registerAreaCommand } from "./area-command.js";
 import { registerCatalogCommand } from "./catalog-command.js";
 import { registerDiagnosticCommands } from "./diagnostic-commands.js";
 import { registerEnsembleCommand } from "./ensemble-command.js";
+import { registerModelComparisonCommand } from "./model-comparison-command.js";
 import { registerPointCommands } from "./point-commands.js";
 import { registerTransectCommand } from "./transect-command.js";
 
@@ -15,6 +16,7 @@ export function createCliProgram(): Command {
   registerCatalogCommand(program);
   registerPointCommands(program);
   registerEnsembleCommand(program);
+  registerModelComparisonCommand(program);
   registerDiagnosticCommands(program);
   registerTransectCommand(program);
   registerAreaCommand(program);
