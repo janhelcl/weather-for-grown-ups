@@ -31,3 +31,21 @@ jobs:
           node-version: 24
       - run: npm install --no-audit --no-fund
       - run: npm run test:coverage
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install --no-audit --no-fund
+      - run: npm run pack:check
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t weather-for-grown-ups:test .
+      - run: docker run --rm weather-for-grown-ups:test --help
+      - run: docker run --rm --entrypoint /opt/conda/bin/wgrib2 weather-for-grown-ups:test -version
