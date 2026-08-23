@@ -4,12 +4,6 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "17 5 * * 1"
-  push:
-    branches:
-      - ci/scheduled-live-noaa
-  pull_request:
-    branches:
-      - main
 
 concurrency:
   group: live-noaa-integration
