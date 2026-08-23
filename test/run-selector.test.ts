@@ -10,12 +10,16 @@ const base = {
 };
 
 describe("run selection", () => {
-  it("defaults an omitted run to latest", () => {
+  it("defaults an omitted run to query-aware latest", () => {
     expect(profileQuerySchema.parse(base).run).toBe("latest");
   });
 
   it("accepts latest explicitly", () => {
     expect(runSelectorSchema.parse("latest")).toBe("latest");
+  });
+
+  it("accepts latest_complete as the explicit f384-complete selector", () => {
+    expect(runSelectorSchema.parse("latest_complete")).toBe("latest_complete");
   });
 
   it("retains explicit timezone-aware model cycles", () => {
