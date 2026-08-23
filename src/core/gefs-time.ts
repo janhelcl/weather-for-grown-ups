@@ -1,7 +1,9 @@
 const GEFS_RUN_HOURS = new Set([0, 6, 12, 18]);
 const HOUR_MS = 3_600_000;
+const THREE_HOURS_MS = 3 * HOUR_MS;
 export const GEFS_MAX_FORECAST_HOUR = 384;
 export const GEFS_FORECAST_STEP_HOURS = 3;
+export const GEFS_TOTAL_NATIVE_FORECAST_STEPS = GEFS_MAX_FORECAST_HOUR / GEFS_FORECAST_STEP_HOURS + 1;
 
 export function parseGefsRun(value: string): Date {
   const run = new Date(value);
@@ -29,6 +31,31 @@ export function gefsForecastHour(run: Date, validTime: Date): number {
     throw new Error("GEFS 0.5° pgrb2a output is available every 3 hours");
   }
   return hours;
+}
+
+export function nativeGefsValidTimesInRange(startTime: Date, endTime: Date, maxSteps: number): Date[] {
+  if (endTime.getTime() < startTime.getTime()) {
+    throw new Error("GEFS time-series endTime must be at or after startTime");
+  }
+  if (!isNativeGefsValidTime(startTime) || !isNativeGefsValidTime(endTime)) {
+    throw new Error("GEFS time-series bounds must be exact native three-hour valid times");
+  }
+  const span = endTime.getTime() - startTime.getTime();
+  if (span % THREE_HOURS_MS !== 0) {
+    throw new Error("GEFS time-series range must align to the native three-hour cadence");
+  }
+  const count = span / THREE_HOURS_MS + 1;
+  if (count > maxSteps) {
+    throw new Error(`GEFS time series would contain ${count} steps, exceeding maxSteps=${maxSteps}`);
+  }
+  return Array.from({ length: count }, (_, index) => new Date(startTime.getTime() + index * THREE_HOURS_MS));
+}
+
+export function isNativeGefsValidTime(value: Date): boolean {
+  return value.getUTCMinutes() === 0
+    && value.getUTCSeconds() === 0
+    && value.getUTCMilliseconds() === 0
+    && value.getUTCHours() % GEFS_FORECAST_STEP_HOURS === 0;
 }
 
 export function latestGefsCycleAtOrBefore(value: Date): Date {
