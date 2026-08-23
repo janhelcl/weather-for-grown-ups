@@ -61,6 +61,7 @@ export const ATMOSPHERIC_MODEL_CATALOG: Record<AtmosphericModelId, AtmosphericMo
     operations: [
       "profile",
       "timeseries",
+      "layer_diagnostics",
       "ensemble_distribution",
       "aligned_model_comparison",
     ],
