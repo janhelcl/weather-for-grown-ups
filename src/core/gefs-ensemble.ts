@@ -18,6 +18,7 @@ import {
 } from "../schema/gefs-ensemble.js";
 import type { DecodedValue } from "./types.js";
 import { mapConcurrent } from "./concurrency.js";
+import { summarizeNumericDistribution, thresholdGteSummary } from "./ensemble-statistics.js";
 import { GefsLatestRunResolver, type GefsLatestRunProvider } from "./gefs-latest-run.js";
 import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
 
@@ -76,9 +77,10 @@ export class GefsEnsembleService {
 
     const values = samples.map((sample) => sample.value);
     const output = variable.outputs[0];
+    const summary = summarizeNumericDistribution(values, query.quantiles);
     const threshold = query.thresholdGte === undefined
       ? undefined
-      : thresholdSummary(values, query.thresholdGte);
+      : thresholdGteSummary(values, query.thresholdGte);
 
     return gefsEnsembleResultSchema.parse({
       model: "gefs_0p50",
@@ -96,15 +98,7 @@ export class GefsEnsembleService {
       },
       members: samples.map(({ member, value, cacheHit }) => ({ member, value, cacheHit })),
       summary: {
-        memberCount: values.length,
-        mean: mean(values),
-        populationStdDev: populationStdDev(values),
-        min: Math.min(...values),
-        max: Math.max(...values),
-        quantiles: [...query.quantiles].sort((a, b) => a - b).map((quantileValue) => ({
-          quantile: quantileValue,
-          value: quantile(values, quantileValue),
-        })),
+        ...summary,
         ...(threshold === undefined ? {} : { threshold }),
       },
       source: {
@@ -153,37 +147,4 @@ function normalizeValue(variable: RawVariableDefinition, value: number): number 
   const output = variable.outputs[0];
   if (variable.sourceUnit === "K" && output.unit === "degC") return value - 273.15;
   return value;
-}
-
-function mean(values: readonly number[]): number {
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function populationStdDev(values: readonly number[]): number {
-  const average = mean(values);
-  const variance = values.reduce((sum, value) => sum + (value - average) ** 2, 0) / values.length;
-  return Math.sqrt(variance);
-}
-
-function quantile(values: readonly number[], q: number): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const position = q * (sorted.length - 1);
-  const lowerIndex = Math.floor(position);
-  const upperIndex = Math.ceil(position);
-  const lower = sorted[lowerIndex];
-  const upper = sorted[upperIndex];
-  if (lower === undefined || upper === undefined) throw new Error("Cannot compute GEFS quantile from an empty ensemble");
-  if (lowerIndex === upperIndex) return lower;
-  return lower + (upper - lower) * (position - lowerIndex);
-}
-
-function thresholdSummary(values: readonly number[], threshold: number) {
-  const count = values.filter((value) => value >= threshold).length;
-  return {
-    operator: "gte" as const,
-    value: threshold,
-    count,
-    fraction: count / values.length,
-    interpretation: "raw_member_fraction_not_calibrated_probability" as const,
-  };
 }

@@ -1,22 +1,15 @@
 import {
   expandProfileDiagnosticVariables,
-  type ProfileDiagnosticId,
 } from "../catalog/profile-diagnostics.js";
-import {
-  deriveFreezingLevelCrossings,
-  deriveTemperatureInversionLayers,
-  type SampledThermodynamicLevel,
-} from "../derived/profile-diagnostics.js";
 import {
   profileDiagnosticsQuerySchema,
   type ProfileDiagnosticsQueryInput,
   type ProfileQueryInput,
 } from "../schema/query.js";
+import { deriveProfileDiagnosticsFromLevels } from "./pressure-diagnostics.js";
 import { ProfileService } from "./profile.js";
 import type {
-  ProfileDiagnosticResult,
   ProfileDiagnosticsResult,
-  ProfileLevel,
   ProfileResult,
 } from "./types.js";
 
@@ -51,8 +44,6 @@ export class ProfileDiagnosticsService {
       source: query.source,
     });
 
-    const sampledLevels = profile.levels.map(toSampledLevel);
-
     return {
       model: "gfs_0p25",
       run: profile.run,
@@ -62,33 +53,8 @@ export class ProfileDiagnosticsService {
       gridPoint: profile.gridPoint,
       sampledPressureLevelsHpa: pressureLevelsHpa,
       levels: profile.levels,
-      diagnostics: diagnostics.map((id) => deriveDiagnostic(id, sampledLevels)),
+      diagnostics: deriveProfileDiagnosticsFromLevels(profile.levels, diagnostics),
       source: profile.source,
     };
   }
-}
-
-function deriveDiagnostic(
-  id: ProfileDiagnosticId,
-  levels: readonly SampledThermodynamicLevel[],
-): ProfileDiagnosticResult {
-  switch (id) {
-    case "freezing_level_crossings":
-      return { id, crossings: deriveFreezingLevelCrossings(levels) };
-    case "temperature_inversion_layers":
-      return { id, layers: deriveTemperatureInversionLayers(levels) };
-  }
-}
-
-function toSampledLevel(level: ProfileLevel): SampledThermodynamicLevel {
-  return {
-    pressureHpa: level.pressureHpa,
-    temperatureC: required(level.temperatureC, "temperature", level.pressureHpa),
-    geopotentialHeightGpm: required(level.geopotentialHeightGpm, "geopotential_height", level.pressureHpa),
-  };
-}
-
-function required(value: number | undefined, id: string, pressureHpa: number): number {
-  if (value === undefined) throw new Error(`Profile result is missing required ${id}@${pressureHpa}mb`);
-  return value;
 }
