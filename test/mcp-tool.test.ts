@@ -20,7 +20,12 @@ const result: ProfileResult = {
   requestedPoint: { latitude: 50.08, longitude: 14.43 },
   gridPoint: { latitude: 50, longitude: 14.5 },
   levels: [{ pressureHpa: 850, temperatureC: 12 }],
-  source: { provider: "NOAA NOMADS", decoder: "wgrib2", cacheHit: false },
+  source: {
+    provider: "NOAA NOMADS",
+    access: "nomads_grib_filter",
+    decoder: "wgrib2",
+    cacheHit: false,
+  },
 };
 
 describe("handleGetGfsProfile", () => {
