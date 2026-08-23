@@ -119,6 +119,7 @@ describe("MCP result boundary", () => {
     );
 
     expect(response).not.toHaveProperty("isError");
+    if (!("structuredContent" in response)) throw new Error("Expected MCP success response");
     expect(response.structuredContent).toMatchObject({ fields: profile.fields });
   });
 
