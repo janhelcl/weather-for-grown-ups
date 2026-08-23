@@ -1,6 +1,6 @@
 import * as z from "zod/v4";
 import { LAYER_DIAGNOSTIC_IDS } from "../catalog/layer-diagnostics.js";
-import { NON_ISOBARIC_FIELD_IDS } from "../catalog/non-isobaric-fields.js";
+import { NON_ISOBARIC_FIELD_CATALOG, NON_ISOBARIC_FIELD_IDS } from "../catalog/non-isobaric-fields.js";
 import { PARCEL_DEFINITION_IDS } from "../catalog/parcel-diagnostics.js";
 import { isSupportedGfsPressureLevel } from "../catalog/pressure-levels.js";
 import { PROFILE_DIAGNOSTIC_IDS } from "../catalog/profile-diagnostics.js";
@@ -214,8 +214,9 @@ export const areaSummaryQuerySchema = z.object({
   northLatitude: z.number().min(-90).max(90),
   run: runSelectorSchema,
   validTime: isoDateTimeSchema.describe("Forecast valid time"),
-  variable: rawVariableIdSchema,
-  pressureLevelHpa: pressureLevelSchema,
+  variable: rawVariableIdSchema.optional(),
+  pressureLevelHpa: pressureLevelSchema.optional(),
+  field: nonIsobaricFieldIdSchema.optional(),
   maxGridPoints: z.number().int().min(1).max(1_100_000).default(DEFAULT_AREA_MAX_GRID_POINTS),
 }).superRefine((query, context) => {
   if (query.eastLongitude <= query.westLongitude) {
@@ -231,6 +232,32 @@ export const areaSummaryQuerySchema = z.object({
       path: ["northLatitude"],
       message: "northLatitude must be greater than southLatitude",
     });
+  }
+
+  const hasPressureVariable = query.variable !== undefined || query.pressureLevelHpa !== undefined;
+  const hasField = query.field !== undefined;
+  if (hasPressureVariable && hasField) {
+    context.addIssue({
+      code: "custom",
+      path: ["field"],
+      message: "Area summary accepts either one pressure-level variable or one non-isobaric field, not both",
+    });
+  } else if (hasField) {
+    const definition = NON_ISOBARIC_FIELD_CATALOG[query.field!];
+    if (definition.kind !== "raw") {
+      context.addIssue({
+        code: "custom",
+        path: ["field"],
+        message: "Area summary currently supports raw non-isobaric fields only; derived wind must be aggregated from grid-cell diagnostics in a future extension",
+      });
+    }
+  } else {
+    if (query.variable === undefined) {
+      context.addIssue({ code: "custom", path: ["variable"], message: "Pressure-level area summary requires variable" });
+    }
+    if (query.pressureLevelHpa === undefined) {
+      context.addIssue({ code: "custom", path: ["pressureLevelHpa"], message: "Pressure-level area summary requires pressureLevelHpa" });
+    }
   }
 });
 
