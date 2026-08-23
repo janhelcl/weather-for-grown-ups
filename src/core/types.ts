@@ -53,6 +53,8 @@ export interface ProfileLevel {
   mixingRatioKgKg?: number;
   virtualTemperatureC?: number;
   airDensityKgM3?: number;
+  wetBulbTemperatureC?: number;
+  equivalentPotentialTemperatureK?: number;
 }
 
 export type FieldTemporalResult =

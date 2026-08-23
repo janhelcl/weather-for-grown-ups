@@ -1,3 +1,9 @@
+import {
+  findContiguousLayers,
+  findThresholdCrossings,
+  orderSamplesByHeight,
+} from "./profile-features.js";
+
 export interface SampledThermodynamicLevel {
   pressureHpa: number;
   geopotentialHeightGpm: number;
@@ -30,119 +36,73 @@ export interface TemperatureInversionLayer {
 }
 
 export function orderProfileByHeight(levels: readonly SampledThermodynamicLevel[]): SampledThermodynamicLevel[] {
-  const ordered = [...levels].sort((a, b) => a.geopotentialHeightGpm - b.geopotentialHeightGpm);
-  for (let index = 1; index < ordered.length; index += 1) {
-    const lower = ordered[index - 1]!;
-    const upper = ordered[index]!;
-    if (!(upper.geopotentialHeightGpm > lower.geopotentialHeightGpm)) {
-      throw new Error(`Expected strictly increasing geopotential heights, received ${lower.geopotentialHeightGpm} and ${upper.geopotentialHeightGpm} gpm`);
-    }
-  }
-  return ordered;
+  return orderSamplesByHeight(levels);
 }
 
 export function deriveFreezingLevelCrossings(
   levels: readonly SampledThermodynamicLevel[],
 ): FreezingLevelCrossing[] {
-  const ordered = orderProfileByHeight(levels);
-  const crossings: FreezingLevelCrossing[] = [];
-
-  for (let index = 0; index < ordered.length; index += 1) {
-    const level = ordered[index]!;
-    if (level.temperatureC === 0) {
-      const lower = ordered[Math.max(0, index - 1)]!;
-      const upper = ordered[Math.min(ordered.length - 1, index + 1)]!;
-      crossings.push({
-        pressureHpa: level.pressureHpa,
-        geopotentialHeightGpm: level.geopotentialHeightGpm,
-        method: "exact_sample",
-        transition: exactSampleTransition(lower.temperatureC, upper.temperatureC),
-        lowerLevel: lower,
-        upperLevel: upper,
-      });
+  return findThresholdCrossings(levels, (level) => level.temperatureC, 0).map((crossing) => {
+    if (crossing.method === "exact_sample") {
+      return {
+        pressureHpa: crossing.sample.pressureHpa,
+        geopotentialHeightGpm: crossing.sample.geopotentialHeightGpm,
+        method: "exact_sample" as const,
+        transition: crossingTransition(crossing.direction),
+        lowerLevel: crossing.lowerSample,
+        upperLevel: crossing.upperSample,
+      };
     }
-  }
 
-  for (let index = 1; index < ordered.length; index += 1) {
-    const lower = ordered[index - 1]!;
-    const upper = ordered[index]!;
-    if (lower.temperatureC === 0 || upper.temperatureC === 0) continue;
-    if (Math.sign(lower.temperatureC) === Math.sign(upper.temperatureC)) continue;
-
-    const fraction = lower.temperatureC / (lower.temperatureC - upper.temperatureC);
-    const geopotentialHeightGpm = lower.geopotentialHeightGpm
-      + fraction * (upper.geopotentialHeightGpm - lower.geopotentialHeightGpm);
-    const logPressure = Math.log(lower.pressureHpa)
-      + fraction * (Math.log(upper.pressureHpa) - Math.log(lower.pressureHpa));
-
-    crossings.push({
+    const geopotentialHeightGpm = crossing.lowerSample.geopotentialHeightGpm
+      + crossing.fraction * (crossing.upperSample.geopotentialHeightGpm - crossing.lowerSample.geopotentialHeightGpm);
+    const logPressure = Math.log(crossing.lowerSample.pressureHpa)
+      + crossing.fraction * (Math.log(crossing.upperSample.pressureHpa) - Math.log(crossing.lowerSample.pressureHpa));
+    return {
       pressureHpa: Math.exp(logPressure),
       geopotentialHeightGpm,
-      method: "interpolated",
-      transition: lower.temperatureC > 0 ? "warm_to_cold" : "cold_to_warm",
-      lowerLevel: lower,
-      upperLevel: upper,
-    });
-  }
-
-  return crossings.sort((a, b) => a.geopotentialHeightGpm - b.geopotentialHeightGpm);
+      method: "interpolated" as const,
+      transition: crossingTransition(crossing.direction),
+      lowerLevel: crossing.lowerSample,
+      upperLevel: crossing.upperSample,
+    };
+  });
 }
 
 export function deriveTemperatureInversionLayers(
   levels: readonly SampledThermodynamicLevel[],
 ): TemperatureInversionLayer[] {
-  const ordered = orderProfileByHeight(levels);
-  const layers: TemperatureInversionLayer[] = [];
-  let inversionStartIndex: number | undefined;
+  const layers = findContiguousLayers(
+    levels,
+    (gradient) => gradient.deltaValue > 0,
+    (level) => level.temperatureC,
+  );
 
-  for (let index = 1; index < ordered.length; index += 1) {
-    const lower = ordered[index - 1]!;
-    const upper = ordered[index]!;
-    const isInversionSegment = upper.temperatureC > lower.temperatureC;
-
-    if (isInversionSegment && inversionStartIndex === undefined) {
-      inversionStartIndex = index - 1;
+  return layers.map((layer) => {
+    const base = layer.baseSample;
+    const top = layer.topSample;
+    const depthGpm = top.geopotentialHeightGpm - base.geopotentialHeightGpm;
+    const temperatureIncreaseC = top.temperatureC - base.temperatureC;
+    if (!(depthGpm > 0) || !(temperatureIncreaseC > 0)) {
+      throw new Error("Internal inversion-layer construction error");
     }
-
-    const isLastSegment = index === ordered.length - 1;
-    if (inversionStartIndex !== undefined && (!isInversionSegment || isLastSegment)) {
-      const inversionEndIndex = isInversionSegment && isLastSegment ? index : index - 1;
-      layers.push(buildInversionLayer(ordered, inversionStartIndex, inversionEndIndex));
-      inversionStartIndex = undefined;
-    }
-  }
-
-  return layers;
+    return {
+      basePressureHpa: base.pressureHpa,
+      topPressureHpa: top.pressureHpa,
+      baseGeopotentialHeightGpm: base.geopotentialHeightGpm,
+      topGeopotentialHeightGpm: top.geopotentialHeightGpm,
+      baseTemperatureC: base.temperatureC,
+      topTemperatureC: top.temperatureC,
+      depthGpm,
+      temperatureIncreaseC,
+      meanTemperatureGradientCPerKm: temperatureIncreaseC / depthGpm * 1000,
+      sampledSegments: layer.sampledSegments,
+    };
+  });
 }
 
-function buildInversionLayer(
-  levels: readonly SampledThermodynamicLevel[],
-  baseIndex: number,
-  topIndex: number,
-): TemperatureInversionLayer {
-  const base = levels[baseIndex]!;
-  const top = levels[topIndex]!;
-  const depthGpm = top.geopotentialHeightGpm - base.geopotentialHeightGpm;
-  const temperatureIncreaseC = top.temperatureC - base.temperatureC;
-  if (!(depthGpm > 0) || !(temperatureIncreaseC > 0)) {
-    throw new Error("Internal inversion-layer construction error");
-  }
-  return {
-    basePressureHpa: base.pressureHpa,
-    topPressureHpa: top.pressureHpa,
-    baseGeopotentialHeightGpm: base.geopotentialHeightGpm,
-    topGeopotentialHeightGpm: top.geopotentialHeightGpm,
-    baseTemperatureC: base.temperatureC,
-    topTemperatureC: top.temperatureC,
-    depthGpm,
-    temperatureIncreaseC,
-    meanTemperatureGradientCPerKm: temperatureIncreaseC / depthGpm * 1000,
-    sampledSegments: topIndex - baseIndex,
-  };
-}
-
-function exactSampleTransition(lowerTemperatureC: number, upperTemperatureC: number): FreezingCrossingTransition {
-  if (lowerTemperatureC > 0 && upperTemperatureC < 0) return "warm_to_cold";
-  if (lowerTemperatureC < 0 && upperTemperatureC > 0) return "cold_to_warm";
+function crossingTransition(direction: "increasing" | "decreasing" | "indeterminate"): FreezingCrossingTransition {
+  if (direction === "increasing") return "cold_to_warm";
+  if (direction === "decreasing") return "warm_to_cold";
   return "indeterminate";
 }

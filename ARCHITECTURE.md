@@ -31,9 +31,13 @@ agent interpretation
 
 Derived variables declare their raw GFS dependencies in the shared catalog. Query planning expands those dependencies before source access, while the derivation itself happens only after raw completeness validation. This keeps NOAA access minimal and makes the same derived result available automatically to profile, batch-point, and time-series consumers.
 
+Moist thermodynamic variables remain ordinary per-level derived variables rather than separate tools. Wet-bulb temperature and equivalent potential temperature both depend on temperature plus specific humidity, with pressure supplied by the isobaric coordinate. Equivalent potential temperature uses the Bolton (1980) formulation. Wet-bulb temperature is a deterministic same-pressure adiabatic-saturation enthalpy solve. The catalog describes these methods so consuming agents can distinguish model fields from WFG calculations.
+
 Cross-level diagnostics are separate from per-level variables. A pressure-layer diagnostic explicitly names a lower-altitude/higher-pressure surface and an upper-altitude/lower-pressure surface, obtains one minimal two-level profile, and returns both the raw endpoints and deterministic diagnostic values. Gradients are normalized by the GFS geopotential-height difference rather than pretending pressure difference is geometric depth.
 
 Whole-profile diagnostics are also explicit about sampling. The caller supplies the published pressure levels to inspect; WFG fetches the union of raw dependencies once, returns those sampled levels, and derives profile structure locally. Freezing-level crossings are interpolated between sampled temperatures/heights with log-pressure interpolation. Temperature inversions are reported only where adjacent sampled levels warm with height, with contiguous inversion segments merged. WFG does not imply structure between pressure levels that the caller did not request.
+
+Whole-profile feature mechanics live below named diagnostics as reusable deterministic primitives: strict height ordering, adjacent gradients, threshold crossings, contiguous matching layers, and extrema. Named meteorological diagnostics compose these mechanics and add their domain-specific output semantics. This prevents each new diagnostic from reimplementing vertical traversal or subtly changing interpolation/layer grouping behavior.
 
 ## Surface contracts
 
