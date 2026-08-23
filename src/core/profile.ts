@@ -14,9 +14,11 @@ import { expandRequestedVariables } from "../catalog/variables.js";
 import {
   deriveAirDensityKgM3,
   deriveDewPointC,
+  deriveEquivalentPotentialTemperatureK,
   deriveMixingRatioKgKg,
   derivePotentialTemperatureK,
   deriveVirtualTemperatureC,
+  deriveWetBulbTemperatureC,
 } from "../derived/thermodynamics.js";
 import { deriveWind } from "../derived/wind.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
@@ -214,6 +216,22 @@ function applyDerivedPressureValues(level: ProfileLevel, requestedVariables: rea
 
   if (requested.has("air_density")) {
     level.airDensityKgM3 = deriveAirDensityKgM3(
+      dependency(level.temperatureC, "temperature", level.pressureHpa),
+      dependency(level.specificHumidityKgKg, "specific_humidity", level.pressureHpa),
+      level.pressureHpa,
+    );
+  }
+
+  if (requested.has("wet_bulb_temperature")) {
+    level.wetBulbTemperatureC = deriveWetBulbTemperatureC(
+      dependency(level.temperatureC, "temperature", level.pressureHpa),
+      dependency(level.specificHumidityKgKg, "specific_humidity", level.pressureHpa),
+      level.pressureHpa,
+    );
+  }
+
+  if (requested.has("equivalent_potential_temperature")) {
+    level.equivalentPotentialTemperatureK = deriveEquivalentPotentialTemperatureK(
       dependency(level.temperatureC, "temperature", level.pressureHpa),
       dependency(level.specificHumidityKgKg, "specific_humidity", level.pressureHpa),
       level.pressureHpa,
