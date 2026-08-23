@@ -226,7 +226,13 @@ export interface AreaSummaryResult {
   validTime: string;
   forecastHour: number;
   bbox: BoundingBox;
-  variable: { id: RawVariableId; pressureHpa: number; field: string; unit: string };
+  variable?: { id: RawVariableId; pressureHpa: number; field: string; unit: string };
+  field?: {
+    id: NonIsobaricFieldId;
+    level: NonIsobaricFieldLevelResult;
+    temporal: FieldTemporalResult;
+    output: { field: string; unit: string };
+  };
   statistics: {
     definedGridPoints: number;
     mean: number;

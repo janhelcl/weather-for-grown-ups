@@ -20,11 +20,10 @@ export interface NomadsAreaRequest {
   northLatitude: number;
   variables: RawVariableDefinition[];
   pressureLevelsHpa: number[];
-}
-
-interface NomadsRequest extends NomadsAreaRequest {
   fields?: RawNonIsobaricFieldDefinition[];
 }
+
+type NomadsRequest = NomadsAreaRequest;
 
 export function buildNomadsPointUrl(request: NomadsPointRequest): string {
   return buildNomadsUrl({

@@ -295,7 +295,13 @@ export const areaSummaryResultSchema = z.object({
     pressureHpa: z.number(),
     field: z.string(),
     unit: z.string(),
-  }),
+  }).optional(),
+  field: z.object({
+    id: nonIsobaricFieldIdSchema,
+    level: nonIsobaricFieldLevelResultSchema,
+    temporal: fieldTemporalResultSchema,
+    output: z.object({ field: z.string(), unit: z.string() }),
+  }).optional(),
   statistics: z.object({
     definedGridPoints: z.number(),
     mean: z.number(),
@@ -309,6 +315,15 @@ export const areaSummaryResultSchema = z.object({
     decoder: z.literal("wgrib2"),
     cacheHit: z.boolean(),
   }),
+}).superRefine((value, context) => {
+  const descriptorCount = Number(value.variable !== undefined) + Number(value.field !== undefined);
+  if (descriptorCount !== 1) {
+    context.addIssue({
+      code: "custom",
+      path: ["field"],
+      message: "Area summary result must describe exactly one pressure-level variable or non-isobaric field",
+    });
+  }
 });
 
 export const latestGfsRunResultSchema = z.object({

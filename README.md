@@ -210,7 +210,27 @@ The primitive is intentionally **S3-only**. For each forecast step WFG downloads
 
 This means a three-point, five-step query performs five shared batch fetches rather than fifteen independent point fetches. The response is time-major: each series step contains its valid time, forecast hour, slice cache status, and the ordered point results for that step.
 
+## Run-to-run comparison
+
+```bash
+wfg compare-runs \
+  --lat 50.08 \
+  --lon 14.43 \
+  --valid 2026-08-24T12:00:00Z \
+  --cycles 3 \
+  --vars temperature,wind \
+  --levels 850,700 \
+  --fields temperature_2m,low_cloud_cover \
+  --json
+```
+
+MCP exposes the same primitive as `compare_gfs_runs`. It compares the same point, valid time, and atmospheric selection across 2-6 consecutive six-hour model cycles. Runs are returned oldest to newest; every transition delta is **newer minus older**.
+
+Wind direction uses the shortest signed circular change, so 350° → 10° is +20° rather than -340°. Accumulation and forecast-window-average fields only receive numeric deltas when their absolute time windows match. See `RUN_COMPARISON.md` for the detailed contract and failure semantics.
+
 ## Bounded area summary
+
+Pressure-level example:
 
 ```bash
 wfg area \
@@ -221,15 +241,27 @@ wfg area \
   --level 850
 ```
 
-MCP exposes the same primitive as `summarize_gfs_area`. It returns **min, max, and an unweighted grid-point mean** for one raw variable, one pressure level, one valid time, and one bbox. The raw grid is never returned to the agent.
+Non-isobaric example:
 
-Area summaries intentionally remain pressure-level-only for now: Grib Filter crops the requested region before transfer, then `wgrib2` computes the statistics locally. A conservative 50,000-grid-point default guard bounds the requested area. Antimeridian-crossing boxes and derived/vector statistics are not supported yet.
+```bash
+wfg area \
+  --west 12 --east 18 \
+  --south 48 --north 51 \
+  --valid 2026-08-20T12:00:00Z \
+  --field low_cloud_cover_average
+```
+
+MCP exposes the same primitive as `summarize_gfs_area`. It returns **min, max, and an unweighted grid-point mean** for either one raw pressure-level variable at one pressure surface or one raw non-isobaric field, one valid time, and one bbox. The raw grid is never returned to the agent.
+
+Non-isobaric results retain exact vertical and temporal semantics. Before calculating statistics, WFG inspects the filtered GRIB inventory and requires exactly one record matching the requested variable code, GRIB level, and instantaneous/accumulation/average semantics. This prevents an instantaneous cloud-cover request from silently selecting a forecast-window-average record at the same named layer.
+
+Derived/vector area fields remain intentionally unsupported where aggregation order matters; for example WFG does not derive an area wind from mean U/V because that is not equivalent to deriving wind at each grid cell and then aggregating. A conservative 50,000-grid-point default guard bounds the requested area. Antimeridian-crossing boxes are not supported yet. See `AREA_SUMMARY.md` for the exact record-selection, unit-normalization, and pacing behavior.
 
 ## Two data paths
 
 NOMADS is the default for single point queries and the area-summary path because its Grib Filter can geographically subset before transfer. Surface, height-above-ground, named-layer, and named-level selections use the same Grib Filter request as pressure levels, so all physical NOMADS downloads continue to pass through the shared courtesy limiter.
 
-For multi-point and multi-time workflows, NOAA AWS Open Data is the natural path. The S3 adapter fetches the `.idx` inventory, identifies only requested pressure and non-isobaric GRIB messages, derives byte ranges, and downloads those messages with HTTP Range requests. Non-isobaric selectors match variable, exact vertical semantics, and exact temporal semantics, so an instantaneous cloud-cover request cannot silently select the forecast-window-average record at the same layer. Multi-point sampling reuses one selected-message slice across all coordinates; multi-point time series repeats that reuse once per forecast step.
+For multi-point, multi-time, and run-comparison workflows, NOAA AWS Open Data is the natural path. The S3 adapter fetches the `.idx` inventory, identifies only requested pressure and non-isobaric GRIB messages, derives byte ranges, and downloads those messages with HTTP Range requests. Non-isobaric selectors match variable, exact vertical semantics, and exact temporal semantics, so an instantaneous cloud-cover request cannot silently select the forecast-window-average record at the same layer. Multi-point sampling reuses one selected-message slice across all coordinates; multi-point time series repeats that reuse once per forecast step.
 
 Both data paths feed `wgrib2` and return normalized data with explicit provenance.
 
@@ -275,6 +307,7 @@ npm run dev -- parcel --help
 npm run dev -- points --help
 npm run dev -- timeseries --help
 npm run dev -- points-timeseries --help
+npm run dev -- compare-runs --help
 npm run dev -- area --help
 npm run mcp
 ```
@@ -308,25 +341,27 @@ Implemented:
 - independent MetPy-based golden-reference validation for core thermodynamics, moist lapse, and CAPE
 - batched same-time sampling for up to 50 points with one reusable S3 selected-message slice
 - native-cadence multi-point time series for up to 20 points with one reusable S3 selected-message slice per forecast step and point-step guards
+- run-to-run comparison across 2-6 consecutive GFS cycles with raw snapshots, deterministic deltas, and interval comparability rules
 - surface and height-above-ground point fields with exact-level validation
 - named cloud layers/levels and whole-atmosphere column products with exact vertical semantics
 - accumulation and forecast-window-average fields with explicit forecast intervals
 - native-cadence point time series with bounded concurrency and step guard
-- bounded raw pressure-field area min/max/unweighted mean without returning grids
+- bounded raw pressure-level and raw non-isobaric area min/max/unweighted mean without returning grids
+- exact non-isobaric area GRIB-message selection by variable, vertical semantics, and temporal semantics
 - 12 raw pressure-level fields plus 8 deterministic derived pressure-level variables
 - surface diagnostics plus 2/10/20/30/40/50/80/100 m fields and derived winds
 - instantaneous and averaged cloud-cover layers, cloud boundaries/top temperatures, cloud ceiling, precipitable/cloud water, ozone, and cloud work function
 - deterministic NOMADS geographic-subset path with 11 s cross-process limiter
 - NOAA AWS `.idx` + selected-message byte-range path with reusable subset cache
-- `wgrib2` point extraction for isobaric/non-isobaric named-layer and temporal semantics plus area statistics adapters
-- CLI `catalog`, `latest`, `profile`, `layer`, `profile-diagnostics`, `parcel`, `points`, `timeseries`, `points-timeseries`, and `area`
-- MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_layer_diagnostics`, `get_gfs_profile_diagnostics`, `get_gfs_parcel_diagnostics`, `get_gfs_points`, `get_gfs_timeseries`, `get_gfs_points_timeseries`, and `summarize_gfs_area`
+- `wgrib2` point extraction for isobaric/non-isobaric named-layer and temporal semantics plus exact-message area statistics adapters
+- CLI `catalog`, `latest`, `profile`, `layer`, `profile-diagnostics`, `parcel`, `points`, `timeseries`, `points-timeseries`, `compare-runs`, and `area`
+- MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_layer_diagnostics`, `get_gfs_profile_diagnostics`, `get_gfs_parcel_diagnostics`, `get_gfs_points`, `get_gfs_timeseries`, `get_gfs_points_timeseries`, `compare_gfs_runs`, and `summarize_gfs_area`
 - shared CLI/MCP result contracts and comprehensive deterministic offline test suite plus opt-in real NOAA profile smoke tests
 
 Next:
 
-1. add run-to-run forecast comparison for the same valid time/range
-2. extend bounded area summaries to non-isobaric fields and optionally add extrema locations/percentiles/threshold fractions
-3. improve catalog search/filter ergonomics as the field surface grows
-4. add a pressure-level transect/cross-section primitive
-5. add a live multi-point/time-series/parcel smoke after the S3 path has been exercised manually
+1. improve catalog search/filter ergonomics as the field surface grows
+2. add a pressure-level transect/cross-section primitive
+3. extend area summaries with optional extrema locations, percentiles, and threshold fractions
+4. add parcel/profile-diagnostic time-series composition if repeated structure analysis proves useful
+5. add live multi-point/time-series/parcel/non-isobaric-area smoke coverage after the paths have been exercised manually
