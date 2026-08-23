@@ -21,6 +21,15 @@ RUN micromamba install --yes --name base --channel conda-forge \
 ENV PATH=/opt/conda/bin:${PATH}
 WORKDIR /app
 
+FROM runtime-base AS live-test
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/node_modules ./node_modules
+COPY tsconfig.json tsconfig.scripts.json ./
+COPY src ./src
+COPY scripts ./scripts
+USER $MAMBA_USER
+CMD ["npm", "run", "test:live:all"]
+
 FROM runtime-base AS runtime
 COPY --from=prod-deps /app/package.json ./package.json
 COPY --from=prod-deps /app/node_modules ./node_modules
@@ -32,12 +41,3 @@ EXPOSE 3000
 USER $MAMBA_USER
 ENTRYPOINT ["wfg-entrypoint"]
 CMD ["--help"]
-
-FROM runtime-base AS live-test
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/node_modules ./node_modules
-COPY tsconfig.json tsconfig.scripts.json ./
-COPY src ./src
-COPY scripts ./scripts
-USER $MAMBA_USER
-CMD ["npm", "run", "test:live:all"]
