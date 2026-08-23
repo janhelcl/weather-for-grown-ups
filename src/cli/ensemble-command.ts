@@ -1,6 +1,8 @@
 import type { Command } from "commander";
 import { GEFS_MEMBERS, type GefsMember, type GefsPressureVariableId } from "../catalog/gefs.js";
+import { GefsEnsembleTimeSeriesService } from "../core/gefs-ensemble-timeseries.js";
 import { GefsEnsembleService } from "../core/gefs-ensemble.js";
+import { gefsEnsembleTimeSeriesResultSchema } from "../schema/gefs-ensemble-timeseries.js";
 import { gefsEnsembleResultSchema } from "../schema/gefs-ensemble.js";
 
 export function registerEnsembleCommand(program: Command): void {
@@ -40,6 +42,60 @@ export function registerEnsembleCommand(program: Command): void {
       console.log(`mean=${result.summary.mean}  populationStdDev=${result.summary.populationStdDev}  min=${result.summary.min}  max=${result.summary.max}`);
       if (result.summary.threshold) {
         console.log(`>= ${result.summary.threshold.value}: ${result.summary.threshold.count}/${result.summary.memberCount} = ${result.summary.threshold.fraction}; raw member fraction, not a calibrated probability`);
+      }
+    });
+
+  program
+    .command("ensemble-timeseries")
+    .description("Track one GEFS 0.5° pressure-level ensemble distribution across native three-hour forecast steps")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .option("--run <iso|latest>", "GEFS run initialization; latest = newest single cycle satisfying the complete time range/member selection", "latest")
+    .requiredOption("--start <iso>", "First forecast valid time on the native three-hour GEFS cadence")
+    .requiredOption("--end <iso>", "Last forecast valid time on the native three-hour GEFS cadence, inclusive")
+    .requiredOption("--var <id>", "Pressure-level variable: temperature, relative_humidity, u_wind, v_wind, geopotential_height")
+    .requiredOption("--level <hpa>", "Pressure level in hPa", Number)
+    .option("--members <list>", "Comma-separated GEFS members (c00,p01..p30); default all 31")
+    .option("--quantiles <list>", "Comma-separated quantiles from 0 to 1", "0.1,0.5,0.9")
+    .option("--gte <number>", "Optional threshold in normalized output units", Number)
+    .option("--include-members", "Include each member value at every step; summaries are always returned")
+    .option("--max-steps <number>", "Maximum native forecast steps accepted", Number, 129)
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const result = await new GefsEnsembleTimeSeriesService().getTimeSeries({
+        latitude: options.lat,
+        longitude: options.lon,
+        run: options.run,
+        startTime: options.start,
+        endTime: options.end,
+        variable: options.var as GefsPressureVariableId,
+        pressureLevelHpa: options.level,
+        ...(options.members === undefined ? {} : { members: parseMembers(options.members) }),
+        quantiles: parseNumbers(options.quantiles),
+        ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
+        includeMembers: Boolean(options.includeMembers),
+        maxSteps: options.maxSteps,
+      });
+      gefsEnsembleTimeSeriesResultSchema.parse(result);
+      if (options.json) return console.log(JSON.stringify(result, null, 2));
+
+      console.log(`GEFS ${result.run}  ${result.startTime} → ${result.endTime}  ${result.series.length} steps`);
+      console.log(`${result.selection.variable}@${result.selection.pressureLevelHpa}hPa (${result.selection.unit}); ${result.selection.members.length} members`);
+      console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
+      console.table(result.series.map((step) => ({
+        validTime: step.validTime,
+        forecastHour: step.forecastHour,
+        mean: step.summary.mean,
+        populationStdDev: step.summary.populationStdDev,
+        min: step.summary.min,
+        max: step.summary.max,
+        ...(step.summary.threshold ? { thresholdFraction: step.summary.threshold.fraction } : {}),
+      })));
+      if (result.includeMembers) {
+        for (const step of result.series) {
+          console.log(`Members at ${step.validTime}`);
+          console.table(step.members ?? []);
+        }
       }
     });
 }
