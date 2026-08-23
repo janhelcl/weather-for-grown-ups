@@ -6,6 +6,7 @@ import { DiagnosticTimeSeriesService } from "./core/diagnostic-time-series.js";
 import { GefsEnsembleProfileService } from "./core/gefs-ensemble-profile.js";
 import { GefsEnsembleTimeSeriesService } from "./core/gefs-ensemble-timeseries.js";
 import { GefsEnsembleService } from "./core/gefs-ensemble.js";
+import { GefsLayerDiagnosticsService } from "./core/gefs-layer-diagnostics.js";
 import { GfsGefsComparisonService } from "./core/gfs-gefs-comparison.js";
 import { LayerDiagnosticsService } from "./core/layer-diagnostics.js";
 import { LatestRunResolver } from "./core/latest-run.js";
@@ -21,6 +22,7 @@ import {
   handleGetGefsEnsemble,
   handleGetGefsEnsembleProfile,
   handleGetGefsEnsembleTimeSeries,
+  handleGetGefsLayerDiagnostics,
 } from "./mcp-gefs-tool.js";
 import { handleCompareGfsToGefs } from "./mcp-model-comparison-tool.js";
 import {
@@ -53,6 +55,10 @@ import {
 } from "./schema/gefs-ensemble-timeseries.js";
 import { gefsEnsembleQuerySchema, gefsEnsembleResultSchema } from "./schema/gefs-ensemble.js";
 import {
+  gefsLayerDiagnosticsQuerySchema,
+  gefsLayerDiagnosticsResultSchema,
+} from "./schema/gefs-layer-diagnostics.js";
+import {
   gfsGefsComparisonQuerySchema,
   gfsGefsComparisonResultSchema,
 } from "./schema/gfs-gefs-comparison.js";
@@ -84,13 +90,14 @@ export function createMcpServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "WFG exposes NOAA numerical weather models with explicit model/run/valid-time/vertical semantics. Use get_gfs_catalog or search_gfs_catalog to discover the deterministic GFS 0.25° surface. GFS query tools support query-aware run='latest', latest_complete through f384, and explicit reproducible cycles; values are raw model data or deterministic local physical derivations. Use get_gefs_ensemble for one-time uncertainty across GEFS 0.5° control/perturbed members, get_gefs_ensemble_profile for multi-variable/multi-level vertical distributions at one point/time, get_gefs_ensemble_timeseries to track one field distribution across native three-hour forecast steps from one fixed cycle, and compare_gfs_to_gefs to place deterministic GFS inside an aligned GEFS member distribution. GEFS member fractions, profile summaries, and GFS-vs-GEFS ranks are raw model/member distribution evidence, not calibrated probabilities or uncertainty. Use GFS diagnostics for layer/profile/parcel calculations, points/transect/time-series tools for spatial and temporal composition, compare_gfs_runs for cycle changes, and summarize_gfs_area for bounded grid statistics. WFG does not provide activity-specific interpretation or safety advice.",
+      instructions: "WFG exposes NOAA numerical weather models with explicit model/run/valid-time/vertical semantics. GFS and GEFS share model-independent profile and diagnostic kernels while preserving deterministic-vs-ensemble result semantics. Use get_gfs_catalog or search_gfs_catalog to discover the deterministic GFS 0.25° surface. GFS query tools support query-aware run='latest', latest_complete through f384, and explicit reproducible cycles. Use get_gefs_ensemble for one-time member distributions, get_gefs_ensemble_profile for multi-variable/multi-level vertical distributions, get_gefs_ensemble_timeseries for one-field native-cadence distributions, and get_gefs_layer_diagnostics for per-member layer calculations summarized across the ensemble. compare_gfs_to_gefs places deterministic GFS inside an aligned GEFS member distribution. GEFS member fractions, profile/diagnostic summaries, and GFS-vs-GEFS ranks are raw model/member evidence, not calibrated probabilities or uncertainty. WFG does not provide activity-specific interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
   const gefsEnsembleService = new GefsEnsembleService();
   const gefsEnsembleProfileService = new GefsEnsembleProfileService();
   const gefsEnsembleTimeSeriesService = new GefsEnsembleTimeSeriesService({ ensembleGetter: gefsEnsembleService });
+  const gefsLayerDiagnosticsService = new GefsLayerDiagnosticsService({ profileGetter: gefsEnsembleProfileService });
   const profileService = new ProfileService({ latestRunProvider: latestRunResolver });
   const gfsGefsComparisonService = new GfsGefsComparisonService({
     profileGetter: profileService,
@@ -158,6 +165,13 @@ export function createMcpServer(): McpServer {
     inputSchema: gefsEnsembleTimeSeriesQuerySchema,
     outputSchema: gefsEnsembleTimeSeriesResultSchema,
   }, async (query) => handleGetGefsEnsembleTimeSeries(gefsEnsembleTimeSeriesService, query));
+
+  server.registerTool("get_gefs_layer_diagnostics", {
+    title: "Get GEFS pressure-layer diagnostic distributions",
+    description: "Apply the same layer meteorology used by deterministic GFS to every selected GEFS member, then summarize each diagnostic output across members. Supports environmental lapse rate, vector wind shear, and potential-temperature gradient. Layer depth is member-specific and is summarized separately. Memberwise inputs/results are omitted unless includeMembers=true. Distribution summaries are raw ensemble evidence, not calibrated uncertainty.",
+    inputSchema: gefsLayerDiagnosticsQuerySchema,
+    outputSchema: gefsLayerDiagnosticsResultSchema,
+  }, async (query) => handleGetGefsLayerDiagnostics(gefsLayerDiagnosticsService, query));
 
   server.registerTool("compare_gfs_to_gefs", {
     title: "Compare deterministic GFS to GEFS",
