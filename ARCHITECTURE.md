@@ -52,7 +52,7 @@ Parcel choice is part of the physics, so WFG has no ambiguous generic CAPE tool.
 
 One profile request obtains pressure-level temperature, specific humidity and geopotential height together with the required surface/2 m fields. The surface parcel initializes from GFS surface pressure/geopotential height with 2 m temperature and humidity. The mixed-layer parcel uses pressure-weighted mean potential temperature and mixing ratio over the exact lowest 100 hPa. The most-unstable parcel selects the sampled state with maximum Bolton equivalent potential temperature in the lowest 300 hPa.
 
-Ascent is dry adiabatic to the Bolton LCL and pseudo-adiabatic above it using deterministic numerical integration in log pressure. Environmental values are interpolated in log pressure. Buoyancy compares parcel and environmental **virtual temperature**; zero-buoyancy crossings are inserted before the pressure-coordinate CAPE/CIN integration. Raw environmental levels and the complete parcel path remain in the result for auditability.
+Ascent is dry adiabatic to the Bolton LCL and pseudo-adiabatic above it using deterministic numerical integration in log pressure. Environmental values are interpolated in log pressure. Buoyancy compares parcel and environmental **virtual temperature**; zero-buoyancy crossings are inserted before the pressure-coordinate CAPE/CIN integration. Raw environmental levels and the complete parcel path remain in the single-time result for auditability.
 
 ## Spatial and temporal composition
 
@@ -60,7 +60,11 @@ Ascent is dry adiabatic to the Bolton LCL and pseudo-adiabatic above it using de
 
 `TransectService` composes that primitive: it generates evenly spaced great-circle coordinates, delegates one batch request, and attaches along-track distance. It does not implement a second GRIB access path.
 
-`PointsTimeSeriesService` composes batch requests across native GFS forecast steps, reusing one selected-message slice per step. `TimeSeriesService` is the single-point equivalent. `RunComparisonService` holds valid time constant and compares consecutive six-hour cycles with deterministic delta rules.
+`PointsTimeSeriesService` composes batch requests across native GFS forecast steps, reusing one selected-message slice per step. `TimeSeriesService` is the single-point field equivalent. `RunComparisonService` holds valid time constant and compares consecutive six-hour cycles with deterministic delta rules.
+
+`DiagnosticTimeSeriesService` composes the existing single-time layer, whole-profile, and parcel services across the same native GFS time axis. A query selects exactly one diagnostic family. Query-aware `latest` is resolved once against the complete valid-time range and the exact raw dependencies required by that diagnostic selection; every underlying diagnostic call then receives the explicit resolved run. This prevents cycle drift within a series while reusing the already-tested meteorological implementations instead of creating parallel formulas.
+
+Diagnostic time-series responses are intentionally compact. Layer/profile steps retain the deterministic diagnostic outputs and the explicit selection echo supplies the fixed vertical sampling semantics. Parcel steps retain parcel start, LCL/LFC/EL, CAPE and CIN but omit the repeated full parcel path. The single-time parcel service remains the detailed audit surface for any individual step.
 
 Area summaries deliberately use a different path. A bounded NOMADS subset is decoded locally and reduced to statistics; the raw grid is never returned. Optional percentiles, threshold fractions, and extrema locations operate over defined grid cells in normalized WFG output units.
 
@@ -88,7 +92,7 @@ The HTTP launcher is transport/infrastructure code only. It adds the `/mcp` endp
 
 ## Shared contracts
 
-Shared Zod schemas define public profile, diagnostic, batch, transect, time-series, run-comparison, area-summary, latest-run, vertical, temporal, and provenance contracts. CLI validates results before emission; MCP advertises and validates the same result shapes.
+Shared Zod schemas define public profile, diagnostic, diagnostic-time-series, batch, transect, field-time-series, run-comparison, area-summary, latest-run, vertical, temporal, and provenance contracts. CLI validates results before emission; MCP advertises and validates the same result shapes.
 
 A new core result shape is incomplete until its shared schema and both relevant surface adapters are updated and tested.
 
@@ -96,11 +100,11 @@ A new core result shape is incomplete until its shared schema and both relevant 
 
 ### NOMADS Grib Filter
 
-Use NOMADS where geographic subsetting materially reduces transfer: single-point requests and bounded areas. All physical requests share the same cross-process courtesy limiter and cache boundary.
+Use NOMADS where geographic subsetting materially reduces transfer: single-point requests and bounded areas. All physical requests share the same cross-process courtesy limiter and cache boundary. Diagnostic time series may request NOMADS explicitly, but they have no pacing bypass.
 
 ### NOAA AWS Open Data
 
-Use AWS `.idx` inventories and HTTP byte ranges where one selected GRIB-message slice can be reused across locations or forecast steps: batch points, transects, time series, multi-point time series, and run comparison.
+Use AWS `.idx` inventories and HTTP byte ranges where selected GRIB messages can be reused across locations or forecast steps: batch points, transects, field time series, diagnostic time series, multi-point time series, and run comparison. S3 is the default diagnostic-time-series source because a series spans multiple forecast files.
 
 Both paths feed the same `wgrib2` decoder boundary and normalized output contracts.
 
