@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { handleGetGfsAreaSummary } from "../src/mcp-area-tool.js";
-import type { AreaSummaryResult } from "../src/schema/area-summary-result.js";
+import { areaSummaryResultSchema, type AreaSummaryResult } from "../src/schema/area-summary-result.js";
 
 const query = {
   westLongitude: 12,
@@ -37,9 +37,10 @@ const result: AreaSummaryResult = {
 
 describe("rich MCP area summary handler", () => {
   it("preserves the optional distribution in structured output", async () => {
+    const expected = areaSummaryResultSchema.parse(result);
     expect(await handleGetGfsAreaSummary({ summarize: async () => result }, query)).toEqual({
-      content: [{ type: "text", text: JSON.stringify(result) }],
-      structuredContent: result,
+      content: [{ type: "text", text: JSON.stringify(expected) }],
+      structuredContent: expected,
     });
   });
 
