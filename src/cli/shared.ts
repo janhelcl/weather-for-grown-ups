@@ -1,3 +1,4 @@
+import type { GefsMember, GefsPressureVariableId } from "../catalog/gefs.js";
 import type {
   LayerDiagnosticId,
   NonIsobaricFieldId,
@@ -7,10 +8,19 @@ import type {
 } from "../schema/query.js";
 
 export const DEFAULT_VARIABLES = "temperature,relative_humidity,wind";
+export const DEFAULT_GEFS_PROFILE_VARIABLES = "temperature,relative_humidity,u_wind,v_wind,geopotential_height";
 export const DEFAULT_LEVELS = "1000,925,850,700,500";
 export const DEFAULT_LAYER_DIAGNOSTICS = "temperature_lapse_rate,wind_shear,potential_temperature_gradient";
 export const DEFAULT_PROFILE_DIAGNOSTICS = "freezing_level_crossings,temperature_inversion_layers";
 export const RUN_HELP = "GFS run initialization; latest = newest run satisfying this query, latest_complete = newest run published through f384";
+
+export type CliAtmosphericModel = "gfs" | "gefs";
+
+export function parseAtmosphericModel(value: unknown): CliAtmosphericModel {
+  const model = String(value).trim().toLowerCase();
+  if (model !== "gfs" && model !== "gefs") throw new Error(`Expected --model gfs|gefs, received: ${value}`);
+  return model;
+}
 
 export function pointSelection(vars: unknown, levels: unknown, fields: unknown): {
   variables?: VariableId[];
@@ -52,6 +62,18 @@ export function collectPoint(value: string, previous: PointCoordinate[] | undefi
 
 export function parseVariables(value: unknown): VariableId[] {
   return String(value).split(",").map((variable) => variable.trim()).filter(Boolean) as VariableId[];
+}
+
+export function parseGefsVariables(value: unknown): GefsPressureVariableId[] {
+  return String(value).split(",").map((variable) => variable.trim()).filter(Boolean) as GefsPressureVariableId[];
+}
+
+export function parseGefsMembers(value: unknown): GefsMember[] {
+  return String(value).split(",").map((member) => member.trim()).filter(Boolean) as GefsMember[];
+}
+
+export function parseNumbers(value: unknown): number[] {
+  return String(value).split(",").map((item) => item.trim()).filter(Boolean).map(Number);
 }
 
 export function parseLayerDiagnostics(value: unknown): LayerDiagnosticId[] {
