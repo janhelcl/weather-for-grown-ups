@@ -101,14 +101,16 @@ function deriveDiagnostic(
     case "wind_shear":
       return {
         id,
-        values: deriveWindShear(
-          required(lower.uWindMs, "u_wind", lower.pressureHpa),
-          required(lower.vWindMs, "v_wind", lower.pressureHpa),
-          required(upper.uWindMs, "u_wind", upper.pressureHpa),
-          required(upper.vWindMs, "v_wind", upper.pressureHpa),
-          lowerHeightGpm,
-          upperHeightGpm,
-        ),
+        values: {
+          ...deriveWindShear(
+            required(lower.uWindMs, "u_wind", lower.pressureHpa),
+            required(lower.vWindMs, "v_wind", lower.pressureHpa),
+            required(upper.uWindMs, "u_wind", upper.pressureHpa),
+            required(upper.vWindMs, "v_wind", upper.pressureHpa),
+            lowerHeightGpm,
+            upperHeightGpm,
+          ),
+        },
       };
     case "potential_temperature_gradient":
       return {
