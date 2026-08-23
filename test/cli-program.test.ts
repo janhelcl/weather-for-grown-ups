@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import { createCliProgram } from "../src/cli/program.js";
 import {
   collectPoint,
+  parseAtmosphericModel,
   parseFields,
+  parseGefsMembers,
+  parseGefsVariables,
   parseLayerDiagnostics,
   parseLevels,
+  parseNumbers,
   parseProfileDiagnostics,
   parseVariables,
   pointSelection,
@@ -45,6 +49,14 @@ describe("CLI program registration", () => {
     expect(program.version()).toBe("0.1.0");
     expect(program.commands).toHaveLength(EXPECTED_COMMANDS.length);
   });
+
+  it("keeps canonical profile, timeseries and layer commands model-selectable without multiplying commands", () => {
+    const program = createCliProgram();
+    for (const name of ["profile", "timeseries", "layer"]) {
+      const command = program.commands.find((candidate) => candidate.name() === name);
+      expect(command?.options.some((option) => option.long === "--model")).toBe(true);
+    }
+  });
 });
 
 describe("CLI shared parsing", () => {
@@ -84,6 +96,9 @@ describe("CLI shared parsing", () => {
 
   it("parses comma-separated CLI lists consistently", () => {
     expect(parseVariables("temperature, wind")).toEqual(["temperature", "wind"]);
+    expect(parseGefsVariables("temperature, u_wind")).toEqual(["temperature", "u_wind"]);
+    expect(parseGefsMembers("p02, c00,p01")).toEqual(["p02", "c00", "p01"]);
+    expect(parseNumbers("0.1, 0.5,0.9")).toEqual([0.1, 0.5, 0.9]);
     expect(parseLevels("1000, 850,700")).toEqual([1000, 850, 700]);
     expect(parseFields(undefined)).toEqual([]);
     expect(parseFields("temperature_2m, low_cloud_cover")).toEqual(["temperature_2m", "low_cloud_cover"]);
@@ -95,5 +110,11 @@ describe("CLI shared parsing", () => {
       "freezing_level_crossings",
       "temperature_inversion_layers",
     ]);
+  });
+
+  it("normalizes supported atmospheric CLI model aliases and rejects unknown models", () => {
+    expect(parseAtmosphericModel("GFS")).toBe("gfs");
+    expect(parseAtmosphericModel(" gefs ")).toBe("gefs");
+    expect(() => parseAtmosphericModel("ecmwf")).toThrow("Expected --model gfs|gefs");
   });
 });
