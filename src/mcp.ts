@@ -12,9 +12,9 @@ import { ProfileService } from "./core/profile.js";
 import { RunComparisonService } from "./core/run-comparison.js";
 import { TimeSeriesService } from "./core/time-series.js";
 import { TransectService } from "./core/transect.js";
+import { handleGetGfsAreaSummary } from "./mcp-area-tool.js";
 import {
   handleCompareGfsRuns,
-  handleGetGfsAreaSummary,
   handleGetGfsCatalog,
   handleGetGfsLayerDiagnostics,
   handleGetGfsParcelDiagnostics,
@@ -27,9 +27,10 @@ import {
   handleSearchGfsCatalog,
 } from "./mcp-tool.js";
 import { handleGetGfsTransect } from "./mcp-transect-tool.js";
+import { areaSummaryQuerySchema } from "./schema/area-summary.js";
+import { areaSummaryResultSchema } from "./schema/area-summary-result.js";
 import { catalogSearchQuerySchema, catalogSearchResultSchema } from "./schema/catalog-search.js";
 import {
-  areaSummaryQuerySchema,
   batchPointsQuerySchema,
   layerDiagnosticsQuerySchema,
   parcelDiagnosticsQuerySchema,
@@ -40,7 +41,6 @@ import {
   timeSeriesQuerySchema,
 } from "./schema/query.js";
 import {
-  areaSummaryResultSchema,
   batchPointsResultSchema,
   layerDiagnosticsResultSchema,
   latestGfsRunResultSchema,
@@ -58,7 +58,7 @@ function createServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "Use get_gfs_catalog for the complete pressure/non-isobaric/diagnostic catalog and search_gfs_catalog for compact ranked discovery by text, section, raw/derived classification, or temporal semantics. For profile, diagnostics, batched-point, transect, time-series, multi-point time-series, run-comparison, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_points when comparing multiple arbitrary locations at one valid time, get_gfs_transect for an evenly spaced pressure-level cross-section along a great-circle path, get_gfs_points_timeseries when the same locations must be compared across a valid-time range, and compare_gfs_runs when the same point/valid time/selection should be compared across consecutive six-hour model cycles. summarize_gfs_area accepts either one raw pressure-level variable at one pressure surface or one raw non-isobaric field and preserves exact vertical/temporal semantics. Run-comparison deltas are newer minus older; wind direction uses shortest signed angular change. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
+      instructions: "Use get_gfs_catalog for the complete pressure/non-isobaric/diagnostic catalog and search_gfs_catalog for compact ranked discovery by text, section, raw/derived classification, or temporal semantics. For profile, diagnostics, batched-point, transect, time-series, multi-point time-series, run-comparison, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_points when comparing multiple arbitrary locations at one valid time, get_gfs_transect for an evenly spaced pressure-level cross-section along a great-circle path, get_gfs_points_timeseries when the same locations must be compared across a valid-time range, and compare_gfs_runs when the same point/valid time/selection should be compared across consecutive six-hour model cycles. summarize_gfs_area accepts either one raw pressure-level variable at one pressure surface or one raw non-isobaric field and preserves exact vertical/temporal semantics. Area min/max/mean are always available; optional percentiles, threshold fractions, and extrema locations operate over defined grid cells in normalized WFG output units and never return the raw grid. Run-comparison deltas are newer minus older; wind direction uses shortest signed angular change. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
@@ -164,7 +164,7 @@ function createServer(): McpServer {
 
   server.registerTool("summarize_gfs_area", {
     title: "Summarize GFS field over an area",
-    description: "Return bounded-area min, max, and unweighted grid-point mean for either one raw GFS pressure-level variable at one pressure surface or one raw non-isobaric field. Non-isobaric results include exact level and temporal semantics. Uses NOMADS geographic subsetting and does not return the raw grid.",
+    description: "Return bounded-area min, max, and unweighted grid-point mean for either one raw GFS pressure-level variable at one pressure surface or one raw non-isobaric field. Optionally return percentiles, fractions of defined grid cells above/below normalized-unit thresholds, and representative min/max grid coordinates with tie counts. Rich statistics are computed locally from the bounded NOMADS subset; the raw grid is never returned.",
     inputSchema: areaSummaryQuerySchema,
     outputSchema: areaSummaryResultSchema,
   }, async (query) => handleGetGfsAreaSummary(areaSummaryService, query));
