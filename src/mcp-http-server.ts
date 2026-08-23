@@ -151,7 +151,14 @@ export function createMcpHttpServer(config: McpHttpConfig): McpHttpServer {
       return;
     }
 
-    void nodeHandler(req, res);
+    if (!req.method) {
+      res.statusCode = 400;
+      res.setHeader("content-type", "text/plain; charset=utf-8");
+      res.end("Missing HTTP method");
+      return;
+    }
+
+    void nodeHandler(req as Parameters<typeof nodeHandler>[0], res);
   });
 
   return {
