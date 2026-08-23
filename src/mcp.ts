@@ -23,7 +23,9 @@ import {
   handleGetGfsProfileDiagnostics,
   handleGetGfsTimeSeries,
   handleGetLatestGfsRun,
+  handleSearchGfsCatalog,
 } from "./mcp-tool.js";
+import { catalogSearchQuerySchema, catalogSearchResultSchema } from "./schema/catalog-search.js";
 import {
   areaSummaryQuerySchema,
   batchPointsQuerySchema,
@@ -52,7 +54,7 @@ function createServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "Use get_gfs_catalog to discover pressure-level variables, deterministic pressure-layer, whole-profile, and parcel diagnostics, and non-isobaric GFS fields. For profile, diagnostics, batched-point, time-series, multi-point time-series, run-comparison, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_points when comparing multiple locations at one valid time, get_gfs_points_timeseries when the same locations must be compared across a valid-time range, and compare_gfs_runs when the same point/valid time/selection should be compared across consecutive six-hour model cycles. summarize_gfs_area accepts either one raw pressure-level variable at one pressure surface or one raw non-isobaric field and preserves exact vertical/temporal semantics. Run-comparison deltas are newer minus older; wind direction uses shortest signed angular change. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
+      instructions: "Use get_gfs_catalog for the complete pressure/non-isobaric/diagnostic catalog and search_gfs_catalog for compact ranked discovery by text, section, raw/derived classification, or temporal semantics. For profile, diagnostics, batched-point, time-series, multi-point time-series, run-comparison, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_points when comparing multiple locations at one valid time, get_gfs_points_timeseries when the same locations must be compared across a valid-time range, and compare_gfs_runs when the same point/valid time/selection should be compared across consecutive six-hour model cycles. summarize_gfs_area accepts either one raw pressure-level variable at one pressure surface or one raw non-isobaric field and preserves exact vertical/temporal semantics. Run-comparison deltas are newer minus older; wind direction uses shortest signed angular change. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
@@ -74,9 +76,16 @@ function createServer(): McpServer {
 
   server.registerTool("get_gfs_catalog", {
     title: "Get supported GFS field catalog",
-    description: "List pressure-level variables, deterministic layer/profile/parcel diagnostics, and supported non-isobaric fields with canonical outputs, dependencies, and units.",
+    description: "List the complete pressure-level variable, deterministic layer/profile/parcel diagnostic, and non-isobaric field catalog with canonical outputs, dependencies, and units. Use search_gfs_catalog when only a compact subset is needed.",
     inputSchema: z.object({}),
   }, async () => handleGetGfsCatalog());
+
+  server.registerTool("search_gfs_catalog", {
+    title: "Search supported GFS fields and diagnostics",
+    description: "Return compact ranked catalog matches across pressure variables, non-isobaric fields, layer/profile diagnostics, and parcel definitions. Search natural text, IDs, dependencies, output names/units, GFS codes, and vertical/temporal semantics; optionally filter sections, raw/derived classification, and instantaneous/accumulation/average fields.",
+    inputSchema: catalogSearchQuerySchema,
+    outputSchema: catalogSearchResultSchema,
+  }, async (query) => handleSearchGfsCatalog(query));
 
   server.registerTool("get_latest_gfs_run", {
     title: "Get latest complete GFS run",
