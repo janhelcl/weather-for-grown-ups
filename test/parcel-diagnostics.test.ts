@@ -7,6 +7,7 @@ import {
 import {
   deriveDryAdiabaticTemperatureC,
   deriveLclState,
+  derivePotentialTemperatureK,
   deriveSaturationSpecificHumidityKgKg,
 } from "../src/derived/thermodynamics.js";
 
@@ -74,8 +75,13 @@ describe("deriveParcelComputation", () => {
         layerTopPressureHpa: 900,
       },
     });
-    expect(result.startingState.construction?.sampledLevels).toBeGreaterThanOrEqual(3);
-    expect(result.startingState.temperatureC).toBeLessThan(surface.temperatureC);
+    expect(result.startingState.construction?.sampledLevels).toBe(3);
+    const thetaSurface = derivePotentialTemperatureK(surface.temperatureC, 1000);
+    const theta950 = derivePotentialTemperatureK(unstableProfile[0]!.temperatureC, 950);
+    const theta900 = derivePotentialTemperatureK(unstableProfile[1]!.temperatureC, 900);
+    const expectedMeanThetaK = ((thetaSurface + theta950) / 2 * 50 + (theta950 + theta900) / 2 * 50) / 100;
+    expect(derivePotentialTemperatureK(result.startingState.temperatureC, 1000)).toBeCloseTo(expectedMeanThetaK, 10);
+    expect(result.startingState.specificHumidityKgKg).toBeLessThan(surface.specificHumidityKgKg);
   });
 
   it("selects the sampled maximum-theta-e parcel in the lowest 300 hPa", () => {
