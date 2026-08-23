@@ -27,6 +27,8 @@ export const variableIdSchema = z.enum([
   "mixing_ratio",
   "virtual_temperature",
   "air_density",
+  "wet_bulb_temperature",
+  "equivalent_potential_temperature",
 ]);
 export const layerDiagnosticIdSchema = z.enum(LAYER_DIAGNOSTIC_IDS);
 export const profileDiagnosticIdSchema = z.enum(PROFILE_DIAGNOSTIC_IDS);
