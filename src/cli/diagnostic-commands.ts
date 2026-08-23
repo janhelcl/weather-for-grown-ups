@@ -1,14 +1,15 @@
 import type { Command } from "commander";
 import { AtmosphericLayerDiagnosticsService } from "../core/atmospheric-layer-diagnostics-service.js";
+import { AtmosphericProfileDiagnosticsService } from "../core/atmospheric-profile-diagnostics-service.js";
 import { DiagnosticTimeSeriesService } from "../core/diagnostic-time-series.js";
 import { ParcelDiagnosticsService } from "../core/parcel-diagnostics.js";
-import { ProfileDiagnosticsService } from "../core/profile-diagnostics.js";
 import type { DiagnosticTimeSeriesQueryInput } from "../schema/diagnostic-time-series.js";
 import {
   diagnosticTimeSeriesResultSchema,
   type DiagnosticTimeSeriesResult,
 } from "../schema/diagnostic-time-series-result.js";
 import { gefsLayerDiagnosticsResultSchema } from "../schema/gefs-layer-diagnostics.js";
+import { gefsProfileDiagnosticsResultSchema } from "../schema/gefs-profile-diagnostics.js";
 import {
   DEFAULT_TIME_SERIES_MAX_STEPS,
   type ParcelDefinitionId,
@@ -119,37 +120,96 @@ export function registerDiagnosticCommands(program: Command): void {
 
   program
     .command("profile-diagnostics")
-    .description("Derive freezing-level crossings and inversion layers from an explicit GFS pressure profile")
+    .description("Derive sampled whole-profile diagnostics from GFS or member-by-member GEFS")
+    .option("--model <gfs|gefs>", "Atmospheric model family", "gfs")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
-    .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
+    .option("--run <iso|latest|latest_complete>", "Model initialization; GEFS accepts latest or an explicit cycle", "latest")
     .requiredOption("--valid <iso>", "Forecast valid time")
     .requiredOption("--levels <list>", "Comma-separated published pressure levels in hPa; vertical resolution controls diagnostic resolution")
     .option("--diagnostics <list>", "Comma-separated profile diagnostic IDs", DEFAULT_PROFILE_DIAGNOSTICS)
-    .option("--source <nomads|s3>", "Data access path", "nomads")
+    .option("--source <nomads|s3>", "GFS-only data access path")
+    .option("--members <list>", "GEFS-only comma-separated members (c00,p01..p30); default all 31")
+    .option("--quantiles <list>", "GEFS-only comma-separated quantiles from 0 to 1")
+    .option("--include-members", "GEFS-only: include each member's sampled profile and complete diagnostic structures")
     .option("--json", "Output JSON")
     .action(async (options) => {
-      const result = await new ProfileDiagnosticsService().getProfileDiagnostics({
-        latitude: options.lat,
-        longitude: options.lon,
-        run: options.run,
-        validTime: options.valid,
-        pressureLevelsHpa: parseLevels(options.levels),
-        diagnostics: parseProfileDiagnostics(options.diagnostics),
-        source: options.source as ProfileSourceId,
-      });
-      profileDiagnosticsResultSchema.parse(result);
-      if (options.json) return console.log(JSON.stringify(result, null, 2));
-      console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
-      console.log(`Source ${result.source.provider} (${result.source.access})`);
-      console.log(`Sampled pressure levels (hPa): ${result.sampledPressureLevelsHpa.join(", ")}`);
-      for (const diagnostic of result.diagnostics) {
-        console.log(diagnostic.id);
-        if (diagnostic.id === "freezing_level_crossings") console.dir(diagnostic.crossings, { depth: null });
-        else console.table(diagnostic.layers);
+      const model = parseAtmosphericModel(options.model);
+      const service = new AtmosphericProfileDiagnosticsService();
+      const pressureLevelsHpa = parseLevels(options.levels);
+      const diagnostics = parseProfileDiagnostics(options.diagnostics);
+
+      if (model === "gfs") {
+        if (options.members !== undefined || options.quantiles !== undefined || options.includeMembers) {
+          throw new Error("--members, --quantiles and --include-members are only valid with --model gefs");
+        }
+        const result = profileDiagnosticsResultSchema.parse(await service.getProfileDiagnostics({
+          model: "gfs_0p25",
+          query: {
+            latitude: options.lat,
+            longitude: options.lon,
+            run: options.run,
+            validTime: options.valid,
+            pressureLevelsHpa,
+            diagnostics,
+            source: (options.source ?? "nomads") as ProfileSourceId,
+          },
+        }));
+        if (options.json) return console.log(JSON.stringify(result, null, 2));
+        console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+        console.log(`Source ${result.source.provider} (${result.source.access})`);
+        console.log(`Sampled pressure levels (hPa): ${result.sampledPressureLevelsHpa.join(", ")}`);
+        for (const diagnostic of result.diagnostics) {
+          console.log(diagnostic.id);
+          if (diagnostic.id === "freezing_level_crossings") console.dir(diagnostic.crossings, { depth: null });
+          else console.table(diagnostic.layers);
+        }
+        console.log("Raw sampled levels used by the derivations");
+        console.table(result.levels);
+        return;
       }
-      console.log("Raw sampled levels used by the derivations");
-      console.table(result.levels);
+
+      if (options.source !== undefined) throw new Error("--source is a deterministic GFS option and is not valid with --model gefs");
+      const result = gefsProfileDiagnosticsResultSchema.parse(await service.getProfileDiagnostics({
+        model: "gefs_0p50",
+        query: {
+          latitude: options.lat,
+          longitude: options.lon,
+          run: options.run,
+          validTime: options.valid,
+          pressureLevelsHpa,
+          diagnostics,
+          ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+          quantiles: parseNumbers(options.quantiles ?? "0.1,0.5,0.9"),
+          includeMembers: Boolean(options.includeMembers),
+        },
+      }));
+      if (options.json) return console.log(JSON.stringify(result, null, 2));
+      console.log(`GEFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+      console.log(`${result.selection.members.length} members; sampled pressure levels (hPa): ${result.sampledPressureLevelsHpa.join(", ")}`);
+      for (const summary of result.summaries) {
+        if (summary.id === "freezing_level_crossings") {
+          console.log(`freezing_level_crossings: ${summary.membersWithAnyCrossing.count}/${summary.membersWithAnyCrossing.memberCount} members have >=1 crossing; mean count=${summary.crossingCount.mean.toFixed(2)}`);
+          if (summary.lowestCrossing) {
+            console.log(`lowest crossing among contributing members: mean ${summary.lowestCrossing.geopotentialHeightGpm.mean.toFixed(0)} gpm / ${summary.lowestCrossing.pressureHpa.mean.toFixed(1)} hPa`);
+          }
+        } else {
+          console.log(`temperature_inversion_layers: ${summary.membersWithAnyLayer.count}/${summary.membersWithAnyLayer.memberCount} members have >=1 layer; mean count=${summary.layerCount.mean.toFixed(2)}; mean total depth=${summary.totalLayerDepthGpm.mean.toFixed(0)} gpm`);
+          if (summary.strongestTemperatureIncreaseC) {
+            console.log(`strongest inversion among contributing members: mean temperature increase ${summary.strongestTemperatureIncreaseC.distribution.mean.toFixed(2)} °C`);
+          }
+        }
+      }
+      if (result.members) {
+        for (const member of result.members) {
+          console.log(`${member.member}${member.cacheHit ? " (cache)" : ""}`);
+          for (const diagnostic of member.diagnostics) {
+            console.log(diagnostic.id);
+            if (diagnostic.id === "freezing_level_crossings") console.dir(diagnostic.crossings, { depth: null });
+            else console.table(diagnostic.layers);
+          }
+        }
+      }
     });
 
   program
