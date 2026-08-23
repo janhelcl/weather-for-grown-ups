@@ -5,6 +5,7 @@ import type {
   BatchPointsResult,
   LayerDiagnosticsResult,
   ParcelDiagnosticsResult,
+  PointsTimeSeriesResult,
   ProfileDiagnosticsResult,
   ProfileResult,
   TimeSeriesResult,
@@ -14,6 +15,7 @@ import type {
   BatchPointsQueryInput,
   LayerDiagnosticsQueryInput,
   ParcelDiagnosticsQueryInput,
+  PointsTimeSeriesQueryInput,
   ProfileDiagnosticsQueryInput,
   ProfileQueryInput,
   TimeSeriesQueryInput,
@@ -24,6 +26,7 @@ import {
   layerDiagnosticsResultSchema,
   latestGfsRunResultSchema,
   parcelDiagnosticsResultSchema,
+  pointsTimeSeriesResultSchema,
   profileDiagnosticsResultSchema,
   profileResultSchema,
   timeSeriesResultSchema,
@@ -35,6 +38,7 @@ export interface ProfileDiagnosticsGetter { getProfileDiagnostics(query: Profile
 export interface ParcelDiagnosticsGetter { getParcelDiagnostics(query: ParcelDiagnosticsQueryInput): Promise<ParcelDiagnosticsResult>; }
 export interface BatchPointsGetter { getPoints(query: BatchPointsQueryInput): Promise<BatchPointsResult>; }
 export interface TimeSeriesGetter { getTimeSeries(query: TimeSeriesQueryInput): Promise<TimeSeriesResult>; }
+export interface PointsTimeSeriesGetter { getPointsTimeSeries(query: PointsTimeSeriesQueryInput): Promise<PointsTimeSeriesResult>; }
 export interface AreaSummaryGetter { summarize(query: AreaSummaryQueryInput): Promise<AreaSummaryResult>; }
 
 export function handleGetGfsCatalog() {
@@ -87,6 +91,18 @@ export async function handleGetGfsPoints(batchService: BatchPointsGetter, query:
 export async function handleGetGfsTimeSeries(timeSeriesService: TimeSeriesGetter, query: TimeSeriesQueryInput) {
   try {
     const output = timeSeriesResultSchema.parse(await timeSeriesService.getTimeSeries(query));
+    return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } };
+  } catch (error) { return toolError(error); }
+}
+
+export async function handleGetGfsPointsTimeSeries(
+  pointsTimeSeriesService: PointsTimeSeriesGetter,
+  query: PointsTimeSeriesQueryInput,
+) {
+  try {
+    const output = pointsTimeSeriesResultSchema.parse(
+      await pointsTimeSeriesService.getPointsTimeSeries(query),
+    );
     return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } };
   } catch (error) { return toolError(error); }
 }

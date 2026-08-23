@@ -59,7 +59,7 @@ wfg profile \
   --json
 ```
 
-MCP uses the same variable IDs with `get_gfs_profile`; `get_gfs_points` and `get_gfs_timeseries` inherit the same derived pressure-level variables through the shared core.
+MCP uses the same variable IDs with `get_gfs_profile`; `get_gfs_points`, `get_gfs_timeseries`, and `get_gfs_points_timeseries` inherit the same derived pressure-level variables through the shared core.
 
 Fields-only query:
 
@@ -143,7 +143,7 @@ Supported parcel definitions are:
 
 One underlying profile request obtains pressure-level temperature, specific humidity and geopotential height together with surface pressure/geopotential height and 2 m temperature/specific humidity. The requested pressure levels therefore control environmental resolution without multiplying NOMADS requests.
 
-The parcel ascends dry adiabatically to a Bolton lifted condensation level (LCL), then pseudo-adiabatically above it. Environmental values are interpolated in log pressure. Parcel and environmental buoyancy use virtual temperature; zero-buoyancy crossings are inserted before integrating energy. `lfc` is the first level of free convection at or above the LCL, and `el` is the first equilibrium level ending that contiguous positive-buoyancy layer. CAPE and CIN use the pressure-coordinate form `-Rd ∫ (Tv_parcel - Tv_environment) d ln(p)`.
+The parcel ascends dry adiabatically to a Bolton lifted condensation level (LCL), then pseudo-adiabatically above it using the standard pressure-coordinate moist-lapse equation. Environmental values are interpolated in log pressure. Parcel and environmental buoyancy use virtual temperature; zero-buoyancy crossings are inserted before integrating energy. `lfc` is the first level of free convection at or above the LCL, and `el` is the first equilibrium level ending that contiguous positive-buoyancy layer. CAPE and CIN use the pressure-coordinate form `-Rd ∫ (Tv_parcel - Tv_environment) d ln(p)`.
 
 The result returns the parcel starting state, LCL, optional LFC/EL, CAPE/CIN, the complete dry/saturated parcel path and the raw sampled environmental levels. If no LFC occurs before the profile top, CAPE is zero and CIN is integrated to the sampled top; if the positive layer continues through the sampled top, CAPE reports `profile_top` rather than inventing an equilibrium level beyond the data.
 
@@ -187,6 +187,29 @@ Time series returns every native GFS output inside the requested range: hourly t
 
 With `run=latest`, time-series resolution chooses one newest eligible run initialized at or before the requested range start, verifies the exact requested fields at the first and last native forecast steps, and requires the range to fit inside the 384-hour forecast horizon. This avoids mixing model cycles inside one series while still using fresher partially published runs when they already cover the requested window.
 
+## Multi-point time series
+
+When several locations need the same atmospheric selection across a forecast range, combine the two batching dimensions directly rather than composing independent point time series:
+
+```bash
+wfg points-timeseries \
+  --point 50.08,14.43 \
+  --point 45.80,11.70 \
+  --point 46.24,13.18 \
+  --from 2026-08-20T06:00:00Z \
+  --to 2026-08-22T18:00:00Z \
+  --vars temperature,wind \
+  --levels 850,700 \
+  --fields temperature_2m,wind_10m,low_cloud_cover \
+  --json
+```
+
+MCP exposes the same primitive as `get_gfs_points_timeseries`. The query accepts up to 20 points, resolves one model cycle for the complete time range, preserves point ordering, and returns every native GFS output inside the range.
+
+The primitive is intentionally **S3-only**. For each forecast step WFG downloads or reuses one selected-message GRIB slice and samples all requested points from that slice. Forecast files are processed with bounded concurrency of four. The default `maxSteps=80` and `maxSamples=1600` guards bound both the temporal length and the point × step response matrix; `maxSamples` can be raised explicitly up to 5,000.
+
+This means a three-point, five-step query performs five shared batch fetches rather than fifteen independent point fetches. The response is time-major: each series step contains its valid time, forecast hour, slice cache status, and the ordered point results for that step.
+
 ## Bounded area summary
 
 ```bash
@@ -206,7 +229,7 @@ Area summaries intentionally remain pressure-level-only for now: Grib Filter cro
 
 NOMADS is the default for single point queries and the area-summary path because its Grib Filter can geographically subset before transfer. Surface, height-above-ground, named-layer, and named-level selections use the same Grib Filter request as pressure levels, so all physical NOMADS downloads continue to pass through the shared courtesy limiter.
 
-For multi-point and multi-time workflows, NOAA AWS Open Data is the natural path. The S3 adapter fetches the `.idx` inventory, identifies only requested pressure and non-isobaric GRIB messages, derives byte ranges, and downloads those messages with HTTP Range requests. Non-isobaric selectors match variable, exact vertical semantics, and exact temporal semantics, so an instantaneous cloud-cover request cannot silently select the forecast-window-average record at the same layer. Multi-point sampling reuses one selected-message slice across all coordinates.
+For multi-point and multi-time workflows, NOAA AWS Open Data is the natural path. The S3 adapter fetches the `.idx` inventory, identifies only requested pressure and non-isobaric GRIB messages, derives byte ranges, and downloads those messages with HTTP Range requests. Non-isobaric selectors match variable, exact vertical semantics, and exact temporal semantics, so an instantaneous cloud-cover request cannot silently select the forecast-window-average record at the same layer. Multi-point sampling reuses one selected-message slice across all coordinates; multi-point time series repeats that reuse once per forecast step.
 
 Both data paths feed `wgrib2` and return normalized data with explicit provenance.
 
@@ -223,6 +246,12 @@ For a single valid time, query-aware discovery checks the exact forecast `.idx`,
 For a time range, WFG chooses a single cycle at or before the requested start, checks exact field availability at the first and last native steps, and rejects ranges extending beyond the 384-hour horizon. Complete-run and query-specific discovery results are cached independently in-process for five minutes.
 
 The standalone CLI `wfg latest` and MCP `get_latest_gfs_run` continue to report the newest **complete** (`f384`) cycle because they have no atmospheric query to satisfy.
+
+## Meteorology reference validation
+
+Deterministic meteorology has an independent golden-reference test layer in addition to WFG's implementation tests. `test/golden-meteorology.test.ts` pins published MetPy 1.7 reference cases without adding Python or MetPy to runtime/CI dependencies. It covers core thermodynamics, pseudo-adiabatic moist lapse, and a surface-parcel CAPE sounding. See `METEOROLOGY_VALIDATION.md` for the reference values, formulation differences, and tolerance policy.
+
+The first golden validation pass exposed and corrected a saturated parcel-ascent error: the parcel path now integrates the standard pressure-coordinate moist-lapse ODE directly. The corrected path agrees with MetPy's published 925→200 hPa moist-lapse example within 0.07 °C.
 
 ## Requirements
 
@@ -245,6 +274,7 @@ npm run dev -- profile-diagnostics --help
 npm run dev -- parcel --help
 npm run dev -- points --help
 npm run dev -- timeseries --help
+npm run dev -- points-timeseries --help
 npm run dev -- area --help
 npm run mcp
 ```
@@ -275,7 +305,9 @@ Implemented:
 - deterministic pressure-layer temperature lapse rate, vector wind shear, and potential-temperature gradient from one shared endpoint profile
 - deterministic whole-profile freezing-level crossings and sampled inversion layers from one explicit sampled profile
 - explicit surface, 100 hPa mixed-layer, and sampled 300 hPa most-unstable parcel diagnostics with Bolton LCL, dry/pseudo-adiabatic path, first LFC/EL, CAPE and CIN
+- independent MetPy-based golden-reference validation for core thermodynamics, moist lapse, and CAPE
 - batched same-time sampling for up to 50 points with one reusable S3 selected-message slice
+- native-cadence multi-point time series for up to 20 points with one reusable S3 selected-message slice per forecast step and point-step guards
 - surface and height-above-ground point fields with exact-level validation
 - named cloud layers/levels and whole-atmosphere column products with exact vertical semantics
 - accumulation and forecast-window-average fields with explicit forecast intervals
@@ -287,13 +319,14 @@ Implemented:
 - deterministic NOMADS geographic-subset path with 11 s cross-process limiter
 - NOAA AWS `.idx` + selected-message byte-range path with reusable subset cache
 - `wgrib2` point extraction for isobaric/non-isobaric named-layer and temporal semantics plus area statistics adapters
-- CLI `catalog`, `latest`, `profile`, `layer`, `profile-diagnostics`, `parcel`, `points`, `timeseries`, and `area`
-- MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_layer_diagnostics`, `get_gfs_profile_diagnostics`, `get_gfs_parcel_diagnostics`, `get_gfs_points`, `get_gfs_timeseries`, and `summarize_gfs_area`
+- CLI `catalog`, `latest`, `profile`, `layer`, `profile-diagnostics`, `parcel`, `points`, `timeseries`, `points-timeseries`, and `area`
+- MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_layer_diagnostics`, `get_gfs_profile_diagnostics`, `get_gfs_parcel_diagnostics`, `get_gfs_points`, `get_gfs_timeseries`, `get_gfs_points_timeseries`, and `summarize_gfs_area`
 - shared CLI/MCP result contracts and comprehensive deterministic offline test suite plus opt-in real NOAA profile smoke tests
 
 Next:
 
-1. add a pressure-level transect/cross-section primitive
-2. extend bounded area summaries to non-isobaric fields and optionally add extrema locations/percentiles
-3. add parcel/profile-diagnostic time-series composition if repeated structure analysis proves useful
-4. add a live non-isobaric/time-series/batch/parcel smoke after the S3 path has been exercised manually
+1. add run-to-run forecast comparison for the same valid time/range
+2. extend bounded area summaries to non-isobaric fields and optionally add extrema locations/percentiles/threshold fractions
+3. improve catalog search/filter ergonomics as the field surface grows
+4. add a pressure-level transect/cross-section primitive
+5. add a live multi-point/time-series/parcel smoke after the S3 path has been exercised manually

@@ -261,6 +261,24 @@ export const timeSeriesResultSchema = z.object({
   })),
 });
 
+export const pointsTimeSeriesResultSchema = z.object({
+  model: z.literal("gfs_0p25"),
+  run: isoDateTimeSchema,
+  requestedStartTime: isoDateTimeSchema,
+  requestedEndTime: isoDateTimeSchema,
+  source: z.object({
+    provider: z.literal("NOAA AWS Open Data"),
+    access: z.literal("s3_range"),
+    decoder: z.literal("wgrib2"),
+  }),
+  series: z.array(z.object({
+    validTime: isoDateTimeSchema,
+    forecastHour: z.number(),
+    points: z.array(batchPointResultSchema),
+    cacheHit: z.boolean(),
+  })),
+});
+
 export const areaSummaryResultSchema = z.object({
   model: z.literal("gfs_0p25"),
   run: isoDateTimeSchema,

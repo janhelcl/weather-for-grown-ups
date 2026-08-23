@@ -178,6 +178,21 @@ export const timeSeriesQuerySchema = z.object({
   maxSteps: z.number().int().min(1).max(GFS_TOTAL_NATIVE_FORECAST_STEPS).default(DEFAULT_TIME_SERIES_MAX_STEPS),
 }).superRefine(validateAtmosphericSelection);
 
+export const DEFAULT_POINTS_TIME_SERIES_MAX_POINTS = 20;
+export const DEFAULT_POINTS_TIME_SERIES_MAX_STEPS = 80;
+export const DEFAULT_POINTS_TIME_SERIES_MAX_SAMPLES = 1_600;
+export const MAX_POINTS_TIME_SERIES_MAX_SAMPLES = 5_000;
+
+export const pointsTimeSeriesQuerySchema = z.object({
+  points: z.array(pointCoordinateSchema).min(1).max(DEFAULT_POINTS_TIME_SERIES_MAX_POINTS),
+  run: runSelectorSchema,
+  startTime: isoDateTimeSchema.describe("Inclusive start of requested valid-time range"),
+  endTime: isoDateTimeSchema.describe("Inclusive end of requested valid-time range"),
+  ...atmosphericSelectionSchema,
+  maxSteps: z.number().int().min(1).max(GFS_TOTAL_NATIVE_FORECAST_STEPS).default(DEFAULT_POINTS_TIME_SERIES_MAX_STEPS),
+  maxSamples: z.number().int().min(1).max(MAX_POINTS_TIME_SERIES_MAX_SAMPLES).default(DEFAULT_POINTS_TIME_SERIES_MAX_SAMPLES),
+}).superRefine(validateAtmosphericSelection);
+
 export const DEFAULT_AREA_MAX_GRID_POINTS = 50_000;
 export const GFS_GRID_SPACING_DEG = 0.25;
 
@@ -228,5 +243,7 @@ export type BatchPointsQuery = z.output<typeof batchPointsQuerySchema>;
 export type BatchPointsQueryInput = z.input<typeof batchPointsQuerySchema>;
 export type TimeSeriesQuery = z.output<typeof timeSeriesQuerySchema>;
 export type TimeSeriesQueryInput = z.input<typeof timeSeriesQuerySchema>;
+export type PointsTimeSeriesQuery = z.output<typeof pointsTimeSeriesQuerySchema>;
+export type PointsTimeSeriesQueryInput = z.input<typeof pointsTimeSeriesQuerySchema>;
 export type AreaSummaryQuery = z.output<typeof areaSummaryQuerySchema>;
 export type AreaSummaryQueryInput = z.input<typeof areaSummaryQuerySchema>;

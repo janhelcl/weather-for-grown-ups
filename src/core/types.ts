@@ -200,6 +200,26 @@ export interface TimeSeriesResult {
   series: TimeSeriesStep[];
 }
 
+export interface PointsTimeSeriesStep {
+  validTime: string;
+  forecastHour: number;
+  points: BatchPointResult[];
+  cacheHit: boolean;
+}
+
+export interface PointsTimeSeriesResult {
+  model: "gfs_0p25";
+  run: string;
+  requestedStartTime: string;
+  requestedEndTime: string;
+  source: {
+    provider: "NOAA AWS Open Data";
+    access: "s3_range";
+    decoder: "wgrib2";
+  };
+  series: PointsTimeSeriesStep[];
+}
+
 export interface AreaSummaryResult {
   model: "gfs_0p25";
   run: string;

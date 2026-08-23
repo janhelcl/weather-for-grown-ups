@@ -6,6 +6,7 @@ import { BatchPointsService } from "./core/batch-points.js";
 import { LayerDiagnosticsService } from "./core/layer-diagnostics.js";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ParcelDiagnosticsService } from "./core/parcel-diagnostics.js";
+import { PointsTimeSeriesService } from "./core/points-time-series.js";
 import { ProfileDiagnosticsService } from "./core/profile-diagnostics.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
@@ -25,6 +26,7 @@ import {
   layerDiagnosticsResultSchema,
   latestGfsRunResultSchema,
   parcelDiagnosticsResultSchema,
+  pointsTimeSeriesResultSchema,
   profileDiagnosticsResultSchema,
   profileResultSchema,
   timeSeriesResultSchema,
@@ -311,6 +313,44 @@ program
         fields: step.fields,
         cacheHit: step.cacheHit,
       })), { depth: null });
+    }
+  });
+
+program
+  .command("points-timeseries")
+  .description("Fetch native GFS forecast steps for multiple points using one shared S3 GRIB slice per step")
+  .requiredOption("--point <lat,lon>", "Point to sample; repeat up to 20 times", collectPoint)
+  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
+  .requiredOption("--from <iso>", "Inclusive valid-time range start")
+  .requiredOption("--to <iso>", "Inclusive valid-time range end")
+  .option("--vars <list>", "Comma-separated pressure-level variables")
+  .option("--levels <list>", "Comma-separated pressure levels in hPa")
+  .option("--fields <list>", "Comma-separated non-isobaric field IDs")
+  .option("--max-steps <number>", "Maximum native forecast steps", Number, 80)
+  .option("--max-samples <number>", "Maximum point × forecast-step samples", Number, 1600)
+  .option("--json", "Output JSON")
+  .action(async (options) => {
+    const selection = pointSelection(options.vars, options.levels, options.fields);
+    const result = await new PointsTimeSeriesService().getPointsTimeSeries({
+      points: options.point as PointCoordinate[],
+      run: options.run,
+      startTime: options.from,
+      endTime: options.to,
+      ...selection,
+      maxSteps: options.maxSteps,
+      maxSamples: options.maxSamples,
+    });
+    pointsTimeSeriesResultSchema.parse(result);
+    if (options.json) return console.log(JSON.stringify(result, null, 2));
+    console.log(`GFS ${result.run}  ${result.requestedStartTime} → ${result.requestedEndTime}`);
+    console.log(`Source ${result.source.provider} (${result.source.access}); one shared selected-message slice per forecast step`);
+    for (const step of result.series) {
+      console.log(`Valid ${step.validTime}  f${String(step.forecastHour).padStart(3, "0")}  shared-slice cacheHit=${step.cacheHit}`);
+      for (const [index, point] of step.points.entries()) {
+        console.log(`Point ${index + 1}: ${point.requestedPoint.latitude},${point.requestedPoint.longitude} → grid ${point.gridPoint.latitude},${point.gridPoint.longitude}`);
+        if (point.levels.length > 0) console.table(point.levels);
+        if (point.fields) console.dir(point.fields, { depth: null });
+      }
     }
   });
 
