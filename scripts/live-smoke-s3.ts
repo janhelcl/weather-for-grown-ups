@@ -91,7 +91,7 @@ const parcel = await parcelService.getParcelDiagnostics({
   longitude: 14.43,
   run: run.toISOString(),
   validTime: f006.toISOString(),
-  pressureLevelsHpa: [925, 900, 875, 850, 825, 800, 775, 750, 700, 650, 600, 550, 500, 450, 400, 350, 300, 250, 200],
+  pressureLevelsHpa: [925, 900, 850, 800, 750, 700, 650, 600, 550, 500, 450, 400, 350, 300, 250, 200],
   parcel: "surface_2m",
   source: "s3",
 });
