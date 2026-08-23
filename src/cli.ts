@@ -3,10 +3,12 @@ import { Command } from "commander";
 import { getGfsPressureCatalog } from "./catalog/catalog.js";
 import { AreaSummaryService } from "./core/area-summary.js";
 import { BatchPointsService } from "./core/batch-points.js";
+import { LayerDiagnosticsService } from "./core/layer-diagnostics.js";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
 import type {
+  LayerDiagnosticId,
   NonIsobaricFieldId,
   PointCoordinate,
   ProfileSourceId,
@@ -16,6 +18,7 @@ import type {
 import {
   areaSummaryResultSchema,
   batchPointsResultSchema,
+  layerDiagnosticsResultSchema,
   latestGfsRunResultSchema,
   profileResultSchema,
   timeSeriesResultSchema,
@@ -23,6 +26,7 @@ import {
 
 const DEFAULT_VARIABLES = "temperature,relative_humidity,wind";
 const DEFAULT_LEVELS = "1000,925,850,700,500";
+const DEFAULT_LAYER_DIAGNOSTICS = "temperature_lapse_rate,wind_shear,potential_temperature_gradient";
 const RUN_HELP = "GFS run initialization; latest = newest run satisfying this query, latest_complete = newest run published through f384";
 
 const program = new Command();
@@ -30,7 +34,7 @@ program.name("wfg").description("Weather for Grown Ups — agent-native NOAA GFS
 
 program
   .command("catalog")
-  .description("Show supported GFS pressure-level and non-isobaric fields")
+  .description("Show supported GFS pressure-level variables, layer diagnostics, and non-isobaric fields")
   .option("--json", "Output JSON")
   .action((options) => {
     const catalog = getGfsPressureCatalog();
@@ -46,6 +50,12 @@ program
       output: variable.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
     })));
     console.log(`Pressure levels (hPa): ${catalog.pressureLevelsHpa.join(", ")}`);
+    console.log("Pressure-layer diagnostics");
+    console.table(catalog.layerDiagnostics.map((diagnostic) => ({
+      id: diagnostic.id,
+      dependencies: diagnostic.dependencies.join(", "),
+      output: diagnostic.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
+    })));
     console.log("Non-isobaric fields");
     console.table(catalog.fields.map((field) => ({
       id: field.id,
@@ -105,6 +115,39 @@ program
     console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
     if (result.levels.length > 0) console.table(result.levels);
     if (result.fields) console.dir(result.fields, { depth: null });
+  });
+
+program
+  .command("layer")
+  .description("Derive deterministic diagnostics across two GFS pressure surfaces")
+  .requiredOption("--lat <number>", "Latitude", Number)
+  .requiredOption("--lon <number>", "Longitude", Number)
+  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
+  .requiredOption("--valid <iso>", "Forecast valid time")
+  .requiredOption("--lower <hpa>", "Lower-altitude pressure surface in hPa", Number)
+  .requiredOption("--upper <hpa>", "Upper-altitude pressure surface in hPa", Number)
+  .option("--diagnostics <list>", "Comma-separated layer diagnostic IDs", DEFAULT_LAYER_DIAGNOSTICS)
+  .option("--source <nomads|s3>", "Data access path", "nomads")
+  .option("--json", "Output JSON")
+  .action(async (options) => {
+    const result = await new LayerDiagnosticsService().getLayerDiagnostics({
+      latitude: options.lat,
+      longitude: options.lon,
+      run: options.run,
+      validTime: options.valid,
+      lowerPressureHpa: options.lower,
+      upperPressureHpa: options.upper,
+      diagnostics: parseLayerDiagnostics(options.diagnostics),
+      source: options.source as ProfileSourceId,
+    });
+    layerDiagnosticsResultSchema.parse(result);
+    if (options.json) return console.log(JSON.stringify(result, null, 2));
+    console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+    console.log(`Source ${result.source.provider} (${result.source.access})`);
+    console.log(`${result.layer.lowerPressureHpa} → ${result.layer.upperPressureHpa} hPa; ${result.layer.lowerGeopotentialHeightGpm.toFixed(0)} → ${result.layer.upperGeopotentialHeightGpm.toFixed(0)} gpm; depth ${result.layer.depthGpm.toFixed(0)} gpm`);
+    console.table(result.diagnostics.map((diagnostic) => ({ id: diagnostic.id, ...diagnostic.values })));
+    console.log("Raw endpoint values used by the derivations");
+    console.table(result.levels);
   });
 
 program
@@ -264,6 +307,10 @@ function collectPoint(value: string, previous: PointCoordinate[] | undefined): P
 
 function parseVariables(value: unknown): VariableId[] {
   return String(value).split(",").map((variable) => variable.trim()).filter(Boolean) as VariableId[];
+}
+
+function parseLayerDiagnostics(value: unknown): LayerDiagnosticId[] {
+  return String(value).split(",").map((diagnostic) => diagnostic.trim()).filter(Boolean) as LayerDiagnosticId[];
 }
 
 function parseLevels(value: unknown): number[] {

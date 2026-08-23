@@ -1,3 +1,4 @@
+import type { LayerDiagnosticId } from "../catalog/layer-diagnostics.js";
 import type {
   NonIsobaricFieldId,
   NonIsobaricNamedLayerId,
@@ -95,6 +96,30 @@ export interface ProfileResult {
   gridPoint: GridPoint;
   levels: ProfileLevel[];
   fields?: NonIsobaricFieldResult[];
+  source: SourceProvenance & { cacheHit: boolean };
+}
+
+export interface LayerDiagnosticResult {
+  id: LayerDiagnosticId;
+  values: Record<string, number>;
+}
+
+export interface LayerDiagnosticsResult {
+  model: "gfs_0p25";
+  run: string;
+  validTime: string;
+  forecastHour: number;
+  requestedPoint: GridPoint;
+  gridPoint: GridPoint;
+  layer: {
+    lowerPressureHpa: number;
+    upperPressureHpa: number;
+    lowerGeopotentialHeightGpm: number;
+    upperGeopotentialHeightGpm: number;
+    depthGpm: number;
+  };
+  levels: ProfileLevel[];
+  diagnostics: LayerDiagnosticResult[];
   source: SourceProvenance & { cacheHit: boolean };
 }
 

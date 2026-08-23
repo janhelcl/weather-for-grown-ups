@@ -3,12 +3,14 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import { AreaSummaryService } from "./core/area-summary.js";
 import { BatchPointsService } from "./core/batch-points.js";
+import { LayerDiagnosticsService } from "./core/layer-diagnostics.js";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
 import {
   handleGetGfsAreaSummary,
   handleGetGfsCatalog,
+  handleGetGfsLayerDiagnostics,
   handleGetGfsPoints,
   handleGetGfsProfile,
   handleGetGfsTimeSeries,
@@ -17,12 +19,14 @@ import {
 import {
   areaSummaryQuerySchema,
   batchPointsQuerySchema,
+  layerDiagnosticsQuerySchema,
   profileQuerySchema,
   timeSeriesQuerySchema,
 } from "./schema/query.js";
 import {
   areaSummaryResultSchema,
   batchPointsResultSchema,
+  layerDiagnosticsResultSchema,
   latestGfsRunResultSchema,
   profileResultSchema,
   timeSeriesResultSchema,
@@ -32,18 +36,19 @@ function createServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "Use get_gfs_catalog to discover pressure-level and non-isobaric GFS fields. For profile, batched-point, time-series, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_points when comparing multiple locations at one valid time: it uses one shared NOAA AWS selected-message GRIB slice and samples all points locally. Interval-valued products carry explicit start/end intervals. summarize_gfs_area remains pressure-level only. Values are model data, not interpretation or safety advice.",
+      instructions: "Use get_gfs_catalog to discover pressure-level variables, deterministic pressure-layer diagnostics, and non-isobaric GFS fields. For profile, layer, batched-point, time-series, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic lapse-rate, vector-shear, and potential-temperature-gradient calculations across two pressure surfaces. Use get_gfs_points when comparing multiple locations at one valid time: it uses one shared NOAA AWS selected-message GRIB slice and samples all points locally. Interval-valued products carry explicit start/end intervals. summarize_gfs_area remains pressure-level only. Values are model data, not interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
   const profileService = new ProfileService({ latestRunProvider: latestRunResolver });
+  const layerDiagnosticsService = new LayerDiagnosticsService({ profileGetter: profileService });
   const batchPointsService = new BatchPointsService({ latestRunProvider: latestRunResolver, profileGetter: profileService });
   const timeSeriesService = new TimeSeriesService({ latestRunProvider: latestRunResolver, profileGetter: profileService });
   const areaSummaryService = new AreaSummaryService({ latestRunProvider: latestRunResolver });
 
   server.registerTool("get_gfs_catalog", {
     title: "Get supported GFS field catalog",
-    description: "List pressure-level variables and supported non-isobaric surface, height-above-ground, named-layer, named-level, accumulation, and forecast-average fields with canonical outputs and units.",
+    description: "List pressure-level variables, deterministic pressure-layer diagnostics, and supported non-isobaric fields with canonical outputs, dependencies, and units.",
     inputSchema: z.object({}),
   }, async () => handleGetGfsCatalog());
 
@@ -56,10 +61,17 @@ function createServer(): McpServer {
 
   server.registerTool("get_gfs_profile", {
     title: "Get GFS point fields",
-    description: "Return supported NOAA GFS 0.25° pressure levels and/or non-isobaric fields for one point and valid time. run='latest' resolves the newest cycle containing the exact requested fields at that valid time; run='latest_complete' forces the newest f384-complete cycle.",
+    description: "Return supported NOAA GFS 0.25° pressure levels and/or non-isobaric fields for one point and valid time. Pressure variables include deterministic per-level thermodynamic derivations. run='latest' resolves the newest cycle containing the exact requested fields at that valid time; run='latest_complete' forces the newest f384-complete cycle.",
     inputSchema: profileQuerySchema,
     outputSchema: profileResultSchema,
   }, async (query) => handleGetGfsProfile(profileService, query));
+
+  server.registerTool("get_gfs_layer_diagnostics", {
+    title: "Get GFS pressure-layer diagnostics",
+    description: "Derive deterministic diagnostics across two published GFS pressure surfaces at one point/time. lowerPressureHpa must be the lower-altitude/higher-pressure surface. Supports environmental temperature lapse rate, vector wind shear, and potential-temperature gradient, and returns the raw endpoint values used by the derivations.",
+    inputSchema: layerDiagnosticsQuerySchema,
+    outputSchema: layerDiagnosticsResultSchema,
+  }, async (query) => handleGetGfsLayerDiagnostics(layerDiagnosticsService, query));
 
   server.registerTool("get_gfs_points", {
     title: "Get GFS fields for multiple points",
