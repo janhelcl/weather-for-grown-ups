@@ -5,6 +5,10 @@ import type {
   NonIsobaricNamedLevelId,
 } from "../catalog/non-isobaric-fields.js";
 import type { GfsCode } from "../catalog/variables.js";
+import type {
+  FreezingLevelCrossing,
+  TemperatureInversionLayer,
+} from "../derived/profile-diagnostics.js";
 import type { RawVariableId } from "../schema/query.js";
 import type { ProfileAccessMethod, ProfileProvider } from "../sources/types.js";
 
@@ -120,6 +124,23 @@ export interface LayerDiagnosticsResult {
   };
   levels: ProfileLevel[];
   diagnostics: LayerDiagnosticResult[];
+  source: SourceProvenance & { cacheHit: boolean };
+}
+
+export type ProfileDiagnosticResult =
+  | { id: "freezing_level_crossings"; crossings: FreezingLevelCrossing[] }
+  | { id: "temperature_inversion_layers"; layers: TemperatureInversionLayer[] };
+
+export interface ProfileDiagnosticsResult {
+  model: "gfs_0p25";
+  run: string;
+  validTime: string;
+  forecastHour: number;
+  requestedPoint: GridPoint;
+  gridPoint: GridPoint;
+  sampledPressureLevelsHpa: number[];
+  levels: ProfileLevel[];
+  diagnostics: ProfileDiagnosticResult[];
   source: SourceProvenance & { cacheHit: boolean };
 }
 
