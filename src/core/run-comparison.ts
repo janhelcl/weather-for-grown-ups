@@ -264,19 +264,21 @@ function temporalSemanticsComparable(older: FieldTemporalResult, newer: FieldTem
 }
 
 function compareNumericRecords(
-  older: Record<string, unknown> | undefined,
-  newer: Record<string, unknown> | undefined,
+  older: object | undefined,
+  newer: object | undefined,
   ignored = new Set<string>(),
 ): NumericChange[] {
   if (!older || !newer) return [];
-  const keys = [...new Set([...Object.keys(older), ...Object.keys(newer)])]
+  const olderRecord = older as Record<string, unknown>;
+  const newerRecord = newer as Record<string, unknown>;
+  const keys = [...new Set([...Object.keys(olderRecord), ...Object.keys(newerRecord)])]
     .filter((key) => !ignored.has(key))
     .sort();
 
   const changes: NumericChange[] = [];
   for (const field of keys) {
-    const from = older[field];
-    const to = newer[field];
+    const from = olderRecord[field];
+    const to = newerRecord[field];
     if (typeof from !== "number" || typeof to !== "number" || !Number.isFinite(from) || !Number.isFinite(to)) continue;
     const deltaKind: DeltaKind = isDirectionDegrees(field) ? "circular_degrees" : "linear";
     changes.push({
