@@ -115,6 +115,18 @@ export const VARIABLE_CATALOG: Record<VariableId, VariableDefinition> = {
     "Moist-air density derived from isobaric pressure and virtual temperature using the ideal-gas relation",
     [{ field: "airDensityKgM3", unit: "kg/m^3", description: "Moist-air density" }],
   ),
+  wet_bulb_temperature: derived(
+    "wet_bulb_temperature",
+    ["temperature", "specific_humidity"],
+    "Thermodynamic wet-bulb temperature from a same-pressure adiabatic-saturation enthalpy balance solved by deterministic bisection",
+    [{ field: "wetBulbTemperatureC", unit: "degC", description: "Wet-bulb temperature" }],
+  ),
+  equivalent_potential_temperature: derived(
+    "equivalent_potential_temperature",
+    ["temperature", "specific_humidity"],
+    "Equivalent potential temperature using the Bolton (1980) formulation with parcel vapor pressure recovered from specific humidity and isobaric pressure",
+    [{ field: "equivalentPotentialTemperatureK", unit: "K", description: "Equivalent potential temperature" }],
+  ),
 };
 
 export function expandRequestedVariables(ids: VariableId[]): RawVariableDefinition[] {
