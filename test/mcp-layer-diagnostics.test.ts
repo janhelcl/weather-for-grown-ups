@@ -48,7 +48,7 @@ describe("MCP pressure-layer diagnostics", () => {
     expect(response).not.toHaveProperty("isError");
     if (!("structuredContent" in response)) throw new Error("Expected MCP success response");
     expect(response.structuredContent).toEqual(result);
-    expect(response.content).toEqual([{ type: "text", text: JSON.stringify(result) }]);
+    expect(response.content).toEqual([{ type: "text", text: JSON.stringify(response.structuredContent) }]);
   });
 
   it("rejects a future invalid core result at the MCP boundary", async () => {
