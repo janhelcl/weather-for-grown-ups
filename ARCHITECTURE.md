@@ -5,66 +5,121 @@ Weather for Grown Ups is primarily a **data-access product**, not a forecasting 
 ```text
 NOAA GFS
    ↓
-source adapters
+source adapters (NOMADS / AWS Open Data)
    ↓
-normalization / query planning
+normalization / query planning / caching
    ↓
-small deterministic derivations
+deterministic physical derivations and compositions
    ↓
-shared result contracts
+shared Zod result contracts
    ↓
-CLI / MCP
+CLI / MCP stdio / MCP Streamable HTTP
    ↓
 agent interpretation
 ```
 
 ## Core owns
 
-- canonical variable names
-- run / valid-time / forecast-hour semantics
-- pressure levels and later other vertical coordinates
-- query planning
-- upstream pacing and caching
-- GRIB decoder abstraction
-- normalized typed results
-- deterministic transforms such as U/V → wind speed/direction, per-level thermodynamics, cross-level gradients/shear, sampled whole-profile structure diagnostics, and explicitly defined parcel ascent diagnostics
+- canonical variable and field names;
+- run / valid-time / forecast-hour semantics;
+- authoritative published pressure levels and explicit non-isobaric vertical semantics;
+- instantaneous / accumulation / average temporal semantics;
+- query planning and dependency expansion;
+- upstream pacing and immutable-slice caching;
+- GRIB decoder abstraction;
+- normalized typed results and provenance;
+- deterministic transforms and spatial/temporal compositions.
 
-Derived variables declare their raw GFS dependencies in the shared catalog. Query planning expands those dependencies before source access, while the derivation itself happens only after raw completeness validation. This keeps NOAA access minimal and makes the same derived result available automatically to profile, batch-point, and time-series consumers.
+The core is the product. CLI and MCP are adapters over it, not separate implementations.
 
-Moist thermodynamic variables remain ordinary per-level derived variables rather than separate tools. Wet-bulb temperature and equivalent potential temperature both depend on temperature plus specific humidity, with pressure supplied by the isobaric coordinate. Equivalent potential temperature uses the Bolton (1980) formulation. Wet-bulb temperature is a deterministic same-pressure adiabatic-saturation enthalpy solve. The catalog describes these methods so consuming agents can distinguish model fields from WFG calculations.
+## Catalog-driven derivation
 
-Cross-level diagnostics are separate from per-level variables. A pressure-layer diagnostic explicitly names a lower-altitude/higher-pressure surface and an upper-altitude/lower-pressure surface, obtains one minimal two-level profile, and returns both the raw endpoints and deterministic diagnostic values. Gradients are normalized by the GFS geopotential-height difference rather than pretending pressure difference is geometric depth.
+Derived variables declare raw GFS dependencies in the shared catalog. Query planning expands those dependencies before source access, validates raw completeness, and only then computes the requested value locally. This keeps NOAA access minimal and makes the same derivation automatically available to every compatible surface.
 
-Whole-profile diagnostics are also explicit about sampling. The caller supplies the published pressure levels to inspect; WFG fetches the union of raw dependencies once, returns those sampled levels, and derives profile structure locally. Freezing-level crossings are interpolated between sampled temperatures/heights with log-pressure interpolation. Temperature inversions are reported only where adjacent sampled levels warm with height, with contiguous inversion segments merged. WFG does not imply structure between pressure levels that the caller did not request.
+Moist thermodynamic variables remain ordinary per-level derived variables. Wet-bulb temperature and equivalent potential temperature both depend on temperature plus specific humidity, with pressure supplied by the isobaric coordinate. Equivalent potential temperature uses the Bolton (1980) formulation. Wet-bulb temperature is a deterministic same-pressure adiabatic-saturation enthalpy solve.
 
-Whole-profile feature mechanics live below named diagnostics as reusable deterministic primitives: strict height ordering, adjacent gradients, threshold crossings, contiguous matching layers, and extrema. Named meteorological diagnostics compose these mechanics and add their domain-specific output semantics. This prevents each new diagnostic from reimplementing vertical traversal or subtly changing interpolation/layer grouping behavior.
+## Vertical diagnostics
 
-Parcel diagnostics are a distinct profile-wide result shape because parcel choice is part of the physics. Callers must explicitly select `surface_2m`, `mixed_layer_100hpa`, or `most_unstable_300hpa`; WFG never exposes an ambiguous generic CAPE calculation. One shared profile request obtains pressure-level temperature, specific humidity and geopotential height together with surface pressure/geopotential height and 2 m temperature/specific humidity.
+Pressure-layer diagnostics explicitly name a lower-altitude/higher-pressure surface and an upper-altitude/lower-pressure surface. One minimal two-level profile supplies the raw endpoints used for environmental lapse rate, vector wind shear, and potential-temperature gradient. Height-normalized quantities use GFS geopotential-height difference rather than treating pressure difference as geometric depth.
 
-The surface parcel uses GFS surface pressure/geopotential height with 2 m temperature and humidity. The 100 hPa mixed-layer parcel uses pressure-weighted mean potential temperature and mixing ratio over the exact lowest 100 hPa and initializes that mean state at surface pressure. The most-unstable parcel selects the sampled state with maximum Bolton equivalent potential temperature in the lowest 300 hPa.
+Whole-profile diagnostics are explicit about sampling. The caller chooses the published pressure levels. WFG fetches the union of dependencies once, returns those sampled levels, and derives freezing-level crossings or inversion structure locally. It does not imply unresolved vertical structure between pressure levels that were never requested.
 
-Parcel ascent is dry adiabatic to the Bolton lifted condensation level, then pseudo-adiabatic above it using deterministic numerical integration in log pressure. Environmental values are interpolated in log pressure. Buoyancy compares parcel and environmental **virtual temperature**, zero-buoyancy crossings are inserted explicitly, and LFC/EL refer to the first contiguous positive-buoyancy layer at or above the LCL. CAPE and CIN use the pressure-coordinate form `-Rd ∫ (Tv_parcel - Tv_environment) d ln(p)`. The raw environmental levels and complete parcel path are returned for auditability. As with other profile diagnostics, the caller's requested pressure levels determine environmental resolution.
+Reusable mechanics below named diagnostics handle strict height ordering, adjacent gradients, threshold crossings, contiguous matching layers, and extrema. Meteorological diagnostics compose those primitives rather than reimplementing traversal/interpolation behavior independently.
 
-## Surface contracts
+## Parcel diagnostics
 
-CLI and MCP are equal public surfaces over the same core. They must not maintain separate atmospheric result models.
+Parcel choice is part of the physics, so WFG has no ambiguous generic CAPE tool. Callers explicitly select `surface_2m`, `mixed_layer_100hpa`, or `most_unstable_300hpa`.
 
-Shared Zod result schemas define the public profile, pressure-layer, whole-profile-diagnostic, parcel-diagnostic, time-series, area-summary, latest-run, vertical-level, temporal-interval, and provenance contracts. Both surfaces validate core results against those schemas before emitting them. MCP also advertises the same schemas as tool output schemas.
+One profile request obtains pressure-level temperature, specific humidity and geopotential height together with the required surface/2 m fields. The surface parcel initializes from GFS surface pressure/geopotential height with 2 m temperature and humidity. The mixed-layer parcel uses pressure-weighted mean potential temperature and mixing ratio over the exact lowest 100 hPa. The most-unstable parcel selects the sampled state with maximum Bolton equivalent potential temperature in the lowest 300 hPa.
 
-A new core result shape is therefore incomplete until the shared contract accepts it and both CLI and MCP tests cover the relevant semantics.
+Ascent is dry adiabatic to the Bolton LCL and pseudo-adiabatic above it using deterministic numerical integration in log pressure. Environmental values are interpolated in log pressure. Buoyancy compares parcel and environmental **virtual temperature**; zero-buoyancy crossings are inserted before the pressure-coordinate CAPE/CIN integration. Raw environmental levels and the complete parcel path remain in the result for auditability.
 
-## Core does not own
+## Spatial and temporal composition
 
-- activity-specific weather scores
-- subjective forecast interpretation
-- domain-specific safety judgments
+`BatchPointsService` is the efficient same-time/multi-location primitive. It resolves one run, downloads/reuses one selected-message AWS slice, then samples all requested coordinates locally.
 
-Those belong to the consuming agent or a specialized application.
+`TransectService` composes that primitive: it generates evenly spaced great-circle coordinates, delegates one batch request, and attaches along-track distance. It does not implement a second GRIB access path.
+
+`PointsTimeSeriesService` composes batch requests across native GFS forecast steps, reusing one selected-message slice per step. `TimeSeriesService` is the single-point equivalent. `RunComparisonService` holds valid time constant and compares consecutive six-hour cycles with deterministic delta rules.
+
+Area summaries deliberately use a different path. A bounded NOMADS subset is decoded locally and reduced to statistics; the raw grid is never returned. Optional percentiles, threshold fractions, and extrema locations operate over defined grid cells in normalized WFG output units.
+
+## Public surfaces
+
+CLI and MCP are equal public surfaces over the same services and schemas.
+
+The CLI has one Commander root in `src/cli.ts`. Command registration is explicit and grouped under `src/cli/`:
+
+- `catalog-command.ts`;
+- `point-commands.ts`;
+- `diagnostic-commands.ts`;
+- `transect-command.ts`;
+- `area-command.ts`;
+- `shared.ts` for CLI-only parsing/defaults.
+
+Command modules contain presentation and argument adaptation only. Meteorological/data-access logic stays in `src/core/`.
+
+MCP has one `createMcpServer()` factory. Both transports instantiate the same tool set:
+
+- **stdio** for local process-spawned agent clients;
+- **Streamable HTTP** for hosted/remote clients.
+
+The HTTP launcher is transport/infrastructure code only. It adds the `/mcp` endpoint, `/healthz`, safe loopback defaults, and Host/Origin protection; it does not define a separate atmospheric API.
+
+## Shared contracts
+
+Shared Zod schemas define public profile, diagnostic, batch, transect, time-series, run-comparison, area-summary, latest-run, vertical, temporal, and provenance contracts. CLI validates results before emission; MCP advertises and validates the same result shapes.
+
+A new core result shape is incomplete until its shared schema and both relevant surface adapters are updated and tested.
+
+## Source strategy
+
+### NOMADS Grib Filter
+
+Use NOMADS where geographic subsetting materially reduces transfer: single-point requests and bounded areas. All physical requests share the same cross-process courtesy limiter and cache boundary.
+
+### NOAA AWS Open Data
+
+Use AWS `.idx` inventories and HTTP byte ranges where one selected GRIB-message slice can be reused across locations or forecast steps: batch points, transects, time series, multi-point time series, and run comparison.
+
+Both paths feed the same `wgrib2` decoder boundary and normalized output contracts.
 
 ## GRIB strategy
 
-Do not build a GRIB2 parser in TypeScript. `Wgrib2Decoder` is a narrow adapter around NOAA's `wgrib2` executable. The rest of the codebase deals only with typed values.
+WFG does not implement a GRIB2 parser in TypeScript. `Wgrib2Decoder` is a narrow adapter around NOAA's `wgrib2` executable. The rest of the codebase deals with typed meteorological values, not GRIB internals.
+
+Docker is therefore the reproducible distribution boundary: the production image pins Node.js and `wgrib2`; the npm package remains lightweight for environments that already provide the decoder.
 
 ## Rate limiting
 
-Every physical NOMADS request goes through `FileRateLimiter`. An atomically-created lock directory coordinates independent CLI and MCP processes on one machine. The completion timestamp is persisted separately, making the 11-second cooldown apply across process lifetimes. A hosted multi-replica deployment can replace this with Redis/Postgres behind the same boundary.
+Every physical NOMADS request goes through `FileRateLimiter`. An atomically-created lock directory coordinates independent CLI and MCP processes on one machine. The completion timestamp is persisted separately, making the default 11-second cooldown apply across process lifetimes.
+
+A future hosted multi-replica deployment can replace this implementation with Redis/Postgres behind the same limiter boundary without changing meteorological services.
+
+## Core does not own
+
+- activity-specific weather scores;
+- subjective forecast interpretation;
+- domain-specific safety judgments.
+
+Those belong to the consuming agent or a specialized application.

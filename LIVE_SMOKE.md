@@ -1,73 +1,97 @@
-# Opt-in live NOAA smoke tests
+# Live NOAA integration tests
 
-WFG's normal test suite is deterministic and offline. Live smoke tests are separate, opt-in integration checks for the real NOAA upstreams and local `wgrib2` installation.
+WFG's normal test suite is deterministic and offline. Real NOAA integration checks are deliberately separate because upstream availability, forecast publication timing, network latency, and the NOMADS courtesy delay make them unsuitable as ordinary PR gates.
 
-They are intentionally **not part of normal CI** because upstream availability, forecast publication timing, network latency, and the NOMADS courtesy delay would make ordinary verification slow and non-deterministic.
+## Automated schedule
 
-## Requirements
+`.github/workflows/live-noaa.yml` runs the expanded suite:
+
+- every Monday at **05:17 UTC**;
+- on explicit `workflow_dispatch`.
+
+It does **not** run on normal pushes or pull requests.
+
+The workflow builds the dedicated Docker `live-test` target, which pins Node.js 24 and `wgrib2 3.8.0`, then runs `npm run test:live:all`. Live jobs share one non-cancelling concurrency group so upstream checks never overlap or replace one another.
+
+## Upstream pacing
+
+All physical NOMADS downloads use WFG's normal file-backed limiter. The default is an **11-second post-request cooldown**, deliberately conservative relative to NOAA's 10-second scripted-request guidance. The live suite has no bypass.
+
+AWS Open Data access does not use the NOMADS limiter.
+
+## Expanded S3 integration
+
+```bash
+npm run test:live:s3
+```
+
+This exercises NOAA AWS Open Data through the shared core:
+
+- three-location batched pressure/non-isobaric query;
+- four native forecast steps (`f006` through `f009`);
+- five-sample pressure-level great-circle transect;
+- surface-parcel LCL/CAPE/CIN calculation.
+
+Assertions validate contracts, provenance, dimensions, and physical-result finiteness rather than pinning specific weather values.
+
+## Rich NOMADS area integration
+
+```bash
+npm run test:live:area
+```
+
+This performs one small Central-European `temperature_2m` area request at `f006` and requests:
+
+- p10 / p50 / p90;
+- fraction of defined grid cells at or above 0 °C;
+- representative min/max grid coordinates and tie counts.
+
+It exercises the real NOMADS geographic-subset path, exact field selection, unit normalization, `wgrib2` spread decoding, rich area statistics, and the shared courtesy limiter.
+
+## Run the expanded suite locally
+
+Requirements:
 
 - internet access;
-- `wgrib2` on `PATH`, or `WGRIB2_PATH` set;
-- the same Node.js requirements as WFG.
+- Node.js supported by WFG;
+- `wgrib2` on `PATH`, or `WGRIB2_PATH` set.
 
-All suites first resolve the latest GFS cycle published through `f384`, then use that explicit run for the rest of the suite so the model cycle cannot change halfway through a test.
+Run both expanded integrations:
 
-## Existing single-profile smoke
+```bash
+npm run test:live:all
+```
+
+The Docker target avoids host dependency setup:
+
+```bash
+docker build --target live-test -t weather-for-grown-ups:live-test .
+docker run --rm weather-for-grown-ups:live-test
+```
+
+## Compact legacy profile smoke
+
+The original one-profile smoke remains available for targeted debugging:
 
 ```bash
 npm run test:live
 WFG_LIVE_SOURCE=s3 npm run test:live
 ```
 
-This preserves the original compact point-profile smoke. Without `WFG_LIVE_SOURCE`, it uses NOMADS; the environment variable can switch it to S3.
+Without `WFG_LIVE_SOURCE` it uses NOMADS; setting `s3` switches the source.
 
-## Expanded S3 integration smoke
+## First scheduled-suite verification
 
-```bash
-npm run test:live:s3
-```
+Before the schedule was merged, the expanded workflow was deliberately executed against current NOAA data on 2026-08-23. The first attempt caught a real test defect: the parcel smoke requested unsupported 875/825/775 hPa levels. The smoke data was corrected to the canonical published GFS pressure-level set, and the rerun passed both AWS and NOMADS paths.
 
-This exercises several shared-core compositions against NOAA AWS Open Data:
+That is the purpose of this layer: catch assumptions that deterministic mocks and fixed fixtures cannot reveal without turning upstream availability into a merge dependency.
 
-- a three-location batched query with pressure levels and non-isobaric fields;
-- a four-step native point time series (`f006` through `f009`);
-- a five-sample pressure-level great-circle transect;
-- a real surface-parcel LCL/CAPE/CIN calculation from an S3-backed profile.
+## Failure triage
 
-Assertions intentionally validate contracts and physical-result finiteness rather than expecting specific weather values. The suite uses explicit run timestamps after initial discovery and benefits from WFG's immutable selected-message cache.
+A live failure should be classified as one of:
 
-## Rich NOMADS area smoke
+1. upstream publication/network availability;
+2. `wgrib2` / runtime environment;
+3. WFG integration regression.
 
-```bash
-npm run test:live:area
-```
-
-This performs one small Central-European `temperature_2m` area request at `f006` and asks for:
-
-- p10 / p50 / p90;
-- fraction of defined grid cells at or above 0 °C;
-- min/max representative coordinates and tie counts.
-
-It therefore exercises the real NOMADS geographic-subset path, exact non-isobaric field selection, Kelvin-to-Celsius normalization, and the opt-in bounded `wgrib2 -spread -` calculation path.
-
-This suite makes one physical NOMADS fetch when the GRIB slice is not already cached. It uses the same shared conservative **11-second post-request cooldown** as every other NOMADS call; no smoke-test bypass exists.
-
-## Run both expanded suites
-
-```bash
-npm run test:live:all
-```
-
-This runs the S3 integration suite followed by the rich NOMADS area suite.
-
-## What normal CI checks
-
-Normal `npm run typecheck` now compiles both `src/**/*.ts` and `scripts/**/*.ts` through separate TypeScript configurations. This catches API drift and script errors without contacting NOAA. Normal CI still does **not** execute the live scripts.
-
-A live smoke failure should be triaged as either:
-
-1. an upstream/publication/network problem;
-2. a local `wgrib2`/environment problem; or
-3. a WFG integration regression.
-
-The deterministic offline suite remains the authority for merge gating; live smoke exists to catch assumptions that mocks and fixed fixtures cannot validate.
+Normal deterministic CI remains the merge authority. Live NOAA integration is a low-frequency compatibility signal.
