@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import { AreaSummaryService } from "./core/area-summary.js";
 import { BatchPointsService } from "./core/batch-points.js";
+import { DiagnosticTimeSeriesService } from "./core/diagnostic-time-series.js";
 import { LayerDiagnosticsService } from "./core/layer-diagnostics.js";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ParcelDiagnosticsService } from "./core/parcel-diagnostics.js";
@@ -15,6 +16,7 @@ import { handleGetGfsAreaSummary } from "./mcp-area-tool.js";
 import {
   handleCompareGfsRuns,
   handleGetGfsCatalog,
+  handleGetGfsDiagnosticTimeSeries,
   handleGetGfsLayerDiagnostics,
   handleGetGfsParcelDiagnostics,
   handleGetGfsPoints,
@@ -29,6 +31,8 @@ import { handleGetGfsTransect } from "./mcp-transect-tool.js";
 import { areaSummaryQuerySchema } from "./schema/area-summary.js";
 import { areaSummaryResultSchema } from "./schema/area-summary-result.js";
 import { catalogSearchQuerySchema, catalogSearchResultSchema } from "./schema/catalog-search.js";
+import { diagnosticTimeSeriesQuerySchema } from "./schema/diagnostic-time-series.js";
+import { diagnosticTimeSeriesResultSchema } from "./schema/diagnostic-time-series-result.js";
 import {
   batchPointsQuerySchema,
   layerDiagnosticsQuerySchema,
@@ -57,7 +61,7 @@ export function createMcpServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "Use get_gfs_catalog for the complete pressure/non-isobaric/diagnostic catalog and search_gfs_catalog for compact ranked discovery by text, section, raw/derived classification, or temporal semantics. For profile, diagnostics, batched-point, transect, time-series, multi-point time-series, run-comparison, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_points when comparing multiple arbitrary locations at one valid time, get_gfs_transect for an evenly spaced pressure-level cross-section along a great-circle path, get_gfs_points_timeseries when the same locations must be compared across a valid-time range, and compare_gfs_runs when the same point/valid time/selection should be compared across consecutive six-hour model cycles. summarize_gfs_area accepts either one raw pressure-level variable at one pressure surface or one raw non-isobaric field and preserves exact vertical/temporal semantics. Area min/max/mean are always available; optional percentiles, threshold fractions, and extrema locations operate over defined grid cells in normalized WFG output units and never return the raw grid. Run-comparison deltas are newer minus older; wind direction uses shortest signed angular change. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
+      instructions: "Use get_gfs_catalog for the complete pressure/non-isobaric/diagnostic catalog and search_gfs_catalog for compact ranked discovery by text, section, raw/derived classification, or temporal semantics. For profile, diagnostics, diagnostic time-series, batched-point, transect, time-series, multi-point time-series, run-comparison, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_diagnostic_timeseries to evaluate one of those diagnostic families across native GFS outputs in a valid-time range; parcel time-series steps intentionally omit the repeated full parcel path while preserving parcel start, LCL/LFC/EL, CAPE and CIN. Use get_gfs_points when comparing multiple arbitrary locations at one valid time, get_gfs_transect for an evenly spaced pressure-level cross-section along a great-circle path, get_gfs_points_timeseries when the same locations must be compared across a valid-time range, and compare_gfs_runs when the same point/valid time/selection should be compared across consecutive six-hour model cycles. summarize_gfs_area accepts either one raw pressure-level variable at one pressure surface or one raw non-isobaric field and preserves exact vertical/temporal semantics. Area min/max/mean are always available; optional percentiles, threshold fractions, and extrema locations operate over defined grid cells in normalized WFG output units and never return the raw grid. Run-comparison deltas are newer minus older; wind direction uses shortest signed angular change. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
@@ -65,6 +69,12 @@ export function createMcpServer(): McpServer {
   const layerDiagnosticsService = new LayerDiagnosticsService({ profileGetter: profileService });
   const profileDiagnosticsService = new ProfileDiagnosticsService({ profileGetter: profileService });
   const parcelDiagnosticsService = new ParcelDiagnosticsService({ profileGetter: profileService });
+  const diagnosticTimeSeriesService = new DiagnosticTimeSeriesService({
+    layerDiagnosticsGetter: layerDiagnosticsService,
+    profileDiagnosticsGetter: profileDiagnosticsService,
+    parcelDiagnosticsGetter: parcelDiagnosticsService,
+    latestRunProvider: latestRunResolver,
+  });
   const batchPointsService = new BatchPointsService({ latestRunProvider: latestRunResolver, profileGetter: profileService });
   const transectService = new TransectService({ batchPointsGetter: batchPointsService });
   const timeSeriesService = new TimeSeriesService({ latestRunProvider: latestRunResolver, profileGetter: profileService });
@@ -125,6 +135,13 @@ export function createMcpServer(): McpServer {
     inputSchema: parcelDiagnosticsQuerySchema,
     outputSchema: parcelDiagnosticsResultSchema,
   }, async (query) => handleGetGfsParcelDiagnostics(parcelDiagnosticsService, query));
+
+  server.registerTool("get_gfs_diagnostic_timeseries", {
+    title: "Get GFS diagnostic time series",
+    description: "Evaluate one deterministic layer, whole-profile, or parcel diagnostic selection at every native GFS output inside a valid-time range. One query resolves one model run for the whole range and preserves explicit pressure sampling. S3 is the default multi-time source. Parcel steps return compact start/LCL/LFC/EL/CAPE/CIN state without repeating the full parcel path at every forecast step.",
+    inputSchema: diagnosticTimeSeriesQuerySchema,
+    outputSchema: diagnosticTimeSeriesResultSchema,
+  }, async (query) => handleGetGfsDiagnosticTimeSeries(diagnosticTimeSeriesService, query));
 
   server.registerTool("get_gfs_points", {
     title: "Get GFS fields for multiple points",

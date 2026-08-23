@@ -11,7 +11,8 @@ The 0.1 release surface is now feature-complete around deterministic GFS 0.25° 
 - point profiles for pressure-level and non-isobaric fields;
 - searchable atmospheric catalog;
 - pressure-layer, whole-profile, and explicit parcel diagnostics;
-- multi-point queries and native-cadence time series;
+- native-cadence composed diagnostic time series for those diagnostic families;
+- multi-point queries and native-cadence field time series;
 - multi-point time series;
 - run-to-run comparison;
 - great-circle pressure-level transects;
@@ -20,7 +21,7 @@ The 0.1 release surface is now feature-complete around deterministic GFS 0.25° 
 - local stdio MCP and remotely hostable Streamable HTTP MCP;
 - deterministic offline CI plus a low-frequency live NOAA integration suite.
 
-Ensembles/GEFS and composed diagnostic time series are intentionally outside this 0.1 polish pass.
+Ensembles/GEFS remain intentionally outside the 0.1 deterministic-GFS scope.
 
 ## Install
 
@@ -86,6 +87,20 @@ wfg parcel \
   --json
 ```
 
+The same parcel diagnostics across native forecast times:
+
+```bash
+wfg diagnostic-timeseries \
+  --kind parcel \
+  --lat 50.08 \
+  --lon 14.43 \
+  --start 2026-08-20T09:00:00Z \
+  --end 2026-08-20T18:00:00Z \
+  --levels 1000,975,950,925,900,850,800,750,700,650,600,550,500,450,400,350,300,250,200 \
+  --parcel surface_2m \
+  --json
+```
+
 A transect:
 
 ```bash
@@ -123,9 +138,10 @@ wfg area \
 | `layer` | Deterministic diagnostics between two pressure surfaces |
 | `profile-diagnostics` | Freezing-level crossings and sampled inversion layers |
 | `parcel` | Explicit surface/mixed-layer/most-unstable parcel LCL/LFC/EL/CAPE/CIN |
+| `diagnostic-timeseries` | Native-cadence layer/profile/parcel diagnostics across a valid-time range |
 | `points` | Same field selection for up to 50 points from one shared S3 slice |
 | `transect` | 2–50 great-circle samples across explicit pressure levels |
-| `timeseries` | One-point native GFS forecast-step series |
+| `timeseries` | One-point native GFS forecast-step field series |
 | `points-timeseries` | Multi-point native GFS series with shared slices per step |
 | `compare-runs` | Same point/valid time across 2–6 consecutive GFS cycles |
 | `area` | Bounded raw-field min/max/mean plus optional distribution statistics |
@@ -163,6 +179,7 @@ Current MCP tools:
 - `get_gfs_layer_diagnostics`
 - `get_gfs_profile_diagnostics`
 - `get_gfs_parcel_diagnostics`
+- `get_gfs_diagnostic_timeseries`
 - `get_gfs_points`
 - `get_gfs_transect`
 - `get_gfs_timeseries`
@@ -193,16 +210,21 @@ WFG deliberately separates raw model fields from deterministic physical transfor
 
 Pressure-layer diagnostics currently include environmental temperature lapse rate, vector wind shear, and potential-temperature gradient. Whole-profile diagnostics include all sampled 0 °C crossings and sampled temperature-inversion layers. Parcel calculations require an explicit parcel definition: `surface_2m`, `mixed_layer_100hpa`, or `most_unstable_300hpa`.
 
-The sampled/input values used by diagnostics are returned alongside derived values for auditability. Meteorological formulas have a golden-reference validation layer against published MetPy reference cases; see [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md).
+The single-time diagnostic tools return sampled/input values alongside derived values for auditability. The diagnostic time-series composition repeats those existing calculations across native GFS outputs using one fixed model run and one fixed diagnostic selection. Parcel series keep parcel start, LCL/LFC/EL, CAPE and CIN but omit the repeated full parcel path; the single-time parcel surface remains the detailed audit path.
+
+Meteorological formulas have a golden-reference validation layer against published MetPy reference cases; see [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md). See [DIAGNOSTIC_TIME_SERIES.md](DIAGNOSTIC_TIME_SERIES.md) for time-series semantics and examples.
 
 ## Spatial and temporal composition
 
 Multi-point queries reuse one selected-message S3 slice across all requested coordinates. Multi-point time series repeat that reuse once per forecast step. Transects are the same batch primitive composed over evenly spaced great-circle coordinates.
 
+Diagnostic time series are a different composition over existing single-time diagnostic services. WFG resolves one query-aware run for the complete valid-time range, walks the native GFS forecast timeline, and evaluates one fixed layer/profile/parcel selection at each step. S3 is the default data path for this multi-time operation; NOMADS remains available explicitly and still uses the shared 11-second courtesy limiter.
+
 Area queries are intentionally different: they use a bounded NOMADS geographic subset and compute statistics locally without returning the raw grid. Available statistics are min/max/unweighted grid-point mean plus optional percentiles, threshold fractions in normalized output units, and representative extrema coordinates with tie counts.
 
 Detailed contracts:
 
+- [DIAGNOSTIC_TIME_SERIES.md](DIAGNOSTIC_TIME_SERIES.md)
 - [TRANSECT.md](TRANSECT.md)
 - [AREA_SUMMARY.md](AREA_SUMMARY.md)
 - [AREA_DISTRIBUTION.md](AREA_DISTRIBUTION.md)
@@ -216,13 +238,13 @@ Query tools support:
 - `latest_complete` — newest cycle published through `f384`;
 - explicit 00Z/06Z/12Z/18Z initialization timestamps for reproducibility.
 
-Query-aware `latest` checks the actual requested field selection and valid time/range, so WFG does not choose a newer run that has not published enough data yet. The standalone `wfg latest` / `get_latest_gfs_run` surface reports the newest complete cycle because it has no query to satisfy.
+Query-aware `latest` checks the actual requested field/diagnostic dependencies and valid time/range, so WFG does not choose a newer run that has not published enough data yet. For diagnostic time series the resolution happens once for the complete time range, then that explicit cycle is used for every step. The standalone `wfg latest` / `get_latest_gfs_run` surface reports the newest complete cycle because it has no query to satisfy.
 
 ## NOAA data paths
 
 **NOMADS Grib Filter** is the default for single-point requests and the bounded-area path because it can subset geographically before transfer. Every physical NOMADS request passes through one file-backed cross-process limiter with an **11-second post-request cooldown**, deliberately conservative relative to NOAA's 10-second scripted-request guidance. Cache hits do not consume the limiter.
 
-**NOAA AWS Open Data** is used for efficient batch, transect, time-series, multi-point time-series, and run-comparison work. WFG reads the `.idx`, calculates byte ranges for only the selected GRIB messages, downloads those ranges, caches immutable slices, and samples them locally with `wgrib2`.
+**NOAA AWS Open Data** is used for efficient batch, transect, field time-series, diagnostic time-series, multi-point time-series, and run-comparison work. WFG reads the `.idx`, calculates byte ranges for only the selected GRIB messages, downloads those ranges, caches immutable slices, and samples them locally with `wgrib2`.
 
 Default cache/state location: `~/.cache/wfg/`. Override with `WFG_CACHE_DIR`.
 
@@ -250,6 +272,7 @@ It exercises AWS S3 batch/time-series/transect/parcel paths and a rich NOMADS ar
 - [INSTALL.md](INSTALL.md) — installation, Docker/npm distribution, stdio/HTTP MCP, hosting and release behavior
 - [ARCHITECTURE.md](ARCHITECTURE.md) — core boundaries, data paths, caching and surface design
 - [CATALOG_SEARCH.md](CATALOG_SEARCH.md) — atmospheric discovery/search semantics
+- [DIAGNOSTIC_TIME_SERIES.md](DIAGNOSTIC_TIME_SERIES.md) — native-cadence layer/profile/parcel diagnostic composition
 - [TRANSECT.md](TRANSECT.md) — great-circle cross-section primitive
 - [AREA_SUMMARY.md](AREA_SUMMARY.md) — bounded area selection and statistics
 - [AREA_DISTRIBUTION.md](AREA_DISTRIBUTION.md) — percentiles, thresholds and extrema semantics
@@ -277,4 +300,4 @@ The executable CLI is intentionally thin: `src/cli.ts` creates one Commander roo
 
 WFG returns model data and deterministic physical derivations. It does not provide activity-specific suitability scores, safety advice, or hidden meteorological interpretation.
 
-For the next capability phase, the highest-value expansion is ensemble uncertainty rather than more deterministic one-off diagnostics. That work is intentionally deferred until the 0.1 distribution, documentation and structural polish is complete.
+For the next capability phase, the highest-value expansion is ensemble uncertainty rather than more deterministic one-off diagnostics. GEFS work remains intentionally deferred until explicitly started.

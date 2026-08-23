@@ -1,8 +1,18 @@
 import type { Command } from "commander";
+import { DiagnosticTimeSeriesService } from "../core/diagnostic-time-series.js";
 import { LayerDiagnosticsService } from "../core/layer-diagnostics.js";
 import { ParcelDiagnosticsService } from "../core/parcel-diagnostics.js";
 import { ProfileDiagnosticsService } from "../core/profile-diagnostics.js";
-import type { ParcelDefinitionId, ProfileSourceId } from "../schema/query.js";
+import type { DiagnosticTimeSeriesQueryInput } from "../schema/diagnostic-time-series.js";
+import {
+  diagnosticTimeSeriesResultSchema,
+  type DiagnosticTimeSeriesResult,
+} from "../schema/diagnostic-time-series-result.js";
+import {
+  DEFAULT_TIME_SERIES_MAX_STEPS,
+  type ParcelDefinitionId,
+  type ProfileSourceId,
+} from "../schema/query.js";
 import {
   layerDiagnosticsResultSchema,
   parcelDiagnosticsResultSchema,
@@ -120,4 +130,109 @@ export function registerDiagnosticCommands(program: Command): void {
       console.log("Raw sampled environmental levels");
       console.table(result.levels);
     });
+
+  program
+    .command("diagnostic-timeseries")
+    .description("Evaluate layer, whole-profile, or parcel diagnostics across native GFS forecast times")
+    .requiredOption("--kind <layer|profile|parcel>", "Diagnostic family")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
+    .requiredOption("--start <iso>", "Inclusive start of valid-time range")
+    .requiredOption("--end <iso>", "Inclusive end of valid-time range")
+    .option("--lower <hpa>", "Layer lower-altitude pressure surface in hPa", Number)
+    .option("--upper <hpa>", "Layer upper-altitude pressure surface in hPa", Number)
+    .option("--levels <list>", "Profile/parcel published pressure levels in hPa")
+    .option("--diagnostics <list>", "Comma-separated diagnostic IDs; defaults depend on --kind")
+    .option("--parcel <surface_2m|mixed_layer_100hpa|most_unstable_300hpa>", "Parcel initialization for --kind parcel")
+    .option("--source <nomads|s3>", "Data access path", "s3")
+    .option("--max-steps <number>", "Maximum native GFS outputs", Number, DEFAULT_TIME_SERIES_MAX_STEPS)
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const query: DiagnosticTimeSeriesQueryInput = {
+        latitude: options.lat,
+        longitude: options.lon,
+        run: options.run,
+        startTime: options.start,
+        endTime: options.end,
+        diagnostic: diagnosticSelectionFromCli(options),
+        source: options.source as ProfileSourceId,
+        maxSteps: options.maxSteps,
+      };
+      const result = await new DiagnosticTimeSeriesService().getDiagnosticTimeSeries(query);
+      diagnosticTimeSeriesResultSchema.parse(result);
+      if (options.json) return console.log(JSON.stringify(result, null, 2));
+      printDiagnosticTimeSeries(result);
+    });
+}
+
+function diagnosticSelectionFromCli(options: Record<string, unknown>): DiagnosticTimeSeriesQueryInput["diagnostic"] {
+  switch (options.kind) {
+    case "layer":
+      return {
+        kind: "layer",
+        lowerPressureHpa: Number(options.lower),
+        upperPressureHpa: Number(options.upper),
+        diagnostics: parseLayerDiagnostics(options.diagnostics ?? DEFAULT_LAYER_DIAGNOSTICS),
+      };
+    case "profile":
+      return {
+        kind: "profile",
+        pressureLevelsHpa: parseLevels(options.levels ?? ""),
+        diagnostics: parseProfileDiagnostics(options.diagnostics ?? DEFAULT_PROFILE_DIAGNOSTICS),
+      };
+    case "parcel":
+      return {
+        kind: "parcel",
+        pressureLevelsHpa: parseLevels(options.levels ?? ""),
+        parcel: String(options.parcel ?? "") as ParcelDefinitionId,
+      };
+    default:
+      throw new Error(`Expected --kind layer, profile, or parcel; received ${String(options.kind)}`);
+  }
+}
+
+function printDiagnosticTimeSeries(result: DiagnosticTimeSeriesResult): void {
+  console.log(`GFS ${result.run}  ${result.requestedStartTime} → ${result.requestedEndTime}`);
+  console.log(`Source ${result.source.provider} (${result.source.access}); ${result.series.length} native outputs`);
+
+  switch (result.diagnostic.kind) {
+    case "layer":
+      console.table(result.series.map((step) => {
+        if (step.kind !== "layer") throw new Error("Unexpected diagnostic step kind");
+        const values = Object.fromEntries(step.diagnostics.flatMap((diagnostic) =>
+          Object.entries(diagnostic.values).map(([field, value]) => [`${diagnostic.id}.${field}`, value])));
+        return { validTime: step.validTime, forecastHour: step.forecastHour, ...values };
+      }));
+      break;
+    case "profile":
+      console.table(result.series.map((step) => {
+        if (step.kind !== "profile") throw new Error("Unexpected diagnostic step kind");
+        const freezingCrossings = step.diagnostics.reduce(
+          (count, diagnostic) => count + (diagnostic.id === "freezing_level_crossings" ? diagnostic.crossings.length : 0),
+          0,
+        );
+        const inversionLayers = step.diagnostics.reduce(
+          (count, diagnostic) => count + (diagnostic.id === "temperature_inversion_layers" ? diagnostic.layers.length : 0),
+          0,
+        );
+        return { validTime: step.validTime, forecastHour: step.forecastHour, freezingCrossings, inversionLayers };
+      }));
+      break;
+    case "parcel":
+      console.table(result.series.map((step) => {
+        if (step.kind !== "parcel") throw new Error("Unexpected diagnostic step kind");
+        return {
+          validTime: step.validTime,
+          forecastHour: step.forecastHour,
+          capeJkg: step.parcel.capeJkg,
+          cinJkg: step.parcel.cinJkg,
+          lclPressureHpa: step.parcel.lcl.pressureHpa,
+          lclHeightGpm: step.parcel.lcl.geopotentialHeightGpm,
+          lfcPressureHpa: step.parcel.lfc?.pressureHpa,
+          elPressureHpa: step.parcel.el?.pressureHpa,
+        };
+      }));
+      break;
+  }
 }

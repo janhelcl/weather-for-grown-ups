@@ -21,6 +21,7 @@ const EXPECTED_COMMANDS = [
   "layer",
   "profile-diagnostics",
   "parcel",
+  "diagnostic-timeseries",
   "transect",
   "area",
 ];

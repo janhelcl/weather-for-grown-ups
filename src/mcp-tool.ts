@@ -16,6 +16,11 @@ import {
   catalogSearchResultSchema,
   type CatalogSearchQueryInput,
 } from "./schema/catalog-search.js";
+import type { DiagnosticTimeSeriesQueryInput } from "./schema/diagnostic-time-series.js";
+import {
+  diagnosticTimeSeriesResultSchema,
+  type DiagnosticTimeSeriesResult,
+} from "./schema/diagnostic-time-series-result.js";
 import type {
   AreaSummaryQueryInput,
   BatchPointsQueryInput,
@@ -46,6 +51,7 @@ export interface ProfileDiagnosticsGetter { getProfileDiagnostics(query: Profile
 export interface ParcelDiagnosticsGetter { getParcelDiagnostics(query: ParcelDiagnosticsQueryInput): Promise<ParcelDiagnosticsResult>; }
 export interface BatchPointsGetter { getPoints(query: BatchPointsQueryInput): Promise<BatchPointsResult>; }
 export interface TimeSeriesGetter { getTimeSeries(query: TimeSeriesQueryInput): Promise<TimeSeriesResult>; }
+export interface DiagnosticTimeSeriesGetter { getDiagnosticTimeSeries(query: DiagnosticTimeSeriesQueryInput): Promise<DiagnosticTimeSeriesResult>; }
 export interface PointsTimeSeriesGetter { getPointsTimeSeries(query: PointsTimeSeriesQueryInput): Promise<PointsTimeSeriesResult>; }
 export interface RunComparisonGetter { compareRuns(query: RunComparisonQueryInput): Promise<RunComparisonResult>; }
 export interface AreaSummaryGetter { summarize(query: AreaSummaryQueryInput): Promise<AreaSummaryResult>; }
@@ -107,6 +113,18 @@ export async function handleGetGfsPoints(batchService: BatchPointsGetter, query:
 export async function handleGetGfsTimeSeries(timeSeriesService: TimeSeriesGetter, query: TimeSeriesQueryInput) {
   try {
     const output = timeSeriesResultSchema.parse(await timeSeriesService.getTimeSeries(query));
+    return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } };
+  } catch (error) { return toolError(error); }
+}
+
+export async function handleGetGfsDiagnosticTimeSeries(
+  diagnosticTimeSeriesService: DiagnosticTimeSeriesGetter,
+  query: DiagnosticTimeSeriesQueryInput,
+) {
+  try {
+    const output = diagnosticTimeSeriesResultSchema.parse(
+      await diagnosticTimeSeriesService.getDiagnosticTimeSeries(query),
+    );
     return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } };
   } catch (error) { return toolError(error); }
 }
