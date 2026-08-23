@@ -23,14 +23,17 @@ The deterministic surface is feature-complete around GFS 0.25° access:
 
 ### GEFS 0.5° ensemble foundation
 
-The first ensemble surface adds model-native NOAA GEFS access without pretending GEFS is just deterministic GFS plus a member argument:
+The ensemble surface adds model-native NOAA GEFS access without pretending GEFS is just deterministic GFS plus a member argument:
 
 - operational atmospheric `pgrb2a` 0.5° product;
 - control `c00` plus perturbed members `p01` through `p30`;
-- one point, valid time, raw pressure-level variable, and pressure surface per query;
+- one-point distributions at one valid time;
+- native three-hour ensemble time series from one fixed model cycle;
+- raw pressure-level variable and pressure-surface selection;
 - native three-hour cadence through `f384` in the current WFG contract;
 - member values plus mean, population spread, extrema and caller-selected quantiles;
 - optional threshold member fraction, explicitly marked as **not a calibrated probability**;
+- compact time-series summaries by default, with full member trajectories only on request;
 - direct NOAA AWS `.idx` byte-range access and immutable local caching.
 
 See [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) for the exact model/member/pressure-level contract and semantics.
@@ -103,6 +106,23 @@ wfg ensemble \
 
 The default ensemble selection is all 31 members. Use `--members c00,p01,p02,...` to request a subset.
 
+### GEFS ensemble time series
+
+```bash
+wfg ensemble-timeseries \
+  --lat 50.08 \
+  --lon 14.43 \
+  --start 2026-08-24T06:00:00Z \
+  --end 2026-08-25T18:00:00Z \
+  --var temperature \
+  --level 850 \
+  --quantiles 0.1,0.5,0.9 \
+  --gte 10 \
+  --json
+```
+
+The series resolves one model cycle for the complete range. Per-step member values are omitted by default; add `--include-members` only when the full trajectories are needed.
+
 ### Explicit parcel diagnostics
 
 ```bash
@@ -163,6 +183,7 @@ wfg area \
 | `catalog` | Browse/search deterministic GFS variables, fields, diagnostics, parcel definitions, semantics and units |
 | `latest` | Resolve the newest GFS cycle published through `f384` |
 | `ensemble` | GEFS member values and distribution summary for one raw pressure-level field at one point/time |
+| `ensemble-timeseries` | GEFS distribution summaries across native three-hour steps from one fixed run; optional member trajectories |
 | `profile` | One GFS point/time pressure profile and/or non-isobaric fields |
 | `layer` | Deterministic diagnostics between two GFS pressure surfaces |
 | `profile-diagnostics` | Freezing-level crossings and sampled inversion layers |
@@ -205,6 +226,7 @@ Current MCP tools:
 - `search_gfs_catalog`
 - `get_latest_gfs_run`
 - `get_gefs_ensemble`
+- `get_gefs_ensemble_timeseries`
 - `get_gfs_profile`
 - `get_gfs_layer_diagnostics`
 - `get_gfs_profile_diagnostics`
@@ -229,9 +251,9 @@ Non-isobaric fields preserve explicit vertical semantics (`surface`, height abov
 
 ### GEFS
 
-GEFS has a separate explicit catalog because the 0.5° `pgrb2a` inventory is not identical to deterministic GFS 0.25°. The initial ensemble surface supports temperature, relative humidity, U/V wind components and geopotential height on the documented common pressure surfaces, with additional 300/400-hPa support for U/V wind.
+GEFS has a separate explicit catalog because the 0.5° `pgrb2a` inventory is not identical to deterministic GFS 0.25°. The current ensemble surface supports temperature, relative humidity, U/V wind components and geopotential height on the documented common pressure surfaces, with additional 300/400-hPa support for U/V wind.
 
-Member order is canonicalized to `c00,p01,...,p30`. All members in one result come from the same model initialization cycle and valid time.
+Member order is canonicalized to `c00,p01,...,p30`. All members in one point result come from the same model initialization cycle and valid time. Ensemble time series additionally guarantee that every forecast step belongs to one fixed model cycle.
 
 ## Deterministic meteorology
 
@@ -251,7 +273,7 @@ Diagnostic time series compose existing single-time diagnostic services. WFG res
 
 Area queries use a bounded NOMADS geographic subset and compute statistics locally without returning the raw grid.
 
-GEFS currently exposes the lower-level member-distribution primitive at one point/time. Ensemble temporal/spatial/diagnostic compositions are intentionally left for subsequent increments rather than hidden inside the first endpoint.
+GEFS time series compose the existing one-time member-distribution service over native three-hour steps. Query-aware range resolution chooses one initialization that can satisfy the complete interval, and each underlying step receives that explicit run. Summary-only output is the default to avoid multiplying agent context by `members × forecast steps` unless the caller explicitly requests member trajectories.
 
 ## Run selection
 
@@ -272,7 +294,9 @@ Query-aware `latest` checks requested dependencies and valid time/range so WFG d
 - `latest` — newest six-hour GEFS cycle for which every requested member exists at the required valid time;
 - explicit 00Z/06Z/12Z/18Z initialization timestamps.
 
-The current WFG GEFS contract requires a native three-hour output and caps forecast hour at `f384`.
+`get_gefs_ensemble_timeseries` / `wfg ensemble-timeseries` use the same explicit-run option. For `latest`, the resolver selects the newest cycle that starts no later than the first requested valid time and has the selected members published at both ends of the complete range. That run is then fixed across every intermediate step.
+
+The current WFG GEFS contract requires native three-hour output and caps forecast hour at `f384`.
 
 ## NOAA data paths
 
@@ -299,13 +323,13 @@ The real-upstream suite is separate:
 npm run test:live:all
 ```
 
-It exercises deterministic GFS AWS/NOMADS paths and a small GEFS control-plus-two-member AWS query. GitHub Actions runs it on a deliberately low-frequency weekly schedule and also supports manual dispatch. Normal PR/main CI remains offline.
+It exercises deterministic GFS AWS/NOMADS paths plus a small GEFS control-plus-two-member point query and two-step ensemble time series. GitHub Actions runs it on a deliberately low-frequency weekly schedule and also supports manual dispatch. Normal PR/main CI remains offline.
 
 ## Documentation map
 
 - [INSTALL.md](INSTALL.md) — installation, Docker/npm distribution, stdio/HTTP MCP, hosting and release behavior
 - [ARCHITECTURE.md](ARCHITECTURE.md) — core boundaries, data paths, caching and surface design
-- [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — GEFS model/member contract, distribution semantics and examples
+- [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — GEFS model/member contract, point/time-series distribution semantics and examples
 - [CATALOG_SEARCH.md](CATALOG_SEARCH.md) — deterministic GFS atmospheric discovery/search semantics
 - [DIAGNOSTIC_TIME_SERIES.md](DIAGNOSTIC_TIME_SERIES.md) — native-cadence layer/profile/parcel diagnostic composition
 - [TRANSECT.md](TRANSECT.md) — great-circle cross-section primitive
