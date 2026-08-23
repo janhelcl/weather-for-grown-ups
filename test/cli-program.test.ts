@@ -19,6 +19,7 @@ const EXPECTED_COMMANDS = [
   "points-timeseries",
   "compare-runs",
   "ensemble",
+  "ensemble-profile",
   "ensemble-timeseries",
   "compare-gfs-gefs",
   "layer",
