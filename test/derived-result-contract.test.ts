@@ -17,6 +17,8 @@ const derivedLevel = {
   mixingRatioKgKg: 0.0060362,
   virtualTemperatureC: 13.0397,
   airDensityKgM3: 1.03468,
+  wetBulbTemperatureC: 7.691,
+  equivalentPotentialTemperatureK: 316.758,
 };
 
 const profile: ProfileResult = {
@@ -85,7 +87,15 @@ describe("derived meteorology shared result contract", () => {
         longitude: profile.requestedPoint.longitude,
         run: profile.run,
         validTime: profile.validTime,
-        variables: ["dew_point", "potential_temperature", "mixing_ratio", "virtual_temperature", "air_density"],
+        variables: [
+          "dew_point",
+          "potential_temperature",
+          "mixing_ratio",
+          "virtual_temperature",
+          "air_density",
+          "wet_bulb_temperature",
+          "equivalent_potential_temperature",
+        ],
         pressureLevelsHpa: [850],
         source: "s3",
       },
