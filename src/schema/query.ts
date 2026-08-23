@@ -39,10 +39,12 @@ export const pressureLevelSchema = z.number().refine(
   "Pressure level is not published by the GFS 0.25° isobaric product",
 );
 
-const pointSchema = {
+export const pointCoordinateSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
-};
+});
+
+const pointSchema = pointCoordinateSchema.shape;
 
 const atmosphericSelectionSchema = {
   variables: z.array(variableIdSchema).min(1).optional(),
@@ -84,6 +86,15 @@ export const profileQuerySchema = z.object({
   validTime: isoDateTimeSchema.describe("Forecast valid time"),
   ...atmosphericSelectionSchema,
   source: profileSourceIdSchema.default("nomads").describe("Data access path: NOMADS geographic subset or NOAA AWS byte ranges"),
+}).superRefine(validateAtmosphericSelection);
+
+export const DEFAULT_BATCH_MAX_POINTS = 50;
+
+export const batchPointsQuerySchema = z.object({
+  points: z.array(pointCoordinateSchema).min(1).max(DEFAULT_BATCH_MAX_POINTS),
+  run: runSelectorSchema,
+  validTime: isoDateTimeSchema.describe("Forecast valid time shared by every requested point"),
+  ...atmosphericSelectionSchema,
 }).superRefine(validateAtmosphericSelection);
 
 export const DEFAULT_TIME_SERIES_MAX_STEPS = 160;
@@ -133,8 +144,11 @@ export type RawVariableId = z.infer<typeof rawVariableIdSchema>;
 export type VariableId = z.infer<typeof variableIdSchema>;
 export type NonIsobaricFieldId = z.infer<typeof nonIsobaricFieldIdSchema>;
 export type ProfileSourceId = z.infer<typeof profileSourceIdSchema>;
+export type PointCoordinate = z.infer<typeof pointCoordinateSchema>;
 export type ProfileQuery = z.output<typeof profileQuerySchema>;
 export type ProfileQueryInput = z.input<typeof profileQuerySchema>;
+export type BatchPointsQuery = z.output<typeof batchPointsQuerySchema>;
+export type BatchPointsQueryInput = z.input<typeof batchPointsQuerySchema>;
 export type TimeSeriesQuery = z.output<typeof timeSeriesQuerySchema>;
 export type TimeSeriesQueryInput = z.input<typeof timeSeriesQuerySchema>;
 export type AreaSummaryQuery = z.output<typeof areaSummaryQuerySchema>;
