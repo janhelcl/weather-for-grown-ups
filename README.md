@@ -17,6 +17,8 @@ Supported pressure-level variables include temperature, relative humidity, U/V w
 
 Derived variables declare their raw GFS dependencies in the catalog. WFG fetches only those raw dependencies, validates that the requested pressure profile is complete, then computes the requested derivation locally. These are physical transforms rather than activity-specific scores or forecast interpretation.
 
+The same catalog advertises deterministic diagnostics across two pressure surfaces: environmental temperature lapse rate, vector wind shear, and potential-temperature gradient. Layer diagnostics also declare their raw dependencies, so several diagnostics can share one minimal two-level profile fetch.
+
 The catalog also exposes non-isobaric fields with explicit vertical and temporal semantics:
 
 - surface pressure, surface geopotential height, surface temperature, gust, surface CAPE/CIN, and boundary-layer height
@@ -75,6 +77,27 @@ Pressure-level variables and non-isobaric fields can be requested together in th
 Non-isobaric results are records with three explicit pieces of semantics: `level`, `temporal`, and normalized `values`. For example, `total_precipitation` is returned with `temporal.type="accumulation"`, while `low_cloud_base_pressure` is returned with `temporal.type="average"`; both interval-valued products include start/end forecast hours and start/end UTC timestamps.
 
 The run defaults to `latest`, meaning the newest GFS cycle whose already-published data can satisfy the requested valid time and exact field selection. Use `--run latest_complete` to force the newest cycle published through `f384`, or pass an explicit run timestamp for reproducibility. `wfg latest` reports the newest `f384`-complete cycle.
+
+## Pressure-layer diagnostics
+
+Cross-level diagnostics use two published pressure surfaces and one underlying profile fetch:
+
+```bash
+wfg layer \
+  --lat 50.08 \
+  --lon 14.43 \
+  --valid 2026-08-20T12:00:00Z \
+  --lower 850 \
+  --upper 700 \
+  --diagnostics temperature_lapse_rate,wind_shear,potential_temperature_gradient \
+  --json
+```
+
+`lower` means lower altitude and therefore the higher pressure value; `--lower 850 --upper 700` is valid, while the reverse ordering is rejected. Layer depth is the difference in GFS geopotential height between the two surfaces.
+
+`temperature_lapse_rate` is positive when temperature decreases with height. `wind_shear` returns upper-minus-lower U/V component changes, the vector-change magnitude, and magnitude per kilometre of geopotential-height difference. `potential_temperature_gradient` is upper-minus-lower potential temperature per kilometre. The result also includes the raw endpoint pressure-level values used by the calculations for auditability.
+
+MCP exposes the same primitive as `get_gfs_layer_diagnostics`. The query can select either NOMADS or S3 and follows the same `latest` / `latest_complete` / explicit-run semantics as point profiles.
 
 ## Batched point query
 
@@ -167,6 +190,7 @@ npm run test:smoke
 npm run dev -- catalog
 npm run dev -- latest
 npm run dev -- profile --help
+npm run dev -- layer --help
 npm run dev -- points --help
 npm run dev -- timeseries --help
 npm run dev -- area --help
@@ -192,9 +216,10 @@ Default cache/state location: `~/.cache/wfg/`. Override with `WFG_CACHE_DIR`.
 
 Implemented:
 
-- discoverable pressure-level and non-isobaric field catalog
+- discoverable pressure-level variables, pressure-layer diagnostics, and non-isobaric field catalog
 - query-aware newest-available run discovery plus explicit latest-f384-complete selection via NOAA AWS Open Data
 - pressure-level point profiles with completeness validation
+- deterministic pressure-layer temperature lapse rate, vector wind shear, and potential-temperature gradient from one shared endpoint profile
 - batched same-time sampling for up to 50 points with one reusable S3 selected-message slice
 - surface and height-above-ground point fields with exact-level validation
 - named cloud layers/levels and whole-atmosphere column products with exact vertical semantics
@@ -207,12 +232,13 @@ Implemented:
 - deterministic NOMADS geographic-subset path with 11 s cross-process limiter
 - NOAA AWS `.idx` + selected-message byte-range path with reusable subset cache
 - `wgrib2` point extraction for isobaric/non-isobaric named-layer and temporal semantics plus area statistics adapters
-- CLI `catalog`, `latest`, `profile`, `points`, `timeseries`, and `area`
-- MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_points`, `get_gfs_timeseries`, and `summarize_gfs_area`
+- CLI `catalog`, `latest`, `profile`, `layer`, `points`, `timeseries`, and `area`
+- MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_layer_diagnostics`, `get_gfs_points`, `get_gfs_timeseries`, and `summarize_gfs_area`
 - shared CLI/MCP result contracts and comprehensive deterministic offline test suite plus opt-in real NOAA profile smoke tests
 
 Next:
 
-1. extend bounded area summaries to non-isobaric fields and optionally add extrema locations/percentiles
-2. add a pressure-level transect/cross-section primitive
-3. add a live non-isobaric/time-series/batch smoke after the S3 path has been exercised manually
+1. add profile-wide deterministic diagnostics such as interpolated freezing-level crossings
+2. extend bounded area summaries to non-isobaric fields and optionally add extrema locations/percentiles
+3. add a pressure-level transect/cross-section primitive
+4. add a live non-isobaric/time-series/batch smoke after the S3 path has been exercised manually
