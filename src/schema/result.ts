@@ -37,6 +37,8 @@ export const profileLevelResultSchema = z.object({
   mixingRatioKgKg: z.number().optional(),
   virtualTemperatureC: z.number().optional(),
   airDensityKgM3: z.number().optional(),
+  wetBulbTemperatureC: z.number().optional(),
+  equivalentPotentialTemperatureK: z.number().optional(),
 });
 
 export const nonIsobaricFieldLevelResultSchema = z.union([
