@@ -12,9 +12,8 @@ import {
   GefsLatestRunResolver,
   type GefsLatestRunRangeProvider,
 } from "./gefs-latest-run.js";
-import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
+import { gefsForecastHour, nativeGefsValidTimesInRange, parseGefsRun } from "./gefs-time.js";
 
-const THREE_HOURS_MS = 3 * 3_600_000;
 export const DEFAULT_GEFS_TIME_STEP_CONCURRENCY = 2;
 
 export interface GefsEnsembleGetter {
@@ -43,7 +42,7 @@ export class GefsEnsembleTimeSeriesService {
     const startTime = new Date(query.startTime);
     const endTime = new Date(query.endTime);
     const members = sortGefsMembers(query.members);
-    const times = buildNativeTimes(startTime, endTime, query.maxSteps);
+    const times = nativeGefsValidTimesInRange(startTime, endTime, query.maxSteps);
 
     const run = query.run === "latest"
       ? await this.latestRunRangeProvider.resolveLatestRunRange(startTime, endTime, members)
@@ -110,29 +109,4 @@ export class GefsEnsembleTimeSeriesService {
       },
     });
   }
-}
-
-function buildNativeTimes(startTime: Date, endTime: Date, maxSteps: number): Date[] {
-  if (endTime.getTime() < startTime.getTime()) {
-    throw new Error("GEFS ensemble time-series endTime must be at or after startTime");
-  }
-  if (!isNativeValidTime(startTime) || !isNativeValidTime(endTime)) {
-    throw new Error("GEFS ensemble time-series bounds must be exact native three-hour valid times");
-  }
-  const span = endTime.getTime() - startTime.getTime();
-  if (span % THREE_HOURS_MS !== 0) {
-    throw new Error("GEFS ensemble time-series range must align to the native three-hour cadence");
-  }
-  const count = span / THREE_HOURS_MS + 1;
-  if (count > maxSteps) {
-    throw new Error(`GEFS ensemble time series would contain ${count} steps, exceeding maxSteps=${maxSteps}`);
-  }
-  return Array.from({ length: count }, (_, index) => new Date(startTime.getTime() + index * THREE_HOURS_MS));
-}
-
-function isNativeValidTime(value: Date): boolean {
-  return value.getUTCMinutes() === 0
-    && value.getUTCSeconds() === 0
-    && value.getUTCMilliseconds() === 0
-    && value.getUTCHours() % 3 === 0;
 }
