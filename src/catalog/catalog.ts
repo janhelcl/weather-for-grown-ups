@@ -1,3 +1,4 @@
+import { LAYER_DIAGNOSTIC_CATALOG } from "./layer-diagnostics.js";
 import { NON_ISOBARIC_FIELD_CATALOG } from "./non-isobaric-fields.js";
 import { GFS_PRESSURE_LEVELS_HPA } from "./pressure-levels.js";
 import { VARIABLE_CATALOG } from "./variables.js";
@@ -29,6 +30,16 @@ export function getGfsPressureCatalog() {
             outputs: [...definition.outputs],
           },
     ),
+    layerDiagnosticsNote:
+      "Pressure-layer diagnostics combine two published isobaric surfaces. lowerPressureHpa must be greater than upperPressureHpa; rates use the GFS geopotential-height difference between those surfaces.",
+    layerDiagnostics: Object.values(LAYER_DIAGNOSTIC_CATALOG).map((definition) => ({
+      id: definition.id,
+      kind: definition.kind,
+      verticalSemantics: definition.verticalSemantics,
+      dependencies: [...definition.dependencies],
+      description: definition.description,
+      outputs: [...definition.outputs],
+    })),
     fieldSemanticsNote:
       "Non-isobaric fields carry explicit vertical and temporal semantics. Named layers/levels remain distinct from pressure surfaces; accumulation and average results include their exact GFS forecast-hour interval.",
     fields: Object.values(NON_ISOBARIC_FIELD_CATALOG).map((definition) =>
