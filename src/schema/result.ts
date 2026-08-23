@@ -3,6 +3,7 @@ import {
   NON_ISOBARIC_NAMED_LAYER_IDS,
   NON_ISOBARIC_NAMED_LEVEL_IDS,
 } from "../catalog/non-isobaric-fields.js";
+import { isoDateTimeSchema, nonIsobaricFieldIdSchema, rawVariableIdSchema } from "./query.js";
 
 export const sourceProvenanceSchema = z.object({
   provider: z.union([z.literal("NOAA NOMADS"), z.literal("NOAA AWS Open Data")]),
@@ -38,8 +39,8 @@ export const nonIsobaricFieldLevelResultSchema = z.union([
 const intervalTemporalResultShape = {
   startForecastHour: z.number(),
   endForecastHour: z.number(),
-  startTime: z.string(),
-  endTime: z.string(),
+  startTime: isoDateTimeSchema,
+  endTime: isoDateTimeSchema,
 };
 
 export const fieldTemporalResultSchema = z.union([
@@ -49,7 +50,7 @@ export const fieldTemporalResultSchema = z.union([
 ]);
 
 export const nonIsobaricFieldResultSchema = z.object({
-  id: z.string(),
+  id: nonIsobaricFieldIdSchema,
   level: nonIsobaricFieldLevelResultSchema,
   temporal: fieldTemporalResultSchema,
   values: z.record(z.string(), z.number()),
@@ -59,8 +60,8 @@ const gridPointSchema = z.object({ latitude: z.number(), longitude: z.number() }
 
 export const profileResultSchema = z.object({
   model: z.literal("gfs_0p25"),
-  run: z.string(),
-  validTime: z.string(),
+  run: isoDateTimeSchema,
+  validTime: isoDateTimeSchema,
   forecastHour: z.number(),
   requestedPoint: gridPointSchema,
   gridPoint: gridPointSchema,
@@ -71,14 +72,14 @@ export const profileResultSchema = z.object({
 
 export const timeSeriesResultSchema = z.object({
   model: z.literal("gfs_0p25"),
-  run: z.string(),
-  requestedStartTime: z.string(),
-  requestedEndTime: z.string(),
+  run: isoDateTimeSchema,
+  requestedStartTime: isoDateTimeSchema,
+  requestedEndTime: isoDateTimeSchema,
   requestedPoint: gridPointSchema,
   gridPoint: gridPointSchema,
   source: sourceProvenanceSchema,
   series: z.array(z.object({
-    validTime: z.string(),
+    validTime: isoDateTimeSchema,
     forecastHour: z.number(),
     levels: z.array(profileLevelResultSchema),
     fields: z.array(nonIsobaricFieldResultSchema).optional(),
@@ -88,8 +89,8 @@ export const timeSeriesResultSchema = z.object({
 
 export const areaSummaryResultSchema = z.object({
   model: z.literal("gfs_0p25"),
-  run: z.string(),
-  validTime: z.string(),
+  run: isoDateTimeSchema,
+  validTime: isoDateTimeSchema,
   forecastHour: z.number(),
   bbox: z.object({
     westLongitude: z.number(),
@@ -98,7 +99,7 @@ export const areaSummaryResultSchema = z.object({
     northLatitude: z.number(),
   }),
   variable: z.object({
-    id: z.string(),
+    id: rawVariableIdSchema,
     pressureHpa: z.number(),
     field: z.string(),
     unit: z.string(),
@@ -120,7 +121,7 @@ export const areaSummaryResultSchema = z.object({
 
 export const latestGfsRunResultSchema = z.object({
   model: z.literal("gfs_0p25"),
-  run: z.string(),
+  run: isoDateTimeSchema,
   completeness: z.literal("f384"),
   discoverySource: z.literal("NOAA AWS Open Data"),
 });
