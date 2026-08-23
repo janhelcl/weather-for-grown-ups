@@ -3,6 +3,7 @@ import * as z from "zod/v4";
 import { AreaSummaryService } from "./core/area-summary.js";
 import { BatchPointsService } from "./core/batch-points.js";
 import { DiagnosticTimeSeriesService } from "./core/diagnostic-time-series.js";
+import { GefsEnsembleService } from "./core/gefs-ensemble.js";
 import { LayerDiagnosticsService } from "./core/layer-diagnostics.js";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ParcelDiagnosticsService } from "./core/parcel-diagnostics.js";
@@ -13,6 +14,7 @@ import { RunComparisonService } from "./core/run-comparison.js";
 import { TimeSeriesService } from "./core/time-series.js";
 import { TransectService } from "./core/transect.js";
 import { handleGetGfsAreaSummary } from "./mcp-area-tool.js";
+import { handleGetGefsEnsemble } from "./mcp-gefs-tool.js";
 import {
   handleCompareGfsRuns,
   handleGetGfsCatalog,
@@ -33,6 +35,7 @@ import { areaSummaryResultSchema } from "./schema/area-summary-result.js";
 import { catalogSearchQuerySchema, catalogSearchResultSchema } from "./schema/catalog-search.js";
 import { diagnosticTimeSeriesQuerySchema } from "./schema/diagnostic-time-series.js";
 import { diagnosticTimeSeriesResultSchema } from "./schema/diagnostic-time-series-result.js";
+import { gefsEnsembleQuerySchema, gefsEnsembleResultSchema } from "./schema/gefs-ensemble.js";
 import {
   batchPointsQuerySchema,
   layerDiagnosticsQuerySchema,
@@ -61,10 +64,11 @@ export function createMcpServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "Use get_gfs_catalog for the complete pressure/non-isobaric/diagnostic catalog and search_gfs_catalog for compact ranked discovery by text, section, raw/derived classification, or temporal semantics. For profile, diagnostics, diagnostic time-series, batched-point, transect, time-series, multi-point time-series, run-comparison, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_diagnostic_timeseries to evaluate one of those diagnostic families across native GFS outputs in a valid-time range; parcel time-series steps intentionally omit the repeated full parcel path while preserving parcel start, LCL/LFC/EL, CAPE and CIN. Use get_gfs_points when comparing multiple arbitrary locations at one valid time, get_gfs_transect for an evenly spaced pressure-level cross-section along a great-circle path, get_gfs_points_timeseries when the same locations must be compared across a valid-time range, and compare_gfs_runs when the same point/valid time/selection should be compared across consecutive six-hour model cycles. summarize_gfs_area accepts either one raw pressure-level variable at one pressure surface or one raw non-isobaric field and preserves exact vertical/temporal semantics. Area min/max/mean are always available; optional percentiles, threshold fractions, and extrema locations operate over defined grid cells in normalized WFG output units and never return the raw grid. Run-comparison deltas are newer minus older; wind direction uses shortest signed angular change. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
+      instructions: "WFG exposes NOAA numerical weather models with explicit model/run/valid-time/vertical semantics. Use get_gfs_catalog or search_gfs_catalog to discover the deterministic GFS 0.25° surface. GFS query tools support query-aware run='latest', latest_complete through f384, and explicit reproducible cycles; values are raw model data or deterministic local physical derivations. Use get_gefs_ensemble for uncertainty across the GEFS 0.5° control and perturbed members at one point, valid time, raw pgrb2a pressure-level variable, and pressure surface. GEFS output is on its native three-hour cadence and the optional threshold fraction is the raw fraction of requested ensemble members meeting the threshold, not a calibrated probability. Use GFS diagnostics for layer/profile/parcel calculations, points/transect/time-series tools for spatial and temporal composition, compare_gfs_runs for cycle changes, and summarize_gfs_area for bounded grid statistics. WFG does not provide activity-specific interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
+  const gefsEnsembleService = new GefsEnsembleService();
   const profileService = new ProfileService({ latestRunProvider: latestRunResolver });
   const layerDiagnosticsService = new LayerDiagnosticsService({ profileGetter: profileService });
   const profileDiagnosticsService = new ProfileDiagnosticsService({ profileGetter: profileService });
@@ -107,6 +111,13 @@ export function createMcpServer(): McpServer {
     inputSchema: z.object({}),
     outputSchema: latestGfsRunResultSchema,
   }, async () => handleGetLatestGfsRun(latestRunResolver));
+
+  server.registerTool("get_gefs_ensemble", {
+    title: "Get GEFS pressure-level ensemble",
+    description: "Sample one raw NOAA GEFS 0.5° pgrb2a pressure-level variable at one point and native three-hour valid time across the control and selected perturbed members. Returns each normalized member value plus mean, population standard deviation, extrema, requested quantiles, and an optional >= threshold member fraction. The threshold fraction is raw ensemble membership, not a calibrated probability.",
+    inputSchema: gefsEnsembleQuerySchema,
+    outputSchema: gefsEnsembleResultSchema,
+  }, async (query) => handleGetGefsEnsemble(gefsEnsembleService, query));
 
   server.registerTool("get_gfs_profile", {
     title: "Get GFS point fields",

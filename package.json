@@ -1,7 +1,7 @@
 {
   "name": "weather-for-grown-ups",
   "version": "0.1.0",
-  "description": "Agent-native access to NOAA GFS data.",
+  "description": "Agent-native access to NOAA GFS and GEFS data.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -14,6 +14,7 @@
   "homepage": "https://github.com/janhelcl/weather-for-grown-ups#readme",
   "keywords": [
     "gfs",
+    "gefs",
     "noaa",
     "weather",
     "meteorology",
@@ -43,11 +44,12 @@
     "mcp:http": "tsx src/mcp-http.ts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:smoke": "node dist/cli.js --help && node dist/cli.js catalog --help && node dist/cli.js catalog --search cloud --sections fields --classification raw --limit 3 --json && node dist/cli.js latest --help && node dist/cli.js profile --help && node dist/cli.js layer --help && node dist/cli.js profile-diagnostics --help && node dist/cli.js parcel --help && node dist/cli.js diagnostic-timeseries --help && node dist/cli.js points --help && node dist/cli.js transect --help && node dist/cli.js timeseries --help && node dist/cli.js points-timeseries --help && node dist/cli.js compare-runs --help && node dist/cli.js area --help",
+    "test:smoke": "node dist/cli.js --help && node dist/cli.js catalog --help && node dist/cli.js catalog --search cloud --sections fields --classification raw --limit 3 --json && node dist/cli.js latest --help && node dist/cli.js ensemble --help && node dist/cli.js profile --help && node dist/cli.js layer --help && node dist/cli.js profile-diagnostics --help && node dist/cli.js parcel --help && node dist/cli.js diagnostic-timeseries --help && node dist/cli.js points --help && node dist/cli.js transect --help && node dist/cli.js timeseries --help && node dist/cli.js points-timeseries --help && node dist/cli.js compare-runs --help && node dist/cli.js area --help",
     "test:live": "tsx scripts/live-smoke.ts",
     "test:live:s3": "tsx scripts/live-smoke-s3.ts",
+    "test:live:gefs": "tsx scripts/live-smoke-gefs.ts",
     "test:live:area": "tsx scripts/live-smoke-area.ts",
-    "test:live:all": "npm run test:live:s3 && npm run test:live:area",
+    "test:live:all": "npm run test:live:s3 && npm run test:live:gefs && npm run test:live:area",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "pack:check": "npm pack --dry-run",
     "prepack": "npm run build",
