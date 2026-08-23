@@ -14,7 +14,10 @@
     "test:coverage": "vitest run --coverage",
     "test:smoke": "node dist/cli.js --help && node dist/cli.js catalog --help && node dist/cli.js catalog --search cloud --sections fields --classification raw --limit 3 --json && node dist/cli.js latest --help && node dist/cli.js profile --help && node dist/cli.js layer --help && node dist/cli.js profile-diagnostics --help && node dist/cli.js parcel --help && node dist/cli.js points --help && node dist/cli.js transect --help && node dist/cli.js timeseries --help && node dist/cli.js points-timeseries --help && node dist/cli.js compare-runs --help && node dist/cli.js area --help",
     "test:live": "tsx scripts/live-smoke.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test:live:s3": "tsx scripts/live-smoke-s3.ts",
+    "test:live:area": "tsx scripts/live-smoke-area.ts",
+    "test:live:all": "npm run test:live:s3 && npm run test:live:area",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit"
   },
   "dependencies": { "@modelcontextprotocol/server": "^2.0.0", "commander": "^14.0.0", "execa": "^9.0.0", "zod": "^4.0.0" },
   "devDependencies": { "@types/node": "^24.0.0", "@vitest/coverage-v8": "^3.0.0", "tsx": "^4.0.0", "typescript": "^6.0.0", "vitest": "^3.0.0" }
