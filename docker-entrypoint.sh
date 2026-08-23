@@ -6,6 +6,10 @@ case "${1:-}" in
     shift
     exec node /app/dist/mcp.js "$@"
     ;;
+  mcp-http)
+    shift
+    exec node /app/dist/mcp-http.js "$@"
+    ;;
   *)
     exec node /app/dist/cli.js "$@"
     ;;

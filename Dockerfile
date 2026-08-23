@@ -25,6 +25,7 @@ COPY --from=build /app/dist ./dist
 COPY docker-entrypoint.sh /usr/local/bin/wfg-entrypoint
 RUN chmod +x /usr/local/bin/wfg-entrypoint
 
+EXPOSE 3000
 USER $MAMBA_USER
 ENTRYPOINT ["wfg-entrypoint"]
 CMD ["--help"]

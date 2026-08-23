@@ -29,7 +29,8 @@
   "engines": { "node": ">=20" },
   "bin": {
     "wfg": "./dist/cli.js",
-    "wfg-mcp": "./dist/mcp-cli.js"
+    "wfg-mcp": "./dist/mcp-cli.js",
+    "wfg-mcp-http": "./dist/mcp-http.js"
   },
   "publishConfig": {
     "access": "public",
@@ -39,6 +40,7 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
     "mcp": "tsx src/mcp.ts",
+    "mcp:http": "tsx src/mcp-http.ts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:smoke": "node dist/cli.js --help && node dist/cli.js catalog --help && node dist/cli.js catalog --search cloud --sections fields --classification raw --limit 3 --json && node dist/cli.js latest --help && node dist/cli.js profile --help && node dist/cli.js layer --help && node dist/cli.js profile-diagnostics --help && node dist/cli.js parcel --help && node dist/cli.js points --help && node dist/cli.js transect --help && node dist/cli.js timeseries --help && node dist/cli.js points-timeseries --help && node dist/cli.js compare-runs --help && node dist/cli.js area --help",
@@ -52,12 +54,14 @@
     "prepublishOnly": "npm run typecheck && npm test && npm run build && npm run test:smoke"
   },
   "dependencies": {
+    "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "commander": "^14.0.0",
     "execa": "^9.0.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "^3.0.0",
     "tsx": "^4.0.0",
