@@ -4,6 +4,7 @@ import type {
   AreaSummaryResult,
   BatchPointsResult,
   LayerDiagnosticsResult,
+  ProfileDiagnosticsResult,
   ProfileResult,
   TimeSeriesResult,
 } from "./core/types.js";
@@ -11,6 +12,7 @@ import type {
   AreaSummaryQueryInput,
   BatchPointsQueryInput,
   LayerDiagnosticsQueryInput,
+  ProfileDiagnosticsQueryInput,
   ProfileQueryInput,
   TimeSeriesQueryInput,
 } from "./schema/query.js";
@@ -19,12 +21,14 @@ import {
   batchPointsResultSchema,
   layerDiagnosticsResultSchema,
   latestGfsRunResultSchema,
+  profileDiagnosticsResultSchema,
   profileResultSchema,
   timeSeriesResultSchema,
 } from "./schema/result.js";
 
 export interface ProfileGetter { getProfile(query: ProfileQueryInput): Promise<ProfileResult>; }
 export interface LayerDiagnosticsGetter { getLayerDiagnostics(query: LayerDiagnosticsQueryInput): Promise<LayerDiagnosticsResult>; }
+export interface ProfileDiagnosticsGetter { getProfileDiagnostics(query: ProfileDiagnosticsQueryInput): Promise<ProfileDiagnosticsResult>; }
 export interface BatchPointsGetter { getPoints(query: BatchPointsQueryInput): Promise<BatchPointsResult>; }
 export interface TimeSeriesGetter { getTimeSeries(query: TimeSeriesQueryInput): Promise<TimeSeriesResult>; }
 export interface AreaSummaryGetter { summarize(query: AreaSummaryQueryInput): Promise<AreaSummaryResult>; }
@@ -51,6 +55,13 @@ export async function handleGetGfsProfile(profileService: ProfileGetter, query: 
 export async function handleGetGfsLayerDiagnostics(layerService: LayerDiagnosticsGetter, query: LayerDiagnosticsQueryInput) {
   try {
     const output = layerDiagnosticsResultSchema.parse(await layerService.getLayerDiagnostics(query));
+    return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } };
+  } catch (error) { return toolError(error); }
+}
+
+export async function handleGetGfsProfileDiagnostics(profileDiagnosticsService: ProfileDiagnosticsGetter, query: ProfileDiagnosticsQueryInput) {
+  try {
+    const output = profileDiagnosticsResultSchema.parse(await profileDiagnosticsService.getProfileDiagnostics(query));
     return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } };
   } catch (error) { return toolError(error); }
 }
