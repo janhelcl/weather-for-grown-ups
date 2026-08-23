@@ -2,6 +2,7 @@ import * as z from "zod/v4";
 import { LAYER_DIAGNOSTIC_IDS } from "../catalog/layer-diagnostics.js";
 import { NON_ISOBARIC_FIELD_IDS } from "../catalog/non-isobaric-fields.js";
 import { isSupportedGfsPressureLevel } from "../catalog/pressure-levels.js";
+import { PROFILE_DIAGNOSTIC_IDS } from "../catalog/profile-diagnostics.js";
 
 export const rawVariableIdSchema = z.enum([
   "temperature",
@@ -28,6 +29,7 @@ export const variableIdSchema = z.enum([
   "air_density",
 ]);
 export const layerDiagnosticIdSchema = z.enum(LAYER_DIAGNOSTIC_IDS);
+export const profileDiagnosticIdSchema = z.enum(PROFILE_DIAGNOSTIC_IDS);
 export const nonIsobaricFieldIdSchema = z.enum(NON_ISOBARIC_FIELD_IDS);
 export const profileSourceIdSchema = z.enum(["nomads", "s3"]);
 
@@ -116,6 +118,23 @@ export const layerDiagnosticsQuerySchema = z.object({
   }
 });
 
+export const profileDiagnosticsQuerySchema = z.object({
+  ...pointSchema,
+  run: runSelectorSchema,
+  validTime: isoDateTimeSchema.describe("Forecast valid time"),
+  pressureLevelsHpa: z.array(pressureLevelSchema).min(2).describe("Published GFS pressure surfaces sampled for whole-profile diagnostics"),
+  diagnostics: z.array(profileDiagnosticIdSchema).min(1),
+  source: profileSourceIdSchema.default("nomads").describe("Data access path: NOMADS geographic subset or NOAA AWS byte ranges"),
+}).superRefine((query, context) => {
+  if (new Set(query.pressureLevelsHpa).size < 2) {
+    context.addIssue({
+      code: "custom",
+      path: ["pressureLevelsHpa"],
+      message: "Whole-profile diagnostics require at least two distinct pressure levels",
+    });
+  }
+});
+
 export const DEFAULT_BATCH_MAX_POINTS = 50;
 
 export const batchPointsQuerySchema = z.object({
@@ -171,6 +190,7 @@ export const areaSummaryQuerySchema = z.object({
 export type RawVariableId = z.infer<typeof rawVariableIdSchema>;
 export type VariableId = z.infer<typeof variableIdSchema>;
 export type LayerDiagnosticId = z.infer<typeof layerDiagnosticIdSchema>;
+export type ProfileDiagnosticId = z.infer<typeof profileDiagnosticIdSchema>;
 export type NonIsobaricFieldId = z.infer<typeof nonIsobaricFieldIdSchema>;
 export type ProfileSourceId = z.infer<typeof profileSourceIdSchema>;
 export type PointCoordinate = z.infer<typeof pointCoordinateSchema>;
@@ -178,6 +198,8 @@ export type ProfileQuery = z.output<typeof profileQuerySchema>;
 export type ProfileQueryInput = z.input<typeof profileQuerySchema>;
 export type LayerDiagnosticsQuery = z.output<typeof layerDiagnosticsQuerySchema>;
 export type LayerDiagnosticsQueryInput = z.input<typeof layerDiagnosticsQuerySchema>;
+export type ProfileDiagnosticsQuery = z.output<typeof profileDiagnosticsQuerySchema>;
+export type ProfileDiagnosticsQueryInput = z.input<typeof profileDiagnosticsQuerySchema>;
 export type BatchPointsQuery = z.output<typeof batchPointsQuerySchema>;
 export type BatchPointsQueryInput = z.input<typeof batchPointsQuerySchema>;
 export type TimeSeriesQuery = z.output<typeof timeSeriesQuerySchema>;
