@@ -24,6 +24,7 @@ export function deriveDewPointC(temperatureC: number, relativeHumidityPct: numbe
 
 /** Potential temperature from Poisson's equation using a 1000 hPa reference pressure. */
 export function derivePotentialTemperatureK(temperatureC: number, pressureHpa: number): number {
+  assertPressure(pressureHpa);
   const temperatureK = temperatureC + KELVIN_OFFSET;
   return temperatureK * Math.pow(REFERENCE_PRESSURE_HPA / pressureHpa, POISSON_EXPONENT);
 }
@@ -87,7 +88,8 @@ export function deriveDewPointFromVaporPressureC(vaporPressureHpa: number): numb
  *
  * The parcel moisture state is supplied as specific humidity. Vapor pressure
  * and dew point are recovered from q and the isobaric pressure, then Bolton's
- * LCL-temperature and theta-e equations are applied.
+ * LCL-temperature and theta-e equations are applied. At q=0 the expression
+ * reduces to dry potential temperature.
  */
 export function deriveEquivalentPotentialTemperatureK(
   temperatureC: number,
@@ -95,8 +97,10 @@ export function deriveEquivalentPotentialTemperatureK(
   pressureHpa: number,
 ): number {
   assertPressure(pressureHpa);
+  assertSpecificHumidity(specificHumidityKgKg);
   const temperatureK = temperatureC + KELVIN_OFFSET;
   if (!(temperatureK > 0)) throw new Error(`Temperature must be above absolute zero, received ${temperatureC} degC`);
+  if (specificHumidityKgKg === 0) return derivePotentialTemperatureK(temperatureC, pressureHpa);
 
   const mixingRatio = deriveMixingRatioKgKg(specificHumidityKgKg);
   const vaporPressureHpa = deriveVaporPressureHpa(specificHumidityKgKg, pressureHpa);
@@ -130,10 +134,12 @@ export function deriveWetBulbTemperatureC(
   pressureHpa: number,
 ): number {
   assertPressure(pressureHpa);
+  assertSpecificHumidity(specificHumidityKgKg);
   const mixingRatio = deriveMixingRatioKgKg(specificHumidityKgKg);
-  const vaporPressureHpa = deriveVaporPressureHpa(specificHumidityKgKg, pressureHpa);
-  const dewPointC = deriveDewPointFromVaporPressureC(vaporPressureHpa);
   const targetEnthalpy = moistAirEnthalpyKjKgDryAir(temperatureC, mixingRatio);
+  const dewPointC = specificHumidityKgKg === 0
+    ? temperatureC - 100
+    : deriveDewPointFromVaporPressureC(deriveVaporPressureHpa(specificHumidityKgKg, pressureHpa));
 
   let lowerC = Math.min(temperatureC, dewPointC) - 40;
   let upperC = Math.max(temperatureC, dewPointC) + 10;
@@ -174,8 +180,8 @@ function moistAirEnthalpyKjKgDryAir(temperatureC: number, mixingRatioKgKg: numbe
 }
 
 function assertSpecificHumidity(specificHumidityKgKg: number): void {
-  if (!(specificHumidityKgKg > 0 && specificHumidityKgKg < 1) || !Number.isFinite(specificHumidityKgKg)) {
-    throw new Error(`Expected specific humidity in (0, 1), received ${specificHumidityKgKg}`);
+  if (!(specificHumidityKgKg >= 0 && specificHumidityKgKg < 1) || !Number.isFinite(specificHumidityKgKg)) {
+    throw new Error(`Expected specific humidity in [0, 1), received ${specificHumidityKgKg}`);
   }
 }
 
