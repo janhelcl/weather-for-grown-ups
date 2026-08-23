@@ -6,6 +6,12 @@ import { LatestRunResolver } from "./core/latest-run.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
 import type { NonIsobaricFieldId, ProfileSourceId, RawVariableId, VariableId } from "./schema/query.js";
+import {
+  areaSummaryResultSchema,
+  latestGfsRunResultSchema,
+  profileResultSchema,
+  timeSeriesResultSchema,
+} from "./schema/result.js";
 
 const DEFAULT_VARIABLES = "temperature,relative_humidity,wind";
 const DEFAULT_LEVELS = "1000,925,850,700,500";
@@ -48,11 +54,17 @@ program
   .option("--json", "Output JSON")
   .action(async (options) => {
     const run = await new LatestRunResolver().resolveLatestRun();
+    const result = latestGfsRunResultSchema.parse({
+      model: "gfs_0p25",
+      run: run.toISOString(),
+      completeness: "f384",
+      discoverySource: "NOAA AWS Open Data",
+    });
     if (options.json) {
-      console.log(JSON.stringify({ model: "gfs_0p25", run: run.toISOString(), completeness: "f384" }, null, 2));
+      console.log(JSON.stringify(result, null, 2));
       return;
     }
-    console.log(run.toISOString());
+    console.log(result.run);
   });
 
 program
@@ -77,6 +89,7 @@ program
       ...selection,
       source: options.source as ProfileSourceId,
     });
+    profileResultSchema.parse(result);
     if (options.json) return console.log(JSON.stringify(result, null, 2));
     console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
     console.log(`Source ${result.source.provider} (${result.source.access})`);
@@ -111,6 +124,7 @@ program
       source: options.source as ProfileSourceId,
       maxSteps: options.maxSteps,
     });
+    timeSeriesResultSchema.parse(result);
     if (options.json) return console.log(JSON.stringify(result, null, 2));
     console.log(`GFS ${result.run}  ${result.requestedStartTime} → ${result.requestedEndTime}`);
     console.log(`Source ${result.source.provider} (${result.source.access})`);
@@ -154,6 +168,7 @@ program
       pressureLevelHpa: options.level,
       maxGridPoints: options.maxGridPoints,
     });
+    areaSummaryResultSchema.parse(result);
     if (options.json) return console.log(JSON.stringify(result, null, 2));
     console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
     console.log(`${result.variable.id} ${result.variable.pressureHpa} hPa [${result.variable.unit}]`);

@@ -11,6 +11,8 @@ normalization / query planning
    ↓
 small deterministic derivations
    ↓
+shared result contracts
+   ↓
 CLI / MCP
    ↓
 agent interpretation
@@ -26,6 +28,14 @@ agent interpretation
 - GRIB decoder abstraction
 - normalized typed results
 - deterministic transforms such as U/V → wind speed/direction
+
+## Surface contracts
+
+CLI and MCP are equal public surfaces over the same core. They must not maintain separate atmospheric result models.
+
+Shared Zod result schemas define the public profile, time-series, area-summary, latest-run, vertical-level, temporal-interval, and provenance contracts. Both surfaces validate core results against those schemas before emitting them. MCP also advertises the same schemas as tool output schemas.
+
+A new core result shape is therefore incomplete until the shared contract accepts it and both CLI and MCP tests cover the relevant semantics.
 
 ## Core does not own
 
