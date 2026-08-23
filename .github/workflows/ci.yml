@@ -50,3 +50,22 @@ jobs:
       - run: docker run --rm weather-for-grown-ups:test --help
       - name: Verify bundled wgrib2
         run: docker run --rm --entrypoint /opt/conda/bin/wgrib2 weather-for-grown-ups:test -version 2>&1 | grep -Fx "3.8.0"
+      - name: Verify HTTP MCP container entrypoint
+        run: |
+          set -euo pipefail
+          container_id="$(docker run -d --rm \
+            -p 127.0.0.1:3000:3000 \
+            -e WFG_MCP_HOST=0.0.0.0 \
+            -e WFG_MCP_ALLOWED_HOSTS=localhost,127.0.0.1 \
+            weather-for-grown-ups:test mcp-http)"
+          trap 'docker rm -f "$container_id" >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 20); do
+            if curl --fail --silent --show-error \
+              -H 'Host: localhost' \
+              http://127.0.0.1:3000/healthz | grep -q '"status":"ok"'; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          docker logs "$container_id"
+          exit 1
