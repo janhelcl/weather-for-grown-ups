@@ -41,6 +41,36 @@ describe("ProfileService", () => {
     for (const code of ["TMP", "RH", "UGRD", "VGRD"]) expect(url.searchParams.get(`var_${code}`)).toBe("on");
   });
 
+  it("derives thermodynamic pressure-level diagnostics from the minimum raw GFS dependencies", async () => {
+    const values: DecodedValue[] = [
+      { code: "TMP", pressureHpa: 850, value: 285.15, gridPoint },
+      { code: "RH", pressureHpa: 850, value: 65, gridPoint },
+      { code: "SPFH", pressureHpa: 850, value: 0.006, gridPoint },
+    ];
+    const { service, fetchMock } = harness(values);
+    const result = await service.getProfile({
+      ...query,
+      variables: ["dew_point", "potential_temperature", "mixing_ratio", "virtual_temperature", "air_density"],
+      pressureLevelsHpa: [850],
+    });
+
+    expect(result.levels[0]).toMatchObject({
+      pressureHpa: 850,
+      temperatureC: 12,
+      relativeHumidityPct: 65,
+      specificHumidityKgKg: 0.006,
+    });
+    expect(result.levels[0]?.dewPointC).toBeCloseTo(5.6222, 4);
+    expect(result.levels[0]?.potentialTemperatureK).toBeCloseTo(298.6876, 4);
+    expect(result.levels[0]?.mixingRatioKgKg).toBeCloseTo(0.0060362173, 10);
+    expect(result.levels[0]?.virtualTemperatureC).toBeCloseTo(13.0397, 4);
+    expect(result.levels[0]?.airDensityKgM3).toBeCloseTo(1.03468, 5);
+
+    const url = new URL(fetchMock.mock.calls[0]?.[0] ?? "");
+    for (const code of ["TMP", "RH", "SPFH"]) expect(url.searchParams.get(`var_${code}`)).toBe("on");
+    for (const code of ["UGRD", "VGRD", "HGT"]) expect(url.searchParams.get(`var_${code}`)).not.toBe("on");
+  });
+
   it("maps every expanded raw variable into canonical output fields", async () => {
     const values: DecodedValue[] = [
       { code: "HGT", pressureHpa: 850, value: 1500, gridPoint },
@@ -76,9 +106,32 @@ describe("ProfileService", () => {
     expect(result.levels[0]?.windSpeedMs).toBeUndefined();
   });
 
+  it("does not derive thermodynamic values unless they were requested", async () => {
+    const values: DecodedValue[] = [
+      { code: "TMP", pressureHpa: 850, value: 285.15, gridPoint },
+      { code: "RH", pressureHpa: 850, value: 65, gridPoint },
+      { code: "SPFH", pressureHpa: 850, value: 0.006, gridPoint },
+    ];
+    const result = await harness(values).service.getProfile({
+      ...query,
+      variables: ["temperature", "relative_humidity", "specific_humidity"],
+      pressureLevelsHpa: [850],
+    });
+    expect(result.levels[0]).not.toHaveProperty("dewPointC");
+    expect(result.levels[0]).not.toHaveProperty("potentialTemperatureK");
+    expect(result.levels[0]).not.toHaveProperty("mixingRatioKgKg");
+    expect(result.levels[0]).not.toHaveProperty("virtualTemperatureC");
+    expect(result.levels[0]).not.toHaveProperty("airDensityKgM3");
+  });
+
   it("rejects partial derived-wind data instead of silently omitting the derived value", async () => {
     const { service } = harness([{ code: "UGRD", pressureHpa: 850, value: 3, gridPoint }]);
     await expect(service.getProfile({ ...query, variables: ["wind"], pressureLevelsHpa: [850] })).rejects.toThrow(/VGRD@850mb/);
+  });
+
+  it("rejects partial derived-thermodynamic data instead of silently omitting the derived value", async () => {
+    const { service } = harness([{ code: "TMP", pressureHpa: 850, value: 285.15, gridPoint }]);
+    await expect(service.getProfile({ ...query, variables: ["dew_point"], pressureLevelsHpa: [850] })).rejects.toThrow(/RH@850mb/);
   });
 
   it("rejects a partial requested pressure profile instead of returning empty level shells", async () => {
