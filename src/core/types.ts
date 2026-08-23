@@ -93,6 +93,27 @@ export interface ProfileResult {
   source: SourceProvenance & { cacheHit: boolean };
 }
 
+export interface BatchPointResult {
+  requestedPoint: GridPoint;
+  gridPoint: GridPoint;
+  levels: ProfileLevel[];
+  fields?: NonIsobaricFieldResult[];
+}
+
+export interface BatchPointsResult {
+  model: "gfs_0p25";
+  run: string;
+  validTime: string;
+  forecastHour: number;
+  points: BatchPointResult[];
+  source: {
+    provider: "NOAA AWS Open Data";
+    access: "s3_range";
+    decoder: "wgrib2";
+    cacheHit: boolean;
+  };
+}
+
 export interface TimeSeriesStep {
   validTime: string;
   forecastHour: number;
