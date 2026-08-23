@@ -1,8 +1,26 @@
+import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
+import {
+  parseGribIndex,
+  selectNonIsobaricByteRanges,
+  selectPressureByteRanges,
+} from "../grib/index.js";
+
 export const GFS_S3_BASE_URL = "https://noaa-gfs-bdp-pds.s3.amazonaws.com";
 export const COMPLETE_RUN_MARKER_FORECAST_HOUR = 384;
 
+export interface ForecastAvailabilitySelection {
+  variableCodes: readonly string[];
+  pressureLevelsHpa: readonly number[];
+  fields: readonly RawNonIsobaricFieldDefinition[];
+}
+
 export interface RunAvailabilityProbe {
   isRunComplete(run: Date): Promise<boolean>;
+  isForecastAvailable(
+    run: Date,
+    forecastHour: number,
+    selection: ForecastAvailabilitySelection,
+  ): Promise<boolean>;
 }
 
 export function buildGfsS3ForecastUrl(run: Date, forecastHour: number): string {
@@ -35,6 +53,36 @@ export class GfsS3RunProbe implements RunAvailabilityProbe {
     throw new Error(
       `GFS run discovery failed: HTTP ${response.status} ${response.statusText} for ${url}`,
     );
+  }
+
+  async isForecastAvailable(
+    run: Date,
+    forecastHour: number,
+    selection: ForecastAvailabilitySelection,
+  ): Promise<boolean> {
+    const url = buildGfsS3ForecastIndexUrl(run, forecastHour);
+    const response = await this.fetchFn(url, {
+      headers: { "user-agent": "weather-for-grown-ups/0.1" },
+    });
+
+    if (response.status === 404) return false;
+    if (!response.ok) {
+      throw new Error(
+        `GFS forecast discovery failed: HTTP ${response.status} ${response.statusText} for ${url}`,
+      );
+    }
+
+    const records = parseGribIndex(await response.text());
+    try {
+      selectPressureByteRanges(records, selection.variableCodes, selection.pressureLevelsHpa);
+      selectNonIsobaricByteRanges(records, selection.fields);
+      return true;
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("GFS index is missing requested fields:")) {
+        return false;
+      }
+      throw error;
+    }
   }
 }
 
