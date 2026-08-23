@@ -27,7 +27,9 @@ agent interpretation
 - upstream pacing and caching
 - GRIB decoder abstraction
 - normalized typed results
-- deterministic transforms such as U/V → wind speed/direction
+- deterministic transforms such as U/V → wind speed/direction and pressure-level thermodynamics such as dew point, potential temperature, mixing ratio, virtual temperature, and air density
+
+Derived variables declare their raw GFS dependencies in the shared catalog. Query planning expands those dependencies before source access, while the derivation itself happens only after raw completeness validation. This keeps NOAA access minimal and makes the same derived result available automatically to profile, batch-point, and time-series consumers.
 
 ## Surface contracts
 

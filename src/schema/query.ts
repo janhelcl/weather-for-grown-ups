@@ -17,7 +17,15 @@ export const rawVariableIdSchema = z.enum([
   "ozone_mixing_ratio",
 ]);
 
-export const variableIdSchema = z.enum([...rawVariableIdSchema.options, "wind"]);
+export const variableIdSchema = z.enum([
+  ...rawVariableIdSchema.options,
+  "wind",
+  "dew_point",
+  "potential_temperature",
+  "mixing_ratio",
+  "virtual_temperature",
+  "air_density",
+]);
 export const nonIsobaricFieldIdSchema = z.enum(NON_ISOBARIC_FIELD_IDS);
 export const profileSourceIdSchema = z.enum(["nomads", "s3"]);
 

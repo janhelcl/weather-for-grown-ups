@@ -13,7 +13,9 @@ wfg catalog --json
 
 MCP exposes the same information through `get_gfs_catalog`. WFG only accepts pressure levels published by the GFS 0.25° isobaric product, including fractional upper-atmosphere levels down to 0.01 hPa. An arbitrary level such as 842 hPa is rejected before any network request.
 
-Supported pressure-level variables include temperature, relative humidity, U/V wind, geopotential height, specific humidity, pressure/geometric vertical velocity, absolute vorticity, total cloud cover, cloud-water mixing ratio, ozone mixing ratio, plus derived wind speed/direction.
+Supported pressure-level variables include temperature, relative humidity, U/V wind, geopotential height, specific humidity, pressure/geometric vertical velocity, absolute vorticity, total cloud cover, cloud-water mixing ratio, and ozone mixing ratio. Deterministic derived variables include wind speed/direction, dew point, potential temperature, mixing ratio, virtual temperature, and moist-air density.
+
+Derived variables declare their raw GFS dependencies in the catalog. WFG fetches only those raw dependencies, validates that the requested pressure profile is complete, then computes the requested derivation locally. These are physical transforms rather than activity-specific scores or forecast interpretation.
 
 The catalog also exposes non-isobaric fields with explicit vertical and temporal semantics:
 
@@ -42,6 +44,20 @@ wfg profile \
   --vars temperature,relative_humidity,geopotential_height,wind \
   --levels 1000,925,850,700,500
 ```
+
+Derived thermodynamics use the same pressure-profile interface:
+
+```bash
+wfg profile \
+  --lat 50.08 \
+  --lon 14.43 \
+  --valid 2026-08-20T12:00:00Z \
+  --vars dew_point,potential_temperature,mixing_ratio,virtual_temperature,air_density \
+  --levels 1000,925,850,700,500 \
+  --json
+```
+
+MCP uses the same variable IDs with `get_gfs_profile`; `get_gfs_points` and `get_gfs_timeseries` inherit the same derived pressure-level variables through the shared core.
 
 Fields-only query:
 
@@ -185,7 +201,7 @@ Implemented:
 - accumulation and forecast-window-average fields with explicit forecast intervals
 - native-cadence point time series with bounded concurrency and step guard
 - bounded raw pressure-field area min/max/unweighted mean without returning grids
-- 12 raw pressure-level fields plus derived wind
+- 12 raw pressure-level fields plus derived wind, dew point, potential temperature, mixing ratio, virtual temperature, and moist-air density
 - surface diagnostics plus 2/10/20/30/40/50/80/100 m fields and derived winds
 - instantaneous and averaged cloud-cover layers, cloud boundaries/top temperatures, cloud ceiling, precipitable/cloud water, ozone, and cloud work function
 - deterministic NOMADS geographic-subset path with 11 s cross-process limiter

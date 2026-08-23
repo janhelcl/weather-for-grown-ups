@@ -75,11 +75,12 @@ describe("profileQuerySchema", () => {
     expect(parses({ pressureLevelsHpa: [] }).success).toBe(false);
   });
 
-  it("accepts every newly supported pressure-level variable", () => {
+  it("accepts every supported raw and derived pressure-level variable", () => {
     const variables = [
-      "geopotential_height", "specific_humidity", "vertical_velocity",
-      "geometric_vertical_velocity", "absolute_vorticity", "total_cloud_cover",
-      "cloud_water_mixing_ratio", "ozone_mixing_ratio",
+      "temperature", "relative_humidity", "u_wind", "v_wind", "geopotential_height",
+      "specific_humidity", "vertical_velocity", "geometric_vertical_velocity",
+      "absolute_vorticity", "total_cloud_cover", "cloud_water_mixing_ratio", "ozone_mixing_ratio",
+      "wind", "dew_point", "potential_temperature", "mixing_ratio", "virtual_temperature", "air_density",
     ];
     expect(parses({ variables }).success).toBe(true);
   });

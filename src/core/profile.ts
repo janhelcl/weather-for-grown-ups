@@ -11,9 +11,21 @@ import {
   type RawNonIsobaricFieldDefinition,
 } from "../catalog/non-isobaric-fields.js";
 import { expandRequestedVariables } from "../catalog/variables.js";
+import {
+  deriveAirDensityKgM3,
+  deriveDewPointC,
+  deriveMixingRatioKgKg,
+  derivePotentialTemperatureK,
+  deriveVirtualTemperatureC,
+} from "../derived/thermodynamics.js";
 import { deriveWind } from "../derived/wind.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
-import { profileQuerySchema, type ProfileQueryInput, type ProfileSourceId } from "../schema/query.js";
+import {
+  profileQuerySchema,
+  type ProfileQueryInput,
+  type ProfileSourceId,
+  type VariableId,
+} from "../schema/query.js";
 import { NomadsProfileSource, S3ProfileSource } from "../sources/profile-source.js";
 import type { ProfileDataSource } from "../sources/types.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
@@ -117,13 +129,8 @@ export class ProfileService {
       applyDecodedPressureValue(level, value);
     }
 
-    if (requestedVariables.includes("wind")) {
-      for (const level of levelMap.values()) {
-        if (level.uWindMs === undefined || level.vWindMs === undefined) continue;
-        const wind = deriveWind(level.uWindMs, level.vWindMs);
-        level.windSpeedMs = wind.speedMs;
-        level.windDirectionDeg = wind.directionDeg;
-      }
+    for (const level of levelMap.values()) {
+      applyDerivedPressureValues(level, requestedVariables);
     }
 
     const fieldResults = requestedFields.map((id) =>
@@ -164,6 +171,61 @@ function applyDecodedPressureValue(level: ProfileLevel, value: DecodedValue): vo
     case "CLWMR": level.cloudWaterMixingRatioKgKg = value.value; break;
     case "O3MR": level.ozoneMixingRatioKgKg = value.value; break;
   }
+}
+
+function applyDerivedPressureValues(level: ProfileLevel, requestedVariables: readonly VariableId[]): void {
+  const requested = new Set(requestedVariables);
+
+  if (requested.has("wind")) {
+    const wind = deriveWind(
+      dependency(level.uWindMs, "u_wind", level.pressureHpa),
+      dependency(level.vWindMs, "v_wind", level.pressureHpa),
+    );
+    level.windSpeedMs = wind.speedMs;
+    level.windDirectionDeg = wind.directionDeg;
+  }
+
+  if (requested.has("dew_point")) {
+    level.dewPointC = deriveDewPointC(
+      dependency(level.temperatureC, "temperature", level.pressureHpa),
+      dependency(level.relativeHumidityPct, "relative_humidity", level.pressureHpa),
+    );
+  }
+
+  if (requested.has("potential_temperature")) {
+    level.potentialTemperatureK = derivePotentialTemperatureK(
+      dependency(level.temperatureC, "temperature", level.pressureHpa),
+      level.pressureHpa,
+    );
+  }
+
+  if (requested.has("mixing_ratio")) {
+    level.mixingRatioKgKg = deriveMixingRatioKgKg(
+      dependency(level.specificHumidityKgKg, "specific_humidity", level.pressureHpa),
+    );
+  }
+
+  if (requested.has("virtual_temperature")) {
+    level.virtualTemperatureC = deriveVirtualTemperatureC(
+      dependency(level.temperatureC, "temperature", level.pressureHpa),
+      dependency(level.specificHumidityKgKg, "specific_humidity", level.pressureHpa),
+    );
+  }
+
+  if (requested.has("air_density")) {
+    level.airDensityKgM3 = deriveAirDensityKgM3(
+      dependency(level.temperatureC, "temperature", level.pressureHpa),
+      dependency(level.specificHumidityKgKg, "specific_humidity", level.pressureHpa),
+      level.pressureHpa,
+    );
+  }
+}
+
+function dependency(value: number | undefined, id: string, pressureHpa: number): number {
+  if (value === undefined) {
+    throw new Error(`Internal derived-variable dependency missing: ${id}@${pressureHpa}mb`);
+  }
+  return value;
 }
 
 function buildFieldResult(
