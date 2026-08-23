@@ -1,6 +1,6 @@
 import type { Command } from "commander";
+import { AtmosphericLayerDiagnosticsService } from "../core/atmospheric-layer-diagnostics-service.js";
 import { DiagnosticTimeSeriesService } from "../core/diagnostic-time-series.js";
-import { LayerDiagnosticsService } from "../core/layer-diagnostics.js";
 import { ParcelDiagnosticsService } from "../core/parcel-diagnostics.js";
 import { ProfileDiagnosticsService } from "../core/profile-diagnostics.js";
 import type { DiagnosticTimeSeriesQueryInput } from "../schema/diagnostic-time-series.js";
@@ -8,6 +8,7 @@ import {
   diagnosticTimeSeriesResultSchema,
   type DiagnosticTimeSeriesResult,
 } from "../schema/diagnostic-time-series-result.js";
+import { gefsLayerDiagnosticsResultSchema } from "../schema/gefs-layer-diagnostics.js";
 import {
   DEFAULT_TIME_SERIES_MAX_STEPS,
   type ParcelDefinitionId,
@@ -22,43 +23,98 @@ import {
   DEFAULT_LAYER_DIAGNOSTICS,
   DEFAULT_PROFILE_DIAGNOSTICS,
   RUN_HELP,
+  parseAtmosphericModel,
+  parseGefsMembers,
   parseLayerDiagnostics,
   parseLevels,
+  parseNumbers,
   parseProfileDiagnostics,
 } from "./shared.js";
 
 export function registerDiagnosticCommands(program: Command): void {
   program
     .command("layer")
-    .description("Derive deterministic diagnostics across two GFS pressure surfaces")
+    .description("Derive pressure-layer diagnostics from GFS or GEFS using the same meteorological kernel")
+    .option("--model <gfs|gefs>", "Atmospheric model family", "gfs")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
-    .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
+    .option("--run <iso|latest|latest_complete>", "Model initialization; GEFS accepts latest or an explicit cycle", "latest")
     .requiredOption("--valid <iso>", "Forecast valid time")
     .requiredOption("--lower <hpa>", "Lower-altitude pressure surface in hPa", Number)
     .requiredOption("--upper <hpa>", "Upper-altitude pressure surface in hPa", Number)
     .option("--diagnostics <list>", "Comma-separated layer diagnostic IDs", DEFAULT_LAYER_DIAGNOSTICS)
-    .option("--source <nomads|s3>", "Data access path", "nomads")
+    .option("--source <nomads|s3>", "GFS-only data access path")
+    .option("--members <list>", "GEFS-only comma-separated members (c00,p01..p30); default all 31")
+    .option("--quantiles <list>", "GEFS-only comma-separated quantiles from 0 to 1")
+    .option("--include-members", "GEFS-only: include every member's layer and diagnostic values")
     .option("--json", "Output JSON")
     .action(async (options) => {
-      const result = await new LayerDiagnosticsService().getLayerDiagnostics({
-        latitude: options.lat,
-        longitude: options.lon,
-        run: options.run,
-        validTime: options.valid,
-        lowerPressureHpa: options.lower,
-        upperPressureHpa: options.upper,
-        diagnostics: parseLayerDiagnostics(options.diagnostics),
-        source: options.source as ProfileSourceId,
-      });
-      layerDiagnosticsResultSchema.parse(result);
+      const model = parseAtmosphericModel(options.model);
+      const service = new AtmosphericLayerDiagnosticsService();
+      const diagnostics = parseLayerDiagnostics(options.diagnostics);
+
+      if (model === "gfs") {
+        if (options.members !== undefined || options.quantiles !== undefined || options.includeMembers) {
+          throw new Error("--members, --quantiles and --include-members are only valid with --model gefs");
+        }
+        const result = layerDiagnosticsResultSchema.parse(await service.getLayerDiagnostics({
+          model: "gfs_0p25",
+          query: {
+            latitude: options.lat,
+            longitude: options.lon,
+            run: options.run,
+            validTime: options.valid,
+            lowerPressureHpa: options.lower,
+            upperPressureHpa: options.upper,
+            diagnostics,
+            source: (options.source ?? "nomads") as ProfileSourceId,
+          },
+        }));
+        if (options.json) return console.log(JSON.stringify(result, null, 2));
+        console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+        console.log(`Source ${result.source.provider} (${result.source.access})`);
+        console.log(`${result.layer.lowerPressureHpa} → ${result.layer.upperPressureHpa} hPa; ${result.layer.lowerGeopotentialHeightGpm.toFixed(0)} → ${result.layer.upperGeopotentialHeightGpm.toFixed(0)} gpm; depth ${result.layer.depthGpm.toFixed(0)} gpm`);
+        console.table(result.diagnostics.map((diagnostic) => ({ id: diagnostic.id, ...diagnostic.values })));
+        console.log("Raw endpoint values used by the derivations");
+        console.table(result.levels);
+        return;
+      }
+
+      if (options.source !== undefined) throw new Error("--source is a deterministic GFS option and is not valid with --model gefs");
+      const result = gefsLayerDiagnosticsResultSchema.parse(await service.getLayerDiagnostics({
+        model: "gefs_0p50",
+        query: {
+          latitude: options.lat,
+          longitude: options.lon,
+          run: options.run,
+          validTime: options.valid,
+          lowerPressureHpa: options.lower,
+          upperPressureHpa: options.upper,
+          diagnostics,
+          ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+          quantiles: parseNumbers(options.quantiles ?? "0.1,0.5,0.9"),
+          includeMembers: Boolean(options.includeMembers),
+        },
+      }));
       if (options.json) return console.log(JSON.stringify(result, null, 2));
-      console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
-      console.log(`Source ${result.source.provider} (${result.source.access})`);
-      console.log(`${result.layer.lowerPressureHpa} → ${result.layer.upperPressureHpa} hPa; ${result.layer.lowerGeopotentialHeightGpm.toFixed(0)} → ${result.layer.upperGeopotentialHeightGpm.toFixed(0)} gpm; depth ${result.layer.depthGpm.toFixed(0)} gpm`);
-      console.table(result.diagnostics.map((diagnostic) => ({ id: diagnostic.id, ...diagnostic.values })));
-      console.log("Raw endpoint values used by the derivations");
-      console.table(result.levels);
+      console.log(`GEFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+      console.log(`${result.pressureLayer.lowerPressureHpa} → ${result.pressureLayer.upperPressureHpa} hPa; ${result.selection.members.length} members`);
+      console.log(`Layer depth mean=${result.layerDepthGpm.mean.toFixed(1)} gpm  populationStdDev=${result.layerDepthGpm.populationStdDev.toFixed(1)} gpm`);
+      console.table(result.summaries.map((summary) => ({
+        diagnostic: summary.id,
+        field: summary.field,
+        unit: summary.unit,
+        mean: summary.distribution.mean,
+        populationStdDev: summary.distribution.populationStdDev,
+        min: summary.distribution.min,
+        max: summary.distribution.max,
+      })));
+      if (result.members) {
+        for (const member of result.members) {
+          console.log(`${member.member}${member.cacheHit ? " (cache)" : ""}; depth ${member.layer.depthGpm.toFixed(1)} gpm`);
+          console.table(member.diagnostics.map((diagnostic) => ({ id: diagnostic.id, ...diagnostic.values })));
+        }
+      }
     });
 
   program
