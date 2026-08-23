@@ -34,7 +34,7 @@ This exercises NOAA AWS Open Data through the deterministic GFS core:
 
 Assertions validate contracts, provenance, dimensions, and physical-result finiteness rather than pinning specific weather values.
 
-## GEFS ensemble, profile, and aligned GFS comparison integration
+## GEFS ensemble, profile, shared diagnostics, and aligned GFS comparison integration
 
 ```bash
 npm run test:live:gefs
@@ -44,8 +44,9 @@ This is deliberately small. It selects `c00`, `p01`, and `p02`, resolves one cur
 
 The smoke exercises:
 
-- the one-time `GefsEnsembleService` 850-hPa temperature result at the final valid time;
+- the one-time `GefsEnsembleService` 850-hPa temperature distribution at the final valid time;
 - `GefsEnsembleProfileService` over temperature + geopotential height at 850 and 500 hPa, using one multi-message slice per member;
+- `GefsLayerDiagnosticsService` for the 850→500-hPa environmental temperature lapse rate using the **same shared pressure diagnostic kernel as GFS**;
 - a two-step `GefsEnsembleTimeSeriesService` result using the same explicit model run;
 - `GfsGefsComparisonService` at the final valid time, with deterministic GFS and GEFS forced to the same initialization cycle.
 
@@ -58,12 +59,14 @@ It verifies the parts offline fixtures cannot prove:
 - shared-grid consistency across every field and member inside a GEFS profile while preserving separate GFS/GEFS sampled grid points;
 - normalized member values and finite ensemble/profile summaries;
 - summary-only profile output by default;
+- real member profiles feeding the model-independent layer diagnostic kernel;
+- member-specific positive layer depths and finite lapse-rate distribution summaries;
 - fixed-cycle native three-hour temporal composition;
 - compact summary-only time-series output by default;
 - aligned deterministic-minus-ensemble comparison metrics;
 - explicit raw-member / raw-model interpretation semantics rather than calibrated probability or uncertainty.
 
-The live smoke intentionally uses only three GEFS members, two profile variables, two profile levels, and two forecast steps so weekly compatibility testing remains light. Profile byte ranges are fetched sequentially within each concurrently processed member. The comparison reuses the final scalar GEFS member slices and adds only the matching deterministic GFS field slice.
+The live smoke intentionally uses only three GEFS members, two profile variables, two profile levels, one layer diagnostic, and two forecast steps so weekly compatibility testing remains light. The layer-diagnostic call requests the same temperature/geopotential-height profile selection as the preceding profile smoke, so immutable member slices can be reused rather than adding another upstream profile selection. The comparison reuses the final scalar GEFS member slices and adds only the matching deterministic GFS field slice.
 
 ## Rich NOMADS area integration
 
@@ -115,7 +118,7 @@ Without `WFG_LIVE_SOURCE` it uses NOMADS; setting `s3` switches the source.
 
 Before the schedule was merged, the expanded deterministic workflow was deliberately executed against current NOAA data on 2026-08-23. The first attempt caught a real test defect: the parcel smoke requested unsupported 875/825/775 hPa levels. The smoke data was corrected to the canonical published GFS pressure-level set, and the rerun passed both AWS and NOMADS paths.
 
-The GEFS point and time-series capabilities were likewise exercised against current NOAA AWS data before merge. Cross-model comparison extended that same low-cost compatibility check to the aligned deterministic GFS slice. Ensemble-profile coverage now additionally checks current multi-message `pgrb2a` inventories and memberwise decoding. This layer exists to catch assumptions that deterministic mocks and fixed fixtures cannot reveal without turning upstream availability into a permanent merge dependency.
+The GEFS point, time-series, profile, and cross-model comparison capabilities were likewise exercised against current NOAA AWS data before merge. The unified-core change extends that same low-cost compatibility check to member-by-member layer diagnostics, proving that real GEFS multi-message profiles successfully cross the normalized-profile boundary and feed shared meteorological code. This layer exists to catch assumptions that deterministic mocks and fixed fixtures cannot reveal without turning upstream availability into a permanent merge dependency.
 
 ## Failure triage
 
