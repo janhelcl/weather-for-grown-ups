@@ -43,6 +43,11 @@ export interface ProfileLevel {
   ozoneMixingRatioKgKg?: number;
   windSpeedMs?: number;
   windDirectionDeg?: number;
+  dewPointC?: number;
+  potentialTemperatureK?: number;
+  mixingRatioKgKg?: number;
+  virtualTemperatureC?: number;
+  airDensityKgM3?: number;
 }
 
 export type FieldTemporalResult =
