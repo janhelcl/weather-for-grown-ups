@@ -1,10 +1,12 @@
 import type { Command } from "commander";
 import { BatchPointsService } from "../core/batch-points.js";
+import { AtmosphericProfileService } from "../core/atmospheric-profile-service.js";
+import { AtmosphericTimeSeriesService } from "../core/atmospheric-timeseries-service.js";
 import { LatestRunResolver } from "../core/latest-run.js";
 import { PointsTimeSeriesService } from "../core/points-time-series.js";
-import { ProfileService } from "../core/profile.js";
 import { RunComparisonService } from "../core/run-comparison.js";
-import { TimeSeriesService } from "../core/time-series.js";
+import { gefsEnsembleProfileResultSchema } from "../schema/gefs-ensemble-profile.js";
+import { gefsEnsembleTimeSeriesResultSchema } from "../schema/gefs-ensemble-timeseries.js";
 import type { PointCoordinate, ProfileSourceId } from "../schema/query.js";
 import {
   batchPointsResultSchema,
@@ -14,7 +16,18 @@ import {
   timeSeriesResultSchema,
 } from "../schema/result.js";
 import { runComparisonResultSchema } from "../schema/run-comparison-result.js";
-import { RUN_HELP, collectPoint, pointSelection } from "./shared.js";
+import {
+  DEFAULT_GEFS_PROFILE_VARIABLES,
+  DEFAULT_LEVELS,
+  RUN_HELP,
+  collectPoint,
+  parseAtmosphericModel,
+  parseGefsMembers,
+  parseGefsVariables,
+  parseLevels,
+  parseNumbers,
+  pointSelection,
+} from "./shared.js";
 
 export function registerPointCommands(program: Command): void {
   program
@@ -38,33 +51,85 @@ export function registerPointCommands(program: Command): void {
 
   program
     .command("profile")
-    .description("Fetch GFS pressure levels and/or non-isobaric fields for a point")
+    .description("Fetch a pressure profile from GFS or GEFS; deterministic GFS remains the default model")
+    .option("--model <gfs|gefs>", "Atmospheric model family", "gfs")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
-    .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
+    .option("--run <iso|latest|latest_complete>", "Model initialization; GEFS accepts latest or an explicit cycle", "latest")
     .requiredOption("--valid <iso>", "Forecast valid time")
     .option("--vars <list>", "Comma-separated pressure-level variables")
     .option("--levels <list>", "Comma-separated pressure levels in hPa")
-    .option("--fields <list>", "Comma-separated non-isobaric field IDs")
-    .option("--source <nomads|s3>", "Data access path", "nomads")
+    .option("--fields <list>", "GFS-only comma-separated non-isobaric field IDs")
+    .option("--source <nomads|s3>", "GFS-only data access path")
+    .option("--members <list>", "GEFS-only comma-separated members (c00,p01..p30); default all 31")
+    .option("--quantiles <list>", "GEFS-only comma-separated quantiles from 0 to 1")
+    .option("--include-members", "GEFS-only: include each member's complete selected profile")
     .option("--json", "Output JSON")
     .action(async (options) => {
-      const selection = pointSelection(options.vars, options.levels, options.fields);
-      const result = await new ProfileService().getProfile({
-        latitude: options.lat,
-        longitude: options.lon,
-        run: options.run,
-        validTime: options.valid,
-        ...selection,
-        source: options.source as ProfileSourceId,
-      });
-      profileResultSchema.parse(result);
+      const model = parseAtmosphericModel(options.model);
+      const service = new AtmosphericProfileService();
+
+      if (model === "gfs") {
+        if (options.members !== undefined || options.quantiles !== undefined || options.includeMembers) {
+          throw new Error("--members, --quantiles and --include-members are only valid with --model gefs");
+        }
+        const selection = pointSelection(options.vars, options.levels, options.fields);
+        const result = profileResultSchema.parse(await service.getProfile({
+          model: "gfs_0p25",
+          query: {
+            latitude: options.lat,
+            longitude: options.lon,
+            run: options.run,
+            validTime: options.valid,
+            ...selection,
+            source: (options.source ?? "nomads") as ProfileSourceId,
+          },
+        }));
+        if (options.json) return console.log(JSON.stringify(result, null, 2));
+        console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+        console.log(`Source ${result.source.provider} (${result.source.access})`);
+        console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
+        if (result.levels.length > 0) console.table(result.levels);
+        if (result.fields) console.dir(result.fields, { depth: null });
+        return;
+      }
+
+      if (options.fields !== undefined || options.source !== undefined) {
+        throw new Error("--fields and --source are deterministic GFS options and are not valid with --model gefs");
+      }
+      const result = gefsEnsembleProfileResultSchema.parse(await service.getProfile({
+        model: "gefs_0p50",
+        query: {
+          latitude: options.lat,
+          longitude: options.lon,
+          run: options.run,
+          validTime: options.valid,
+          variables: parseGefsVariables(options.vars ?? DEFAULT_GEFS_PROFILE_VARIABLES),
+          pressureLevelsHpa: parseLevels(options.levels ?? DEFAULT_LEVELS),
+          ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+          quantiles: parseNumbers(options.quantiles ?? "0.1,0.5,0.9"),
+          includeMembers: Boolean(options.includeMembers),
+        },
+      }));
       if (options.json) return console.log(JSON.stringify(result, null, 2));
-      console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
-      console.log(`Source ${result.source.provider} (${result.source.access})`);
+      console.log(`GEFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+      console.log(`${result.selection.members.length} members; ${result.selection.variables.join(",")} @ ${result.selection.pressureLevelsHpa.join(",")} hPa`);
       console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
-      if (result.levels.length > 0) console.table(result.levels);
-      if (result.fields) console.dir(result.fields, { depth: null });
+      console.table(result.summaries.map((summary) => ({
+        pressureLevelHpa: summary.pressureLevelHpa,
+        variable: summary.variable,
+        unit: summary.unit,
+        mean: summary.mean,
+        populationStdDev: summary.populationStdDev,
+        min: summary.min,
+        max: summary.max,
+      })));
+      if (result.members) {
+        for (const member of result.members) {
+          console.log(`${member.member}${member.cacheHit ? " (cache)" : ""}`);
+          console.table(member.values);
+        }
+      }
     });
 
   program
@@ -98,46 +163,110 @@ export function registerPointCommands(program: Command): void {
 
   program
     .command("timeseries")
-    .description("Fetch native GFS forecast steps for pressure levels and/or non-isobaric fields")
+    .description("Fetch a native forecast time series from GFS or GEFS; deterministic GFS remains the default model")
+    .option("--model <gfs|gefs>", "Atmospheric model family", "gfs")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
-    .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
+    .option("--run <iso|latest|latest_complete>", "Model initialization; GEFS accepts latest or an explicit cycle", "latest")
     .requiredOption("--from <iso>", "Inclusive valid-time range start")
     .requiredOption("--to <iso>", "Inclusive valid-time range end")
-    .option("--vars <list>", "Comma-separated pressure-level variables")
-    .option("--levels <list>", "Comma-separated pressure levels in hPa")
-    .option("--fields <list>", "Comma-separated non-isobaric field IDs")
-    .option("--source <nomads|s3>", "Data access path", "s3")
-    .option("--max-steps <number>", "Maximum native forecast steps", Number, 160)
+    .option("--vars <list>", "Pressure-level variables; GEFS currently requires exactly one")
+    .option("--levels <list>", "Pressure levels in hPa; GEFS currently requires exactly one")
+    .option("--fields <list>", "GFS-only comma-separated non-isobaric field IDs")
+    .option("--source <nomads|s3>", "GFS-only data access path")
+    .option("--members <list>", "GEFS-only comma-separated members (c00,p01..p30); default all 31")
+    .option("--quantiles <list>", "GEFS-only comma-separated quantiles from 0 to 1")
+    .option("--gte <number>", "GEFS-only threshold in normalized output units", Number)
+    .option("--include-members", "GEFS-only: include member values at every step")
+    .option("--max-steps <number>", "Maximum native forecast steps", Number)
     .option("--json", "Output JSON")
     .action(async (options) => {
-      const selection = pointSelection(options.vars, options.levels, options.fields);
-      const result = await new TimeSeriesService().getTimeSeries({
-        latitude: options.lat,
-        longitude: options.lon,
-        run: options.run,
-        startTime: options.from,
-        endTime: options.to,
-        ...selection,
-        source: options.source as ProfileSourceId,
-        maxSteps: options.maxSteps,
-      });
-      timeSeriesResultSchema.parse(result);
+      const model = parseAtmosphericModel(options.model);
+      const service = new AtmosphericTimeSeriesService();
+
+      if (model === "gfs") {
+        if (options.members !== undefined || options.quantiles !== undefined || options.gte !== undefined || options.includeMembers) {
+          throw new Error("--members, --quantiles, --gte and --include-members are only valid with --model gefs");
+        }
+        const selection = pointSelection(options.vars, options.levels, options.fields);
+        const result = timeSeriesResultSchema.parse(await service.getTimeSeries({
+          model: "gfs_0p25",
+          query: {
+            latitude: options.lat,
+            longitude: options.lon,
+            run: options.run,
+            startTime: options.from,
+            endTime: options.to,
+            ...selection,
+            source: (options.source ?? "s3") as ProfileSourceId,
+            maxSteps: options.maxSteps ?? 160,
+          },
+        }));
+        if (options.json) return console.log(JSON.stringify(result, null, 2));
+        console.log(`GFS ${result.run}  ${result.requestedStartTime} → ${result.requestedEndTime}`);
+        console.log(`Source ${result.source.provider} (${result.source.access})`);
+        console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
+        const pressureRows = result.series.flatMap((step) =>
+          step.levels.map((level) => ({ valid: step.validTime, f: step.forecastHour, ...level, cacheHit: step.cacheHit })),
+        );
+        if (pressureRows.length > 0) console.table(pressureRows);
+        if (result.series.some((step) => step.fields)) {
+          console.dir(result.series.map((step) => ({
+            validTime: step.validTime,
+            forecastHour: step.forecastHour,
+            fields: step.fields,
+            cacheHit: step.cacheHit,
+          })), { depth: null });
+        }
+        return;
+      }
+
+      if (options.fields !== undefined || options.source !== undefined) {
+        throw new Error("--fields and --source are deterministic GFS options and are not valid with --model gefs");
+      }
+      const variables = parseGefsVariables(options.vars ?? "temperature");
+      const levels = parseLevels(options.levels ?? "850");
+      if (variables.length !== 1 || levels.length !== 1) {
+        throw new Error("GEFS time series currently requires exactly one --vars variable and one --levels pressure surface");
+      }
+      const variable = variables[0];
+      const pressureLevelHpa = levels[0];
+      if (variable === undefined || pressureLevelHpa === undefined) throw new Error("GEFS time-series selection is empty");
+      const result = gefsEnsembleTimeSeriesResultSchema.parse(await service.getTimeSeries({
+        model: "gefs_0p50",
+        query: {
+          latitude: options.lat,
+          longitude: options.lon,
+          run: options.run,
+          startTime: options.from,
+          endTime: options.to,
+          variable,
+          pressureLevelHpa,
+          ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+          quantiles: parseNumbers(options.quantiles ?? "0.1,0.5,0.9"),
+          ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
+          includeMembers: Boolean(options.includeMembers),
+          maxSteps: options.maxSteps ?? 129,
+        },
+      }));
       if (options.json) return console.log(JSON.stringify(result, null, 2));
-      console.log(`GFS ${result.run}  ${result.requestedStartTime} → ${result.requestedEndTime}`);
-      console.log(`Source ${result.source.provider} (${result.source.access})`);
+      console.log(`GEFS ${result.run}  ${result.startTime} → ${result.endTime}  ${result.series.length} steps`);
+      console.log(`${result.selection.variable}@${result.selection.pressureLevelHpa}hPa (${result.selection.unit}); ${result.selection.members.length} members`);
       console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
-      const pressureRows = result.series.flatMap((step) =>
-        step.levels.map((level) => ({ valid: step.validTime, f: step.forecastHour, ...level, cacheHit: step.cacheHit })),
-      );
-      if (pressureRows.length > 0) console.table(pressureRows);
-      if (result.series.some((step) => step.fields)) {
-        console.dir(result.series.map((step) => ({
-          validTime: step.validTime,
-          forecastHour: step.forecastHour,
-          fields: step.fields,
-          cacheHit: step.cacheHit,
-        })), { depth: null });
+      console.table(result.series.map((step) => ({
+        validTime: step.validTime,
+        forecastHour: step.forecastHour,
+        mean: step.summary.mean,
+        populationStdDev: step.summary.populationStdDev,
+        min: step.summary.min,
+        max: step.summary.max,
+        ...(step.summary.threshold ? { thresholdFraction: step.summary.threshold.fraction } : {}),
+      })));
+      if (result.includeMembers) {
+        for (const step of result.series) {
+          console.log(`Members at ${step.validTime}`);
+          console.table(step.members ?? []);
+        }
       }
     });
 
