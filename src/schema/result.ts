@@ -27,6 +27,11 @@ export const profileLevelResultSchema = z.object({
   ozoneMixingRatioKgKg: z.number().optional(),
   windSpeedMs: z.number().optional(),
   windDirectionDeg: z.number().optional(),
+  dewPointC: z.number().optional(),
+  potentialTemperatureK: z.number().optional(),
+  mixingRatioKgKg: z.number().optional(),
+  virtualTemperatureC: z.number().optional(),
+  airDensityKgM3: z.number().optional(),
 });
 
 export const nonIsobaricFieldLevelResultSchema = z.union([
