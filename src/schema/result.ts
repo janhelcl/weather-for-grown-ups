@@ -56,7 +56,7 @@ export const nonIsobaricFieldResultSchema = z.object({
   values: z.record(z.string(), z.number()),
 });
 
-const gridPointSchema = z.object({ latitude: z.number(), longitude: z.number() });
+export const gridPointSchema = z.object({ latitude: z.number(), longitude: z.number() });
 
 export const profileResultSchema = z.object({
   model: z.literal("gfs_0p25"),
@@ -68,6 +68,27 @@ export const profileResultSchema = z.object({
   levels: z.array(profileLevelResultSchema),
   fields: z.array(nonIsobaricFieldResultSchema).optional(),
   source: sourceProvenanceSchema.extend({ cacheHit: z.boolean() }),
+});
+
+export const batchPointResultSchema = z.object({
+  requestedPoint: gridPointSchema,
+  gridPoint: gridPointSchema,
+  levels: z.array(profileLevelResultSchema),
+  fields: z.array(nonIsobaricFieldResultSchema).optional(),
+});
+
+export const batchPointsResultSchema = z.object({
+  model: z.literal("gfs_0p25"),
+  run: isoDateTimeSchema,
+  validTime: isoDateTimeSchema,
+  forecastHour: z.number(),
+  points: z.array(batchPointResultSchema),
+  source: z.object({
+    provider: z.literal("NOAA AWS Open Data"),
+    access: z.literal("s3_range"),
+    decoder: z.literal("wgrib2"),
+    cacheHit: z.boolean(),
+  }),
 });
 
 export const timeSeriesResultSchema = z.object({

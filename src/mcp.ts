@@ -2,19 +2,27 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import { AreaSummaryService } from "./core/area-summary.js";
+import { BatchPointsService } from "./core/batch-points.js";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
 import {
   handleGetGfsAreaSummary,
   handleGetGfsCatalog,
+  handleGetGfsPoints,
   handleGetGfsProfile,
   handleGetGfsTimeSeries,
   handleGetLatestGfsRun,
 } from "./mcp-tool.js";
-import { areaSummaryQuerySchema, profileQuerySchema, timeSeriesQuerySchema } from "./schema/query.js";
+import {
+  areaSummaryQuerySchema,
+  batchPointsQuerySchema,
+  profileQuerySchema,
+  timeSeriesQuerySchema,
+} from "./schema/query.js";
 import {
   areaSummaryResultSchema,
+  batchPointsResultSchema,
   latestGfsRunResultSchema,
   profileResultSchema,
   timeSeriesResultSchema,
@@ -24,11 +32,12 @@ function createServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "Use get_gfs_catalog to discover pressure-level and non-isobaric GFS fields. For profile, time-series, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. get_gfs_profile and get_gfs_timeseries can mix isobaric variables with surface, height-above-ground, named-layer, named-level, accumulation, and forecast-average fields. Interval-valued products carry explicit start/end intervals. summarize_gfs_area remains pressure-level only. Values are model data, not interpretation or safety advice.",
+      instructions: "Use get_gfs_catalog to discover pressure-level and non-isobaric GFS fields. For profile, batched-point, time-series, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_points when comparing multiple locations at one valid time: it uses one shared NOAA AWS selected-message GRIB slice and samples all points locally. Interval-valued products carry explicit start/end intervals. summarize_gfs_area remains pressure-level only. Values are model data, not interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
   const profileService = new ProfileService({ latestRunProvider: latestRunResolver });
+  const batchPointsService = new BatchPointsService({ latestRunProvider: latestRunResolver, profileGetter: profileService });
   const timeSeriesService = new TimeSeriesService({ latestRunProvider: latestRunResolver, profileGetter: profileService });
   const areaSummaryService = new AreaSummaryService({ latestRunProvider: latestRunResolver });
 
@@ -51,6 +60,13 @@ function createServer(): McpServer {
     inputSchema: profileQuerySchema,
     outputSchema: profileResultSchema,
   }, async (query) => handleGetGfsProfile(profileService, query));
+
+  server.registerTool("get_gfs_points", {
+    title: "Get GFS fields for multiple points",
+    description: "Return the same supported GFS field selection for up to 50 points at one valid time. Uses NOAA AWS byte ranges so the selected GRIB messages are fetched once and sampled at every requested point. run='latest' uses query-aware newest-available selection.",
+    inputSchema: batchPointsQuerySchema,
+    outputSchema: batchPointsResultSchema,
+  }, async (query) => handleGetGfsPoints(batchPointsService, query));
 
   server.registerTool("get_gfs_timeseries", {
     title: "Get GFS point time series",

@@ -60,6 +60,28 @@ Non-isobaric results are records with three explicit pieces of semantics: `level
 
 The run defaults to `latest`, meaning the newest GFS cycle whose already-published data can satisfy the requested valid time and exact field selection. Use `--run latest_complete` to force the newest cycle published through `f384`, or pass an explicit run timestamp for reproducibility. `wfg latest` reports the newest `f384`-complete cycle.
 
+## Batched point query
+
+When several locations need the same atmospheric selection at the same valid time, use one batch rather than independent point calls:
+
+```bash
+wfg points \
+  --point 50.08,14.43 \
+  --point 45.80,11.70 \
+  --point 46.24,13.18 \
+  --valid 2026-08-20T12:00:00Z \
+  --vars temperature,relative_humidity,wind \
+  --levels 850,700,500 \
+  --fields wind_10m,low_cloud_cover,cloud_ceiling \
+  --json
+```
+
+MCP exposes the same primitive as `get_gfs_points`. A batch accepts up to 50 points, preserves input ordering, resolves `latest` once for the shared selection, and returns the requested/grid point plus the same normalized pressure and non-isobaric results used by the single-point surface.
+
+Batched points are intentionally **S3-only**. The selected pressure/non-isobaric GRIB messages are downloaded once with HTTP byte ranges, then `wgrib2` samples that local slice at every requested coordinate. Local point decoding is bounded to eight concurrent operations. This avoids multiple NOMADS requests and therefore does not consume the NOMADS courtesy limiter per point.
+
+The batch-level `source.cacheHit` is true only when the shared selected-message slice was already cached before the batch; a newly downloaded slice reports false even though subsequent points reuse it in-process.
+
 ## Point time series
 
 ```bash
@@ -95,7 +117,7 @@ Area summaries intentionally remain pressure-level-only for now: Grib Filter cro
 
 NOMADS is the default for single point queries and the area-summary path because its Grib Filter can geographically subset before transfer. Surface, height-above-ground, named-layer, and named-level selections use the same Grib Filter request as pressure levels, so all physical NOMADS downloads continue to pass through the shared courtesy limiter.
 
-For multi-time workflows, NOAA AWS Open Data is the default. The S3 path fetches the `.idx` inventory, identifies only requested pressure and non-isobaric GRIB messages, derives byte ranges, and downloads those messages with HTTP Range requests. Non-isobaric selectors match variable, exact vertical semantics, and exact temporal semantics, so an instantaneous cloud-cover request cannot silently select the forecast-window-average record at the same layer.
+For multi-point and multi-time workflows, NOAA AWS Open Data is the natural path. The S3 adapter fetches the `.idx` inventory, identifies only requested pressure and non-isobaric GRIB messages, derives byte ranges, and downloads those messages with HTTP Range requests. Non-isobaric selectors match variable, exact vertical semantics, and exact temporal semantics, so an instantaneous cloud-cover request cannot silently select the forecast-window-average record at the same layer. Multi-point sampling reuses one selected-message slice across all coordinates.
 
 Both data paths feed `wgrib2` and return normalized data with explicit provenance.
 
@@ -129,6 +151,7 @@ npm run test:smoke
 npm run dev -- catalog
 npm run dev -- latest
 npm run dev -- profile --help
+npm run dev -- points --help
 npm run dev -- timeseries --help
 npm run dev -- area --help
 npm run mcp
@@ -156,6 +179,7 @@ Implemented:
 - discoverable pressure-level and non-isobaric field catalog
 - query-aware newest-available run discovery plus explicit latest-f384-complete selection via NOAA AWS Open Data
 - pressure-level point profiles with completeness validation
+- batched same-time sampling for up to 50 points with one reusable S3 selected-message slice
 - surface and height-above-ground point fields with exact-level validation
 - named cloud layers/levels and whole-atmosphere column products with exact vertical semantics
 - accumulation and forecast-window-average fields with explicit forecast intervals
@@ -167,12 +191,12 @@ Implemented:
 - deterministic NOMADS geographic-subset path with 11 s cross-process limiter
 - NOAA AWS `.idx` + selected-message byte-range path with reusable subset cache
 - `wgrib2` point extraction for isobaric/non-isobaric named-layer and temporal semantics plus area statistics adapters
-- CLI `catalog`, `latest`, `profile`, `timeseries`, and `area`
-- MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_timeseries`, and `summarize_gfs_area`
+- CLI `catalog`, `latest`, `profile`, `points`, `timeseries`, and `area`
+- MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_points`, `get_gfs_timeseries`, and `summarize_gfs_area`
 - shared CLI/MCP result contracts and comprehensive deterministic offline test suite plus opt-in real NOAA profile smoke tests
 
 Next:
 
-1. add a batched multi-point query primitive
-2. optionally add extrema locations to bounded area summaries
-3. add a live non-isobaric/time-series smoke after the S3 path has been exercised manually
+1. extend bounded area summaries to non-isobaric fields and optionally add extrema locations/percentiles
+2. add a pressure-level transect/cross-section primitive
+3. add a live non-isobaric/time-series/batch smoke after the S3 path has been exercised manually
