@@ -9,6 +9,8 @@ import {
 
 if (process.argv[2] === "transect") {
   await import("./transect-cli.js");
+} else if (process.argv[2] === "area") {
+  await import("./area-cli.js");
 } else if (process.argv[2] !== "catalog") {
   await import("./cli-legacy.js");
 } else {

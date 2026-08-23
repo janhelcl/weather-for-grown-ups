@@ -9,7 +9,13 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
-      exclude: ["src/cli.ts", "src/cli-legacy.ts", "src/mcp.ts"],
+      exclude: [
+        "src/cli.ts",
+        "src/cli-legacy.ts",
+        "src/transect-cli.ts",
+        "src/area-cli.ts",
+        "src/mcp.ts",
+      ],
       reporter: ["text", "json-summary", "lcov"],
       thresholds: {
         lines: 90,
