@@ -39,15 +39,16 @@ const result: PointsTimeSeriesResult = {
 };
 
 describe("handleGetGfsPointsTimeSeries", () => {
-  it("returns text and structured MCP output", async () => {
+  it("returns equivalent text and structured MCP output", async () => {
     const response = await handleGetGfsPointsTimeSeries(
       { getPointsTimeSeries: async () => result },
       query,
     );
-    expect(response).toEqual({
-      content: [{ type: "text", text: JSON.stringify(result) }],
-      structuredContent: result,
-    });
+    expect(response).not.toHaveProperty("isError");
+    expect(response.structuredContent).toEqual(result);
+    expect(response.content).toHaveLength(1);
+    expect(response.content[0]?.type).toBe("text");
+    expect(JSON.parse(response.content[0]!.text)).toEqual(result);
   });
 
   it("maps matrix guard failures to MCP errors", async () => {
