@@ -58,7 +58,7 @@ Pressure-level variables and non-isobaric fields can be requested together in th
 
 Non-isobaric results are records with three explicit pieces of semantics: `level`, `temporal`, and normalized `values`. For example, `total_precipitation` is returned with `temporal.type="accumulation"`, while `low_cloud_base_pressure` is returned with `temporal.type="average"`; both interval-valued products include start/end forecast hours and start/end UTC timestamps.
 
-The run defaults to the latest **complete** GFS cycle. Use `wfg latest` to inspect it or pass `--run ...` for reproducibility.
+The run defaults to `latest`, meaning the newest GFS cycle whose already-published data can satisfy the requested valid time and exact field selection. Use `--run latest_complete` to force the newest cycle published through `f384`, or pass an explicit run timestamp for reproducibility. `wfg latest` reports the newest `f384`-complete cycle.
 
 ## Point time series
 
@@ -73,6 +73,8 @@ wfg timeseries \
 ```
 
 Time series returns every native GFS output inside the requested range: hourly through forecast hour 120 and every three hours afterwards. It defaults to the S3 byte-range source and processes at most four forecast files concurrently. A default `maxSteps=160` guard prevents accidentally producing very large tool responses; callers can raise it up to the full 209 native GFS outputs.
+
+With `run=latest`, time-series resolution chooses one newest eligible run initialized at or before the requested range start, verifies the exact requested fields at the first and last native forecast steps, and requires the range to fit inside the 384-hour forecast horizon. This avoids mixing model cycles inside one series while still using fresher partially published runs when they already cover the requested window.
 
 ## Bounded area summary
 
@@ -99,7 +101,17 @@ Both data paths feed `wgrib2` and return normalized data with explicit provenanc
 
 ## Latest-run discovery
 
-`latest` means the newest **complete** GFS 0.25° run. WFG checks NOAA's public AWS Open Data copy for the run's `f384.idx` marker, starting with the current 6-hour cycle and walking backwards. Results are cached in-process for five minutes.
+Query tools support three run selectors:
+
+- `latest` — newest cycle that can satisfy the query with data already published on NOAA AWS Open Data
+- `latest_complete` — newest cycle whose `f384.idx` marker exists
+- an explicit 00Z/06Z/12Z/18Z initialization timestamp — reproducible fixed-cycle access
+
+For a single valid time, query-aware discovery checks the exact forecast `.idx`, including pressure variable × level pairs and non-isobaric vertical/temporal semantics. That means an averaged cloud product absent from `f000` can cause discovery to step back to an older run where the same valid time is represented by a forecast file that actually contains the requested product.
+
+For a time range, WFG chooses a single cycle at or before the requested start, checks exact field availability at the first and last native steps, and rejects ranges extending beyond the 384-hour horizon. Complete-run and query-specific discovery results are cached independently in-process for five minutes.
+
+The standalone CLI `wfg latest` and MCP `get_latest_gfs_run` continue to report the newest **complete** (`f384`) cycle because they have no atmospheric query to satisfy.
 
 ## Requirements
 
@@ -142,7 +154,7 @@ Default cache/state location: `~/.cache/wfg/`. Override with `WFG_CACHE_DIR`.
 Implemented:
 
 - discoverable pressure-level and non-isobaric field catalog
-- automatic latest-complete-run discovery via NOAA AWS Open Data
+- query-aware newest-available run discovery plus explicit latest-f384-complete selection via NOAA AWS Open Data
 - pressure-level point profiles with completeness validation
 - surface and height-above-ground point fields with exact-level validation
 - named cloud layers/levels and whole-atmosphere column products with exact vertical semantics
@@ -157,9 +169,10 @@ Implemented:
 - `wgrib2` point extraction for isobaric/non-isobaric named-layer and temporal semantics plus area statistics adapters
 - CLI `catalog`, `latest`, `profile`, `timeseries`, and `area`
 - MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_timeseries`, and `summarize_gfs_area`
-- comprehensive deterministic offline test suite plus opt-in real NOAA profile smoke tests
+- shared CLI/MCP result contracts and comprehensive deterministic offline test suite plus opt-in real NOAA profile smoke tests
 
 Next:
 
-1. optionally add extrema locations to bounded area summaries
-2. add a live non-isobaric/time-series smoke after the S3 path has been exercised manually
+1. add a batched multi-point query primitive
+2. optionally add extrema locations to bounded area summaries
+3. add a live non-isobaric/time-series smoke after the S3 path has been exercised manually
