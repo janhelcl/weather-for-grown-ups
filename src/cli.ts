@@ -5,12 +5,14 @@ import { AreaSummaryService } from "./core/area-summary.js";
 import { BatchPointsService } from "./core/batch-points.js";
 import { LayerDiagnosticsService } from "./core/layer-diagnostics.js";
 import { LatestRunResolver } from "./core/latest-run.js";
+import { ProfileDiagnosticsService } from "./core/profile-diagnostics.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
 import type {
   LayerDiagnosticId,
   NonIsobaricFieldId,
   PointCoordinate,
+  ProfileDiagnosticId,
   ProfileSourceId,
   RawVariableId,
   VariableId,
@@ -20,6 +22,7 @@ import {
   batchPointsResultSchema,
   layerDiagnosticsResultSchema,
   latestGfsRunResultSchema,
+  profileDiagnosticsResultSchema,
   profileResultSchema,
   timeSeriesResultSchema,
 } from "./schema/result.js";
@@ -27,6 +30,7 @@ import {
 const DEFAULT_VARIABLES = "temperature,relative_humidity,wind";
 const DEFAULT_LEVELS = "1000,925,850,700,500";
 const DEFAULT_LAYER_DIAGNOSTICS = "temperature_lapse_rate,wind_shear,potential_temperature_gradient";
+const DEFAULT_PROFILE_DIAGNOSTICS = "freezing_level_crossings,temperature_inversion_layers";
 const RUN_HELP = "GFS run initialization; latest = newest run satisfying this query, latest_complete = newest run published through f384";
 
 const program = new Command();
@@ -34,7 +38,7 @@ program.name("wfg").description("Weather for Grown Ups — agent-native NOAA GFS
 
 program
   .command("catalog")
-  .description("Show supported GFS pressure-level variables, layer diagnostics, and non-isobaric fields")
+  .description("Show supported GFS pressure-level variables, derived diagnostics, and non-isobaric fields")
   .option("--json", "Output JSON")
   .action((options) => {
     const catalog = getGfsPressureCatalog();
@@ -52,6 +56,12 @@ program
     console.log(`Pressure levels (hPa): ${catalog.pressureLevelsHpa.join(", ")}`);
     console.log("Pressure-layer diagnostics");
     console.table(catalog.layerDiagnostics.map((diagnostic) => ({
+      id: diagnostic.id,
+      dependencies: diagnostic.dependencies.join(", "),
+      output: diagnostic.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
+    })));
+    console.log("Whole-profile diagnostics");
+    console.table(catalog.profileDiagnostics.map((diagnostic) => ({
       id: diagnostic.id,
       dependencies: diagnostic.dependencies.join(", "),
       output: diagnostic.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
@@ -147,6 +157,41 @@ program
     console.log(`${result.layer.lowerPressureHpa} → ${result.layer.upperPressureHpa} hPa; ${result.layer.lowerGeopotentialHeightGpm.toFixed(0)} → ${result.layer.upperGeopotentialHeightGpm.toFixed(0)} gpm; depth ${result.layer.depthGpm.toFixed(0)} gpm`);
     console.table(result.diagnostics.map((diagnostic) => ({ id: diagnostic.id, ...diagnostic.values })));
     console.log("Raw endpoint values used by the derivations");
+    console.table(result.levels);
+  });
+
+program
+  .command("profile-diagnostics")
+  .description("Derive freezing-level crossings and inversion layers from an explicit GFS pressure profile")
+  .requiredOption("--lat <number>", "Latitude", Number)
+  .requiredOption("--lon <number>", "Longitude", Number)
+  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
+  .requiredOption("--valid <iso>", "Forecast valid time")
+  .requiredOption("--levels <list>", "Comma-separated published pressure levels in hPa; vertical resolution controls diagnostic resolution")
+  .option("--diagnostics <list>", "Comma-separated profile diagnostic IDs", DEFAULT_PROFILE_DIAGNOSTICS)
+  .option("--source <nomads|s3>", "Data access path", "nomads")
+  .option("--json", "Output JSON")
+  .action(async (options) => {
+    const result = await new ProfileDiagnosticsService().getProfileDiagnostics({
+      latitude: options.lat,
+      longitude: options.lon,
+      run: options.run,
+      validTime: options.valid,
+      pressureLevelsHpa: parseLevels(options.levels),
+      diagnostics: parseProfileDiagnostics(options.diagnostics),
+      source: options.source as ProfileSourceId,
+    });
+    profileDiagnosticsResultSchema.parse(result);
+    if (options.json) return console.log(JSON.stringify(result, null, 2));
+    console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+    console.log(`Source ${result.source.provider} (${result.source.access})`);
+    console.log(`Sampled pressure levels (hPa): ${result.sampledPressureLevelsHpa.join(", ")}`);
+    for (const diagnostic of result.diagnostics) {
+      console.log(diagnostic.id);
+      if (diagnostic.id === "freezing_level_crossings") console.dir(diagnostic.crossings, { depth: null });
+      else console.table(diagnostic.layers);
+    }
+    console.log("Raw sampled levels used by the derivations");
     console.table(result.levels);
   });
 
@@ -311,6 +356,10 @@ function parseVariables(value: unknown): VariableId[] {
 
 function parseLayerDiagnostics(value: unknown): LayerDiagnosticId[] {
   return String(value).split(",").map((diagnostic) => diagnostic.trim()).filter(Boolean) as LayerDiagnosticId[];
+}
+
+function parseProfileDiagnostics(value: unknown): ProfileDiagnosticId[] {
+  return String(value).split(",").map((diagnostic) => diagnostic.trim()).filter(Boolean) as ProfileDiagnosticId[];
 }
 
 function parseLevels(value: unknown): number[] {
