@@ -1,446 +1,107 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { getGfsPressureCatalog } from "./catalog/catalog.js";
-import { AreaSummaryService } from "./core/area-summary.js";
-import { BatchPointsService } from "./core/batch-points.js";
-import { LayerDiagnosticsService } from "./core/layer-diagnostics.js";
-import { LatestRunResolver } from "./core/latest-run.js";
-import { ParcelDiagnosticsService } from "./core/parcel-diagnostics.js";
-import { PointsTimeSeriesService } from "./core/points-time-series.js";
-import { ProfileDiagnosticsService } from "./core/profile-diagnostics.js";
-import { ProfileService } from "./core/profile.js";
-import { RunComparisonService } from "./core/run-comparison.js";
-import { TimeSeriesService } from "./core/time-series.js";
-import type {
-  LayerDiagnosticId,
-  NonIsobaricFieldId,
-  ParcelDefinitionId,
-  PointCoordinate,
-  ProfileDiagnosticId,
-  ProfileSourceId,
-  RawVariableId,
-  VariableId,
-} from "./schema/query.js";
+import { searchGfsCatalog } from "./catalog/search.js";
 import {
-  areaSummaryResultSchema,
-  batchPointsResultSchema,
-  layerDiagnosticsResultSchema,
-  latestGfsRunResultSchema,
-  parcelDiagnosticsResultSchema,
-  pointsTimeSeriesResultSchema,
-  profileDiagnosticsResultSchema,
-  profileResultSchema,
-  timeSeriesResultSchema,
-} from "./schema/result.js";
-import { runComparisonResultSchema } from "./schema/run-comparison-result.js";
+  catalogSearchResultSchema,
+  type CatalogSearchSection,
+} from "./schema/catalog-search.js";
 
-const DEFAULT_VARIABLES = "temperature,relative_humidity,wind";
-const DEFAULT_LEVELS = "1000,925,850,700,500";
-const DEFAULT_LAYER_DIAGNOSTICS = "temperature_lapse_rate,wind_shear,potential_temperature_gradient";
-const DEFAULT_PROFILE_DIAGNOSTICS = "freezing_level_crossings,temperature_inversion_layers";
-const RUN_HELP = "GFS run initialization; latest = newest run satisfying this query, latest_complete = newest run published through f384";
+if (process.argv[2] !== "catalog") {
+  await import("./cli-legacy.js");
+} else {
+  const command = new Command("catalog")
+    .description("Browse or search supported GFS variables, diagnostics, parcel definitions, and non-isobaric fields")
+    .option("--search <text>", "Search IDs, descriptions, dependencies, outputs, units, GFS codes, and semantics")
+    .option("--sections <list>", "Comma-separated sections: variables,fields,layer_diagnostics,profile_diagnostics,parcel_definitions")
+    .option("--classification <raw|derived>", "Restrict matches to raw or derived entries")
+    .option("--temporal <instantaneous|accumulation|average>", "Restrict non-isobaric fields by temporal semantics")
+    .option("--limit <number>", "Maximum compact search results (1-100)", Number)
+    .option("--json", "Output JSON")
+    .action((options) => {
+      const searchMode = options.search !== undefined
+        || options.sections !== undefined
+        || options.classification !== undefined
+        || options.temporal !== undefined
+        || options.limit !== undefined;
 
-const program = new Command();
-program.name("wfg").description("Weather for Grown Ups — agent-native NOAA GFS access").version("0.1.0");
-
-program
-  .command("catalog")
-  .description("Show supported GFS pressure-level variables, derived diagnostics, and non-isobaric fields")
-  .option("--json", "Output JSON")
-  .action((options) => {
-    const catalog = getGfsPressureCatalog();
-    if (options.json) {
-      console.log(JSON.stringify(catalog, null, 2));
-      return;
-    }
-    console.log("Pressure-level variables");
-    console.table(catalog.variables.map((variable) => ({
-      id: variable.id,
-      kind: variable.kind,
-      gfs: "gfsCode" in variable ? variable.gfsCode : "derived",
-      output: variable.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
-    })));
-    console.log(`Pressure levels (hPa): ${catalog.pressureLevelsHpa.join(", ")}`);
-    console.log("Pressure-layer diagnostics");
-    console.table(catalog.layerDiagnostics.map((diagnostic) => ({
-      id: diagnostic.id,
-      dependencies: diagnostic.dependencies.join(", "),
-      output: diagnostic.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
-    })));
-    console.log("Whole-profile diagnostics");
-    console.table(catalog.profileDiagnostics.map((diagnostic) => ({
-      id: diagnostic.id,
-      dependencies: diagnostic.dependencies.join(", "),
-      output: diagnostic.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
-    })));
-    console.log("Parcel definitions");
-    console.table(catalog.parcelDefinitions.map((definition) => ({
-      id: definition.id,
-      pressureDependencies: definition.pressureDependencies.join(", "),
-      fieldDependencies: definition.fieldDependencies.join(", "),
-      output: definition.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
-    })));
-    console.log("Non-isobaric fields");
-    console.table(catalog.fields.map((field) => ({
-      id: field.id,
-      kind: field.kind,
-      level: formatFieldLevel(field.level),
-      temporal: field.temporalSemantics,
-      gfs: "gfsCode" in field ? field.gfsCode : "derived",
-      output: field.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
-    })));
-  });
-
-program
-  .command("latest")
-  .description("Resolve the latest complete GFS 0.25° run (published through f384)")
-  .option("--json", "Output JSON")
-  .action(async (options) => {
-    const run = await new LatestRunResolver().resolveLatestRun();
-    const result = latestGfsRunResultSchema.parse({
-      model: "gfs_0p25",
-      run: run.toISOString(),
-      completeness: "f384",
-      discoverySource: "NOAA AWS Open Data",
-    });
-    if (options.json) {
-      console.log(JSON.stringify(result, null, 2));
-      return;
-    }
-    console.log(result.run);
-  });
-
-program
-  .command("profile")
-  .description("Fetch GFS pressure levels and/or non-isobaric fields for a point")
-  .requiredOption("--lat <number>", "Latitude", Number)
-  .requiredOption("--lon <number>", "Longitude", Number)
-  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
-  .requiredOption("--valid <iso>", "Forecast valid time")
-  .option("--vars <list>", "Comma-separated pressure-level variables")
-  .option("--levels <list>", "Comma-separated pressure levels in hPa")
-  .option("--fields <list>", "Comma-separated non-isobaric field IDs")
-  .option("--source <nomads|s3>", "Data access path", "nomads")
-  .option("--json", "Output JSON")
-  .action(async (options) => {
-    const selection = pointSelection(options.vars, options.levels, options.fields);
-    const result = await new ProfileService().getProfile({
-      latitude: options.lat,
-      longitude: options.lon,
-      run: options.run,
-      validTime: options.valid,
-      ...selection,
-      source: options.source as ProfileSourceId,
-    });
-    profileResultSchema.parse(result);
-    if (options.json) return console.log(JSON.stringify(result, null, 2));
-    console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
-    console.log(`Source ${result.source.provider} (${result.source.access})`);
-    console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
-    if (result.levels.length > 0) console.table(result.levels);
-    if (result.fields) console.dir(result.fields, { depth: null });
-  });
-
-program
-  .command("layer")
-  .description("Derive deterministic diagnostics across two GFS pressure surfaces")
-  .requiredOption("--lat <number>", "Latitude", Number)
-  .requiredOption("--lon <number>", "Longitude", Number)
-  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
-  .requiredOption("--valid <iso>", "Forecast valid time")
-  .requiredOption("--lower <hpa>", "Lower-altitude pressure surface in hPa", Number)
-  .requiredOption("--upper <hpa>", "Upper-altitude pressure surface in hPa", Number)
-  .option("--diagnostics <list>", "Comma-separated layer diagnostic IDs", DEFAULT_LAYER_DIAGNOSTICS)
-  .option("--source <nomads|s3>", "Data access path", "nomads")
-  .option("--json", "Output JSON")
-  .action(async (options) => {
-    const result = await new LayerDiagnosticsService().getLayerDiagnostics({
-      latitude: options.lat,
-      longitude: options.lon,
-      run: options.run,
-      validTime: options.valid,
-      lowerPressureHpa: options.lower,
-      upperPressureHpa: options.upper,
-      diagnostics: parseLayerDiagnostics(options.diagnostics),
-      source: options.source as ProfileSourceId,
-    });
-    layerDiagnosticsResultSchema.parse(result);
-    if (options.json) return console.log(JSON.stringify(result, null, 2));
-    console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
-    console.log(`Source ${result.source.provider} (${result.source.access})`);
-    console.log(`${result.layer.lowerPressureHpa} → ${result.layer.upperPressureHpa} hPa; ${result.layer.lowerGeopotentialHeightGpm.toFixed(0)} → ${result.layer.upperGeopotentialHeightGpm.toFixed(0)} gpm; depth ${result.layer.depthGpm.toFixed(0)} gpm`);
-    console.table(result.diagnostics.map((diagnostic) => ({ id: diagnostic.id, ...diagnostic.values })));
-    console.log("Raw endpoint values used by the derivations");
-    console.table(result.levels);
-  });
-
-program
-  .command("profile-diagnostics")
-  .description("Derive freezing-level crossings and inversion layers from an explicit GFS pressure profile")
-  .requiredOption("--lat <number>", "Latitude", Number)
-  .requiredOption("--lon <number>", "Longitude", Number)
-  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
-  .requiredOption("--valid <iso>", "Forecast valid time")
-  .requiredOption("--levels <list>", "Comma-separated published pressure levels in hPa; vertical resolution controls diagnostic resolution")
-  .option("--diagnostics <list>", "Comma-separated profile diagnostic IDs", DEFAULT_PROFILE_DIAGNOSTICS)
-  .option("--source <nomads|s3>", "Data access path", "nomads")
-  .option("--json", "Output JSON")
-  .action(async (options) => {
-    const result = await new ProfileDiagnosticsService().getProfileDiagnostics({
-      latitude: options.lat,
-      longitude: options.lon,
-      run: options.run,
-      validTime: options.valid,
-      pressureLevelsHpa: parseLevels(options.levels),
-      diagnostics: parseProfileDiagnostics(options.diagnostics),
-      source: options.source as ProfileSourceId,
-    });
-    profileDiagnosticsResultSchema.parse(result);
-    if (options.json) return console.log(JSON.stringify(result, null, 2));
-    console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
-    console.log(`Source ${result.source.provider} (${result.source.access})`);
-    console.log(`Sampled pressure levels (hPa): ${result.sampledPressureLevelsHpa.join(", ")}`);
-    for (const diagnostic of result.diagnostics) {
-      console.log(diagnostic.id);
-      if (diagnostic.id === "freezing_level_crossings") console.dir(diagnostic.crossings, { depth: null });
-      else console.table(diagnostic.layers);
-    }
-    console.log("Raw sampled levels used by the derivations");
-    console.table(result.levels);
-  });
-
-program
-  .command("parcel")
-  .description("Lift an explicit parcel through a sampled GFS pressure profile and derive LCL/LFC/EL/CAPE/CIN")
-  .requiredOption("--lat <number>", "Latitude", Number)
-  .requiredOption("--lon <number>", "Longitude", Number)
-  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
-  .requiredOption("--valid <iso>", "Forecast valid time")
-  .requiredOption("--levels <list>", "Comma-separated published pressure levels in hPa; vertical resolution controls parcel diagnostics")
-  .requiredOption("--parcel <surface_2m|mixed_layer_100hpa|most_unstable_300hpa>", "Explicit parcel initialization")
-  .option("--source <nomads|s3>", "Data access path", "nomads")
-  .option("--json", "Output JSON")
-  .action(async (options) => {
-    const result = await new ParcelDiagnosticsService().getParcelDiagnostics({
-      latitude: options.lat,
-      longitude: options.lon,
-      run: options.run,
-      validTime: options.valid,
-      pressureLevelsHpa: parseLevels(options.levels),
-      parcel: options.parcel as ParcelDefinitionId,
-      source: options.source as ProfileSourceId,
-    });
-    parcelDiagnosticsResultSchema.parse(result);
-    if (options.json) return console.log(JSON.stringify(result, null, 2));
-    console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
-    console.log(`Source ${result.source.provider} (${result.source.access})`);
-    console.log(`Parcel ${result.parcel.startingState.definition} from ${result.parcel.startingState.pressureHpa.toFixed(1)} hPa, ${result.parcel.startingState.temperatureC.toFixed(2)} °C`);
-    console.log(`LCL ${result.parcel.lcl.pressureHpa.toFixed(1)} hPa${result.parcel.lcl.geopotentialHeightGpm === undefined ? "" : ` / ${result.parcel.lcl.geopotentialHeightGpm.toFixed(0)} gpm`}`);
-    console.log(`LFC ${result.parcel.lfc ? `${result.parcel.lfc.pressureHpa.toFixed(1)} hPa` : "none"}; EL ${result.parcel.el ? `${result.parcel.el.pressureHpa.toFixed(1)} hPa` : "none"}`);
-    console.log(`CAPE ${result.parcel.capeJkg.toFixed(1)} J/kg (${result.parcel.capeTop}); CIN ${result.parcel.cinJkg.toFixed(1)} J/kg (${result.parcel.cinTop})`);
-    console.log("Parcel path");
-    console.table(result.parcel.parcelPath);
-    console.log("Raw sampled environmental levels");
-    console.table(result.levels);
-  });
-
-program
-  .command("points")
-  .description("Fetch one GFS field selection for multiple points using a shared S3 GRIB slice")
-  .requiredOption("--point <lat,lon>", "Point to sample; repeat up to 50 times", collectPoint)
-  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
-  .requiredOption("--valid <iso>", "Forecast valid time")
-  .option("--vars <list>", "Comma-separated pressure-level variables")
-  .option("--levels <list>", "Comma-separated pressure levels in hPa")
-  .option("--fields <list>", "Comma-separated non-isobaric field IDs")
-  .option("--json", "Output JSON")
-  .action(async (options) => {
-    const selection = pointSelection(options.vars, options.levels, options.fields);
-    const result = await new BatchPointsService().getPoints({
-      points: options.point as PointCoordinate[],
-      run: options.run,
-      validTime: options.valid,
-      ...selection,
-    });
-    batchPointsResultSchema.parse(result);
-    if (options.json) return console.log(JSON.stringify(result, null, 2));
-    console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
-    console.log(`Source ${result.source.provider} (${result.source.access})  shared-slice cacheHit=${result.source.cacheHit}`);
-    for (const [index, point] of result.points.entries()) {
-      console.log(`Point ${index + 1}: ${point.requestedPoint.latitude},${point.requestedPoint.longitude} → grid ${point.gridPoint.latitude},${point.gridPoint.longitude}`);
-      if (point.levels.length > 0) console.table(point.levels);
-      if (point.fields) console.dir(point.fields, { depth: null });
-    }
-  });
-
-program
-  .command("timeseries")
-  .description("Fetch native GFS forecast steps for pressure levels and/or non-isobaric fields")
-  .requiredOption("--lat <number>", "Latitude", Number)
-  .requiredOption("--lon <number>", "Longitude", Number)
-  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
-  .requiredOption("--from <iso>", "Inclusive valid-time range start")
-  .requiredOption("--to <iso>", "Inclusive valid-time range end")
-  .option("--vars <list>", "Comma-separated pressure-level variables")
-  .option("--levels <list>", "Comma-separated pressure levels in hPa")
-  .option("--fields <list>", "Comma-separated non-isobaric field IDs")
-  .option("--source <nomads|s3>", "Data access path", "s3")
-  .option("--max-steps <number>", "Maximum native forecast steps", Number, 160)
-  .option("--json", "Output JSON")
-  .action(async (options) => {
-    const selection = pointSelection(options.vars, options.levels, options.fields);
-    const result = await new TimeSeriesService().getTimeSeries({
-      latitude: options.lat,
-      longitude: options.lon,
-      run: options.run,
-      startTime: options.from,
-      endTime: options.to,
-      ...selection,
-      source: options.source as ProfileSourceId,
-      maxSteps: options.maxSteps,
-    });
-    timeSeriesResultSchema.parse(result);
-    if (options.json) return console.log(JSON.stringify(result, null, 2));
-    console.log(`GFS ${result.run}  ${result.requestedStartTime} → ${result.requestedEndTime}`);
-    console.log(`Source ${result.source.provider} (${result.source.access})`);
-    console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
-    const pressureRows = result.series.flatMap((step) =>
-      step.levels.map((level) => ({ valid: step.validTime, f: step.forecastHour, ...level, cacheHit: step.cacheHit })),
-    );
-    if (pressureRows.length > 0) console.table(pressureRows);
-    if (result.series.some((step) => step.fields)) {
-      console.dir(result.series.map((step) => ({
-        validTime: step.validTime,
-        forecastHour: step.forecastHour,
-        fields: step.fields,
-        cacheHit: step.cacheHit,
-      })), { depth: null });
-    }
-  });
-
-program
-  .command("points-timeseries")
-  .description("Fetch native GFS forecast steps for multiple points using one shared S3 GRIB slice per step")
-  .requiredOption("--point <lat,lon>", "Point to sample; repeat up to 20 times", collectPoint)
-  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
-  .requiredOption("--from <iso>", "Inclusive valid-time range start")
-  .requiredOption("--to <iso>", "Inclusive valid-time range end")
-  .option("--vars <list>", "Comma-separated pressure-level variables")
-  .option("--levels <list>", "Comma-separated pressure levels in hPa")
-  .option("--fields <list>", "Comma-separated non-isobaric field IDs")
-  .option("--max-steps <number>", "Maximum native forecast steps", Number, 80)
-  .option("--max-samples <number>", "Maximum point × forecast-step samples", Number, 1600)
-  .option("--json", "Output JSON")
-  .action(async (options) => {
-    const selection = pointSelection(options.vars, options.levels, options.fields);
-    const result = await new PointsTimeSeriesService().getPointsTimeSeries({
-      points: options.point as PointCoordinate[],
-      run: options.run,
-      startTime: options.from,
-      endTime: options.to,
-      ...selection,
-      maxSteps: options.maxSteps,
-      maxSamples: options.maxSamples,
-    });
-    pointsTimeSeriesResultSchema.parse(result);
-    if (options.json) return console.log(JSON.stringify(result, null, 2));
-    console.log(`GFS ${result.run}  ${result.requestedStartTime} → ${result.requestedEndTime}`);
-    console.log(`Source ${result.source.provider} (${result.source.access}); one shared selected-message slice per forecast step`);
-    for (const step of result.series) {
-      console.log(`Valid ${step.validTime}  f${String(step.forecastHour).padStart(3, "0")}  shared-slice cacheHit=${step.cacheHit}`);
-      for (const [index, point] of step.points.entries()) {
-        console.log(`Point ${index + 1}: ${point.requestedPoint.latitude},${point.requestedPoint.longitude} → grid ${point.gridPoint.latitude},${point.gridPoint.longitude}`);
-        if (point.levels.length > 0) console.table(point.levels);
-        if (point.fields) console.dir(point.fields, { depth: null });
+      if (!searchMode) {
+        const catalog = getGfsPressureCatalog();
+        if (options.json) {
+          console.log(JSON.stringify(catalog, null, 2));
+          return;
+        }
+        printFullCatalog(catalog);
+        return;
       }
-    }
-  });
 
-program
-  .command("compare-runs")
-  .description("Compare one point/valid time across consecutive six-hour GFS model cycles")
-  .requiredOption("--lat <number>", "Latitude", Number)
-  .requiredOption("--lon <number>", "Longitude", Number)
-  .option("--anchor <iso|latest|latest_complete>", "Newest run in the comparison", "latest")
-  .requiredOption("--valid <iso>", "Forecast valid time compared across cycles")
-  .option("--vars <list>", "Comma-separated pressure-level variables")
-  .option("--levels <list>", "Comma-separated pressure levels in hPa")
-  .option("--fields <list>", "Comma-separated non-isobaric field IDs")
-  .option("--cycles <number>", "Number of consecutive six-hour model cycles to compare (2-6)", Number, 3)
-  .option("--json", "Output JSON")
-  .action(async (options) => {
-    const selection = pointSelection(options.vars, options.levels, options.fields);
-    const result = await new RunComparisonService().compareRuns({
-      latitude: options.lat,
-      longitude: options.lon,
-      anchorRun: options.anchor,
-      validTime: options.valid,
-      ...selection,
-      cycles: options.cycles,
-    });
-    runComparisonResultSchema.parse(result);
-    if (options.json) return console.log(JSON.stringify(result, null, 2));
-    console.log(`GFS run comparison  valid ${result.validTime}`);
-    console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
-    console.log(`Anchor ${result.anchorRun}; source ${result.source.provider} (${result.source.access})`);
-    console.table(result.runs.map((run) => ({ run: run.run, forecastHour: run.forecastHour, cacheHit: run.cacheHit })));
-    for (const comparison of result.comparisons) {
-      console.log(`${comparison.fromRun} → ${comparison.toRun}  (f${comparison.fromForecastHour} → f${comparison.toForecastHour}); deltas = newer - older`);
-      const pressureRows = comparison.pressureLevels.flatMap((level) => level.changes.map((change) => ({
-        pressureHpa: level.pressureHpa,
-        field: change.field,
-        from: change.from,
-        to: change.to,
-        delta: change.delta,
-        deltaKind: change.deltaKind,
+      const result = catalogSearchResultSchema.parse(searchGfsCatalog({
+        ...(options.search === undefined ? {} : { search: String(options.search) }),
+        ...(options.sections === undefined ? {} : { sections: parseSections(options.sections) }),
+        ...(options.classification === undefined ? {} : { classification: options.classification }),
+        ...(options.temporal === undefined ? {} : { temporalSemantics: options.temporal }),
+        ...(options.limit === undefined ? {} : { limit: options.limit }),
+      }));
+
+      if (options.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+
+      const searchText = result.query.search === undefined ? "browse" : `search=${JSON.stringify(result.query.search)}`;
+      console.log(`GFS catalog ${searchText}; ${result.totalMatches} matches${result.truncated ? `, showing ${result.matches.length}` : ""}`);
+      console.table(result.matches.map((match) => ({
+        section: match.section,
+        id: match.id,
+        classification: match.classification,
+        temporal: match.temporalSemantics ?? "",
+        vertical: match.verticalSemantics,
+        gfs: match.gfsCode ?? "",
+        output: match.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
       })));
-      if (pressureRows.length > 0) console.table(pressureRows);
-      if (comparison.fields.length > 0) {
-        console.dir(comparison.fields, { depth: null });
-      }
-    }
-  });
-
-program
-  .command("area")
-  .description("Summarize one raw GFS pressure-level variable or non-isobaric field over a bounded area")
-  .requiredOption("--west <number>", "Western longitude", Number)
-  .requiredOption("--east <number>", "Eastern longitude", Number)
-  .requiredOption("--south <number>", "Southern latitude", Number)
-  .requiredOption("--north <number>", "Northern latitude", Number)
-  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
-  .requiredOption("--valid <iso>", "Forecast valid time")
-  .option("--var <id>", "One raw pressure-level variable; use together with --level")
-  .option("--level <hpa>", "Pressure level in hPa; use together with --var", Number)
-  .option("--field <id>", "One raw non-isobaric field; mutually exclusive with --var/--level")
-  .option("--max-grid-points <number>", "Maximum estimated GFS grid points", Number, 50000)
-  .option("--json", "Output JSON")
-  .action(async (options) => {
-    const result = await new AreaSummaryService().summarize({
-      westLongitude: options.west,
-      eastLongitude: options.east,
-      southLatitude: options.south,
-      northLatitude: options.north,
-      run: options.run,
-      validTime: options.valid,
-      ...(options.var === undefined ? {} : { variable: options.var as RawVariableId }),
-      ...(options.level === undefined ? {} : { pressureLevelHpa: options.level as number }),
-      ...(options.field === undefined ? {} : { field: options.field as NonIsobaricFieldId }),
-      maxGridPoints: options.maxGridPoints,
     });
-    areaSummaryResultSchema.parse(result);
-    if (options.json) return console.log(JSON.stringify(result, null, 2));
-    console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
-    if (result.variable) {
-      console.log(`${result.variable.id} ${result.variable.pressureHpa} hPa [${result.variable.unit}]`);
-    } else if (result.field) {
-      console.log(`${result.field.id} [${result.field.output.unit}]`);
-      console.dir({ level: result.field.level, temporal: result.field.temporal }, { depth: null });
-    }
-    console.table([result.statistics]);
-  });
 
-await program.parseAsync();
+  await command.parseAsync(process.argv.slice(3), { from: "user" });
+}
+
+function printFullCatalog(catalog: ReturnType<typeof getGfsPressureCatalog>): void {
+  console.log("Pressure-level variables");
+  console.table(catalog.variables.map((variable) => ({
+    id: variable.id,
+    kind: variable.kind,
+    gfs: "gfsCode" in variable ? variable.gfsCode : "derived",
+    output: variable.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
+  })));
+  console.log(`Pressure levels (hPa): ${catalog.pressureLevelsHpa.join(", ")}`);
+  console.log("Pressure-layer diagnostics");
+  console.table(catalog.layerDiagnostics.map((diagnostic) => ({
+    id: diagnostic.id,
+    dependencies: diagnostic.dependencies.join(", "),
+    output: diagnostic.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
+  })));
+  console.log("Whole-profile diagnostics");
+  console.table(catalog.profileDiagnostics.map((diagnostic) => ({
+    id: diagnostic.id,
+    dependencies: diagnostic.dependencies.join(", "),
+    output: diagnostic.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
+  })));
+  console.log("Parcel definitions");
+  console.table(catalog.parcelDefinitions.map((definition) => ({
+    id: definition.id,
+    pressureDependencies: definition.pressureDependencies.join(", "),
+    fieldDependencies: definition.fieldDependencies.join(", "),
+    output: definition.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
+  })));
+  console.log("Non-isobaric fields");
+  console.table(catalog.fields.map((field) => ({
+    id: field.id,
+    kind: field.kind,
+    level: formatFieldLevel(field.level),
+    temporal: field.temporalSemantics,
+    gfs: "gfsCode" in field ? field.gfsCode : "derived",
+    output: field.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
+  })));
+}
 
 function formatFieldLevel(level: ReturnType<typeof getGfsPressureCatalog>["fields"][number]["level"]): string {
   switch (level.type) {
@@ -451,61 +112,9 @@ function formatFieldLevel(level: ReturnType<typeof getGfsPressureCatalog>["field
   }
 }
 
-function pointSelection(vars: unknown, levels: unknown, fields: unknown): {
-  variables?: VariableId[];
-  pressureLevelsHpa?: number[];
-  fields?: NonIsobaricFieldId[];
-} {
-  const parsedFields = parseFields(fields);
-  const hasExplicitPressureSelection = vars !== undefined || levels !== undefined;
-  const includeDefaultPressureSelection = !hasExplicitPressureSelection && parsedFields.length === 0;
-
-  const variables = vars !== undefined
-    ? parseVariables(vars)
-    : hasExplicitPressureSelection || includeDefaultPressureSelection
-      ? parseVariables(DEFAULT_VARIABLES)
-      : undefined;
-  const pressureLevelsHpa = levels !== undefined
-    ? parseLevels(levels)
-    : hasExplicitPressureSelection || includeDefaultPressureSelection
-      ? parseLevels(DEFAULT_LEVELS)
-      : undefined;
-
-  return {
-    ...(variables === undefined ? {} : { variables }),
-    ...(pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa }),
-    ...(parsedFields.length === 0 ? {} : { fields: parsedFields }),
-  };
-}
-
-function collectPoint(value: string, previous: PointCoordinate[] | undefined): PointCoordinate[] {
-  const parts = value.split(",").map((part) => part.trim());
-  if (parts.length !== 2) throw new Error(`Expected --point lat,lon, received: ${value}`);
-  const latitude = Number(parts[0]);
-  const longitude = Number(parts[1]);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    throw new Error(`Expected numeric --point lat,lon, received: ${value}`);
-  }
-  return [...(previous ?? []), { latitude, longitude }];
-}
-
-function parseVariables(value: unknown): VariableId[] {
-  return String(value).split(",").map((variable) => variable.trim()).filter(Boolean) as VariableId[];
-}
-
-function parseLayerDiagnostics(value: unknown): LayerDiagnosticId[] {
-  return String(value).split(",").map((diagnostic) => diagnostic.trim()).filter(Boolean) as LayerDiagnosticId[];
-}
-
-function parseProfileDiagnostics(value: unknown): ProfileDiagnosticId[] {
-  return String(value).split(",").map((diagnostic) => diagnostic.trim()).filter(Boolean) as ProfileDiagnosticId[];
-}
-
-function parseLevels(value: unknown): number[] {
-  return String(value).split(",").map((level) => level.trim()).filter(Boolean).map(Number);
-}
-
-function parseFields(value: unknown): NonIsobaricFieldId[] {
-  if (value === undefined) return [];
-  return String(value).split(",").map((field) => field.trim()).filter(Boolean) as NonIsobaricFieldId[];
+function parseSections(value: unknown): CatalogSearchSection[] {
+  return String(value)
+    .split(",")
+    .map((section) => section.trim())
+    .filter(Boolean) as CatalogSearchSection[];
 }
