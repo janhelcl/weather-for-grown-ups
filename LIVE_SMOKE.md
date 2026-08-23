@@ -34,7 +34,7 @@ This exercises NOAA AWS Open Data through the deterministic GFS core:
 
 Assertions validate contracts, provenance, dimensions, and physical-result finiteness rather than pinning specific weather values.
 
-## GEFS ensemble integration
+## GEFS ensemble and aligned GFS comparison integration
 
 ```bash
 npm run test:live:gefs
@@ -42,24 +42,26 @@ npm run test:live:gefs
 
 This is deliberately small. It selects `c00`, `p01`, and `p02`, resolves one current GEFS cycle covering two adjacent native three-hour valid times, and samples 850-hPa temperature over Prague from the NOAA AWS `pgrb2a` 0.5° product.
 
-The smoke exercises both:
+The smoke exercises:
 
 - the one-time `GefsEnsembleService` result at the final valid time;
-- a two-step `GefsEnsembleTimeSeriesService` result using the same explicit model run.
+- a two-step `GefsEnsembleTimeSeriesService` result using the same explicit model run;
+- `GfsGefsComparisonService` at the final valid time, with deterministic GFS and GEFS forced to the same initialization cycle.
 
 It verifies the parts offline fixtures cannot prove:
 
-- current NOAA GEFS bucket/path/member naming;
+- current NOAA GFS/GEFS AWS bucket, path, and member naming;
 - `.idx` availability and range-aware run discovery;
 - selected GRIB byte-range download at multiple forecast hours;
-- `wgrib2` point decoding of real GEFS subsets;
-- shared-grid consistency across members and time steps;
+- `wgrib2` point decoding of real deterministic GFS and GEFS subsets;
+- shared-grid consistency inside GEFS while preserving separate GFS/GEFS sampled grid points;
 - normalized member values and finite ensemble summaries;
 - fixed-cycle native three-hour temporal composition;
 - compact summary-only time-series output by default;
-- explicit raw-member threshold-fraction semantics.
+- aligned deterministic-minus-ensemble comparison metrics;
+- explicit raw-member / raw-model interpretation semantics rather than calibrated probability or uncertainty.
 
-The live smoke intentionally uses only three members and two forecast steps so weekly compatibility testing remains light while exercising both ensemble surfaces.
+The live smoke intentionally uses only three GEFS members and two forecast steps so weekly compatibility testing remains light. The comparison reuses the final GEFS member slices and adds only the matching deterministic GFS field slice.
 
 ## Rich NOMADS area integration
 
@@ -111,7 +113,7 @@ Without `WFG_LIVE_SOURCE` it uses NOMADS; setting `s3` switches the source.
 
 Before the schedule was merged, the expanded deterministic workflow was deliberately executed against current NOAA data on 2026-08-23. The first attempt caught a real test defect: the parcel smoke requested unsupported 875/825/775 hPa levels. The smoke data was corrected to the canonical published GFS pressure-level set, and the rerun passed both AWS and NOMADS paths.
 
-The first GEFS capability was likewise exercised against current NOAA AWS data before merge. This layer exists to catch assumptions that deterministic mocks and fixed fixtures cannot reveal without turning upstream availability into a permanent merge dependency.
+The GEFS point and time-series capabilities were likewise exercised against current NOAA AWS data before merge. Cross-model comparison extends that same low-cost compatibility check to the aligned deterministic GFS slice. This layer exists to catch assumptions that deterministic mocks and fixed fixtures cannot reveal without turning upstream availability into a permanent merge dependency.
 
 ## Failure triage
 

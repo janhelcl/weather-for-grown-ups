@@ -15,7 +15,7 @@ The current GEFS surface covers:
 - NOAA AWS Open Data `.idx` byte-range access only;
 - normalized member values plus deterministic ensemble distribution summaries.
 
-The time-series surface composes the same point/member primitive across one fixed model cycle; it does not introduce a parallel meteorology or source path.
+The time-series surface composes the same point/member primitive across one fixed model cycle; it does not introduce a parallel meteorology or source path. Deterministic GFS-vs-GEFS comparison is a separate cross-model composition over this same member-distribution primitive; see [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md).
 
 ## Supported pressure-level variables
 
@@ -97,10 +97,12 @@ wfg ensemble-timeseries \
 
 ## MCP
 
-The equivalent MCP tools are:
+The GEFS-only MCP tools are:
 
 - `get_gefs_ensemble` for one valid time;
 - `get_gefs_ensemble_timeseries` for a native-cadence range.
+
+The cross-model `compare_gfs_to_gefs` tool composes the same GEFS result with deterministic GFS from one aligned initialization cycle. CLI equivalents are `wfg ensemble`, `wfg ensemble-timeseries`, and `wfg compare-gfs-gefs` respectively.
 
 CLI and MCP call the same core services and validate against the same public schemas.
 
@@ -189,7 +191,6 @@ Not yet included:
 - ensemble parcel/layer/profile diagnostics;
 - spatial ensemble areas or transects;
 - calibrated probabilities;
-- comparison of deterministic GFS against the GEFS distribution;
 - ensemble-derived activity suitability or safety judgments.
 
-Those should compose from the same model/member/source contract rather than bypass it.
+Aligned deterministic GFS-vs-GEFS comparison is now available as a separate composition; see [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md). Future ensemble diagnostics should likewise compose from this model/member/source contract rather than bypass it.
