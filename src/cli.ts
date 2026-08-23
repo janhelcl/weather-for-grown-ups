@@ -2,12 +2,20 @@
 import { Command } from "commander";
 import { getGfsPressureCatalog } from "./catalog/catalog.js";
 import { AreaSummaryService } from "./core/area-summary.js";
+import { BatchPointsService } from "./core/batch-points.js";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
-import type { NonIsobaricFieldId, ProfileSourceId, RawVariableId, VariableId } from "./schema/query.js";
+import type {
+  NonIsobaricFieldId,
+  PointCoordinate,
+  ProfileSourceId,
+  RawVariableId,
+  VariableId,
+} from "./schema/query.js";
 import {
   areaSummaryResultSchema,
+  batchPointsResultSchema,
   latestGfsRunResultSchema,
   profileResultSchema,
   timeSeriesResultSchema,
@@ -97,6 +105,35 @@ program
     console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
     if (result.levels.length > 0) console.table(result.levels);
     if (result.fields) console.dir(result.fields, { depth: null });
+  });
+
+program
+  .command("points")
+  .description("Fetch one GFS field selection for multiple points using a shared S3 GRIB slice")
+  .requiredOption("--point <lat,lon>", "Point to sample; repeat up to 50 times", collectPoint)
+  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
+  .requiredOption("--valid <iso>", "Forecast valid time")
+  .option("--vars <list>", "Comma-separated pressure-level variables")
+  .option("--levels <list>", "Comma-separated pressure levels in hPa")
+  .option("--fields <list>", "Comma-separated non-isobaric field IDs")
+  .option("--json", "Output JSON")
+  .action(async (options) => {
+    const selection = pointSelection(options.vars, options.levels, options.fields);
+    const result = await new BatchPointsService().getPoints({
+      points: options.point as PointCoordinate[],
+      run: options.run,
+      validTime: options.valid,
+      ...selection,
+    });
+    batchPointsResultSchema.parse(result);
+    if (options.json) return console.log(JSON.stringify(result, null, 2));
+    console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+    console.log(`Source ${result.source.provider} (${result.source.access})  shared-slice cacheHit=${result.source.cacheHit}`);
+    for (const [index, point] of result.points.entries()) {
+      console.log(`Point ${index + 1}: ${point.requestedPoint.latitude},${point.requestedPoint.longitude} → grid ${point.gridPoint.latitude},${point.gridPoint.longitude}`);
+      if (point.levels.length > 0) console.table(point.levels);
+      if (point.fields) console.dir(point.fields, { depth: null });
+    }
   });
 
 program
@@ -212,6 +249,17 @@ function pointSelection(vars: unknown, levels: unknown, fields: unknown): {
     ...(pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa }),
     ...(parsedFields.length === 0 ? {} : { fields: parsedFields }),
   };
+}
+
+function collectPoint(value: string, previous: PointCoordinate[] | undefined): PointCoordinate[] {
+  const parts = value.split(",").map((part) => part.trim());
+  if (parts.length !== 2) throw new Error(`Expected --point lat,lon, received: ${value}`);
+  const latitude = Number(parts[0]);
+  const longitude = Number(parts[1]);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new Error(`Expected numeric --point lat,lon, received: ${value}`);
+  }
+  return [...(previous ?? []), { latitude, longitude }];
 }
 
 function parseVariables(value: unknown): VariableId[] {
