@@ -3,6 +3,7 @@ import * as z from "zod/v4";
 import { AreaSummaryService } from "./core/area-summary.js";
 import { BatchPointsService } from "./core/batch-points.js";
 import { DiagnosticTimeSeriesService } from "./core/diagnostic-time-series.js";
+import { GefsEnsembleProfileService } from "./core/gefs-ensemble-profile.js";
 import { GefsEnsembleTimeSeriesService } from "./core/gefs-ensemble-timeseries.js";
 import { GefsEnsembleService } from "./core/gefs-ensemble.js";
 import { GfsGefsComparisonService } from "./core/gfs-gefs-comparison.js";
@@ -16,7 +17,11 @@ import { RunComparisonService } from "./core/run-comparison.js";
 import { TimeSeriesService } from "./core/time-series.js";
 import { TransectService } from "./core/transect.js";
 import { handleGetGfsAreaSummary } from "./mcp-area-tool.js";
-import { handleGetGefsEnsemble, handleGetGefsEnsembleTimeSeries } from "./mcp-gefs-tool.js";
+import {
+  handleGetGefsEnsemble,
+  handleGetGefsEnsembleProfile,
+  handleGetGefsEnsembleTimeSeries,
+} from "./mcp-gefs-tool.js";
 import { handleCompareGfsToGefs } from "./mcp-model-comparison-tool.js";
 import {
   handleCompareGfsRuns,
@@ -38,6 +43,10 @@ import { areaSummaryResultSchema } from "./schema/area-summary-result.js";
 import { catalogSearchQuerySchema, catalogSearchResultSchema } from "./schema/catalog-search.js";
 import { diagnosticTimeSeriesQuerySchema } from "./schema/diagnostic-time-series.js";
 import { diagnosticTimeSeriesResultSchema } from "./schema/diagnostic-time-series-result.js";
+import {
+  gefsEnsembleProfileQuerySchema,
+  gefsEnsembleProfileResultSchema,
+} from "./schema/gefs-ensemble-profile.js";
 import {
   gefsEnsembleTimeSeriesQuerySchema,
   gefsEnsembleTimeSeriesResultSchema,
@@ -75,11 +84,12 @@ export function createMcpServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "WFG exposes NOAA numerical weather models with explicit model/run/valid-time/vertical semantics. Use get_gfs_catalog or search_gfs_catalog to discover the deterministic GFS 0.25° surface. GFS query tools support query-aware run='latest', latest_complete through f384, and explicit reproducible cycles; values are raw model data or deterministic local physical derivations. Use get_gefs_ensemble for one-time uncertainty across GEFS 0.5° control/perturbed members, get_gefs_ensemble_timeseries to track the same member distribution across native three-hour forecast steps from one fixed cycle, and compare_gfs_to_gefs when you need to place deterministic GFS inside an aligned GEFS member distribution. GEFS threshold fractions and GFS-vs-GEFS ranks are raw model/member distribution evidence, not calibrated probabilities or uncertainty. Use GFS diagnostics for layer/profile/parcel calculations, points/transect/time-series tools for spatial and temporal composition, compare_gfs_runs for cycle changes, and summarize_gfs_area for bounded grid statistics. WFG does not provide activity-specific interpretation or safety advice.",
+      instructions: "WFG exposes NOAA numerical weather models with explicit model/run/valid-time/vertical semantics. Use get_gfs_catalog or search_gfs_catalog to discover the deterministic GFS 0.25° surface. GFS query tools support query-aware run='latest', latest_complete through f384, and explicit reproducible cycles; values are raw model data or deterministic local physical derivations. Use get_gefs_ensemble for one-time uncertainty across GEFS 0.5° control/perturbed members, get_gefs_ensemble_profile for multi-variable/multi-level vertical distributions at one point/time, get_gefs_ensemble_timeseries to track one field distribution across native three-hour forecast steps from one fixed cycle, and compare_gfs_to_gefs to place deterministic GFS inside an aligned GEFS member distribution. GEFS member fractions, profile summaries, and GFS-vs-GEFS ranks are raw model/member distribution evidence, not calibrated probabilities or uncertainty. Use GFS diagnostics for layer/profile/parcel calculations, points/transect/time-series tools for spatial and temporal composition, compare_gfs_runs for cycle changes, and summarize_gfs_area for bounded grid statistics. WFG does not provide activity-specific interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
   const gefsEnsembleService = new GefsEnsembleService();
+  const gefsEnsembleProfileService = new GefsEnsembleProfileService();
   const gefsEnsembleTimeSeriesService = new GefsEnsembleTimeSeriesService({ ensembleGetter: gefsEnsembleService });
   const profileService = new ProfileService({ latestRunProvider: latestRunResolver });
   const gfsGefsComparisonService = new GfsGefsComparisonService({
@@ -134,6 +144,13 @@ export function createMcpServer(): McpServer {
     inputSchema: gefsEnsembleQuerySchema,
     outputSchema: gefsEnsembleResultSchema,
   }, async (query) => handleGetGefsEnsemble(gefsEnsembleService, query));
+
+  server.registerTool("get_gefs_ensemble_profile", {
+    title: "Get GEFS ensemble pressure profile",
+    description: "Summarize multiple raw GEFS 0.5° pgrb2a pressure-level variables across multiple published pressure surfaces and selected members at one point/time. WFG fetches one multi-message slice per member and returns per variable/level mean, population spread, extrema, and quantiles. Member profiles are omitted by default; set includeMembers=true only when memberwise vertical trajectories are needed.",
+    inputSchema: gefsEnsembleProfileQuerySchema,
+    outputSchema: gefsEnsembleProfileResultSchema,
+  }, async (query) => handleGetGefsEnsembleProfile(gefsEnsembleProfileService, query));
 
   server.registerTool("get_gefs_ensemble_timeseries", {
     title: "Get GEFS ensemble time series",
