@@ -48,4 +48,5 @@ jobs:
       - uses: actions/checkout@v4
       - run: docker build -t weather-for-grown-ups:test .
       - run: docker run --rm weather-for-grown-ups:test --help
-      - run: docker run --rm --entrypoint /opt/conda/bin/wgrib2 weather-for-grown-ups:test -version
+      - name: Verify bundled wgrib2
+        run: docker run --rm --entrypoint /opt/conda/bin/wgrib2 weather-for-grown-ups:test -version 2>&1 | grep -Fx "3.8.0"
