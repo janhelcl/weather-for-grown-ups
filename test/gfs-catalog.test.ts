@@ -13,7 +13,7 @@ describe("getGfsPressureCatalog", () => {
 
   it("exposes all raw and derived variable metadata without internal functions", () => {
     const catalog = getGfsPressureCatalog();
-    expect(catalog.variables).toHaveLength(13);
+    expect(catalog.variables).toHaveLength(18);
     expect(catalog.variables.find((variable) => variable.id === "specific_humidity")).toMatchObject({
       kind: "raw",
       gfsCode: "SPFH",
@@ -24,6 +24,16 @@ describe("getGfsPressureCatalog", () => {
       kind: "derived",
       dependencies: ["u_wind", "v_wind"],
     });
+    expect(catalog.variables.find((variable) => variable.id === "dew_point")).toMatchObject({
+      kind: "derived",
+      dependencies: ["temperature", "relative_humidity"],
+      outputs: [{ field: "dewPointC", unit: "degC" }],
+    });
+    expect(catalog.variables.find((variable) => variable.id === "air_density")).toMatchObject({
+      kind: "derived",
+      dependencies: ["temperature", "specific_humidity"],
+      outputs: [{ field: "airDensityKgM3", unit: "kg/m^3" }],
+    });
   });
 
   it("returns fresh arrays so callers cannot mutate the canonical catalog", () => {
@@ -32,6 +42,6 @@ describe("getGfsPressureCatalog", () => {
     first.variables.pop();
     const second = getGfsPressureCatalog();
     expect(second.pressureLevelsHpa).toHaveLength(41);
-    expect(second.variables).toHaveLength(13);
+    expect(second.variables).toHaveLength(18);
   });
 });
