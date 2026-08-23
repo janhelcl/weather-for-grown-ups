@@ -2,6 +2,7 @@ import type { GefsEnsembleProfileService } from "./core/gefs-ensemble-profile.js
 import type { GefsEnsembleTimeSeriesService } from "./core/gefs-ensemble-timeseries.js";
 import type { GefsEnsembleService } from "./core/gefs-ensemble.js";
 import type { GefsLayerDiagnosticsService } from "./core/gefs-layer-diagnostics.js";
+import type { GefsProfileDiagnosticsService } from "./core/gefs-profile-diagnostics.js";
 import {
   gefsEnsembleProfileResultSchema,
   type GefsEnsembleProfileQueryInput,
@@ -22,6 +23,11 @@ import {
   type GefsLayerDiagnosticsQueryInput,
   type GefsLayerDiagnosticsResult,
 } from "./schema/gefs-layer-diagnostics.js";
+import {
+  gefsProfileDiagnosticsResultSchema,
+  type GefsProfileDiagnosticsQueryInput,
+  type GefsProfileDiagnosticsResult,
+} from "./schema/gefs-profile-diagnostics.js";
 
 export interface GefsEnsembleGetter {
   getEnsemble(query: GefsEnsembleQueryInput): Promise<GefsEnsembleResult>;
@@ -37,6 +43,10 @@ export interface GefsEnsembleProfileGetter {
 
 export interface GefsLayerDiagnosticsGetter {
   getLayerDiagnostics(query: GefsLayerDiagnosticsQueryInput): Promise<GefsLayerDiagnosticsResult>;
+}
+
+export interface GefsProfileDiagnosticsGetter {
+  getProfileDiagnostics(query: GefsProfileDiagnosticsQueryInput): Promise<GefsProfileDiagnosticsResult>;
 }
 
 export async function handleGetGefsEnsemble(
@@ -65,6 +75,13 @@ export async function handleGetGefsLayerDiagnostics(
   query: GefsLayerDiagnosticsQueryInput,
 ) {
   return handle(async () => gefsLayerDiagnosticsResultSchema.parse(await service.getLayerDiagnostics(query)));
+}
+
+export async function handleGetGefsProfileDiagnostics(
+  service: Pick<GefsProfileDiagnosticsService, "getProfileDiagnostics"> | GefsProfileDiagnosticsGetter,
+  query: GefsProfileDiagnosticsQueryInput,
+) {
+  return handle(async () => gefsProfileDiagnosticsResultSchema.parse(await service.getProfileDiagnostics(query)));
 }
 
 async function handle<T extends Record<string, unknown>>(operation: () => Promise<T>) {

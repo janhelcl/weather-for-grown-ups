@@ -4,6 +4,7 @@ import { GefsEnsembleTimeSeriesService } from "../src/core/gefs-ensemble-timeser
 import { GefsEnsembleService } from "../src/core/gefs-ensemble.js";
 import { GefsLatestRunResolver } from "../src/core/gefs-latest-run.js";
 import { GefsLayerDiagnosticsService } from "../src/core/gefs-layer-diagnostics.js";
+import { GefsProfileDiagnosticsService } from "../src/core/gefs-profile-diagnostics.js";
 import { latestGefsCycleAtOrBefore } from "../src/core/gefs-time.js";
 import { GfsGefsComparisonService } from "../src/core/gfs-gefs-comparison.js";
 
@@ -15,6 +16,7 @@ const run = await latestRunResolver.resolveLatestRunRange(startTime, endTime, me
 const ensembleService = new GefsEnsembleService({ latestRunProvider: latestRunResolver });
 const profileService = new GefsEnsembleProfileService({ latestRunProvider: latestRunResolver });
 const layerDiagnosticsService = new GefsLayerDiagnosticsService({ profileGetter: profileService });
+const profileDiagnosticsService = new GefsProfileDiagnosticsService({ profileGetter: profileService });
 const timeSeriesService = new GefsEnsembleTimeSeriesService({
   ensembleGetter: ensembleService,
   latestRunRangeProvider: latestRunResolver,
@@ -112,6 +114,48 @@ assert.equal(layerDiagnostics.source.provider, "NOAA AWS Open Data");
 assert.equal(layerDiagnostics.source.access, "s3_range");
 assert.equal(layerDiagnostics.source.product, "pgrb2a_0p50");
 
+const profileDiagnostics = await profileDiagnosticsService.getProfileDiagnostics({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: run.toISOString(),
+  validTime: endTime.toISOString(),
+  pressureLevelsHpa: [1000, 925, 850, 700, 500],
+  diagnostics: ["freezing_level_crossings", "temperature_inversion_layers"],
+  members: [...members],
+  quantiles: [0.1, 0.5, 0.9],
+});
+
+assert.equal(profileDiagnostics.model, "gefs_0p50");
+assert.equal(profileDiagnostics.run, run.toISOString());
+assert.equal(profileDiagnostics.validTime, endTime.toISOString());
+assert.equal(profileDiagnostics.forecastHour, result.forecastHour);
+assert.deepEqual(profileDiagnostics.sampledPressureLevelsHpa, [1000, 925, 850, 700, 500]);
+assert.deepEqual(profileDiagnostics.selection.members, members);
+assert.equal(profileDiagnostics.members, undefined);
+assert.equal(profileDiagnostics.summaries.length, 2);
+const freezingSummary = profileDiagnostics.summaries.find((summary) => summary.id === "freezing_level_crossings");
+assert(freezingSummary?.id === "freezing_level_crossings");
+assert.equal(freezingSummary.membersWithAnyCrossing.memberCount, members.length);
+assert(freezingSummary.membersWithAnyCrossing.fraction >= 0 && freezingSummary.membersWithAnyCrossing.fraction <= 1);
+assert.equal(freezingSummary.membersWithAnyCrossing.interpretation, "raw_member_fraction_not_calibrated_probability");
+assert.equal(freezingSummary.crossingCount.memberCount, members.length);
+assert.equal(freezingSummary.crossingCount.quantiles.length, 3);
+if (freezingSummary.lowestCrossing) {
+  assert(freezingSummary.lowestCrossing.contributingMemberCount > 0);
+  assert(Number.isFinite(freezingSummary.lowestCrossing.geopotentialHeightGpm.mean));
+  assert(Number.isFinite(freezingSummary.lowestCrossing.pressureHpa.mean));
+}
+const inversionSummary = profileDiagnostics.summaries.find((summary) => summary.id === "temperature_inversion_layers");
+assert(inversionSummary?.id === "temperature_inversion_layers");
+assert.equal(inversionSummary.membersWithAnyLayer.memberCount, members.length);
+assert(inversionSummary.membersWithAnyLayer.fraction >= 0 && inversionSummary.membersWithAnyLayer.fraction <= 1);
+assert.equal(inversionSummary.membersWithAnyLayer.interpretation, "raw_member_fraction_not_calibrated_probability");
+assert.equal(inversionSummary.layerCount.memberCount, members.length);
+assert.equal(inversionSummary.totalLayerDepthGpm.memberCount, members.length);
+assert.equal(profileDiagnostics.source.provider, "NOAA AWS Open Data");
+assert.equal(profileDiagnostics.source.access, "s3_range");
+assert.equal(profileDiagnostics.source.product, "pgrb2a_0p50");
+
 const series = await timeSeriesService.getTimeSeries({
   latitude: 50.08,
   longitude: 14.43,
@@ -193,6 +237,11 @@ console.log(JSON.stringify({
     layerDepthGpm: layerDiagnostics.layerDepthGpm,
     summaries: layerDiagnostics.summaries,
     cacheHit: layerDiagnostics.source.allCacheHit,
+  },
+  ensembleProfileDiagnostics: {
+    sampledPressureLevelsHpa: profileDiagnostics.sampledPressureLevelsHpa,
+    summaries: profileDiagnostics.summaries,
+    cacheHit: profileDiagnostics.source.allCacheHit,
   },
   ensembleTimeSeries: series.series.map((step) => ({
     validTime: step.validTime,
