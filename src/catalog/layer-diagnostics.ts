@@ -26,7 +26,7 @@ export const LAYER_DIAGNOSTIC_CATALOG: Record<LayerDiagnosticId, LayerDiagnostic
     dependencies: ["temperature", "geopotential_height"],
     description: "Environmental temperature lapse rate across a pressure layer; positive when temperature decreases with height",
     outputs: [
-      { field: "temperatureLapseRateCPerKm", unit: "degC/km", description: "Temperature decrease per kilometre of geometric layer depth" },
+      { field: "temperatureLapseRateCPerKm", unit: "degC/km", description: "Temperature decrease per kilometre of geopotential-height difference" },
     ],
   },
   wind_shear: {
@@ -39,7 +39,7 @@ export const LAYER_DIAGNOSTIC_CATALOG: Record<LayerDiagnosticId, LayerDiagnostic
       { field: "uWindShearMs", unit: "m/s", description: "Upper-minus-lower eastward wind component" },
       { field: "vWindShearMs", unit: "m/s", description: "Upper-minus-lower northward wind component" },
       { field: "windShearMagnitudeMs", unit: "m/s", description: "Magnitude of the vector wind change across the layer" },
-      { field: "windShearMsPerKm", unit: "m/s/km", description: "Vector wind-change magnitude per kilometre of layer depth" },
+      { field: "windShearMsPerKm", unit: "m/s/km", description: "Vector wind-change magnitude per kilometre of geopotential-height difference" },
     ],
   },
   potential_temperature_gradient: {
@@ -47,9 +47,9 @@ export const LAYER_DIAGNOSTIC_CATALOG: Record<LayerDiagnosticId, LayerDiagnostic
     kind: "derived_layer",
     verticalSemantics: "pressure_layer",
     dependencies: ["temperature", "geopotential_height"],
-    description: "Potential-temperature increase from the lower to upper pressure surface per kilometre of layer depth",
+    description: "Potential-temperature increase from the lower to upper pressure surface per kilometre of geopotential-height difference",
     outputs: [
-      { field: "potentialTemperatureGradientKPerKm", unit: "K/km", description: "Upper-minus-lower potential temperature per kilometre" },
+      { field: "potentialTemperatureGradientKPerKm", unit: "K/km", description: "Upper-minus-lower potential temperature per kilometre of geopotential-height difference" },
     ],
   },
 };
