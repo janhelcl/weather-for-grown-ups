@@ -14,6 +14,14 @@ export interface GefsMemberDataRequest {
   pressureLevelHpa: number;
 }
 
+export interface GefsMemberSelectionDataRequest {
+  run: Date;
+  forecastHour: number;
+  member: GefsMember;
+  variableCodes: GfsCode[];
+  pressureLevelsHpa: number[];
+}
+
 export interface GefsSubsetFile {
   path: string;
   cacheHit: boolean;
@@ -23,7 +31,11 @@ export interface GefsMemberSource {
   fetch(request: GefsMemberDataRequest): Promise<GefsSubsetFile>;
 }
 
-export class GefsS3SubsetCache implements GefsMemberSource {
+export interface GefsMemberSelectionSource {
+  fetchSelection(request: GefsMemberSelectionDataRequest): Promise<GefsSubsetFile>;
+}
+
+export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionSource {
   private readonly inFlight = new Map<string, Promise<GefsSubsetFile>>();
 
   constructor(
@@ -32,8 +44,32 @@ export class GefsS3SubsetCache implements GefsMemberSource {
   ) {}
 
   async fetch(request: GefsMemberDataRequest): Promise<GefsSubsetFile> {
+    return this.fetchCached(
+      subsetKey(request),
+      request,
+      [request.variableCode],
+      [request.pressureLevelHpa],
+    );
+  }
+
+  async fetchSelection(request: GefsMemberSelectionDataRequest): Promise<GefsSubsetFile> {
+    const variableCodes = [...new Set(request.variableCodes)].sort();
+    const pressureLevelsHpa = [...new Set(request.pressureLevelsHpa)].sort((a, b) => a - b);
+    return this.fetchCached(
+      selectionSubsetKey({ ...request, variableCodes, pressureLevelsHpa }),
+      request,
+      variableCodes,
+      pressureLevelsHpa,
+    );
+  }
+
+  private async fetchCached(
+    key: string,
+    request: Pick<GefsMemberDataRequest, "run" | "forecastHour" | "member">,
+    variableCodes: GfsCode[],
+    pressureLevelsHpa: number[],
+  ): Promise<GefsSubsetFile> {
     await mkdir(this.rootDir, { recursive: true });
-    const key = subsetKey(request);
     const path = join(this.rootDir, `${key}.grib2`);
     if (await exists(path)) return { path, cacheHit: true };
 
@@ -43,21 +79,27 @@ export class GefsS3SubsetCache implements GefsMemberSource {
       return { ...result, cacheHit: true };
     }
 
-    const operation = this.download(request, path).finally(() => this.inFlight.delete(key));
+    const operation = this.download(request, variableCodes, pressureLevelsHpa, path)
+      .finally(() => this.inFlight.delete(key));
     this.inFlight.set(key, operation);
     return operation;
   }
 
-  private async download(request: GefsMemberDataRequest, path: string): Promise<GefsSubsetFile> {
+  private async download(
+    request: Pick<GefsMemberDataRequest, "run" | "forecastHour" | "member">,
+    variableCodes: GfsCode[],
+    pressureLevelsHpa: number[],
+    path: string,
+  ): Promise<GefsSubsetFile> {
     const gribUrl = buildGefsS3ForecastUrl(request.run, request.forecastHour, request.member);
     const indexUrl = buildGefsS3ForecastIndexUrl(request.run, request.forecastHour, request.member);
     const records = parseGribIndex(await this.fetchIndex(indexUrl));
-    const ranges = selectPressureByteRanges(
-      records,
-      [request.variableCode],
-      [request.pressureLevelHpa],
-    );
-    const chunks = await Promise.all(ranges.map((range) => this.fetchRange(gribUrl, range)));
+    const ranges = selectPressureByteRanges(records, variableCodes, pressureLevelsHpa);
+    // Keep range fan-out bounded by fetching one selected GRIB message at a time per member.
+    // Profile service already samples multiple members concurrently, so this caps aggregate
+    // AWS concurrency at the member concurrency instead of multiplying it by profile cells.
+    const chunks: Uint8Array[] = [];
+    for (const range of ranges) chunks.push(await this.fetchRange(gribUrl, range));
     const totalBytes = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
     const combined = new Uint8Array(totalBytes);
     let offset = 0;
@@ -123,6 +165,16 @@ function subsetKey(request: GefsMemberDataRequest): string {
     member: request.member,
     variableCode: request.variableCode,
     pressureLevelHpa: request.pressureLevelHpa,
+  })).digest("hex");
+}
+
+function selectionSubsetKey(request: GefsMemberSelectionDataRequest): string {
+  return createHash("sha256").update(JSON.stringify({
+    run: request.run.toISOString(),
+    forecastHour: request.forecastHour,
+    member: request.member,
+    variableCodes: request.variableCodes,
+    pressureLevelsHpa: request.pressureLevelsHpa,
   })).digest("hex");
 }
 

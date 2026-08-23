@@ -28,16 +28,17 @@ The ensemble surface adds model-native NOAA GEFS access without pretending GEFS 
 - operational atmospheric `pgrb2a` 0.5° product;
 - control `c00` plus perturbed members `p01` through `p30`;
 - one-point distributions at one valid time;
+- multi-variable, multi-level ensemble pressure profiles at one valid time;
 - native three-hour ensemble time series from one fixed model cycle;
 - aligned deterministic GFS-vs-GEFS distribution comparison from one shared initialization cycle;
-- raw pressure-level variable and pressure-surface selection;
+- explicit raw pressure-variable and pressure-surface selections;
 - native three-hour cadence through `f384` in the current WFG contract;
 - member values plus mean, population spread, extrema and caller-selected quantiles;
-- optional threshold member fraction, explicitly marked as **not a calibrated probability**;
-- compact time-series summaries by default, with full member trajectories only on request;
+- optional scalar threshold member fraction, explicitly marked as **not a calibrated probability**;
+- compact profile/time-series summaries by default, with full member values only on request;
 - direct NOAA AWS `.idx` byte-range access and immutable local caching.
 
-See [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) for the model/member/time-series contract and [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md) for aligned cross-model comparison semantics.
+See [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) for the model/member/profile/time-series contract and [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md) for aligned cross-model comparison semantics.
 
 Both model families are available through local stdio MCP and remotely hostable Streamable HTTP MCP. CLI and MCP use the same core services and schemas.
 
@@ -106,6 +107,21 @@ wfg ensemble \
 ```
 
 The default ensemble selection is all 31 members. Use `--members c00,p01,p02,...` to request a subset.
+
+### GEFS ensemble pressure profile
+
+```bash
+wfg ensemble-profile \
+  --lat 50.08 \
+  --lon 14.43 \
+  --valid 2026-08-24T12:00:00Z \
+  --vars temperature,relative_humidity,geopotential_height \
+  --levels 1000,925,850,700,500 \
+  --quantiles 0.1,0.5,0.9 \
+  --json
+```
+
+The profile returns a distribution summary for every requested variable/level cell and omits raw member profiles by default. Add `--include-members` only when the individual member vertical trajectories are needed. Each member is fetched as one cached multi-message slice and decoded once.
 
 ### GEFS ensemble time series
 
@@ -199,6 +215,7 @@ wfg area \
 | `catalog` | Browse/search deterministic GFS variables, fields, diagnostics, parcel definitions, semantics and units |
 | `latest` | Resolve the newest GFS cycle published through `f384` |
 | `ensemble` | GEFS member values and distribution summary for one raw pressure-level field at one point/time |
+| `ensemble-profile` | GEFS distribution summaries across multiple raw variables and pressure levels at one point/time; optional member profiles |
 | `ensemble-timeseries` | GEFS distribution summaries across native three-hour steps from one fixed run; optional member trajectories |
 | `compare-gfs-gefs` | Deterministic GFS positioned inside an aligned GEFS member distribution from the same initialization cycle |
 | `profile` | One GFS point/time pressure profile and/or non-isobaric fields |
@@ -243,6 +260,7 @@ Current MCP tools:
 - `search_gfs_catalog`
 - `get_latest_gfs_run`
 - `get_gefs_ensemble`
+- `get_gefs_ensemble_profile`
 - `get_gefs_ensemble_timeseries`
 - `compare_gfs_to_gefs`
 - `get_gfs_profile`
@@ -271,7 +289,9 @@ Non-isobaric fields preserve explicit vertical semantics (`surface`, height abov
 
 GEFS has a separate explicit catalog because the 0.5° `pgrb2a` inventory is not identical to deterministic GFS 0.25°. The current ensemble surface supports temperature, relative humidity, U/V wind components and geopotential height on the documented common pressure surfaces, with additional 300/400-hPa support for U/V wind.
 
-Member order is canonicalized to `c00,p01,...,p30`. All members in one point result come from the same model initialization cycle and valid time. Ensemble time series additionally guarantee that every forecast step belongs to one fixed model cycle.
+Member order is canonicalized to `c00,p01,...,p30`. All members in a one-time result come from the same model initialization cycle and valid time. Ensemble profiles additionally require all selected fields within each member and all requested members to resolve to one GEFS grid point. Ensemble time series additionally guarantee that every forecast step belongs to one fixed model cycle.
+
+Profile queries are explicit Cartesian selections: every selected raw variable must exist at every selected pressure level. Summary-only output is the default; memberwise profile values are opt-in.
 
 Cross-model comparisons preserve the distinct sampled GFS 0.25° and GEFS 0.5° grid points. They compare one raw variable in the same normalized units, same initialization cycle, and same valid time; WFG does not silently resample the two products onto a common grid for this point primitive.
 
@@ -293,6 +313,8 @@ Diagnostic time series compose existing single-time diagnostic services. WFG res
 
 Area queries use a bounded NOMADS geographic subset and compute statistics locally without returning the raw grid.
 
+GEFS profiles compose raw pressure-level messages vertically: one member-specific selected-message slice contains the requested Cartesian variable/level cells and is decoded once, then distributions are aggregated across members. AWS range requests are sequential within each member while member processing remains bounded-concurrent.
+
 GEFS time series compose the existing one-time member-distribution service over native three-hour steps. Query-aware range resolution chooses one initialization that can satisfy the complete interval, and each underlying step receives that explicit run. Summary-only output is the default to avoid multiplying agent context by `members × forecast steps` unless the caller explicitly requests member trajectories.
 
 The GFS-vs-GEFS comparison composes the existing deterministic GFS profile and GEFS ensemble primitives after resolving one shared cycle. The comparison layer owns alignment and descriptive distribution metrics, not a second GRIB access implementation.
@@ -311,7 +333,7 @@ Query-aware `latest` checks requested dependencies and valid time/range so WFG d
 
 ### GEFS and aligned comparison
 
-`get_gefs_ensemble` / `wfg ensemble` support:
+`get_gefs_ensemble` / `wfg ensemble` and `get_gefs_ensemble_profile` / `wfg ensemble-profile` support:
 
 - `latest` — newest six-hour GEFS cycle for which every requested member exists at the required valid time;
 - explicit 00Z/06Z/12Z/18Z initialization timestamps.
@@ -326,7 +348,7 @@ The current WFG GEFS contract requires native three-hour output and caps forecas
 
 **NOMADS Grib Filter** is the default for deterministic GFS single-point requests and the bounded-area path because it can subset geographically before transfer. Every physical NOMADS request passes through one file-backed cross-process limiter with an **11-second post-request cooldown**, deliberately conservative relative to NOAA's 10-second scripted-request guidance. Cache hits do not consume the limiter.
 
-**NOAA AWS Open Data** is used for deterministic GFS batch/transect/time-series/run-comparison work, aligned GFS-vs-GEFS comparison, and GEFS member access. WFG reads `.idx` inventories, calculates byte ranges for selected GRIB messages, downloads only those ranges, caches immutable slices, and samples locally with `wgrib2`.
+**NOAA AWS Open Data** is used for deterministic GFS batch/transect/time-series/run-comparison work, aligned GFS-vs-GEFS comparison, and all GEFS member access. WFG reads `.idx` inventories, calculates byte ranges for selected GRIB messages, downloads only those ranges, caches immutable slices, and samples locally with `wgrib2`. GEFS profile selections are stitched into one cached multi-message slice per member and decoded once.
 
 Default cache/state location: `~/.cache/wfg/`. Override with `WFG_CACHE_DIR`.
 
@@ -347,13 +369,13 @@ The real-upstream suite is separate:
 npm run test:live:all
 ```
 
-It exercises deterministic GFS AWS/NOMADS paths plus a small GEFS control-plus-two-member point query, two-step ensemble time series, and aligned deterministic GFS-vs-GEFS comparison. GitHub Actions runs it on a deliberately low-frequency weekly schedule and also supports manual dispatch. Normal PR/main CI remains offline.
+It exercises deterministic GFS AWS/NOMADS paths plus a small GEFS control-plus-two-member point query, two-variable/two-level ensemble profile, two-step ensemble time series, and aligned deterministic GFS-vs-GEFS comparison. GitHub Actions runs it on a deliberately low-frequency weekly schedule and also supports manual dispatch. Normal PR/main CI remains offline.
 
 ## Documentation map
 
 - [INSTALL.md](INSTALL.md) — installation, Docker/npm distribution, stdio/HTTP MCP, hosting and release behavior
 - [ARCHITECTURE.md](ARCHITECTURE.md) — core boundaries, data paths, caching and surface design
-- [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — GEFS model/member contract, point/time-series distribution semantics and examples
+- [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — GEFS model/member contract, point/profile/time-series distribution semantics and examples
 - [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md) — aligned deterministic GFS vs GEFS distribution semantics
 - [CATALOG_SEARCH.md](CATALOG_SEARCH.md) — deterministic GFS atmospheric discovery/search semantics
 - [DIAGNOSTIC_TIME_SERIES.md](DIAGNOSTIC_TIME_SERIES.md) — native-cadence layer/profile/parcel diagnostic composition
