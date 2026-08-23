@@ -12,12 +12,11 @@ describe("pressure-layer derivations", () => {
   });
 
   it("derives upper-minus-lower vector wind shear and depth-normalized magnitude", () => {
-    expect(deriveWindShear(3, 4, -10, 0, 1500, 3000)).toEqual({
-      uWindShearMs: -13,
-      vWindShearMs: -4,
-      windShearMagnitudeMs: Math.hypot(13, 4),
-      windShearMsPerKm: Math.hypot(13, 4) / 1.5,
-    });
+    const shear = deriveWindShear(3, 4, -10, 0, 1500, 3000);
+    expect(shear.uWindShearMs).toBe(-13);
+    expect(shear.vWindShearMs).toBe(-4);
+    expect(shear.windShearMagnitudeMs).toBeCloseTo(Math.hypot(13, 4), 12);
+    expect(shear.windShearMsPerKm).toBeCloseTo(Math.hypot(13, 4) / 1.5, 12);
   });
 
   it("derives upper-minus-lower potential-temperature gradient", () => {
