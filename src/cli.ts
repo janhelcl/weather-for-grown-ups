@@ -9,6 +9,7 @@ import { ParcelDiagnosticsService } from "./core/parcel-diagnostics.js";
 import { PointsTimeSeriesService } from "./core/points-time-series.js";
 import { ProfileDiagnosticsService } from "./core/profile-diagnostics.js";
 import { ProfileService } from "./core/profile.js";
+import { RunComparisonService } from "./core/run-comparison.js";
 import { TimeSeriesService } from "./core/time-series.js";
 import type {
   LayerDiagnosticId,
@@ -31,6 +32,7 @@ import {
   profileResultSchema,
   timeSeriesResultSchema,
 } from "./schema/result.js";
+import { runComparisonResultSchema } from "./schema/run-comparison-result.js";
 
 const DEFAULT_VARIABLES = "temperature,relative_humidity,wind";
 const DEFAULT_LEVELS = "1000,925,850,700,500";
@@ -350,6 +352,51 @@ program
         console.log(`Point ${index + 1}: ${point.requestedPoint.latitude},${point.requestedPoint.longitude} → grid ${point.gridPoint.latitude},${point.gridPoint.longitude}`);
         if (point.levels.length > 0) console.table(point.levels);
         if (point.fields) console.dir(point.fields, { depth: null });
+      }
+    }
+  });
+
+program
+  .command("compare-runs")
+  .description("Compare one point/valid time across consecutive six-hour GFS model cycles")
+  .requiredOption("--lat <number>", "Latitude", Number)
+  .requiredOption("--lon <number>", "Longitude", Number)
+  .option("--anchor <iso|latest|latest_complete>", "Newest run in the comparison", "latest")
+  .requiredOption("--valid <iso>", "Forecast valid time compared across cycles")
+  .option("--vars <list>", "Comma-separated pressure-level variables")
+  .option("--levels <list>", "Comma-separated pressure levels in hPa")
+  .option("--fields <list>", "Comma-separated non-isobaric field IDs")
+  .option("--cycles <number>", "Number of consecutive six-hour model cycles to compare (2-6)", Number, 3)
+  .option("--json", "Output JSON")
+  .action(async (options) => {
+    const selection = pointSelection(options.vars, options.levels, options.fields);
+    const result = await new RunComparisonService().compareRuns({
+      latitude: options.lat,
+      longitude: options.lon,
+      anchorRun: options.anchor,
+      validTime: options.valid,
+      ...selection,
+      cycles: options.cycles,
+    });
+    runComparisonResultSchema.parse(result);
+    if (options.json) return console.log(JSON.stringify(result, null, 2));
+    console.log(`GFS run comparison  valid ${result.validTime}`);
+    console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
+    console.log(`Anchor ${result.anchorRun}; source ${result.source.provider} (${result.source.access})`);
+    console.table(result.runs.map((run) => ({ run: run.run, forecastHour: run.forecastHour, cacheHit: run.cacheHit })));
+    for (const comparison of result.comparisons) {
+      console.log(`${comparison.fromRun} → ${comparison.toRun}  (f${comparison.fromForecastHour} → f${comparison.toForecastHour}); deltas = newer - older`);
+      const pressureRows = comparison.pressureLevels.flatMap((level) => level.changes.map((change) => ({
+        pressureHpa: level.pressureHpa,
+        field: change.field,
+        from: change.from,
+        to: change.to,
+        delta: change.delta,
+        deltaKind: change.deltaKind,
+      })));
+      if (pressureRows.length > 0) console.table(pressureRows);
+      if (comparison.fields.length > 0) {
+        console.dir(comparison.fields, { depth: null });
       }
     }
   });
