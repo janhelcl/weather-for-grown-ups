@@ -7,6 +7,9 @@ on:
   push:
     branches:
       - ci/scheduled-live-noaa
+  pull_request:
+    branches:
+      - main
 
 concurrency:
   group: live-noaa-integration
