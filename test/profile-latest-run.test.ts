@@ -28,11 +28,20 @@ const base = {
 };
 
 describe("ProfileService latest-run selection", () => {
-  it("resolves latest when the run selector is explicit", async () => {
+  it("resolves latest against the exact valid time and expanded field selection", async () => {
     const { service, fetchMock, resolveLatestRun } = harness();
     const result = await service.getProfile({ ...base, run: "latest" });
 
     expect(resolveLatestRun).toHaveBeenCalledOnce();
+    expect(resolveLatestRun).toHaveBeenCalledWith({
+      type: "valid_time",
+      validTime: new Date("2026-08-19T12:00:00Z"),
+      selection: {
+        variableCodes: ["TMP"],
+        pressureLevelsHpa: [850],
+        fields: [],
+      },
+    });
     expect(result.run).toBe("2026-08-19T06:00:00.000Z");
     expect(result.forecastHour).toBe(6);
     expect(new URL(fetchMock.mock.calls[0]?.[0] ?? "").searchParams.get("file")).toBe(
@@ -40,11 +49,18 @@ describe("ProfileService latest-run selection", () => {
     );
   });
 
-  it("uses latest when run is omitted", async () => {
+  it("uses query-aware latest when run is omitted", async () => {
     const { service, resolveLatestRun } = harness();
     const result = await service.getProfile(base);
     expect(resolveLatestRun).toHaveBeenCalledOnce();
+    expect(resolveLatestRun.mock.calls[0]?.[0]).toMatchObject({ type: "valid_time" });
     expect(result.run).toBe("2026-08-19T06:00:00.000Z");
+  });
+
+  it("uses complete-run discovery when latest_complete is requested", async () => {
+    const { service, resolveLatestRun } = harness();
+    await service.getProfile({ ...base, run: "latest_complete" });
+    expect(resolveLatestRun).toHaveBeenCalledWith();
   });
 
   it("does not invoke discovery for an explicit model run", async () => {
@@ -61,16 +77,16 @@ describe("ProfileService latest-run selection", () => {
       decoder: { extractPoint: vi.fn(async () => values) },
       latestRunProvider: {
         resolveLatestRun: vi.fn(async () => {
-          throw new Error("No complete run");
+          throw new Error("No satisfying run");
         }),
       },
     });
 
-    await expect(service.getProfile(base)).rejects.toThrow("No complete run");
+    await expect(service.getProfile(base)).rejects.toThrow("No satisfying run");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("still validates the resolved run against the requested valid time", async () => {
+  it("still validates a mocked resolved run against the requested valid time", async () => {
     const { service, fetchMock } = harness(new Date("2026-08-19T12:00:00Z"));
     await expect(
       service.getProfile({ ...base, validTime: "2026-08-19T11:00:00Z" }),
