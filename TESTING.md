@@ -1,8 +1,8 @@
 # Testing
 
-The default test suite is intentionally deterministic and offline. No test is allowed to contact NOAA/NOMADS or NOAA AWS unless it explicitly replaces the global `fetch` stub.
+The default WFG test suite is intentionally deterministic and offline. Unit/integration tests do not contact NOAA unless they explicitly opt into the separate live-test scripts.
 
-## Commands
+## Normal verification
 
 ```bash
 npm test
@@ -10,27 +10,32 @@ npm run test:coverage
 npm run typecheck
 npm run build
 npm run test:smoke
+npm run pack:check
 ```
+
+CI runs the main verification matrix on Node.js 20 and 24, enforces coverage gates, dry-runs the npm package, and builds/smokes the production Docker image including bundled `wgrib2` and the Streamable HTTP MCP entrypoint.
 
 ## Layers covered
 
-- Query schema boundaries, timezone handling, `latest`/`latest_complete`/explicit run selectors, source defaults, batched-point count/coordinate bounds, authoritative GFS pressure-level validation, area bbox rules, and context/work guards.
-- Variable catalog metadata, source-vs-output units, derived dependencies, and agent-facing catalog serialization.
+- Query schema boundaries, timezone handling, `latest`/`latest_complete`/explicit run selectors, source defaults, authoritative GFS pressure-level validation, point/batch/transect/area bounds, and response-size guards.
+- Variable/field/diagnostic catalog metadata, source-vs-output units, raw dependencies, vertical/temporal semantics, compact search and agent-facing serialization.
 - Full configured GFS pressure-level list, including fractional upper-atmosphere levels.
-- GFS run validation, single-time forecast-hour validation, full native cadence, range intersection, and 384-hour horizon.
+- Forecast-hour validation, native GFS cadence, time-range intersection, and 384-hour horizon.
 - Bounded asynchronous mapping, stable output ordering, and failure propagation.
-- Latest-complete-run discovery and query-aware newest-available discovery, independent TTL caching, eligible-cycle bounds, and time-range horizon checks.
-- NOAA AWS `.idx` parsing and availability probing, including exact variable × pressure-level completeness and exact non-isobaric vertical/temporal semantics.
-- NOAA AWS byte-range selection, subset caching, concurrent in-flight deduplication, coordinate-independent slice reuse for multi-point sampling, and failure paths.
-- NOMADS point/area URL planning, pacing, cache behavior, and failure paths.
-- `wgrib2` parsing for all supported raw pressure variables and point invocation behavior.
-- `wgrib2` area-statistics parsing, longitude normalization, defined-grid counts, missing-data behavior, and command-runner failures.
-- Point profile orchestration across NOMADS/S3, query-aware run requirements, all canonical raw output mappings, no-data behavior, and rejection of partial decoded profiles.
-- Batched point orchestration, one run resolution, forced S3 access, input-order preservation, bounded local decoding concurrency, shared-slice cache semantics, and source consistency.
-- Point time-series orchestration, native cadence around f120, single-cycle query-aware resolution, source/grid consistency, bounded concurrency, cache-hit propagation, and max-step rejection.
-- Area-summary orchestration, query-aware pressure-field run requirements, estimated grid-size rejection before network access, temperature normalization, raw-unit preservation, provenance, and explicit unweighted-mean semantics.
-- Shared CLI/MCP result contracts plus MCP catalog/latest/profile/points/time-series/area success and error mappings.
-- Compiled CLI smoke tests on Node 20 and Node 24, including all six data/discovery commands.
+- Latest-complete and query-aware newest-available run discovery, caching, eligible-cycle bounds, exact field availability, and range coverage.
+- NOAA AWS `.idx` parsing, exact GRIB message selection, byte-range planning, slice caching, concurrent in-flight deduplication, and coordinate-independent reuse.
+- NOMADS URL planning, geographic subset behavior, exact pressure/non-isobaric selection, cross-process 11-second pacing, caching, and failure paths.
+- `wgrib2` point and area decoding, missing-data behavior, longitude normalization, command-runner failures, and exact-message checks.
+- Single-point profiles across NOMADS and S3, derived pressure-level variables, exact non-isobaric field semantics, and completeness rejection.
+- Pressure-layer, whole-profile, and parcel diagnostics, including deterministic meteorology mechanics and independent golden-reference cases.
+- Batched points, one shared S3 slice, input-order preservation, bounded local decoding concurrency, and shared cache semantics.
+- Great-circle transects composed over the batch primitive, sample geometry, distance ordering, and response contracts.
+- Native point time series and multi-point time series, one-cycle resolution, cadence around `f120`, bounded forecast concurrency, and step/sample guards.
+- Run-to-run comparison, newest-minus-older deltas, circular wind-direction deltas, and interval comparability rules.
+- Bounded area summaries, exact raw-field selection, grid-size rejection, unit normalization, min/max/unweighted mean, percentiles, threshold fractions, extrema locations, and provenance.
+- Shared CLI/MCP schemas and handler mappings across catalog, point, diagnostic, batch, transect, time-series, comparison, and area tools.
+- Streamable HTTP MCP negotiation with the official MCP client while external network access remains blocked.
+- Compiled CLI smoke coverage for every public command on both supported Node versions.
 
 ## Coverage gates
 
@@ -41,13 +46,18 @@ CI fails below:
 - Functions: 90%
 - Branches: 85%
 
-## Live NOAA smoke tests
+## Network isolation
 
-The real upstream profile smoke remains opt-in:
+Normal tests install a global network guard so accidental external `fetch` calls fail immediately. The HTTP MCP transport test narrowly permits loopback access only; it still cannot contact NOAA.
+
+This separation is deliberate: deterministic CI answers whether WFG itself is correct, while the live suite answers whether current upstream data/access assumptions still hold.
+
+## Live NOAA integration
 
 ```bash
-npm run test:live
-WFG_LIVE_SOURCE=s3 npm run test:live
+npm run test:live:all
 ```
 
-Normal PR CI remains offline. Live multi-point/time-series/area checks should only be added after manual upstream exercises and should stay low-frequency to avoid unnecessary upstream load.
+The expanded suite covers AWS batch/time-series/transect/parcel behavior and a rich NOMADS area query. It runs weekly on Monday at 05:17 UTC plus manual dispatch, never as a normal PR/main gate.
+
+See [LIVE_SMOKE.md](LIVE_SMOKE.md) for the exact live coverage, Docker test environment, pacing, and failure-triage policy.
