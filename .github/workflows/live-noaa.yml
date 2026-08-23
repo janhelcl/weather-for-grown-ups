@@ -1,0 +1,21 @@
+name: Live NOAA integration
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1"
+
+concurrency:
+  group: live-noaa-integration
+  cancel-in-progress: false
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned live-test environment
+        run: docker build --target live-test -t weather-for-grown-ups:live-test .
+      - name: Exercise live NOAA integrations
+        run: docker run --rm weather-for-grown-ups:live-test
