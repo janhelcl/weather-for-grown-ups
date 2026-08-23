@@ -1,8 +1,8 @@
 import * as z from "zod/v4";
 import { diagnosticTimeSeriesSelectionSchema } from "./diagnostic-time-series.js";
+import { isoDateTimeSchema } from "./query.js";
 import {
   gridPointSchema,
-  isoDateTimeSchema,
   layerDiagnosticResultSchema,
   parcelComputationSchema,
   profileDiagnosticResultSchema,
