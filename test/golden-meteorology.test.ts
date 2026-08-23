@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  deriveParcelComputation,
+  type ParcelEnvironmentLevel,
+} from "../src/derived/parcel-diagnostics.js";
+import {
   deriveAirDensityKgM3,
   deriveDewPointC,
   deriveEquivalentPotentialTemperatureK,
@@ -25,6 +29,23 @@ function specificHumidityFromDewPoint(dewPointC: number, pressureHpa: number): n
   return deriveSpecificHumidityFromMixingRatioKgKg(
     deriveSaturationMixingRatioKgKg(dewPointC, pressureHpa),
   );
+}
+
+function environmentLevel(
+  pressureHpa: number,
+  temperatureC: number,
+  dewPointC: number,
+  surfacePressureHpa: number,
+): ParcelEnvironmentLevel {
+  return {
+    pressureHpa,
+    // Height is not part of the CAPE pressure-coordinate integral. A smooth,
+    // monotonic hypsometric-style coordinate keeps the interpolation contract
+    // realistic without introducing another external reference dependency.
+    geopotentialHeightGpm: 8000 * Math.log(surfacePressureHpa / pressureHpa),
+    temperatureC,
+    specificHumidityKgKg: specificHumidityFromDewPoint(dewPointC, pressureHpa),
+  };
 }
 
 /**
@@ -110,5 +131,42 @@ describe("golden meteorology references", () => {
       source: "MetPy test_thermo.py density reference: 999 hPa, 288 K, mixing ratio 0.0016 kg/kg",
     };
     expectWithin(deriveAirDensityKgM3(14.85, q, 999), golden);
+  });
+
+  it("tracks MetPy's basic surface-parcel CAPE/CIN/LFC/EL sounding", () => {
+    const pressures = [959, 779.2, 751.3, 724.3, 700, 269];
+    const temperatures = [22.2, 14.6, 12, 9.4, 7, -38];
+    const dewPoints = [19, -11.2, -10.8, -10.4, -10, -53.2];
+    const levels = pressures.map((pressureHpa, index) => environmentLevel(
+      pressureHpa,
+      temperatures[index]!,
+      dewPoints[index]!,
+      pressures[0]!,
+    ));
+    const [surface, ...sampled] = levels;
+    const actual = deriveParcelComputation("surface_2m", surface!, sampled);
+
+    expectWithin(actual.capeJkg, {
+      reference: 223.927212,
+      tolerance: 50,
+      source: "MetPy test_cape_cin basic sounding",
+    });
+    expectWithin(actual.cinJkg, {
+      reference: -21.4414153,
+      tolerance: 10,
+      source: "MetPy test_cape_cin basic sounding",
+    });
+    expect(actual.lfc).toBeDefined();
+    expect(actual.el).toBeDefined();
+    expectWithin(actual.lfc!.pressureHpa, {
+      reference: 727.055,
+      tolerance: 20,
+      source: "MetPy test_lfc_basic lower-profile crossing",
+    });
+    expectWithin(actual.el!.pressureHpa, {
+      reference: 476.30710,
+      tolerance: 35,
+      source: "MetPy test_el basic sounding",
+    });
   });
 });
