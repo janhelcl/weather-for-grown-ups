@@ -34,7 +34,7 @@ This exercises NOAA AWS Open Data through the deterministic GFS core:
 
 Assertions validate contracts, provenance, dimensions, and physical-result finiteness rather than pinning specific weather values.
 
-## GEFS ensemble, profile, shared diagnostics, and aligned GFS comparison integration
+## GEFS ensemble, profile, shared diagnostics, diagnostic series, and aligned GFS comparison integration
 
 ```bash
 npm run test:live:gefs
@@ -48,7 +48,8 @@ The smoke exercises:
 - `GefsEnsembleProfileService` over temperature + geopotential height at 850 and 500 hPa, using one multi-message slice per member;
 - `GefsLayerDiagnosticsService` for the 850→500-hPa environmental temperature lapse rate using the **same shared pressure diagnostic kernel as GFS**;
 - `GefsProfileDiagnosticsService` for freezing-level crossings and sampled inversion layers over 1000/925/850/700/500 hPa, using the **same shared whole-profile diagnostic kernel as GFS** independently for each member;
-- a two-step `GefsEnsembleTimeSeriesService` result using the same explicit model run;
+- a two-step `GefsDiagnosticTimeSeriesService` whole-profile series over those same five pressure levels, proving fixed-cycle temporal composition of member-first structural diagnostics;
+- a two-step `GefsEnsembleTimeSeriesService` raw-field distribution using the same explicit model run;
 - `GfsGefsComparisonService` at the final valid time, with deterministic GFS and GEFS forced to the same initialization cycle.
 
 It verifies the parts offline fixtures cannot prove:
@@ -64,12 +65,16 @@ It verifies the parts offline fixtures cannot prove:
 - member-specific positive layer depths and finite lapse-rate distribution summaries;
 - raw member fractions/count distributions for real freezing/inversion structures;
 - conditional structural distributions appearing only when at least one member contains the relevant structure;
-- fixed-cycle native three-hour temporal composition;
-- compact summary-only time-series output by default;
+- one explicit GEFS cycle/member/diagnostic selection held fixed across adjacent diagnostic time-series steps;
+- compact structural summaries changing through time without repeating full member profiles or structures;
+- fixed-cycle native three-hour raw-field temporal composition;
+- compact summary-only raw-field time-series output by default;
 - aligned deterministic-minus-ensemble comparison metrics;
 - explicit raw-member / raw-model interpretation semantics rather than calibrated probability or uncertainty.
 
-The live smoke intentionally uses only three GEFS members. The layer check uses two pressure levels; the whole-profile structural check uses five pressure levels and only temperature/geopotential height. Byte ranges are sequential inside each member while members remain bounded-concurrent. The comparison reuses the final scalar GEFS member slices and adds only the matching deterministic GFS field slice.
+The live smoke intentionally uses only three GEFS members. The layer check uses two pressure levels; the single-time and two-step whole-profile structural checks use five pressure levels and only temperature/geopotential height. Byte ranges are sequential inside each member while members remain bounded-concurrent. The diagnostic series adds bounded step concurrency around those existing single-time services. The comparison reuses the final scalar GEFS member slices and adds only the matching deterministic GFS field slice.
+
+The 2026-08-23 validation provided a useful sanity check of the temporal semantics. At `f003`, all three selected members contained one freezing-level crossing; the mean lowest-crossing height was about **2943.7 gpm** with population spread about **75.9 gpm**. At `f006`, all three still contained exactly one crossing, but the mean was about **2942.1 gpm** with population spread only **0.94 gpm**. The series therefore preserved both a stable event fraction and a materially changing ensemble structural spread from one fixed initialization cycle.
 
 ## Rich NOMADS area integration
 
@@ -121,7 +126,7 @@ Without `WFG_LIVE_SOURCE` it uses NOMADS; setting `s3` switches the source.
 
 Before the schedule was merged, the expanded deterministic workflow was deliberately executed against current NOAA data on 2026-08-23. The first attempt caught a real test defect: the parcel smoke requested unsupported 875/825/775 hPa levels. The smoke data was corrected to the canonical published GFS pressure-level set, and the rerun passed both AWS and NOMADS paths.
 
-The GEFS point, time-series, profile, and cross-model comparison capabilities were likewise exercised against current NOAA AWS data before merge. The unified-core change extended that same low-cost compatibility check to member-by-member layer diagnostics. GEFS whole-profile diagnostics now extend the proof to variable-length structural meteorology: real GEFS multi-message profiles cross the normalized-profile boundary, feed the shared freezing/inversion kernel independently per member, and produce ensemble structural summaries without inventing an ensemble-mean structure. This layer exists to catch assumptions that deterministic mocks and fixed fixtures cannot reveal without turning upstream availability into a permanent merge dependency.
+The GEFS point, time-series, profile, and cross-model comparison capabilities were likewise exercised against current NOAA AWS data before merge. The unified-core change extended that same low-cost compatibility check to member-by-member layer diagnostics. GEFS whole-profile diagnostics extended the proof to variable-length structural meteorology: real GEFS multi-message profiles cross the normalized-profile boundary, feed the shared freezing/inversion kernel independently per member, and produce ensemble structural summaries without inventing an ensemble-mean structure. GEFS diagnostic time series now additionally prove that those already-validated single-time summaries can be composed across native forecast times while holding the model cycle, member set, sampling, and diagnostic selection fixed. This layer exists to catch assumptions that deterministic mocks and fixed fixtures cannot reveal without turning upstream availability into a permanent merge dependency.
 
 ## Failure triage
 
