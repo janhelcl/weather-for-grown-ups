@@ -47,11 +47,25 @@ describe("AreaSummaryService", () => {
     expect(result.statistics).toMatchObject({ mean: -0.2, min: -1, max: 0.5 });
   });
 
-  it("resolves latest once when requested", async () => {
+  it("resolves latest against the exact area variable, pressure level, and valid time", async () => {
     const { service, resolveLatestRun } = harness();
     const result = await service.summarize({ ...base, run: "latest" });
-    expect(resolveLatestRun).toHaveBeenCalledOnce();
+    expect(resolveLatestRun).toHaveBeenCalledWith({
+      type: "valid_time",
+      validTime: new Date("2026-08-19T12:00:00Z"),
+      selection: {
+        variableCodes: ["TMP"],
+        pressureLevelsHpa: [850],
+        fields: [],
+      },
+    });
     expect(result.run).toBe("2026-08-19T06:00:00.000Z");
+  });
+
+  it("uses complete-run discovery for latest_complete", async () => {
+    const { service, resolveLatestRun } = harness();
+    await service.summarize({ ...base, run: "latest_complete" });
+    expect(resolveLatestRun).toHaveBeenCalledWith();
   });
 
   it("propagates cache-hit provenance", async () => {
