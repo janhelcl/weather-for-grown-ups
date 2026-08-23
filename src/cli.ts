@@ -403,15 +403,16 @@ program
 
 program
   .command("area")
-  .description("Summarize one raw GFS pressure field over a bounded area")
+  .description("Summarize one raw GFS pressure-level variable or non-isobaric field over a bounded area")
   .requiredOption("--west <number>", "Western longitude", Number)
   .requiredOption("--east <number>", "Eastern longitude", Number)
   .requiredOption("--south <number>", "Southern latitude", Number)
   .requiredOption("--north <number>", "Northern latitude", Number)
   .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
   .requiredOption("--valid <iso>", "Forecast valid time")
-  .requiredOption("--var <id>", "One raw pressure-level variable")
-  .requiredOption("--level <hpa>", "Pressure level in hPa", Number)
+  .option("--var <id>", "One raw pressure-level variable; use together with --level")
+  .option("--level <hpa>", "Pressure level in hPa; use together with --var", Number)
+  .option("--field <id>", "One raw non-isobaric field; mutually exclusive with --var/--level")
   .option("--max-grid-points <number>", "Maximum estimated GFS grid points", Number, 50000)
   .option("--json", "Output JSON")
   .action(async (options) => {
@@ -422,14 +423,20 @@ program
       northLatitude: options.north,
       run: options.run,
       validTime: options.valid,
-      variable: options.var as RawVariableId,
-      pressureLevelHpa: options.level,
+      ...(options.var === undefined ? {} : { variable: options.var as RawVariableId }),
+      ...(options.level === undefined ? {} : { pressureLevelHpa: options.level as number }),
+      ...(options.field === undefined ? {} : { field: options.field as NonIsobaricFieldId }),
       maxGridPoints: options.maxGridPoints,
     });
     areaSummaryResultSchema.parse(result);
     if (options.json) return console.log(JSON.stringify(result, null, 2));
     console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
-    console.log(`${result.variable.id} ${result.variable.pressureHpa} hPa [${result.variable.unit}]`);
+    if (result.variable) {
+      console.log(`${result.variable.id} ${result.variable.pressureHpa} hPa [${result.variable.unit}]`);
+    } else if (result.field) {
+      console.log(`${result.field.id} [${result.field.output.unit}]`);
+      console.dir({ level: result.field.level, temporal: result.field.temporal }, { depth: null });
+    }
     console.table([result.statistics]);
   });
 
