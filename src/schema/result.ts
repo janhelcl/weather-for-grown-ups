@@ -104,6 +104,58 @@ export const layerDiagnosticsResultSchema = z.object({
   source: sourceProvenanceSchema.extend({ cacheHit: z.boolean() }),
 });
 
+const sampledThermodynamicLevelSchema = z.object({
+  pressureHpa: z.number().positive(),
+  geopotentialHeightGpm: z.number(),
+  temperatureC: z.number(),
+});
+
+const freezingLevelCrossingSchema = z.object({
+  pressureHpa: z.number().positive(),
+  geopotentialHeightGpm: z.number(),
+  method: z.enum(["interpolated", "exact_sample"]),
+  transition: z.enum(["warm_to_cold", "cold_to_warm", "indeterminate"]),
+  lowerLevel: sampledThermodynamicLevelSchema,
+  upperLevel: sampledThermodynamicLevelSchema,
+});
+
+const temperatureInversionLayerSchema = z.object({
+  basePressureHpa: z.number().positive(),
+  topPressureHpa: z.number().positive(),
+  baseGeopotentialHeightGpm: z.number(),
+  topGeopotentialHeightGpm: z.number(),
+  baseTemperatureC: z.number(),
+  topTemperatureC: z.number(),
+  depthGpm: z.number().positive(),
+  temperatureIncreaseC: z.number().positive(),
+  meanTemperatureGradientCPerKm: z.number().positive(),
+  sampledSegments: z.number().int().positive(),
+});
+
+export const profileDiagnosticResultSchema = z.discriminatedUnion("id", [
+  z.object({
+    id: z.literal("freezing_level_crossings"),
+    crossings: z.array(freezingLevelCrossingSchema),
+  }),
+  z.object({
+    id: z.literal("temperature_inversion_layers"),
+    layers: z.array(temperatureInversionLayerSchema),
+  }),
+]);
+
+export const profileDiagnosticsResultSchema = z.object({
+  model: z.literal("gfs_0p25"),
+  run: isoDateTimeSchema,
+  validTime: isoDateTimeSchema,
+  forecastHour: z.number(),
+  requestedPoint: gridPointSchema,
+  gridPoint: gridPointSchema,
+  sampledPressureLevelsHpa: z.array(z.number().positive()).min(2),
+  levels: z.array(profileLevelResultSchema).min(2),
+  diagnostics: z.array(profileDiagnosticResultSchema).min(1),
+  source: sourceProvenanceSchema.extend({ cacheHit: z.boolean() }),
+});
+
 export const batchPointResultSchema = z.object({
   requestedPoint: gridPointSchema,
   gridPoint: gridPointSchema,
