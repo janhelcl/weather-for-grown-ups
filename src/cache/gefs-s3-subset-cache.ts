@@ -95,7 +95,11 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
     const indexUrl = buildGefsS3ForecastIndexUrl(request.run, request.forecastHour, request.member);
     const records = parseGribIndex(await this.fetchIndex(indexUrl));
     const ranges = selectPressureByteRanges(records, variableCodes, pressureLevelsHpa);
-    const chunks = await Promise.all(ranges.map((range) => this.fetchRange(gribUrl, range)));
+    // Keep range fan-out bounded by fetching one selected GRIB message at a time per member.
+    // Profile service already samples multiple members concurrently, so this caps aggregate
+    // AWS concurrency at the member concurrency instead of multiplying it by profile cells.
+    const chunks: Uint8Array[] = [];
+    for (const range of ranges) chunks.push(await this.fetchRange(gribUrl, range));
     const totalBytes = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
     const combined = new Uint8Array(totalBytes);
     let offset = 0;
