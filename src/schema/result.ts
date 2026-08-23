@@ -3,7 +3,12 @@ import {
   NON_ISOBARIC_NAMED_LAYER_IDS,
   NON_ISOBARIC_NAMED_LEVEL_IDS,
 } from "../catalog/non-isobaric-fields.js";
-import { isoDateTimeSchema, nonIsobaricFieldIdSchema, rawVariableIdSchema } from "./query.js";
+import {
+  isoDateTimeSchema,
+  layerDiagnosticIdSchema,
+  nonIsobaricFieldIdSchema,
+  rawVariableIdSchema,
+} from "./query.js";
 
 export const sourceProvenanceSchema = z.object({
   provider: z.union([z.literal("NOAA NOMADS"), z.literal("NOAA AWS Open Data")]),
@@ -72,6 +77,30 @@ export const profileResultSchema = z.object({
   gridPoint: gridPointSchema,
   levels: z.array(profileLevelResultSchema),
   fields: z.array(nonIsobaricFieldResultSchema).optional(),
+  source: sourceProvenanceSchema.extend({ cacheHit: z.boolean() }),
+});
+
+export const layerDiagnosticResultSchema = z.object({
+  id: layerDiagnosticIdSchema,
+  values: z.record(z.string(), z.number()),
+});
+
+export const layerDiagnosticsResultSchema = z.object({
+  model: z.literal("gfs_0p25"),
+  run: isoDateTimeSchema,
+  validTime: isoDateTimeSchema,
+  forecastHour: z.number(),
+  requestedPoint: gridPointSchema,
+  gridPoint: gridPointSchema,
+  layer: z.object({
+    lowerPressureHpa: z.number(),
+    upperPressureHpa: z.number(),
+    lowerGeopotentialHeightGpm: z.number(),
+    upperGeopotentialHeightGpm: z.number(),
+    depthGpm: z.number().positive(),
+  }),
+  levels: z.array(profileLevelResultSchema).length(2),
+  diagnostics: z.array(layerDiagnosticResultSchema).min(1),
   source: sourceProvenanceSchema.extend({ cacheHit: z.boolean() }),
 });
 
