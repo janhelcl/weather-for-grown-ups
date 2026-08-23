@@ -1,6 +1,6 @@
 # Installation and distribution
 
-Weather for Grown Ups has two supported distribution paths.
+Weather for Grown Ups has two supported distribution paths and two equal MCP transports: stdio for local process-spawned clients and Streamable HTTP for hosted clients.
 
 ## Docker (recommended, includes `wgrib2`)
 
@@ -20,7 +20,7 @@ For the stdio MCP surface:
 docker run -i --rm ghcr.io/janhelcl/weather-for-grown-ups:0.1.0 mcp
 ```
 
-Example MCP client configuration:
+Example stdio MCP client configuration:
 
 ```json
 {
@@ -35,14 +35,35 @@ Example MCP client configuration:
 }
 ```
 
+For Streamable HTTP, the safe default is loopback-only at `127.0.0.1:3000`. A container or hosted service normally binds all interfaces and must explicitly declare the public Host values it accepts:
+
+```bash
+docker run --rm -p 3000:3000 \
+  -e WFG_MCP_HOST=0.0.0.0 \
+  -e WFG_MCP_ALLOWED_HOSTS=localhost,127.0.0.1 \
+  ghcr.io/janhelcl/weather-for-grown-ups:0.1.0 mcp-http
+```
+
+The MCP endpoint is `/mcp`; `GET /healthz` is a small process health check. For a real hosted deployment, replace the example allowlist with the service's actual public hostname. Browser callers that send an `Origin` header must also configure `WFG_MCP_ALLOWED_ORIGINS` as a comma-separated hostname allowlist.
+
+WFG deliberately refuses a non-loopback HTTP bind without `WFG_MCP_ALLOWED_HOSTS`. The HTTP transport itself does not authenticate callers; put public deployments behind an authentication-capable reverse proxy/platform boundary rather than exposing an unrestricted NOAA-backed endpoint directly.
+
+HTTP configuration:
+
+- `WFG_MCP_HOST` — bind address, default `127.0.0.1`
+- `WFG_MCP_PORT` — TCP port, default `3000`
+- `WFG_MCP_ALLOWED_HOSTS` — comma-separated accepted Host header hostnames; required for non-loopback binds
+- `WFG_MCP_ALLOWED_ORIGINS` — optional comma-separated browser Origin hostnames; when absent on a non-loopback bind, requests carrying an Origin header are rejected
+
 ## npm
 
-The npm package provides the native `wfg` and `wfg-mcp` executables:
+The npm package provides the native `wfg`, `wfg-mcp`, and `wfg-mcp-http` executables:
 
 ```bash
 npm install -g weather-for-grown-ups
 wfg --help
 wfg-mcp
+wfg-mcp-http
 ```
 
 The npm route intentionally does not compile or install a native GRIB tool during `npm install`. `wgrib2` must already be available on `PATH`; WFG's Docker image is the recommended route when you do not want to manage that dependency yourself.
