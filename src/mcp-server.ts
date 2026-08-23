@@ -5,6 +5,7 @@ import { BatchPointsService } from "./core/batch-points.js";
 import { DiagnosticTimeSeriesService } from "./core/diagnostic-time-series.js";
 import { GefsEnsembleTimeSeriesService } from "./core/gefs-ensemble-timeseries.js";
 import { GefsEnsembleService } from "./core/gefs-ensemble.js";
+import { GfsGefsComparisonService } from "./core/gfs-gefs-comparison.js";
 import { LayerDiagnosticsService } from "./core/layer-diagnostics.js";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ParcelDiagnosticsService } from "./core/parcel-diagnostics.js";
@@ -16,6 +17,7 @@ import { TimeSeriesService } from "./core/time-series.js";
 import { TransectService } from "./core/transect.js";
 import { handleGetGfsAreaSummary } from "./mcp-area-tool.js";
 import { handleGetGefsEnsemble, handleGetGefsEnsembleTimeSeries } from "./mcp-gefs-tool.js";
+import { handleCompareGfsToGefs } from "./mcp-model-comparison-tool.js";
 import {
   handleCompareGfsRuns,
   handleGetGfsCatalog,
@@ -41,6 +43,10 @@ import {
   gefsEnsembleTimeSeriesResultSchema,
 } from "./schema/gefs-ensemble-timeseries.js";
 import { gefsEnsembleQuerySchema, gefsEnsembleResultSchema } from "./schema/gefs-ensemble.js";
+import {
+  gfsGefsComparisonQuerySchema,
+  gfsGefsComparisonResultSchema,
+} from "./schema/gfs-gefs-comparison.js";
 import {
   batchPointsQuerySchema,
   layerDiagnosticsQuerySchema,
@@ -69,13 +75,17 @@ export function createMcpServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "WFG exposes NOAA numerical weather models with explicit model/run/valid-time/vertical semantics. Use get_gfs_catalog or search_gfs_catalog to discover the deterministic GFS 0.25° surface. GFS query tools support query-aware run='latest', latest_complete through f384, and explicit reproducible cycles; values are raw model data or deterministic local physical derivations. Use get_gefs_ensemble for one-time uncertainty across GEFS 0.5° control/perturbed members and get_gefs_ensemble_timeseries to track the same member distribution across native three-hour forecast steps from one fixed cycle. GEFS threshold fractions are raw fractions of requested members meeting a threshold, not calibrated probabilities. Use GFS diagnostics for layer/profile/parcel calculations, points/transect/time-series tools for spatial and temporal composition, compare_gfs_runs for cycle changes, and summarize_gfs_area for bounded grid statistics. WFG does not provide activity-specific interpretation or safety advice.",
+      instructions: "WFG exposes NOAA numerical weather models with explicit model/run/valid-time/vertical semantics. Use get_gfs_catalog or search_gfs_catalog to discover the deterministic GFS 0.25° surface. GFS query tools support query-aware run='latest', latest_complete through f384, and explicit reproducible cycles; values are raw model data or deterministic local physical derivations. Use get_gefs_ensemble for one-time uncertainty across GEFS 0.5° control/perturbed members, get_gefs_ensemble_timeseries to track the same member distribution across native three-hour forecast steps from one fixed cycle, and compare_gfs_to_gefs when you need to place deterministic GFS inside an aligned GEFS member distribution. GEFS threshold fractions and GFS-vs-GEFS ranks are raw model/member distribution evidence, not calibrated probabilities or uncertainty. Use GFS diagnostics for layer/profile/parcel calculations, points/transect/time-series tools for spatial and temporal composition, compare_gfs_runs for cycle changes, and summarize_gfs_area for bounded grid statistics. WFG does not provide activity-specific interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
   const gefsEnsembleService = new GefsEnsembleService();
   const gefsEnsembleTimeSeriesService = new GefsEnsembleTimeSeriesService({ ensembleGetter: gefsEnsembleService });
   const profileService = new ProfileService({ latestRunProvider: latestRunResolver });
+  const gfsGefsComparisonService = new GfsGefsComparisonService({
+    profileGetter: profileService,
+    ensembleGetter: gefsEnsembleService,
+  });
   const layerDiagnosticsService = new LayerDiagnosticsService({ profileGetter: profileService });
   const profileDiagnosticsService = new ProfileDiagnosticsService({ profileGetter: profileService });
   const parcelDiagnosticsService = new ParcelDiagnosticsService({ profileGetter: profileService });
@@ -131,6 +141,13 @@ export function createMcpServer(): McpServer {
     inputSchema: gefsEnsembleTimeSeriesQuerySchema,
     outputSchema: gefsEnsembleTimeSeriesResultSchema,
   }, async (query) => handleGetGefsEnsembleTimeSeries(gefsEnsembleTimeSeriesService, query));
+
+  server.registerTool("compare_gfs_to_gefs", {
+    title: "Compare deterministic GFS to GEFS",
+    description: "Place one deterministic GFS 0.25° raw pressure-level value inside the GEFS 0.5° member distribution from the same initialization cycle and valid time. Returns model-specific sampled grid points, deterministic-minus-ensemble-mean, standardized difference, empirical member rank fractions, and whether deterministic GFS lies outside the requested GEFS member range. These are raw model-distribution diagnostics, not calibrated uncertainty.",
+    inputSchema: gfsGefsComparisonQuerySchema,
+    outputSchema: gfsGefsComparisonResultSchema,
+  }, async (query) => handleCompareGfsToGefs(gfsGefsComparisonService, query));
 
   server.registerTool("get_gfs_profile", {
     title: "Get GFS point fields",
