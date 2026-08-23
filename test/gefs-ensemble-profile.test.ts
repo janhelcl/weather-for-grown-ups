@@ -69,8 +69,8 @@ describe("GEFS ensemble profile service", () => {
     expect(result.summaries[2]).toMatchObject({
       variable: "temperature",
       pressureLevelHpa: 500,
-      mean: -18,
     });
+    expect(result.summaries[2]!.mean).toBeCloseTo(-18);
     expect(result.source.allCacheHit).toBe(false);
   });
 
@@ -88,10 +88,16 @@ describe("GEFS ensemble profile service", () => {
     });
 
     expect(result.members?.map((sample) => sample.member)).toEqual(["c00", "p01", "p02"]);
-    expect(result.members?.[0]?.values).toEqual([
-      { variable: "temperature", pressureLevelHpa: 850, value: 0 },
-      { variable: "temperature", pressureLevelHpa: 500, value: -20 },
-    ]);
+    expect(result.members?.[0]?.values[0]).toEqual({
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      value: 0,
+    });
+    expect(result.members?.[0]?.values[1]).toMatchObject({
+      variable: "temperature",
+      pressureLevelHpa: 500,
+    });
+    expect(result.members?.[0]?.values[1]?.value).toBeCloseTo(-20);
   });
 
   it("uses one multi-field source request per member", async () => {
