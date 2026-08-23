@@ -42,6 +42,34 @@ describe("variable catalog", () => {
       ],
     });
   });
+
+  it("describes deterministic thermodynamic variables with their raw dependencies", () => {
+    expect(VARIABLE_CATALOG.dew_point).toMatchObject({
+      kind: "derived",
+      dependencies: ["temperature", "relative_humidity"],
+      outputs: [{ field: "dewPointC", unit: "degC" }],
+    });
+    expect(VARIABLE_CATALOG.potential_temperature).toMatchObject({
+      kind: "derived",
+      dependencies: ["temperature"],
+      outputs: [{ field: "potentialTemperatureK", unit: "K" }],
+    });
+    expect(VARIABLE_CATALOG.mixing_ratio).toMatchObject({
+      kind: "derived",
+      dependencies: ["specific_humidity"],
+      outputs: [{ field: "mixingRatioKgKg", unit: "kg/kg" }],
+    });
+    expect(VARIABLE_CATALOG.virtual_temperature).toMatchObject({
+      kind: "derived",
+      dependencies: ["temperature", "specific_humidity"],
+      outputs: [{ field: "virtualTemperatureC", unit: "degC" }],
+    });
+    expect(VARIABLE_CATALOG.air_density).toMatchObject({
+      kind: "derived",
+      dependencies: ["temperature", "specific_humidity"],
+      outputs: [{ field: "airDensityKgM3", unit: "kg/m^3" }],
+    });
+  });
 });
 
 describe("expandRequestedVariables", () => {
@@ -53,6 +81,20 @@ describe("expandRequestedVariables", () => {
     expect(expandRequestedVariables(["wind"]).map((variable) => variable.id)).toEqual(["u_wind", "v_wind"]);
   });
 
+  it("expands thermodynamic derivations to the minimum raw dependency set", () => {
+    expect(expandRequestedVariables([
+      "dew_point",
+      "potential_temperature",
+      "mixing_ratio",
+      "virtual_temperature",
+      "air_density",
+    ]).map((variable) => variable.id)).toEqual([
+      "temperature",
+      "relative_humidity",
+      "specific_humidity",
+    ]);
+  });
+
   it("deduplicates raw variables and derived dependencies", () => {
     expect(
       expandRequestedVariables(["temperature", "wind", "u_wind", "temperature", "wind"]).map(
@@ -62,6 +104,7 @@ describe("expandRequestedVariables", () => {
   });
 
   it("never returns derived definitions to the NOAA source layer", () => {
-    expect(expandRequestedVariables(["wind", "absolute_vorticity"]).every((variable) => variable.kind === "raw")).toBe(true);
+    expect(expandRequestedVariables(["wind", "dew_point", "air_density", "absolute_vorticity"])
+      .every((variable) => variable.kind === "raw")).toBe(true);
   });
 });
