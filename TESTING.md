@@ -35,7 +35,7 @@ CI runs the main verification matrix on Node.js 20 and 24, enforces coverage gat
 - Bounded area summaries, exact raw-field selection, grid-size rejection, unit normalization, min/max/unweighted mean, percentiles, threshold fractions, extrema locations, and provenance.
 - Shared CLI/MCP schemas and handler mappings across catalog, point, diagnostic, batch, transect, time-series, comparison, and area tools.
 - Streamable HTTP MCP negotiation with the official MCP client while external network access remains blocked.
-- Compiled CLI smoke coverage for every public command on both supported Node versions.
+- The CLI root/registry is unit-tested for the complete, duplicate-free public command set; every compiled CLI command is additionally exercised through the smoke suite on both supported Node versions.
 
 ## Coverage gates
 
@@ -45,6 +45,8 @@ CI fails below:
 - Statements: 90%
 - Functions: 90%
 - Branches: 85%
+
+The thin CLI command-registration/presentation modules are excluded from V8 percentage accounting, matching the policy previously used for the monolithic CLI adapters they replaced. Their command wiring is covered by the registry test and compiled `--help`/catalog smoke suite. `src/cli/program.ts`, CLI parsing helpers, schemas, handlers, and all shared core behavior remain inside the coverage gate.
 
 ## Network isolation
 
