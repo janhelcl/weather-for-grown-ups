@@ -1,4 +1,7 @@
 import { execa } from "execa";
+import type { FieldTemporalSemantics } from "../catalog/non-isobaric-fields.js";
+import type { GfsCode } from "../catalog/variables.js";
+import type { ForecastInterval } from "../core/types.js";
 
 export interface AreaBox {
   westLongitude: number;
@@ -16,6 +19,21 @@ export interface GridStatistics {
   max: number;
 }
 
+export interface AreaMessageSelector {
+  code: GfsCode;
+  gribLevel: string;
+  temporalSemantics: FieldTemporalSemantics;
+}
+
+export type SelectedMessageTemporal =
+  | { type: "instantaneous" }
+  | ({ type: "accumulation" } & ForecastInterval)
+  | ({ type: "average" } & ForecastInterval);
+
+export interface SelectedGridStatistics extends GridStatistics {
+  temporal: SelectedMessageTemporal;
+}
+
 export type Wgrib2CommandRunner = (executable: string, args: string[]) => Promise<{ stdout: string }>;
 
 const defaultRunner: Wgrib2CommandRunner = async (executable, args) => {
@@ -30,17 +48,58 @@ export class Wgrib2StatsDecoder {
   ) {}
 
   async summarizeBox(path: string, box: AreaBox): Promise<GridStatistics> {
-    let stdout: string;
+    const stdout = await this.run([
+      path,
+      "-s",
+      "-undefine",
+      "out-box",
+      `${toLongitude360(box.westLongitude)}:${toLongitude360(box.eastLongitude)}`,
+      `${box.southLatitude}:${box.northLatitude}`,
+      "-stats",
+    ]);
+    return parseSingleStats(stdout);
+  }
+
+  async summarizeSelectedMessage(
+    path: string,
+    box: AreaBox,
+    selector: AreaMessageSelector,
+  ): Promise<SelectedGridStatistics> {
+    const inventory = await this.run([path, "-s"]);
+    const matches = inventory
+      .split(/\r?\n/)
+      .map((line) => parseSelectedAreaInventoryLine(line, selector))
+      .filter((value): value is { record: number; temporal: SelectedMessageTemporal } => value !== null);
+
+    if (matches.length === 0) {
+      throw new Error(
+        `wgrib2 inventory did not contain ${selector.code} at ${selector.gribLevel} with ${selector.temporalSemantics} semantics`,
+      );
+    }
+    if (matches.length > 1) {
+      throw new Error(
+        `wgrib2 inventory contained ${matches.length} matching records for ${selector.code} at ${selector.gribLevel}; refusing ambiguous area statistics`,
+      );
+    }
+
+    const match = matches[0]!;
+    const stdout = await this.run([
+      path,
+      "-d",
+      String(match.record),
+      "-undefine",
+      "out-box",
+      `${toLongitude360(box.westLongitude)}:${toLongitude360(box.eastLongitude)}`,
+      `${box.southLatitude}:${box.northLatitude}`,
+      "-stats",
+    ]);
+    return { ...parseSingleStats(stdout), temporal: match.temporal };
+  }
+
+  private async run(args: string[]): Promise<string> {
     try {
-      ({ stdout } = await this.runner(this.executable, [
-        path,
-        "-s",
-        "-undefine",
-        "out-box",
-        `${toLongitude360(box.westLongitude)}:${toLongitude360(box.eastLongitude)}`,
-        `${box.southLatitude}:${box.northLatitude}`,
-        "-stats",
-      ]));
+      const { stdout } = await this.runner(this.executable, args);
+      return stdout;
     } catch (error) {
       if (error instanceof Error && error.message.includes("ENOENT")) {
         throw new Error(
@@ -49,15 +108,48 @@ export class Wgrib2StatsDecoder {
       }
       throw error;
     }
-
-    const parsed = stdout
-      .split(/\r?\n/)
-      .map(parseWgrib2StatsLine)
-      .find((value): value is GridStatistics => value !== null);
-    if (!parsed) throw new Error(`wgrib2 returned no usable area statistics. Output: ${stdout.slice(0, 500)}`);
-    if (parsed.definedGridPoints <= 0) throw new Error("Requested bbox contains no defined GFS grid points");
-    return parsed;
   }
+}
+
+export function parseSelectedAreaInventoryLine(
+  line: string,
+  selector: AreaMessageSelector,
+): { record: number; temporal: SelectedMessageTemporal } | null {
+  const parts = line.split(":");
+  const record = Number(parts[0]);
+  const code = parts[3];
+  const gribLevel = parts[4];
+  if (!Number.isInteger(record) || record < 1 || code !== selector.code || gribLevel !== selector.gribLevel) {
+    return null;
+  }
+
+  const accumulationMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour acc(?: fcst)?:/i);
+  const averageMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour ave(?: fcst)?:/i);
+
+  if (selector.temporalSemantics === "instantaneous") {
+    if (accumulationMatch || averageMatch) return null;
+    return { record, temporal: { type: "instantaneous" } };
+  }
+  if (selector.temporalSemantics === "accumulation") {
+    if (!accumulationMatch?.[1] || !accumulationMatch[2]) return null;
+    return {
+      record,
+      temporal: {
+        type: "accumulation",
+        startForecastHour: Number(accumulationMatch[1]),
+        endForecastHour: Number(accumulationMatch[2]),
+      },
+    };
+  }
+  if (!averageMatch?.[1] || !averageMatch[2]) return null;
+  return {
+    record,
+    temporal: {
+      type: "average",
+      startForecastHour: Number(averageMatch[1]),
+      endForecastHour: Number(averageMatch[2]),
+    },
+  };
 }
 
 export function parseWgrib2StatsLine(line: string): GridStatistics | null {
@@ -78,6 +170,18 @@ export function parseWgrib2StatsLine(line: string): GridStatistics | null {
     min: min as number,
     max: max as number,
   };
+}
+
+function parseSingleStats(stdout: string): GridStatistics {
+  const parsed = stdout
+    .split(/\r?\n/)
+    .map(parseWgrib2StatsLine)
+    .filter((value): value is GridStatistics => value !== null);
+  if (parsed.length === 0) throw new Error(`wgrib2 returned no usable area statistics. Output: ${stdout.slice(0, 500)}`);
+  if (parsed.length > 1) throw new Error(`wgrib2 returned ${parsed.length} statistic records where exactly one was expected`);
+  const stats = parsed[0]!;
+  if (stats.definedGridPoints <= 0) throw new Error("Requested bbox contains no defined GFS grid points");
+  return stats;
 }
 
 function fieldNumber(line: string, field: string): number | null {
