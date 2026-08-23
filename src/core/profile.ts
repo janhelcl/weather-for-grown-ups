@@ -69,16 +69,26 @@ export class ProfileService {
 
   async getProfile(input: ProfileQueryInput): Promise<ProfileResult> {
     const query = profileQuerySchema.parse(input);
-    const run = query.run === "latest"
-      ? await this.latestRunProvider.resolveLatestRun()
-      : parseGfsRun(query.run);
     const validTime = new Date(query.validTime);
-    const fh = forecastHour(run, validTime);
     const requestedVariables = query.variables ?? [];
     const pressureLevelsHpa = query.pressureLevelsHpa ?? [];
     const requestedFields = query.fields ?? [];
     const variables = expandRequestedVariables(requestedVariables);
     const fields = expandRequestedFields(requestedFields);
+    const run = query.run === "latest"
+      ? await this.latestRunProvider.resolveLatestRun({
+          type: "valid_time",
+          validTime,
+          selection: {
+            variableCodes: variables.map((variable) => variable.gfsCode),
+            pressureLevelsHpa,
+            fields,
+          },
+        })
+      : query.run === "latest_complete"
+        ? await this.latestRunProvider.resolveLatestRun()
+        : parseGfsRun(query.run);
+    const fh = forecastHour(run, validTime);
     const source = this.sources[query.source];
 
     const cached = await source.fetch({
