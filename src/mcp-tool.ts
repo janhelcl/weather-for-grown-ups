@@ -1,5 +1,6 @@
 import { getGfsPressureCatalog } from "./catalog/catalog.js";
 import type { LatestRunProvider } from "./core/latest-run.js";
+import type { RunComparisonResult } from "./core/run-comparison.js";
 import type {
   AreaSummaryResult,
   BatchPointsResult,
@@ -18,6 +19,7 @@ import type {
   PointsTimeSeriesQueryInput,
   ProfileDiagnosticsQueryInput,
   ProfileQueryInput,
+  RunComparisonQueryInput,
   TimeSeriesQueryInput,
 } from "./schema/query.js";
 import {
@@ -31,6 +33,7 @@ import {
   profileResultSchema,
   timeSeriesResultSchema,
 } from "./schema/result.js";
+import { runComparisonResultSchema } from "./schema/run-comparison-result.js";
 
 export interface ProfileGetter { getProfile(query: ProfileQueryInput): Promise<ProfileResult>; }
 export interface LayerDiagnosticsGetter { getLayerDiagnostics(query: LayerDiagnosticsQueryInput): Promise<LayerDiagnosticsResult>; }
@@ -39,6 +42,7 @@ export interface ParcelDiagnosticsGetter { getParcelDiagnostics(query: ParcelDia
 export interface BatchPointsGetter { getPoints(query: BatchPointsQueryInput): Promise<BatchPointsResult>; }
 export interface TimeSeriesGetter { getTimeSeries(query: TimeSeriesQueryInput): Promise<TimeSeriesResult>; }
 export interface PointsTimeSeriesGetter { getPointsTimeSeries(query: PointsTimeSeriesQueryInput): Promise<PointsTimeSeriesResult>; }
+export interface RunComparisonGetter { compareRuns(query: RunComparisonQueryInput): Promise<RunComparisonResult>; }
 export interface AreaSummaryGetter { summarize(query: AreaSummaryQueryInput): Promise<AreaSummaryResult>; }
 
 export function handleGetGfsCatalog() {
@@ -103,6 +107,16 @@ export async function handleGetGfsPointsTimeSeries(
     const output = pointsTimeSeriesResultSchema.parse(
       await pointsTimeSeriesService.getPointsTimeSeries(query),
     );
+    return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } };
+  } catch (error) { return toolError(error); }
+}
+
+export async function handleCompareGfsRuns(
+  runComparisonService: RunComparisonGetter,
+  query: RunComparisonQueryInput,
+) {
+  try {
+    const output = runComparisonResultSchema.parse(await runComparisonService.compareRuns(query));
     return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } };
   } catch (error) { return toolError(error); }
 }

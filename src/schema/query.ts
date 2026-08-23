@@ -193,6 +193,17 @@ export const pointsTimeSeriesQuerySchema = z.object({
   maxSamples: z.number().int().min(1).max(MAX_POINTS_TIME_SERIES_MAX_SAMPLES).default(DEFAULT_POINTS_TIME_SERIES_MAX_SAMPLES),
 }).superRefine(validateAtmosphericSelection);
 
+export const DEFAULT_RUN_COMPARISON_CYCLES = 3;
+export const MAX_RUN_COMPARISON_CYCLES = 6;
+
+export const runComparisonQuerySchema = z.object({
+  ...pointSchema,
+  anchorRun: runSelectorSchema.describe("Newest run in the comparison; earlier runs are consecutive six-hour GFS cycles"),
+  validTime: isoDateTimeSchema.describe("One forecast valid time compared across model cycles"),
+  ...atmosphericSelectionSchema,
+  cycles: z.number().int().min(2).max(MAX_RUN_COMPARISON_CYCLES).default(DEFAULT_RUN_COMPARISON_CYCLES),
+}).superRefine(validateAtmosphericSelection);
+
 export const DEFAULT_AREA_MAX_GRID_POINTS = 50_000;
 export const GFS_GRID_SPACING_DEG = 0.25;
 
@@ -245,5 +256,7 @@ export type TimeSeriesQuery = z.output<typeof timeSeriesQuerySchema>;
 export type TimeSeriesQueryInput = z.input<typeof timeSeriesQuerySchema>;
 export type PointsTimeSeriesQuery = z.output<typeof pointsTimeSeriesQuerySchema>;
 export type PointsTimeSeriesQueryInput = z.input<typeof pointsTimeSeriesQuerySchema>;
+export type RunComparisonQuery = z.output<typeof runComparisonQuerySchema>;
+export type RunComparisonQueryInput = z.input<typeof runComparisonQuerySchema>;
 export type AreaSummaryQuery = z.output<typeof areaSummaryQuerySchema>;
 export type AreaSummaryQueryInput = z.input<typeof areaSummaryQuerySchema>;
