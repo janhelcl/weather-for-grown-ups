@@ -17,7 +17,7 @@ Supported pressure-level variables include temperature, relative humidity, U/V w
 
 Derived variables declare their raw GFS dependencies in the catalog. WFG fetches only those raw dependencies, validates that the requested pressure profile is complete, then computes the requested derivation locally. These are physical transforms rather than activity-specific scores or forecast interpretation.
 
-The same catalog advertises deterministic diagnostics across two pressure surfaces: environmental temperature lapse rate, vector wind shear, and potential-temperature gradient. Layer diagnostics also declare their raw dependencies, so several diagnostics can share one minimal two-level profile fetch.
+The same catalog advertises deterministic diagnostics across two pressure surfaces: environmental temperature lapse rate, vector wind shear, and potential-temperature gradient. It also advertises sampled whole-profile diagnostics: all freezing-level crossings and temperature-inversion layers. Diagnostics declare raw dependencies centrally so several calculations can share one minimal GFS profile fetch.
 
 The catalog also exposes non-isobaric fields with explicit vertical and temporal semantics:
 
@@ -98,6 +98,28 @@ wfg layer \
 `temperature_lapse_rate` is positive when temperature decreases with height. `wind_shear` returns upper-minus-lower U/V component changes, the vector-change magnitude, and magnitude per kilometre of geopotential-height difference. `potential_temperature_gradient` is upper-minus-lower potential temperature per kilometre. The result also includes the raw endpoint pressure-level values used by the calculations for auditability.
 
 MCP exposes the same primitive as `get_gfs_layer_diagnostics`. The query can select either NOMADS or S3 and follows the same `latest` / `latest_complete` / explicit-run semantics as point profiles.
+
+## Whole-profile diagnostics
+
+Whole-profile structure is derived from an explicit set of published pressure surfaces. WFG does not silently choose vertical resolution for the caller:
+
+```bash
+wfg profile-diagnostics \
+  --lat 50.08 \
+  --lon 14.43 \
+  --valid 2026-08-20T12:00:00Z \
+  --levels 1000,975,950,925,900,850,800,750,700,650,600,550,500 \
+  --diagnostics freezing_level_crossings,temperature_inversion_layers \
+  --json
+```
+
+`freezing_level_crossings` returns every 0 °C crossing found in the sampled profile. Exact sampled 0 °C levels are returned directly. Crossings between levels use linear interpolation in temperature/geopotential height and log-pressure interpolation for pressure, together with the bracketing sampled levels and warm→cold / cold→warm transition where determinable.
+
+`temperature_inversion_layers` finds adjacent sampled segments where temperature increases with geopotential height and merges contiguous inversion segments. Each result includes base/top pressure, height and temperature, depth, total temperature increase, mean increase per kilometre, and the number of sampled segments involved.
+
+The sampled raw levels are returned with the diagnostics for auditability. A coarse pressure-level list can therefore miss shallow structure; the tool intentionally makes that limitation visible rather than claiming continuous-profile precision.
+
+MCP exposes the same primitive as `get_gfs_profile_diagnostics`. Both diagnostics share one minimal temperature + geopotential-height profile fetch, and the query can select NOMADS or S3.
 
 ## Batched point query
 
@@ -191,6 +213,7 @@ npm run dev -- catalog
 npm run dev -- latest
 npm run dev -- profile --help
 npm run dev -- layer --help
+npm run dev -- profile-diagnostics --help
 npm run dev -- points --help
 npm run dev -- timeseries --help
 npm run dev -- area --help
@@ -216,10 +239,11 @@ Default cache/state location: `~/.cache/wfg/`. Override with `WFG_CACHE_DIR`.
 
 Implemented:
 
-- discoverable pressure-level variables, pressure-layer diagnostics, and non-isobaric field catalog
+- discoverable pressure-level variables, pressure-layer diagnostics, whole-profile diagnostics, and non-isobaric field catalog
 - query-aware newest-available run discovery plus explicit latest-f384-complete selection via NOAA AWS Open Data
 - pressure-level point profiles with completeness validation
 - deterministic pressure-layer temperature lapse rate, vector wind shear, and potential-temperature gradient from one shared endpoint profile
+- deterministic whole-profile freezing-level crossings and sampled inversion layers from one explicit sampled profile
 - batched same-time sampling for up to 50 points with one reusable S3 selected-message slice
 - surface and height-above-ground point fields with exact-level validation
 - named cloud layers/levels and whole-atmosphere column products with exact vertical semantics
@@ -232,13 +256,13 @@ Implemented:
 - deterministic NOMADS geographic-subset path with 11 s cross-process limiter
 - NOAA AWS `.idx` + selected-message byte-range path with reusable subset cache
 - `wgrib2` point extraction for isobaric/non-isobaric named-layer and temporal semantics plus area statistics adapters
-- CLI `catalog`, `latest`, `profile`, `layer`, `points`, `timeseries`, and `area`
-- MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_layer_diagnostics`, `get_gfs_points`, `get_gfs_timeseries`, and `summarize_gfs_area`
+- CLI `catalog`, `latest`, `profile`, `layer`, `profile-diagnostics`, `points`, `timeseries`, and `area`
+- MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_layer_diagnostics`, `get_gfs_profile_diagnostics`, `get_gfs_points`, `get_gfs_timeseries`, and `summarize_gfs_area`
 - shared CLI/MCP result contracts and comprehensive deterministic offline test suite plus opt-in real NOAA profile smoke tests
 
 Next:
 
-1. add profile-wide deterministic diagnostics such as interpolated freezing-level crossings
-2. extend bounded area summaries to non-isobaric fields and optionally add extrema locations/percentiles
-3. add a pressure-level transect/cross-section primitive
+1. extend bounded area summaries to non-isobaric fields and optionally add extrema locations/percentiles
+2. add a pressure-level transect/cross-section primitive
+3. add profile-diagnostic time-series composition if repeated structure analysis proves useful
 4. add a live non-isobaric/time-series/batch smoke after the S3 path has been exercised manually
