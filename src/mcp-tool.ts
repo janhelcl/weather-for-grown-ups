@@ -1,4 +1,5 @@
 import { getGfsPressureCatalog } from "./catalog/catalog.js";
+import { searchGfsCatalog } from "./catalog/search.js";
 import type { LatestRunProvider } from "./core/latest-run.js";
 import type { RunComparisonResult } from "./core/run-comparison.js";
 import type {
@@ -11,6 +12,10 @@ import type {
   ProfileResult,
   TimeSeriesResult,
 } from "./core/types.js";
+import {
+  catalogSearchResultSchema,
+  type CatalogSearchQueryInput,
+} from "./schema/catalog-search.js";
 import type {
   AreaSummaryQueryInput,
   BatchPointsQueryInput,
@@ -48,6 +53,13 @@ export interface AreaSummaryGetter { summarize(query: AreaSummaryQueryInput): Pr
 export function handleGetGfsCatalog() {
   const output = getGfsPressureCatalog();
   return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } };
+}
+
+export function handleSearchGfsCatalog(query: CatalogSearchQueryInput) {
+  try {
+    const output = catalogSearchResultSchema.parse(searchGfsCatalog(query));
+    return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } };
+  } catch (error) { return toolError(error); }
 }
 
 export async function handleGetGfsAreaSummary(areaService: AreaSummaryGetter, query: AreaSummaryQueryInput) {
