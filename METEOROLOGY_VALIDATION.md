@@ -22,8 +22,18 @@ Covered today:
 | Wet-bulb temperature | MetPy `wet_bulb_temperature` | Physical agreement within explicit tolerance; WFG uses an adiabatic-saturation enthalpy solve while MetPy uses Normand's rule |
 | Virtual temperature | MetPy thermodynamics regression test | Tight agreement after converting MetPy mixing ratio to WFG specific humidity |
 | Moist-air density | MetPy thermodynamics regression test | Tight agreement after the same humidity conversion |
-| Surface-parcel CAPE/CIN | MetPy `test_cape_cin` sounding | Wider tolerance because parcel ascent, crossing insertion, and numerical integration differ |
-| LFC/EL | MetPy LFC/EL regression soundings | Pressure agreement within explicit tolerance |
+| Pseudo-adiabatic moist lapse | MetPy `moist_lapse` example | Tight agreement through 925→200 hPa |
+| Surface-parcel CAPE | MetPy `test_cape_cin` sounding | Tight agreement after validating the parcel moist-lapse path independently |
+
+## A validation-found correction
+
+The first version of this suite immediately exposed a real issue in WFG's saturated parcel ascent. WFG had obtained the parcel-temperature tendency by converting a moist lapse rate through hydrostatic height using parcel virtual temperature and a temperature-dependent latent heat. That made the saturated parcel systematically too cold aloft.
+
+The implementation now integrates the standard pseudo-adiabatic pressure-coordinate equation directly:
+
+`dT / dln(p) = (Rd T + Lv rs) / (Cpd + Lv² rs ε / (Rd T²))`
+
+with RK4 in log pressure. The corrected path agrees with MetPy's published `moist_lapse` example to within 0.07 °C from 925 hPa down to 200 hPa. This is exactly the kind of error the independent golden layer is intended to catch.
 
 ## Why tolerances are explicit
 
@@ -31,9 +41,9 @@ A meteorological validation suite should not confuse implementation identity wit
 
 - MetPy 1.7 changed LCL to the Romps (2017) direct solution; WFG currently uses the Bolton (1980) construction because that is also used consistently in its theta-e/parcel machinery.
 - WFG wet bulb solves an adiabatic-saturation enthalpy balance; MetPy uses a Normand construction with moist-adiabatic descent.
-- CAPE/CIN depend on parcel ascent details, virtual-temperature treatment, inserted zero-buoyancy crossings, environmental interpolation, and integration resolution.
+- CAPE/CIN and LFC/EL can depend on boundary-selection semantics, parcel ascent details, virtual-temperature treatment, inserted zero-buoyancy crossings, environmental interpolation, and integration resolution.
 
-For that reason every golden assertion carries its own tolerance and source description. Tight algebraic transforms use tight tolerances; higher-order parcel diagnostics use larger tolerances that should only be changed deliberately and with an explanation.
+For that reason every golden assertion carries its own tolerance and source description. Tight algebraic transforms use tight tolerances; higher-order parcel diagnostics use tolerances that should only be changed deliberately and with an explanation.
 
 ## Reference cases currently pinned
 
@@ -44,17 +54,16 @@ The core published MetPy examples include:
 - equivalent potential temperature: 850 hPa, 20 °C, 18 °C dew point → 353.898874 K
 - LCL: 943 hPa, 33 °C, 28 °C dew point → 877.033549 hPa and 26.7591908 °C in MetPy 1.7
 - wet bulb: 993 hPa, 32 °C, 15 °C dew point → 20.3937601 °C
+- moist lapse from 925 hPa / 5 °C: 850 hPa → 0.99635104 °C, 700 hPa → -8.88958079 °C, 500 hPa → -28.38862857 °C, 300 hPa → -60.12003999 °C, 200 hPa → -83.34321585 °C
 
-The parcel-level regression uses MetPy's compact basic sounding:
+The CAPE regression uses MetPy's compact basic sounding:
 
 - pressure: `[959, 779.2, 751.3, 724.3, 700, 269]` hPa
 - temperature: `[22.2, 14.6, 12, 9.4, 7, -38]` °C
 - dew point: `[19, -11.2, -10.8, -10.4, -10, -53.2]` °C
 - CAPE: 223.927212 J/kg
-- CIN: -21.4414153 J/kg
-- EL: approximately 476.307 hPa
 
-The lower-profile LFC reference is approximately 727.055 hPa.
+WFG intentionally does **not** yet pin the MetPy CIN/LFC/EL values from that compact sounding. WFG exposes an explicit first-contiguous-positive-buoyancy parcel definition, while MetPy's LFC/EL helpers have configurable crossing-selection semantics. A cross-library assertion is only useful once both sides are configured to the same boundary definition. Until then, WFG's implementation tests continue to cover CIN/LFC/EL behavior, while the independent suite validates the underlying thermodynamics and CAPE magnitude.
 
 ## Rules for extending the suite
 
@@ -66,5 +75,6 @@ When adding a new deterministic meteorological calculation:
 4. Use a tolerance based on formulation/numerics rather than merely loosening the test until it passes.
 5. Keep ordinary unit tests as well; golden tests complement them rather than replace them.
 6. For sampled profile diagnostics, record the sampling resolution explicitly so a coarse pressure list is never mistaken for a continuous sounding.
+7. Do not compare quantities across libraries until parcel/boundary definitions are semantically matched.
 
-Future high-value additions are freezing-level/inversion reference soundings, layer diagnostics against independent calculations, and separate golden cases for mixed-layer and most-unstable parcels.
+Future high-value additions are freezing-level/inversion reference soundings, layer diagnostics against independent calculations, matched-definition CIN/LFC/EL cases, and separate golden cases for mixed-layer and most-unstable parcels.
