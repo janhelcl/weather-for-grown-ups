@@ -19,6 +19,7 @@ const EXPECTED_COMMANDS = [
   "points-timeseries",
   "compare-runs",
   "ensemble",
+  "ensemble-timeseries",
   "layer",
   "profile-diagnostics",
   "parcel",

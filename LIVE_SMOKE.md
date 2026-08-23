@@ -40,19 +40,26 @@ Assertions validate contracts, provenance, dimensions, and physical-result finit
 npm run test:live:gefs
 ```
 
-This is deliberately small. It resolves one current GEFS-compatible valid time, finds a cycle for which `c00`, `p01`, and `p02` are published, then samples 850-hPa temperature over Prague from the NOAA AWS `pgrb2a` 0.5° product.
+This is deliberately small. It selects `c00`, `p01`, and `p02`, resolves one current GEFS cycle covering two adjacent native three-hour valid times, and samples 850-hPa temperature over Prague from the NOAA AWS `pgrb2a` 0.5° product.
+
+The smoke exercises both:
+
+- the one-time `GefsEnsembleService` result at the final valid time;
+- a two-step `GefsEnsembleTimeSeriesService` result using the same explicit model run.
 
 It verifies the parts offline fixtures cannot prove:
 
 - current NOAA GEFS bucket/path/member naming;
-- `.idx` availability discovery;
-- selected GRIB byte-range download;
-- `wgrib2` point decoding of a real GEFS subset;
-- shared-grid consistency across members;
+- `.idx` availability and range-aware run discovery;
+- selected GRIB byte-range download at multiple forecast hours;
+- `wgrib2` point decoding of real GEFS subsets;
+- shared-grid consistency across members and time steps;
 - normalized member values and finite ensemble summaries;
+- fixed-cycle native three-hour temporal composition;
+- compact summary-only time-series output by default;
 - explicit raw-member threshold-fraction semantics.
 
-The live smoke intentionally uses only three members so weekly compatibility testing does not require downloading 31 independent member slices.
+The live smoke intentionally uses only three members and two forecast steps so weekly compatibility testing remains light while exercising both ensemble surfaces.
 
 ## Rich NOMADS area integration
 
