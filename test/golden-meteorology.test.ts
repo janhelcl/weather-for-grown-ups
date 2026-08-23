@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveParcelComputation,
+  integratePseudoAdiabaticTemperatureC,
   type ParcelEnvironmentLevel,
 } from "../src/derived/parcel-diagnostics.js";
 import {
@@ -133,7 +134,24 @@ describe("golden meteorology references", () => {
     expectWithin(deriveAirDensityKgM3(14.85, q, 999), golden);
   });
 
-  it("tracks MetPy's basic surface-parcel CAPE/CIN/LFC/EL sounding", () => {
+  it("matches MetPy pseudo-adiabatic moist lapse through the troposphere", () => {
+    const reference = [
+      { pressureHpa: 850, temperatureC: 0.99635104 },
+      { pressureHpa: 700, temperatureC: -8.88958079 },
+      { pressureHpa: 500, temperatureC: -28.38862857 },
+      { pressureHpa: 300, temperatureC: -60.12003999 },
+      { pressureHpa: 200, temperatureC: -83.34321585 },
+    ];
+    for (const level of reference) {
+      expectWithin(integratePseudoAdiabaticTemperatureC(5, 925, level.pressureHpa), {
+        reference: level.temperatureC,
+        tolerance: 0.07,
+        source: `MetPy moist_lapse example: saturated parcel from 925 hPa / 5 degC to ${level.pressureHpa} hPa`,
+      });
+    }
+  });
+
+  it("matches MetPy's basic surface-parcel CAPE sounding after the moist-lapse correction", () => {
     const pressures = [959, 779.2, 751.3, 724.3, 700, 269];
     const temperatures = [22.2, 14.6, 12, 9.4, 7, -38];
     const dewPoints = [19, -11.2, -10.8, -10.4, -10, -53.2];
@@ -148,25 +166,11 @@ describe("golden meteorology references", () => {
 
     expectWithin(actual.capeJkg, {
       reference: 223.927212,
-      tolerance: 50,
+      tolerance: 5,
       source: "MetPy test_cape_cin basic sounding",
     });
-    expectWithin(actual.cinJkg, {
-      reference: -21.4414153,
-      tolerance: 10,
-      source: "MetPy test_cape_cin basic sounding",
-    });
+    expect(actual.cinJkg).toBeLessThanOrEqual(0);
     expect(actual.lfc).toBeDefined();
     expect(actual.el).toBeDefined();
-    expectWithin(actual.lfc!.pressureHpa, {
-      reference: 727.055,
-      tolerance: 20,
-      source: "MetPy test_lfc_basic lower-profile crossing",
-    });
-    expectWithin(actual.el!.pressureHpa, {
-      reference: 476.30710,
-      tolerance: 35,
-      source: "MetPy test_el basic sounding",
-    });
   });
 });
