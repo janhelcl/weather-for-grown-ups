@@ -39,15 +39,22 @@ describe("profile feature primitives", () => {
     expect(gradients[2]).toMatchObject({ depthGpm: 1000, lowerValue: 4, upperValue: 1, deltaValue: -3, gradientPerKm: -3 });
   });
 
-  it("finds interpolated and exact threshold crossings without duplicate adjacent crossings", () => {
+  it("finds exact, decreasing, and increasing threshold crossings without duplicating exact samples", () => {
     const crossings = findThresholdCrossings(samples, valueOf, 2);
-    expect(crossings).toHaveLength(2);
+    expect(crossings).toHaveLength(3);
     expect(crossings[0]).toMatchObject({
       method: "exact_sample",
       sample: { id: "b" },
       direction: "increasing",
     });
     expect(crossings[1]).toMatchObject({
+      method: "interpolated",
+      lowerSample: { id: "c" },
+      upperSample: { id: "d" },
+      fraction: 2 / 3,
+      direction: "decreasing",
+    });
+    expect(crossings[2]).toMatchObject({
       method: "interpolated",
       lowerSample: { id: "d" },
       upperSample: { id: "e" },
