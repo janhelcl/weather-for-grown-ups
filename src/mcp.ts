@@ -5,6 +5,7 @@ import { AreaSummaryService } from "./core/area-summary.js";
 import { BatchPointsService } from "./core/batch-points.js";
 import { LayerDiagnosticsService } from "./core/layer-diagnostics.js";
 import { LatestRunResolver } from "./core/latest-run.js";
+import { ParcelDiagnosticsService } from "./core/parcel-diagnostics.js";
 import { ProfileDiagnosticsService } from "./core/profile-diagnostics.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
@@ -12,6 +13,7 @@ import {
   handleGetGfsAreaSummary,
   handleGetGfsCatalog,
   handleGetGfsLayerDiagnostics,
+  handleGetGfsParcelDiagnostics,
   handleGetGfsPoints,
   handleGetGfsProfile,
   handleGetGfsProfileDiagnostics,
@@ -22,6 +24,7 @@ import {
   areaSummaryQuerySchema,
   batchPointsQuerySchema,
   layerDiagnosticsQuerySchema,
+  parcelDiagnosticsQuerySchema,
   profileDiagnosticsQuerySchema,
   profileQuerySchema,
   timeSeriesQuerySchema,
@@ -31,6 +34,7 @@ import {
   batchPointsResultSchema,
   layerDiagnosticsResultSchema,
   latestGfsRunResultSchema,
+  parcelDiagnosticsResultSchema,
   profileDiagnosticsResultSchema,
   profileResultSchema,
   timeSeriesResultSchema,
@@ -40,20 +44,21 @@ function createServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "Use get_gfs_catalog to discover pressure-level variables, deterministic pressure-layer and whole-profile diagnostics, and non-isobaric GFS fields. For profile, diagnostics, batched-point, time-series, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_points when comparing multiple locations at one valid time. Values are model data, not interpretation or safety advice.",
+      instructions: "Use get_gfs_catalog to discover pressure-level variables, deterministic pressure-layer, whole-profile, and parcel diagnostics, and non-isobaric GFS fields. For profile, diagnostics, batched-point, time-series, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_points when comparing multiple locations at one valid time. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
   const profileService = new ProfileService({ latestRunProvider: latestRunResolver });
   const layerDiagnosticsService = new LayerDiagnosticsService({ profileGetter: profileService });
   const profileDiagnosticsService = new ProfileDiagnosticsService({ profileGetter: profileService });
+  const parcelDiagnosticsService = new ParcelDiagnosticsService({ profileGetter: profileService });
   const batchPointsService = new BatchPointsService({ latestRunProvider: latestRunResolver, profileGetter: profileService });
   const timeSeriesService = new TimeSeriesService({ latestRunProvider: latestRunResolver, profileGetter: profileService });
   const areaSummaryService = new AreaSummaryService({ latestRunProvider: latestRunResolver });
 
   server.registerTool("get_gfs_catalog", {
     title: "Get supported GFS field catalog",
-    description: "List pressure-level variables, deterministic layer/profile diagnostics, and supported non-isobaric fields with canonical outputs, dependencies, and units.",
+    description: "List pressure-level variables, deterministic layer/profile/parcel diagnostics, and supported non-isobaric fields with canonical outputs, dependencies, and units.",
     inputSchema: z.object({}),
   }, async () => handleGetGfsCatalog());
 
@@ -84,6 +89,13 @@ function createServer(): McpServer {
     inputSchema: profileDiagnosticsQuerySchema,
     outputSchema: profileDiagnosticsResultSchema,
   }, async (query) => handleGetGfsProfileDiagnostics(profileDiagnosticsService, query));
+
+  server.registerTool("get_gfs_parcel_diagnostics", {
+    title: "Get GFS parcel diagnostics",
+    description: "Lift an explicitly defined parcel through an explicit GFS pressure profile and return parcel start, Bolton LCL, pseudo-adiabatic parcel path, first LFC/EL, CAPE and CIN. Parcel definitions are surface_2m, mixed_layer_100hpa, and most_unstable_300hpa. CAPE/CIN are derived from virtual-temperature buoyancy; the sampled pressure levels supplied by the caller control environmental resolution.",
+    inputSchema: parcelDiagnosticsQuerySchema,
+    outputSchema: parcelDiagnosticsResultSchema,
+  }, async (query) => handleGetGfsParcelDiagnostics(parcelDiagnosticsService, query));
 
   server.registerTool("get_gfs_points", {
     title: "Get GFS fields for multiple points",

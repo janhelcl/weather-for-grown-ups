@@ -5,12 +5,14 @@ import { AreaSummaryService } from "./core/area-summary.js";
 import { BatchPointsService } from "./core/batch-points.js";
 import { LayerDiagnosticsService } from "./core/layer-diagnostics.js";
 import { LatestRunResolver } from "./core/latest-run.js";
+import { ParcelDiagnosticsService } from "./core/parcel-diagnostics.js";
 import { ProfileDiagnosticsService } from "./core/profile-diagnostics.js";
 import { ProfileService } from "./core/profile.js";
 import { TimeSeriesService } from "./core/time-series.js";
 import type {
   LayerDiagnosticId,
   NonIsobaricFieldId,
+  ParcelDefinitionId,
   PointCoordinate,
   ProfileDiagnosticId,
   ProfileSourceId,
@@ -22,6 +24,7 @@ import {
   batchPointsResultSchema,
   layerDiagnosticsResultSchema,
   latestGfsRunResultSchema,
+  parcelDiagnosticsResultSchema,
   profileDiagnosticsResultSchema,
   profileResultSchema,
   timeSeriesResultSchema,
@@ -65,6 +68,13 @@ program
       id: diagnostic.id,
       dependencies: diagnostic.dependencies.join(", "),
       output: diagnostic.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
+    })));
+    console.log("Parcel definitions");
+    console.table(catalog.parcelDefinitions.map((definition) => ({
+      id: definition.id,
+      pressureDependencies: definition.pressureDependencies.join(", "),
+      fieldDependencies: definition.fieldDependencies.join(", "),
+      output: definition.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
     })));
     console.log("Non-isobaric fields");
     console.table(catalog.fields.map((field) => ({
@@ -192,6 +202,41 @@ program
       else console.table(diagnostic.layers);
     }
     console.log("Raw sampled levels used by the derivations");
+    console.table(result.levels);
+  });
+
+program
+  .command("parcel")
+  .description("Lift an explicit parcel through a sampled GFS pressure profile and derive LCL/LFC/EL/CAPE/CIN")
+  .requiredOption("--lat <number>", "Latitude", Number)
+  .requiredOption("--lon <number>", "Longitude", Number)
+  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
+  .requiredOption("--valid <iso>", "Forecast valid time")
+  .requiredOption("--levels <list>", "Comma-separated published pressure levels in hPa; vertical resolution controls parcel diagnostics")
+  .requiredOption("--parcel <surface_2m|mixed_layer_100hpa|most_unstable_300hpa>", "Explicit parcel initialization")
+  .option("--source <nomads|s3>", "Data access path", "nomads")
+  .option("--json", "Output JSON")
+  .action(async (options) => {
+    const result = await new ParcelDiagnosticsService().getParcelDiagnostics({
+      latitude: options.lat,
+      longitude: options.lon,
+      run: options.run,
+      validTime: options.valid,
+      pressureLevelsHpa: parseLevels(options.levels),
+      parcel: options.parcel as ParcelDefinitionId,
+      source: options.source as ProfileSourceId,
+    });
+    parcelDiagnosticsResultSchema.parse(result);
+    if (options.json) return console.log(JSON.stringify(result, null, 2));
+    console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+    console.log(`Source ${result.source.provider} (${result.source.access})`);
+    console.log(`Parcel ${result.parcel.startingState.definition} from ${result.parcel.startingState.pressureHpa.toFixed(1)} hPa, ${result.parcel.startingState.temperatureC.toFixed(2)} °C`);
+    console.log(`LCL ${result.parcel.lcl.pressureHpa.toFixed(1)} hPa${result.parcel.lcl.geopotentialHeightGpm === undefined ? "" : ` / ${result.parcel.lcl.geopotentialHeightGpm.toFixed(0)} gpm`}`);
+    console.log(`LFC ${result.parcel.lfc ? `${result.parcel.lfc.pressureHpa.toFixed(1)} hPa` : "none"}; EL ${result.parcel.el ? `${result.parcel.el.pressureHpa.toFixed(1)} hPa` : "none"}`);
+    console.log(`CAPE ${result.parcel.capeJkg.toFixed(1)} J/kg (${result.parcel.capeTop}); CIN ${result.parcel.cinJkg.toFixed(1)} J/kg (${result.parcel.cinTop})`);
+    console.log("Parcel path");
+    console.table(result.parcel.parcelPath);
+    console.log("Raw sampled environmental levels");
     console.table(result.levels);
   });
 

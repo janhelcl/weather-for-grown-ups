@@ -13,11 +13,11 @@ wfg catalog --json
 
 MCP exposes the same information through `get_gfs_catalog`. WFG only accepts pressure levels published by the GFS 0.25° isobaric product, including fractional upper-atmosphere levels down to 0.01 hPa. An arbitrary level such as 842 hPa is rejected before any network request.
 
-Supported pressure-level variables include temperature, relative humidity, U/V wind, geopotential height, specific humidity, pressure/geometric vertical velocity, absolute vorticity, total cloud cover, cloud-water mixing ratio, and ozone mixing ratio. Deterministic derived variables include wind speed/direction, dew point, potential temperature, mixing ratio, virtual temperature, and moist-air density.
+Supported pressure-level variables include temperature, relative humidity, U/V wind, geopotential height, specific humidity, pressure/geometric vertical velocity, absolute vorticity, total cloud cover, cloud-water mixing ratio, and ozone mixing ratio. Deterministic derived variables include wind speed/direction, dew point, potential temperature, mixing ratio, virtual temperature, moist-air density, wet-bulb temperature, and equivalent potential temperature.
 
 Derived variables declare their raw GFS dependencies in the catalog. WFG fetches only those raw dependencies, validates that the requested pressure profile is complete, then computes the requested derivation locally. These are physical transforms rather than activity-specific scores or forecast interpretation.
 
-The same catalog advertises deterministic diagnostics across two pressure surfaces: environmental temperature lapse rate, vector wind shear, and potential-temperature gradient. It also advertises sampled whole-profile diagnostics: all freezing-level crossings and temperature-inversion layers. Diagnostics declare raw dependencies centrally so several calculations can share one minimal GFS profile fetch.
+The same catalog advertises deterministic diagnostics across two pressure surfaces: environmental temperature lapse rate, vector wind shear, and potential-temperature gradient. It also advertises sampled whole-profile diagnostics (all freezing-level crossings and temperature-inversion layers) and explicit parcel definitions for LCL/LFC/EL/CAPE/CIN. Diagnostics declare raw dependencies centrally so several calculations can share one minimal GFS profile fetch.
 
 The catalog also exposes non-isobaric fields with explicit vertical and temporal semantics:
 
@@ -54,7 +54,7 @@ wfg profile \
   --lat 50.08 \
   --lon 14.43 \
   --valid 2026-08-20T12:00:00Z \
-  --vars dew_point,potential_temperature,mixing_ratio,virtual_temperature,air_density \
+  --vars dew_point,potential_temperature,mixing_ratio,virtual_temperature,air_density,wet_bulb_temperature,equivalent_potential_temperature \
   --levels 1000,925,850,700,500 \
   --json
 ```
@@ -120,6 +120,34 @@ wfg profile-diagnostics \
 The sampled raw levels are returned with the diagnostics for auditability. A coarse pressure-level list can therefore miss shallow structure; the tool intentionally makes that limitation visible rather than claiming continuous-profile precision.
 
 MCP exposes the same primitive as `get_gfs_profile_diagnostics`. Both diagnostics share one minimal temperature + geopotential-height profile fetch, and the query can select NOMADS or S3.
+
+## Parcel diagnostics
+
+Parcel calculations require the caller to choose the parcel explicitly; WFG does not expose an ambiguous generic "CAPE" calculation:
+
+```bash
+wfg parcel \
+  --lat 50.08 \
+  --lon 14.43 \
+  --valid 2026-08-20T12:00:00Z \
+  --levels 1000,975,950,925,900,875,850,825,800,775,750,700,650,600,550,500,450,400,350,300,250,200 \
+  --parcel surface_2m \
+  --json
+```
+
+Supported parcel definitions are:
+
+- `surface_2m` — initializes at GFS surface pressure/geopotential height using 2 m temperature and specific humidity.
+- `mixed_layer_100hpa` — pressure-weighted mean potential temperature and mixing ratio over the exact lowest 100 hPa, initialized at surface pressure.
+- `most_unstable_300hpa` — sampled state with the largest Bolton equivalent potential temperature in the lowest 300 hPa.
+
+One underlying profile request obtains pressure-level temperature, specific humidity and geopotential height together with surface pressure/geopotential height and 2 m temperature/specific humidity. The requested pressure levels therefore control environmental resolution without multiplying NOMADS requests.
+
+The parcel ascends dry adiabatically to a Bolton lifted condensation level (LCL), then pseudo-adiabatically above it. Environmental values are interpolated in log pressure. Parcel and environmental buoyancy use virtual temperature; zero-buoyancy crossings are inserted before integrating energy. `lfc` is the first level of free convection at or above the LCL, and `el` is the first equilibrium level ending that contiguous positive-buoyancy layer. CAPE and CIN use the pressure-coordinate form `-Rd ∫ (Tv_parcel - Tv_environment) d ln(p)`.
+
+The result returns the parcel starting state, LCL, optional LFC/EL, CAPE/CIN, the complete dry/saturated parcel path and the raw sampled environmental levels. If no LFC occurs before the profile top, CAPE is zero and CIN is integrated to the sampled top; if the positive layer continues through the sampled top, CAPE reports `profile_top` rather than inventing an equilibrium level beyond the data.
+
+MCP exposes the same primitive as `get_gfs_parcel_diagnostics`. The query can select NOMADS or S3 and follows the same run semantics as the other point/profile diagnostics.
 
 ## Batched point query
 
@@ -214,6 +242,7 @@ npm run dev -- latest
 npm run dev -- profile --help
 npm run dev -- layer --help
 npm run dev -- profile-diagnostics --help
+npm run dev -- parcel --help
 npm run dev -- points --help
 npm run dev -- timeseries --help
 npm run dev -- area --help
@@ -239,30 +268,32 @@ Default cache/state location: `~/.cache/wfg/`. Override with `WFG_CACHE_DIR`.
 
 Implemented:
 
-- discoverable pressure-level variables, pressure-layer diagnostics, whole-profile diagnostics, and non-isobaric field catalog
+- discoverable pressure-level variables, pressure-layer diagnostics, whole-profile diagnostics, explicit parcel definitions, and non-isobaric field catalog
 - query-aware newest-available run discovery plus explicit latest-f384-complete selection via NOAA AWS Open Data
 - pressure-level point profiles with completeness validation
+- deterministic per-level wet-bulb and equivalent-potential-temperature derivations in addition to the existing dry/moist thermodynamic variables
 - deterministic pressure-layer temperature lapse rate, vector wind shear, and potential-temperature gradient from one shared endpoint profile
 - deterministic whole-profile freezing-level crossings and sampled inversion layers from one explicit sampled profile
+- explicit surface, 100 hPa mixed-layer, and sampled 300 hPa most-unstable parcel diagnostics with Bolton LCL, dry/pseudo-adiabatic path, first LFC/EL, CAPE and CIN
 - batched same-time sampling for up to 50 points with one reusable S3 selected-message slice
 - surface and height-above-ground point fields with exact-level validation
 - named cloud layers/levels and whole-atmosphere column products with exact vertical semantics
 - accumulation and forecast-window-average fields with explicit forecast intervals
 - native-cadence point time series with bounded concurrency and step guard
 - bounded raw pressure-field area min/max/unweighted mean without returning grids
-- 12 raw pressure-level fields plus derived wind, dew point, potential temperature, mixing ratio, virtual temperature, and moist-air density
+- 12 raw pressure-level fields plus 8 deterministic derived pressure-level variables
 - surface diagnostics plus 2/10/20/30/40/50/80/100 m fields and derived winds
 - instantaneous and averaged cloud-cover layers, cloud boundaries/top temperatures, cloud ceiling, precipitable/cloud water, ozone, and cloud work function
 - deterministic NOMADS geographic-subset path with 11 s cross-process limiter
 - NOAA AWS `.idx` + selected-message byte-range path with reusable subset cache
 - `wgrib2` point extraction for isobaric/non-isobaric named-layer and temporal semantics plus area statistics adapters
-- CLI `catalog`, `latest`, `profile`, `layer`, `profile-diagnostics`, `points`, `timeseries`, and `area`
-- MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_layer_diagnostics`, `get_gfs_profile_diagnostics`, `get_gfs_points`, `get_gfs_timeseries`, and `summarize_gfs_area`
+- CLI `catalog`, `latest`, `profile`, `layer`, `profile-diagnostics`, `parcel`, `points`, `timeseries`, and `area`
+- MCP `get_gfs_catalog`, `get_latest_gfs_run`, `get_gfs_profile`, `get_gfs_layer_diagnostics`, `get_gfs_profile_diagnostics`, `get_gfs_parcel_diagnostics`, `get_gfs_points`, `get_gfs_timeseries`, and `summarize_gfs_area`
 - shared CLI/MCP result contracts and comprehensive deterministic offline test suite plus opt-in real NOAA profile smoke tests
 
 Next:
 
-1. extend bounded area summaries to non-isobaric fields and optionally add extrema locations/percentiles
-2. add a pressure-level transect/cross-section primitive
-3. add profile-diagnostic time-series composition if repeated structure analysis proves useful
-4. add a live non-isobaric/time-series/batch smoke after the S3 path has been exercised manually
+1. add a pressure-level transect/cross-section primitive
+2. extend bounded area summaries to non-isobaric fields and optionally add extrema locations/percentiles
+3. add parcel/profile-diagnostic time-series composition if repeated structure analysis proves useful
+4. add a live non-isobaric/time-series/batch/parcel smoke after the S3 path has been exercised manually

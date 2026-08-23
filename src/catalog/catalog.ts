@@ -1,5 +1,6 @@
 import { LAYER_DIAGNOSTIC_CATALOG } from "./layer-diagnostics.js";
 import { NON_ISOBARIC_FIELD_CATALOG } from "./non-isobaric-fields.js";
+import { PARCEL_DIAGNOSTIC_CATALOG } from "./parcel-diagnostics.js";
 import { GFS_PRESSURE_LEVELS_HPA } from "./pressure-levels.js";
 import { PROFILE_DIAGNOSTIC_CATALOG } from "./profile-diagnostics.js";
 import { VARIABLE_CATALOG } from "./variables.js";
@@ -48,6 +49,16 @@ export function getGfsPressureCatalog() {
       kind: definition.kind,
       verticalSemantics: definition.verticalSemantics,
       dependencies: [...definition.dependencies],
+      description: definition.description,
+      outputs: [...definition.outputs],
+    })),
+    parcelDiagnosticsNote:
+      "Parcel diagnostics use one explicit environmental pressure profile plus GFS surface pressure/geopotential height and 2 m temperature/specific humidity. Ascent is dry adiabatic to the Bolton LCL and pseudo-adiabatic above it; LFC/EL are virtual-temperature buoyancy crossings and CAPE/CIN use pressure-coordinate integration. The requested pressure levels control vertical resolution.",
+    parcelDefinitions: Object.values(PARCEL_DIAGNOSTIC_CATALOG).map((definition) => ({
+      id: definition.id,
+      kind: definition.kind,
+      pressureDependencies: [...definition.pressureDependencies],
+      fieldDependencies: [...definition.fieldDependencies],
       description: definition.description,
       outputs: [...definition.outputs],
     })),

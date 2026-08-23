@@ -8,6 +8,12 @@ const BOLTON_SATURATION_PRESSURE_HPA = 6.112;
 const BOLTON_SATURATION_A = 17.67;
 const BOLTON_SATURATION_B_C = 243.5;
 
+export interface LclState {
+  pressureHpa: number;
+  temperatureC: number;
+  dewPointC: number;
+}
+
 /**
  * Dew point from temperature and relative humidity using the Magnus form
  * with coefficients 17.625 and 243.04 degC.
@@ -26,7 +32,27 @@ export function deriveDewPointC(temperatureC: number, relativeHumidityPct: numbe
 export function derivePotentialTemperatureK(temperatureC: number, pressureHpa: number): number {
   assertPressure(pressureHpa);
   const temperatureK = temperatureC + KELVIN_OFFSET;
+  if (!(temperatureK > 0)) throw new Error(`Temperature must be above absolute zero, received ${temperatureC} degC`);
   return temperatureK * Math.pow(REFERENCE_PRESSURE_HPA / pressureHpa, POISSON_EXPONENT);
+}
+
+/** Temperature on a dry adiabat from potential temperature and pressure. */
+export function deriveTemperatureFromPotentialTemperatureC(potentialTemperatureK: number, pressureHpa: number): number {
+  assertPressure(pressureHpa);
+  if (!(potentialTemperatureK > 0) || !Number.isFinite(potentialTemperatureK)) {
+    throw new Error(`Expected positive finite potential temperature, received ${potentialTemperatureK} K`);
+  }
+  return potentialTemperatureK * Math.pow(pressureHpa / REFERENCE_PRESSURE_HPA, POISSON_EXPONENT) - KELVIN_OFFSET;
+}
+
+/** Dry-adiabatic parcel temperature at a target pressure. */
+export function deriveDryAdiabaticTemperatureC(
+  startingTemperatureC: number,
+  startingPressureHpa: number,
+  targetPressureHpa: number,
+): number {
+  const theta = derivePotentialTemperatureK(startingTemperatureC, startingPressureHpa);
+  return deriveTemperatureFromPotentialTemperatureC(theta, targetPressureHpa);
 }
 
 /** Mixing ratio from specific humidity: r = q / (1 - q). */
@@ -35,17 +61,33 @@ export function deriveMixingRatioKgKg(specificHumidityKgKg: number): number {
   return specificHumidityKgKg / (1 - specificHumidityKgKg);
 }
 
-/** Virtual temperature for moist air, returned in degrees Celsius. */
-export function deriveVirtualTemperatureC(
+/** Specific humidity from mixing ratio: q = r / (1 + r). */
+export function deriveSpecificHumidityFromMixingRatioKgKg(mixingRatioKgKg: number): number {
+  if (!(mixingRatioKgKg >= 0) || !Number.isFinite(mixingRatioKgKg)) {
+    throw new Error(`Expected non-negative finite mixing ratio, received ${mixingRatioKgKg}`);
+  }
+  return mixingRatioKgKg / (1 + mixingRatioKgKg);
+}
+
+/** Virtual temperature for moist air, returned in Kelvin. */
+export function deriveVirtualTemperatureK(
   temperatureC: number,
   specificHumidityKgKg: number,
 ): number {
   assertSpecificHumidity(specificHumidityKgKg);
   const temperatureK = temperatureC + KELVIN_OFFSET;
-  const virtualTemperatureK = temperatureK * (
+  if (!(temperatureK > 0)) throw new Error(`Temperature must be above absolute zero, received ${temperatureC} degC`);
+  return temperatureK * (
     1 + (1 / WATER_VAPOR_TO_DRY_AIR_GAS_CONSTANT_RATIO - 1) * specificHumidityKgKg
   );
-  return virtualTemperatureK - KELVIN_OFFSET;
+}
+
+/** Virtual temperature for moist air, returned in degrees Celsius. */
+export function deriveVirtualTemperatureC(
+  temperatureC: number,
+  specificHumidityKgKg: number,
+): number {
+  return deriveVirtualTemperatureK(temperatureC, specificHumidityKgKg) - KELVIN_OFFSET;
 }
 
 /** Air density from pressure and virtual temperature using the ideal-gas relation. */
@@ -55,7 +97,7 @@ export function deriveAirDensityKgM3(
   pressureHpa: number,
 ): number {
   assertPressure(pressureHpa);
-  const virtualTemperatureK = deriveVirtualTemperatureC(temperatureC, specificHumidityKgKg) + KELVIN_OFFSET;
+  const virtualTemperatureK = deriveVirtualTemperatureK(temperatureC, specificHumidityKgKg);
   return (pressureHpa * 100) / (DRY_AIR_GAS_CONSTANT_J_KG_K * virtualTemperatureK);
 }
 
@@ -64,6 +106,22 @@ export function deriveSaturationVaporPressureHpa(temperatureC: number): number {
   return BOLTON_SATURATION_PRESSURE_HPA * Math.exp(
     BOLTON_SATURATION_A * temperatureC / (temperatureC + BOLTON_SATURATION_B_C),
   );
+}
+
+/** Saturation mixing ratio over liquid water at the supplied pressure. */
+export function deriveSaturationMixingRatioKgKg(temperatureC: number, pressureHpa: number): number {
+  assertPressure(pressureHpa);
+  const saturationVaporPressureHpa = deriveSaturationVaporPressureHpa(temperatureC);
+  if (!(saturationVaporPressureHpa < pressureHpa)) {
+    throw new Error(`Saturation vapor pressure ${saturationVaporPressureHpa} hPa is not below ambient pressure ${pressureHpa} hPa`);
+  }
+  return WATER_VAPOR_TO_DRY_AIR_GAS_CONSTANT_RATIO
+    * saturationVaporPressureHpa / (pressureHpa - saturationVaporPressureHpa);
+}
+
+/** Saturation specific humidity over liquid water at the supplied pressure. */
+export function deriveSaturationSpecificHumidityKgKg(temperatureC: number, pressureHpa: number): number {
+  return deriveSpecificHumidityFromMixingRatioKgKg(deriveSaturationMixingRatioKgKg(temperatureC, pressureHpa));
 }
 
 /** Water-vapor partial pressure from total pressure and specific humidity. */
@@ -81,6 +139,31 @@ export function deriveDewPointFromVaporPressureC(vaporPressureHpa: number): numb
   }
   const logRatio = Math.log(vaporPressureHpa / BOLTON_SATURATION_PRESSURE_HPA);
   return BOLTON_SATURATION_B_C * logRatio / (BOLTON_SATURATION_A - logRatio);
+}
+
+/** Bolton (1980) lifted-condensation-level temperature and dry-adiabatic pressure. */
+export function deriveLclState(
+  temperatureC: number,
+  specificHumidityKgKg: number,
+  pressureHpa: number,
+): LclState {
+  assertPressure(pressureHpa);
+  assertSpecificHumidity(specificHumidityKgKg);
+  if (!(specificHumidityKgKg > 0)) throw new Error("LCL is undefined for zero specific humidity");
+
+  const temperatureK = temperatureC + KELVIN_OFFSET;
+  if (!(temperatureK > 0)) throw new Error(`Temperature must be above absolute zero, received ${temperatureC} degC`);
+  const dewPointC = deriveDewPointFromVaporPressureC(deriveVaporPressureHpa(specificHumidityKgKg, pressureHpa));
+  const dewPointK = dewPointC + KELVIN_OFFSET;
+  const lclTemperatureK = 56 + 1 / (
+    1 / (dewPointK - 56) + Math.log(temperatureK / dewPointK) / 800
+  );
+  const lclPressureHpa = pressureHpa * Math.pow(lclTemperatureK / temperatureK, 1 / POISSON_EXPONENT);
+  return {
+    pressureHpa: lclPressureHpa,
+    temperatureC: lclTemperatureK - KELVIN_OFFSET,
+    dewPointC,
+  };
 }
 
 /**
@@ -104,12 +187,8 @@ export function deriveEquivalentPotentialTemperatureK(
 
   const mixingRatio = deriveMixingRatioKgKg(specificHumidityKgKg);
   const vaporPressureHpa = deriveVaporPressureHpa(specificHumidityKgKg, pressureHpa);
-  const dewPointK = deriveDewPointFromVaporPressureC(vaporPressureHpa) + KELVIN_OFFSET;
-  if (!(dewPointK > 0)) throw new Error("Derived dew point is below absolute zero");
-
-  const lclTemperatureK = 56 + 1 / (
-    1 / (dewPointK - 56) + Math.log(temperatureK / dewPointK) / 800
-  );
+  const lcl = deriveLclState(temperatureC, specificHumidityKgKg, pressureHpa);
+  const lclTemperatureK = lcl.temperatureC + KELVIN_OFFSET;
   const dryPotentialAtLclK = temperatureK
     * Math.pow(REFERENCE_PRESSURE_HPA / (pressureHpa - vaporPressureHpa), POISSON_EXPONENT)
     * Math.pow(temperatureK / lclTemperatureK, 0.28 * mixingRatio);
@@ -168,10 +247,7 @@ export function deriveWetBulbTemperatureC(
 }
 
 function saturatedEnthalpyResidual(temperatureC: number, pressureHpa: number, targetEnthalpy: number): number {
-  const saturationVaporPressureHpa = deriveSaturationVaporPressureHpa(temperatureC);
-  if (!(saturationVaporPressureHpa < pressureHpa)) return Number.POSITIVE_INFINITY;
-  const saturationMixingRatio = WATER_VAPOR_TO_DRY_AIR_GAS_CONSTANT_RATIO
-    * saturationVaporPressureHpa / (pressureHpa - saturationVaporPressureHpa);
+  const saturationMixingRatio = deriveSaturationMixingRatioKgKg(temperatureC, pressureHpa);
   return moistAirEnthalpyKjKgDryAir(temperatureC, saturationMixingRatio) - targetEnthalpy;
 }
 

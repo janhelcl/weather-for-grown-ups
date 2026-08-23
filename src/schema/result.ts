@@ -7,6 +7,7 @@ import {
   isoDateTimeSchema,
   layerDiagnosticIdSchema,
   nonIsobaricFieldIdSchema,
+  parcelDefinitionIdSchema,
   rawVariableIdSchema,
 } from "./query.js";
 
@@ -155,6 +156,70 @@ export const profileDiagnosticsResultSchema = z.object({
   sampledPressureLevelsHpa: z.array(z.number().positive()).min(2),
   levels: z.array(profileLevelResultSchema).min(2),
   diagnostics: z.array(profileDiagnosticResultSchema).min(1),
+  source: sourceProvenanceSchema.extend({ cacheHit: z.boolean() }),
+});
+
+const parcelBoundarySchema = z.object({
+  pressureHpa: z.number().positive(),
+  geopotentialHeightGpm: z.number().optional(),
+});
+
+const parcelStartingStateSchema = z.object({
+  definition: parcelDefinitionIdSchema,
+  source: z.enum(["surface_2m", "mixed_layer_mean", "isobaric_sample"]),
+  pressureHpa: z.number().positive(),
+  geopotentialHeightGpm: z.number(),
+  temperatureC: z.number(),
+  specificHumidityKgKg: z.number().min(0).max(1),
+  construction: z.object({
+    layerBottomPressureHpa: z.number().positive().optional(),
+    layerTopPressureHpa: z.number().positive().optional(),
+    sampledLevels: z.number().int().positive().optional(),
+    selectedEquivalentPotentialTemperatureK: z.number().positive().optional(),
+    candidateLevels: z.number().int().positive().optional(),
+  }).optional(),
+});
+
+const parcelPathLevelSchema = z.object({
+  pressureHpa: z.number().positive(),
+  geopotentialHeightGpm: z.number(),
+  source: z.enum(["parcel_start", "sampled", "interpolated_lcl", "interpolated_buoyancy_crossing"]),
+  phase: z.enum(["dry", "saturated"]),
+  environmentTemperatureC: z.number(),
+  environmentSpecificHumidityKgKg: z.number().min(0).max(1),
+  environmentVirtualTemperatureK: z.number().positive(),
+  parcelTemperatureC: z.number(),
+  parcelSpecificHumidityKgKg: z.number().min(0).max(1),
+  parcelVirtualTemperatureK: z.number().positive(),
+  virtualTemperatureExcessK: z.number(),
+});
+
+export const parcelComputationSchema = z.object({
+  startingState: parcelStartingStateSchema,
+  lcl: parcelBoundarySchema.extend({
+    temperatureC: z.number(),
+    dewPointC: z.number(),
+    withinProfile: z.boolean(),
+  }),
+  lfc: parcelBoundarySchema.optional(),
+  el: parcelBoundarySchema.optional(),
+  capeJkg: z.number().nonnegative(),
+  cinJkg: z.number().nonpositive(),
+  capeTop: z.enum(["equilibrium_level", "profile_top", "no_lfc"]),
+  cinTop: z.enum(["lfc", "profile_top"]),
+  parcelPath: z.array(parcelPathLevelSchema).min(2),
+});
+
+export const parcelDiagnosticsResultSchema = z.object({
+  model: z.literal("gfs_0p25"),
+  run: isoDateTimeSchema,
+  validTime: isoDateTimeSchema,
+  forecastHour: z.number(),
+  requestedPoint: gridPointSchema,
+  gridPoint: gridPointSchema,
+  sampledPressureLevelsHpa: z.array(z.number().positive()).min(2),
+  levels: z.array(profileLevelResultSchema).min(2),
+  parcel: parcelComputationSchema,
   source: sourceProvenanceSchema.extend({ cacheHit: z.boolean() }),
 });
 

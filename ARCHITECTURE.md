@@ -27,7 +27,7 @@ agent interpretation
 - upstream pacing and caching
 - GRIB decoder abstraction
 - normalized typed results
-- deterministic transforms such as U/V → wind speed/direction, per-level thermodynamics, cross-level gradients/shear, and sampled whole-profile structure diagnostics with explicit vertical semantics
+- deterministic transforms such as U/V → wind speed/direction, per-level thermodynamics, cross-level gradients/shear, sampled whole-profile structure diagnostics, and explicitly defined parcel ascent diagnostics
 
 Derived variables declare their raw GFS dependencies in the shared catalog. Query planning expands those dependencies before source access, while the derivation itself happens only after raw completeness validation. This keeps NOAA access minimal and makes the same derived result available automatically to profile, batch-point, and time-series consumers.
 
@@ -39,11 +39,17 @@ Whole-profile diagnostics are also explicit about sampling. The caller supplies 
 
 Whole-profile feature mechanics live below named diagnostics as reusable deterministic primitives: strict height ordering, adjacent gradients, threshold crossings, contiguous matching layers, and extrema. Named meteorological diagnostics compose these mechanics and add their domain-specific output semantics. This prevents each new diagnostic from reimplementing vertical traversal or subtly changing interpolation/layer grouping behavior.
 
+Parcel diagnostics are a distinct profile-wide result shape because parcel choice is part of the physics. Callers must explicitly select `surface_2m`, `mixed_layer_100hpa`, or `most_unstable_300hpa`; WFG never exposes an ambiguous generic CAPE calculation. One shared profile request obtains pressure-level temperature, specific humidity and geopotential height together with surface pressure/geopotential height and 2 m temperature/specific humidity.
+
+The surface parcel uses GFS surface pressure/geopotential height with 2 m temperature and humidity. The 100 hPa mixed-layer parcel uses pressure-weighted mean potential temperature and mixing ratio over the exact lowest 100 hPa and initializes that mean state at surface pressure. The most-unstable parcel selects the sampled state with maximum Bolton equivalent potential temperature in the lowest 300 hPa.
+
+Parcel ascent is dry adiabatic to the Bolton lifted condensation level, then pseudo-adiabatic above it using deterministic numerical integration in log pressure. Environmental values are interpolated in log pressure. Buoyancy compares parcel and environmental **virtual temperature**, zero-buoyancy crossings are inserted explicitly, and LFC/EL refer to the first contiguous positive-buoyancy layer at or above the LCL. CAPE and CIN use the pressure-coordinate form `-Rd ∫ (Tv_parcel - Tv_environment) d ln(p)`. The raw environmental levels and complete parcel path are returned for auditability. As with other profile diagnostics, the caller's requested pressure levels determine environmental resolution.
+
 ## Surface contracts
 
 CLI and MCP are equal public surfaces over the same core. They must not maintain separate atmospheric result models.
 
-Shared Zod result schemas define the public profile, pressure-layer, whole-profile-diagnostic, time-series, area-summary, latest-run, vertical-level, temporal-interval, and provenance contracts. Both surfaces validate core results against those schemas before emitting them. MCP also advertises the same schemas as tool output schemas.
+Shared Zod result schemas define the public profile, pressure-layer, whole-profile-diagnostic, parcel-diagnostic, time-series, area-summary, latest-run, vertical-level, temporal-interval, and provenance contracts. Both surfaces validate core results against those schemas before emitting them. MCP also advertises the same schemas as tool output schemas.
 
 A new core result shape is therefore incomplete until the shared contract accepts it and both CLI and MCP tests cover the relevant semantics.
 
