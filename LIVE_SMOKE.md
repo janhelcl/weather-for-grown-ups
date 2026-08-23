@@ -19,13 +19,13 @@ All physical NOMADS downloads use WFG's normal file-backed limiter. The default 
 
 AWS Open Data access does not use the NOMADS limiter.
 
-## Expanded S3 integration
+## Expanded deterministic GFS S3 integration
 
 ```bash
 npm run test:live:s3
 ```
 
-This exercises NOAA AWS Open Data through the shared core:
+This exercises NOAA AWS Open Data through the deterministic GFS core:
 
 - three-location batched pressure/non-isobaric query;
 - four native forecast steps (`f006` through `f009`);
@@ -33,6 +33,26 @@ This exercises NOAA AWS Open Data through the shared core:
 - surface-parcel LCL/CAPE/CIN calculation.
 
 Assertions validate contracts, provenance, dimensions, and physical-result finiteness rather than pinning specific weather values.
+
+## GEFS ensemble integration
+
+```bash
+npm run test:live:gefs
+```
+
+This is deliberately small. It resolves one current GEFS-compatible valid time, finds a cycle for which `c00`, `p01`, and `p02` are published, then samples 850-hPa temperature over Prague from the NOAA AWS `pgrb2a` 0.5° product.
+
+It verifies the parts offline fixtures cannot prove:
+
+- current NOAA GEFS bucket/path/member naming;
+- `.idx` availability discovery;
+- selected GRIB byte-range download;
+- `wgrib2` point decoding of a real GEFS subset;
+- shared-grid consistency across members;
+- normalized member values and finite ensemble summaries;
+- explicit raw-member threshold-fraction semantics.
+
+The live smoke intentionally uses only three members so weekly compatibility testing does not require downloading 31 independent member slices.
 
 ## Rich NOMADS area integration
 
@@ -56,7 +76,7 @@ Requirements:
 - Node.js supported by WFG;
 - `wgrib2` on `PATH`, or `WGRIB2_PATH` set.
 
-Run both expanded integrations:
+Run all expanded integrations:
 
 ```bash
 npm run test:live:all
@@ -82,9 +102,9 @@ Without `WFG_LIVE_SOURCE` it uses NOMADS; setting `s3` switches the source.
 
 ## First scheduled-suite verification
 
-Before the schedule was merged, the expanded workflow was deliberately executed against current NOAA data on 2026-08-23. The first attempt caught a real test defect: the parcel smoke requested unsupported 875/825/775 hPa levels. The smoke data was corrected to the canonical published GFS pressure-level set, and the rerun passed both AWS and NOMADS paths.
+Before the schedule was merged, the expanded deterministic workflow was deliberately executed against current NOAA data on 2026-08-23. The first attempt caught a real test defect: the parcel smoke requested unsupported 875/825/775 hPa levels. The smoke data was corrected to the canonical published GFS pressure-level set, and the rerun passed both AWS and NOMADS paths.
 
-That is the purpose of this layer: catch assumptions that deterministic mocks and fixed fixtures cannot reveal without turning upstream availability into a merge dependency.
+The first GEFS capability was likewise exercised against current NOAA AWS data before merge. This layer exists to catch assumptions that deterministic mocks and fixed fixtures cannot reveal without turning upstream availability into a permanent merge dependency.
 
 ## Failure triage
 
