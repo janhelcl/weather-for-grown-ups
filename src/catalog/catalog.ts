@@ -1,6 +1,7 @@
 import { LAYER_DIAGNOSTIC_CATALOG } from "./layer-diagnostics.js";
 import { NON_ISOBARIC_FIELD_CATALOG } from "./non-isobaric-fields.js";
 import { GFS_PRESSURE_LEVELS_HPA } from "./pressure-levels.js";
+import { PROFILE_DIAGNOSTIC_CATALOG } from "./profile-diagnostics.js";
 import { VARIABLE_CATALOG } from "./variables.js";
 
 export function getGfsPressureCatalog() {
@@ -33,6 +34,16 @@ export function getGfsPressureCatalog() {
     layerDiagnosticsNote:
       "Pressure-layer diagnostics combine two published isobaric surfaces. lowerPressureHpa must be greater than upperPressureHpa; rates use the GFS geopotential-height difference between those surfaces.",
     layerDiagnostics: Object.values(LAYER_DIAGNOSTIC_CATALOG).map((definition) => ({
+      id: definition.id,
+      kind: definition.kind,
+      verticalSemantics: definition.verticalSemantics,
+      dependencies: [...definition.dependencies],
+      description: definition.description,
+      outputs: [...definition.outputs],
+    })),
+    profileDiagnosticsNote:
+      "Whole-profile diagnostics operate only on the explicitly requested pressure levels. Freezing crossings use linear temperature/geopotential-height interpolation and log-pressure interpolation; inversion layers merge adjacent sampled segments where temperature increases with height.",
+    profileDiagnostics: Object.values(PROFILE_DIAGNOSTIC_CATALOG).map((definition) => ({
       id: definition.id,
       kind: definition.kind,
       verticalSemantics: definition.verticalSemantics,
