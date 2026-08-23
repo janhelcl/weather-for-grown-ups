@@ -9,8 +9,10 @@ import { ParcelDiagnosticsService } from "./core/parcel-diagnostics.js";
 import { PointsTimeSeriesService } from "./core/points-time-series.js";
 import { ProfileDiagnosticsService } from "./core/profile-diagnostics.js";
 import { ProfileService } from "./core/profile.js";
+import { RunComparisonService } from "./core/run-comparison.js";
 import { TimeSeriesService } from "./core/time-series.js";
 import {
+  handleCompareGfsRuns,
   handleGetGfsAreaSummary,
   handleGetGfsCatalog,
   handleGetGfsLayerDiagnostics,
@@ -30,6 +32,7 @@ import {
   pointsTimeSeriesQuerySchema,
   profileDiagnosticsQuerySchema,
   profileQuerySchema,
+  runComparisonQuerySchema,
   timeSeriesQuerySchema,
 } from "./schema/query.js";
 import {
@@ -43,12 +46,13 @@ import {
   profileResultSchema,
   timeSeriesResultSchema,
 } from "./schema/result.js";
+import { runComparisonResultSchema } from "./schema/run-comparison-result.js";
 
 function createServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "Use get_gfs_catalog to discover pressure-level variables, deterministic pressure-layer, whole-profile, and parcel diagnostics, and non-isobaric GFS fields. For profile, diagnostics, batched-point, time-series, multi-point time-series, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_points when comparing multiple locations at one valid time, and get_gfs_points_timeseries when the same locations must be compared across a valid-time range. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
+      instructions: "Use get_gfs_catalog to discover pressure-level variables, deterministic pressure-layer, whole-profile, and parcel diagnostics, and non-isobaric GFS fields. For profile, diagnostics, batched-point, time-series, multi-point time-series, run-comparison, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_points when comparing multiple locations at one valid time, get_gfs_points_timeseries when the same locations must be compared across a valid-time range, and compare_gfs_runs when the same point/valid time/selection should be compared across consecutive six-hour model cycles. Run-comparison deltas are newer minus older; wind direction uses shortest signed angular change. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
@@ -61,6 +65,10 @@ function createServer(): McpServer {
   const pointsTimeSeriesService = new PointsTimeSeriesService({
     latestRunProvider: latestRunResolver,
     batchPointsGetter: batchPointsService,
+  });
+  const runComparisonService = new RunComparisonService({
+    latestRunProvider: latestRunResolver,
+    profileGetter: profileService,
   });
   const areaSummaryService = new AreaSummaryService({ latestRunProvider: latestRunResolver });
 
@@ -125,6 +133,13 @@ function createServer(): McpServer {
     inputSchema: pointsTimeSeriesQuerySchema,
     outputSchema: pointsTimeSeriesResultSchema,
   }, async (query) => handleGetGfsPointsTimeSeries(pointsTimeSeriesService, query));
+
+  server.registerTool("compare_gfs_runs", {
+    title: "Compare consecutive GFS model runs",
+    description: "Compare the same point, valid time, and atmospheric selection across 2-6 consecutive six-hour GFS cycles. Returns raw snapshots plus deterministic newer-minus-older deltas. Wind direction uses shortest signed angular change. Accumulation/average fields are only delta-comparable when their absolute time windows match.",
+    inputSchema: runComparisonQuerySchema,
+    outputSchema: runComparisonResultSchema,
+  }, async (query) => handleCompareGfsRuns(runComparisonService, query));
 
   server.registerTool("summarize_gfs_area", {
     title: "Summarize GFS field over an area",
