@@ -7,7 +7,9 @@ import {
   type CatalogSearchSection,
 } from "./schema/catalog-search.js";
 
-if (process.argv[2] !== "catalog") {
+if (process.argv[2] === "transect") {
+  await import("./transect-cli.js");
+} else if (process.argv[2] !== "catalog") {
   await import("./cli-legacy.js");
 } else {
   const command = new Command("catalog")

@@ -11,6 +11,7 @@ import { ProfileDiagnosticsService } from "./core/profile-diagnostics.js";
 import { ProfileService } from "./core/profile.js";
 import { RunComparisonService } from "./core/run-comparison.js";
 import { TimeSeriesService } from "./core/time-series.js";
+import { TransectService } from "./core/transect.js";
 import {
   handleCompareGfsRuns,
   handleGetGfsAreaSummary,
@@ -25,6 +26,7 @@ import {
   handleGetLatestGfsRun,
   handleSearchGfsCatalog,
 } from "./mcp-tool.js";
+import { handleGetGfsTransect } from "./mcp-transect-tool.js";
 import { catalogSearchQuerySchema, catalogSearchResultSchema } from "./schema/catalog-search.js";
 import {
   areaSummaryQuerySchema,
@@ -49,12 +51,14 @@ import {
   timeSeriesResultSchema,
 } from "./schema/result.js";
 import { runComparisonResultSchema } from "./schema/run-comparison-result.js";
+import { transectResultSchema } from "./schema/transect-result.js";
+import { transectQuerySchema } from "./schema/transect.js";
 
 function createServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "Use get_gfs_catalog for the complete pressure/non-isobaric/diagnostic catalog and search_gfs_catalog for compact ranked discovery by text, section, raw/derived classification, or temporal semantics. For profile, diagnostics, batched-point, time-series, multi-point time-series, run-comparison, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_points when comparing multiple locations at one valid time, get_gfs_points_timeseries when the same locations must be compared across a valid-time range, and compare_gfs_runs when the same point/valid time/selection should be compared across consecutive six-hour model cycles. summarize_gfs_area accepts either one raw pressure-level variable at one pressure surface or one raw non-isobaric field and preserves exact vertical/temporal semantics. Run-comparison deltas are newer minus older; wind direction uses shortest signed angular change. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
+      instructions: "Use get_gfs_catalog for the complete pressure/non-isobaric/diagnostic catalog and search_gfs_catalog for compact ranked discovery by text, section, raw/derived classification, or temporal semantics. For profile, diagnostics, batched-point, transect, time-series, multi-point time-series, run-comparison, and area tools, run='latest' selects the newest GFS cycle whose published data can satisfy the requested valid time/range and exact field selection; run='latest_complete' selects the newest cycle published through f384. Explicit run timestamps remain reproducible. Use get_gfs_layer_diagnostics for deterministic calculations across two pressure surfaces. Use get_gfs_profile_diagnostics for freezing-level crossings and sampled temperature-inversion layers across an explicit set of pressure surfaces. Use get_gfs_parcel_diagnostics for an explicitly selected surface, 100-hPa mixed-layer, or sampled 300-hPa most-unstable parcel and its LCL/LFC/EL/CAPE/CIN. Use get_gfs_points when comparing multiple arbitrary locations at one valid time, get_gfs_transect for an evenly spaced pressure-level cross-section along a great-circle path, get_gfs_points_timeseries when the same locations must be compared across a valid-time range, and compare_gfs_runs when the same point/valid time/selection should be compared across consecutive six-hour model cycles. summarize_gfs_area accepts either one raw pressure-level variable at one pressure surface or one raw non-isobaric field and preserves exact vertical/temporal semantics. Run-comparison deltas are newer minus older; wind direction uses shortest signed angular change. Values are model data and deterministic physical derivations, not interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
@@ -63,6 +67,7 @@ function createServer(): McpServer {
   const profileDiagnosticsService = new ProfileDiagnosticsService({ profileGetter: profileService });
   const parcelDiagnosticsService = new ParcelDiagnosticsService({ profileGetter: profileService });
   const batchPointsService = new BatchPointsService({ latestRunProvider: latestRunResolver, profileGetter: profileService });
+  const transectService = new TransectService({ batchPointsGetter: batchPointsService });
   const timeSeriesService = new TimeSeriesService({ latestRunProvider: latestRunResolver, profileGetter: profileService });
   const pointsTimeSeriesService = new PointsTimeSeriesService({
     latestRunProvider: latestRunResolver,
@@ -128,6 +133,13 @@ function createServer(): McpServer {
     inputSchema: batchPointsQuerySchema,
     outputSchema: batchPointsResultSchema,
   }, async (query) => handleGetGfsPoints(batchPointsService, query));
+
+  server.registerTool("get_gfs_transect", {
+    title: "Get GFS pressure-level transect",
+    description: "Return an explicit pressure-level cross-section between two coordinates at one valid time. WFG generates 2-50 evenly spaced great-circle samples, resolves one model cycle, fetches one shared NOAA AWS S3 selected-message slice, and returns along-track distance plus the same normalized pressure-level values used by point/batch queries.",
+    inputSchema: transectQuerySchema,
+    outputSchema: transectResultSchema,
+  }, async (query) => handleGetGfsTransect(transectService, query));
 
   server.registerTool("get_gfs_timeseries", {
     title: "Get GFS point time series",
