@@ -1,12 +1,13 @@
 import type { AddressInfo } from "node:net";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createMcpHttpServer,
   loadMcpHttpConfig,
   type McpHttpServer,
 } from "../src/mcp-http-server.js";
 
+const realFetch = globalThis.fetch;
 const openServers: McpHttpServer[] = [];
 
 async function listenOnLoopback(instance: McpHttpServer): Promise<URL> {
@@ -59,6 +60,14 @@ describe("Streamable HTTP MCP", () => {
   it("serves the same registered tool catalog over Streamable HTTP", async () => {
     const instance = createMcpHttpServer(loadMcpHttpConfig({}));
     const url = await listenOnLoopback(instance);
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const requestUrl = new URL(input instanceof Request ? input.url : input);
+      if (requestUrl.hostname !== "127.0.0.1") {
+        throw new Error(`Unexpected non-loopback network access in HTTP MCP test: ${requestUrl}`);
+      }
+      return realFetch(input, init);
+    });
+
     const client = new Client(
       { name: "wfg-http-test", version: "1.0.0" },
       { versionNegotiation: { mode: "auto" } },
