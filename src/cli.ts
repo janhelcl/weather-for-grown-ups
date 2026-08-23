@@ -15,6 +15,7 @@ import {
 
 const DEFAULT_VARIABLES = "temperature,relative_humidity,wind";
 const DEFAULT_LEVELS = "1000,925,850,700,500";
+const RUN_HELP = "GFS run initialization; latest = newest run satisfying this query, latest_complete = newest run published through f384";
 
 const program = new Command();
 program.name("wfg").description("Weather for Grown Ups — agent-native NOAA GFS access").version("0.1.0");
@@ -50,7 +51,7 @@ program
 
 program
   .command("latest")
-  .description("Resolve the latest complete GFS 0.25° run")
+  .description("Resolve the latest complete GFS 0.25° run (published through f384)")
   .option("--json", "Output JSON")
   .action(async (options) => {
     const run = await new LatestRunResolver().resolveLatestRun();
@@ -72,7 +73,7 @@ program
   .description("Fetch GFS pressure levels and/or non-isobaric fields for a point")
   .requiredOption("--lat <number>", "Latitude", Number)
   .requiredOption("--lon <number>", "Longitude", Number)
-  .option("--run <iso|latest>", "GFS run initialization, or latest complete run", "latest")
+  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
   .requiredOption("--valid <iso>", "Forecast valid time")
   .option("--vars <list>", "Comma-separated pressure-level variables")
   .option("--levels <list>", "Comma-separated pressure levels in hPa")
@@ -103,7 +104,7 @@ program
   .description("Fetch native GFS forecast steps for pressure levels and/or non-isobaric fields")
   .requiredOption("--lat <number>", "Latitude", Number)
   .requiredOption("--lon <number>", "Longitude", Number)
-  .option("--run <iso|latest>", "GFS run initialization, or latest complete run", "latest")
+  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
   .requiredOption("--from <iso>", "Inclusive valid-time range start")
   .requiredOption("--to <iso>", "Inclusive valid-time range end")
   .option("--vars <list>", "Comma-separated pressure-level variables")
@@ -150,7 +151,7 @@ program
   .requiredOption("--east <number>", "Eastern longitude", Number)
   .requiredOption("--south <number>", "Southern latitude", Number)
   .requiredOption("--north <number>", "Northern latitude", Number)
-  .option("--run <iso|latest>", "GFS run initialization, or latest complete run", "latest")
+  .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
   .requiredOption("--valid <iso>", "Forecast valid time")
   .requiredOption("--var <id>", "One raw pressure-level variable")
   .requiredOption("--level <hpa>", "Pressure level in hPa", Number)

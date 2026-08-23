@@ -1,3 +1,6 @@
+import { expandRequestedFields } from "../catalog/non-isobaric-fields.js";
+import { expandRequestedVariables } from "../catalog/variables.js";
+import { timeSeriesQuerySchema, type ProfileQueryInput, type TimeSeriesQueryInput } from "../schema/query.js";
 import { mapConcurrent } from "./concurrency.js";
 import {
   nativeForecastHoursInRange,
@@ -7,7 +10,6 @@ import {
 import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
 import { ProfileService } from "./profile.js";
 import type { ProfileResult, TimeSeriesResult } from "./types.js";
-import { timeSeriesQuerySchema, type ProfileQueryInput, type TimeSeriesQueryInput } from "../schema/query.js";
 
 export const DEFAULT_TIME_SERIES_CONCURRENCY = 4;
 
@@ -34,11 +36,25 @@ export class TimeSeriesService {
 
   async getTimeSeries(input: TimeSeriesQueryInput): Promise<TimeSeriesResult> {
     const query = timeSeriesQuerySchema.parse(input);
-    const run = query.run === "latest"
-      ? await this.latestRunProvider.resolveLatestRun()
-      : parseGfsRun(query.run);
     const startTime = new Date(query.startTime);
     const endTime = new Date(query.endTime);
+    const variables = expandRequestedVariables(query.variables ?? []);
+    const fields = expandRequestedFields(query.fields ?? []);
+    const pressureLevelsHpa = query.pressureLevelsHpa ?? [];
+    const run = query.run === "latest"
+      ? await this.latestRunProvider.resolveLatestRun({
+          type: "time_range",
+          startTime,
+          endTime,
+          selection: {
+            variableCodes: variables.map((variable) => variable.gfsCode),
+            pressureLevelsHpa,
+            fields,
+          },
+        })
+      : query.run === "latest_complete"
+        ? await this.latestRunProvider.resolveLatestRun()
+        : parseGfsRun(query.run);
     const forecastHours = nativeForecastHoursInRange(run, startTime, endTime);
 
     if (forecastHours.length > query.maxSteps) {

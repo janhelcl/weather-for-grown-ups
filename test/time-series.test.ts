@@ -85,7 +85,7 @@ describe("TimeSeriesService", () => {
     expect(maxActive).toBe(2);
   });
 
-  it("resolves latest exactly once and passes the explicit resolved run to every profile", async () => {
+  it("resolves query-aware latest exactly once and passes the explicit resolved run to every profile", async () => {
     const resolveLatestRun = vi.fn(async () => new Date(run));
     const getProfile = vi.fn(async (query: ProfileQueryInput) => profileFor(query));
     const service = new TimeSeriesService({
@@ -94,7 +94,25 @@ describe("TimeSeriesService", () => {
     });
     await service.getTimeSeries({ ...base, run: "latest" });
     expect(resolveLatestRun).toHaveBeenCalledOnce();
+    expect(resolveLatestRun).toHaveBeenCalledWith({
+      type: "time_range",
+      startTime: new Date(base.startTime),
+      endTime: new Date(base.endTime),
+      selection: {
+        variableCodes: ["TMP"],
+        pressureLevelsHpa: [850],
+        fields: [],
+      },
+    });
     expect(getProfile.mock.calls.every(([query]) => query.run === run)).toBe(true);
+  });
+
+  it("uses complete-run discovery when latest_complete is requested", async () => {
+    const resolveLatestRun = vi.fn(async () => new Date(run));
+    const getProfile = vi.fn(async (query: ProfileQueryInput) => profileFor(query));
+    const service = new TimeSeriesService({ profileGetter: { getProfile }, latestRunProvider: { resolveLatestRun } });
+    await service.getTimeSeries({ ...base, run: "latest_complete" });
+    expect(resolveLatestRun).toHaveBeenCalledWith();
   });
 
   it("does not call latest-run discovery for an explicit run", async () => {

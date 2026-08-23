@@ -37,10 +37,22 @@ export class AreaSummaryService {
       throw new Error(`Requested bbox is approximately ${estimatedGridPoints} GFS grid points, exceeding maxGridPoints=${query.maxGridPoints}`);
     }
 
-    const run = query.run === "latest" ? await this.latestRunProvider.resolveLatestRun() : parseGfsRun(query.run);
     const validTime = new Date(query.validTime);
-    const fh = forecastHour(run, validTime);
     const variable = VARIABLE_CATALOG[query.variable] as RawVariableDefinition;
+    const run = query.run === "latest"
+      ? await this.latestRunProvider.resolveLatestRun({
+          type: "valid_time",
+          validTime,
+          selection: {
+            variableCodes: [variable.gfsCode],
+            pressureLevelsHpa: [query.pressureLevelHpa],
+            fields: [],
+          },
+        })
+      : query.run === "latest_complete"
+        ? await this.latestRunProvider.resolveLatestRun()
+        : parseGfsRun(query.run);
+    const fh = forecastHour(run, validTime);
     const box: AreaBox = {
       westLongitude: query.westLongitude, eastLongitude: query.eastLongitude,
       southLatitude: query.southLatitude, northLatitude: query.northLatitude,

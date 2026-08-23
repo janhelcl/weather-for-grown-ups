@@ -28,8 +28,11 @@ export const isoDateTimeSchema = z.string().refine(
 
 export const runSelectorSchema = z.union([
   z.literal("latest"),
+  z.literal("latest_complete"),
   isoDateTimeSchema,
-]).default("latest").describe("GFS model initialization time, or 'latest' for the latest complete cycle");
+]).default("latest").describe(
+  "GFS model initialization time; 'latest' selects the newest run that can satisfy this query, while 'latest_complete' selects the newest run published through f384",
+);
 
 export const pressureLevelSchema = z.number().refine(
   isSupportedGfsPressureLevel,
