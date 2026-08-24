@@ -19,6 +19,7 @@ Current GEFS operations:
 
 - scalar raw pressure-field distributions;
 - multi-variable/multi-level pressure profiles;
+- multi-point raw pressure-field distributions;
 - native three-hour raw-field time series;
 - member-first layer diagnostics;
 - member-first whole-profile freezing/inversion diagnostics;
@@ -30,6 +31,7 @@ The canonical shared CLI operations are:
 
 ```text
 profile                --model gefs
+points                 --model gefs
 layer                  --model gefs
 profile-diagnostics    --model gefs
 timeseries             --model gefs
@@ -37,9 +39,9 @@ diagnostic-timeseries  --model gefs
 compare-runs           --model gefs
 ```
 
-`ensemble-profile` and `ensemble-timeseries` remain explicit compatibility aliases over the same core dispatchers.
+`ensemble-profile` and `ensemble-timeseries` remain compatibility aliases over the same core dispatchers.
 
-MCP keeps explicit wrappers such as `get_gefs_ensemble_profile`, `get_gefs_layer_diagnostics`, `get_gefs_profile_diagnostics`, `get_gefs_diagnostic_timeseries`, and `compare_gefs_runs` because smaller model-specific schemas are clearer for agents.
+MCP keeps explicit model wrappers such as `get_gefs_ensemble_profile`, `get_gefs_points`, `get_gefs_layer_diagnostics`, `get_gefs_profile_diagnostics`, `get_gefs_diagnostic_timeseries`, and `compare_gefs_runs` because smaller model-specific schemas are clearer for agents.
 
 ## Supported pressure variables
 
@@ -59,26 +61,15 @@ A raw profile is an explicit Cartesian selection: every requested variable must 
 
 ## Ensemble statistics
 
-All GEFS numeric distribution surfaces use the same implementation for:
+All numeric GEFS distribution surfaces use the same implementation for arithmetic mean, population standard deviation, min/max, and caller-selected quantiles with linear interpolation over sorted values.
 
-- arithmetic mean;
-- population standard deviation;
-- min/max;
-- caller-selected quantiles with linear interpolation over sorted values.
-
-Thus spread/quantile semantics are identical whether the sampled quantity is a raw temperature, a profile cell, a member-specific layer depth, or a diagnostic output.
-
-### Raw member fractions
-
-When a surface reports a member fraction, it is labeled:
+When a surface reports a member threshold/event fraction, it is labeled:
 
 `raw_member_fraction_not_calibrated_probability`
 
 For example, 20/31 members exceeding a threshold or containing a sampled inversion is useful model evidence, but WFG does not claim that value is a calibrated real-world probability.
 
 ## Pressure profiles
-
-Example:
 
 ```bash
 wfg profile \
@@ -91,13 +82,41 @@ wfg profile \
   --json
 ```
 
-The default output is compact: one distribution summary per variable/level cell. `--include-members` adds every selected member's raw normalized profile values.
+The default output is compact: one distribution summary per variable/level cell. `--include-members` adds every selected member's normalized profile values.
 
 Within one member all decoded fields must resolve to one GEFS grid point, and all selected members must resolve to the same GEFS grid point. WFG fails rather than combining inconsistent samples.
 
-## Layer diagnostics
+## Multi-point distributions
 
-Example:
+```bash
+wfg points \
+  --model gefs \
+  --point 50.08,14.43 \
+  --point 49.20,16.61 \
+  --point 47.81,13.04 \
+  --valid 2026-08-24T12:00:00Z \
+  --vars temperature \
+  --levels 850 \
+  --quantiles 0.1,0.5,0.9 \
+  --gte 5 \
+  --json
+```
+
+The current GEFS multi-point primitive accepts one raw pressure-level variable and one pressure surface at 1–20 coordinates.
+
+Execution is deliberately **member-first**:
+
+1. resolve one run for the complete query;
+2. fetch the selected GRIB field slice once per member;
+3. sample every requested coordinate locally from that member slice;
+4. verify that all members resolve consistently at each location;
+5. summarize each location independently across members.
+
+Upstream selected-field fetch count therefore scales with the number of selected members, not `points × members`. Member values are omitted by default; `--include-members` / `includeMembers=true` enables per-location member audit values.
+
+See [GEFS_MULTI_POINT.md](GEFS_MULTI_POINT.md).
+
+## Layer diagnostics
 
 ```bash
 wfg layer \
@@ -109,19 +128,9 @@ wfg layer \
   --json
 ```
 
-GEFS layer diagnostics are **not** calculated on an ensemble-mean profile. WFG:
-
-1. expands the same raw dependencies used by deterministic GFS;
-2. fetches one minimal multi-message profile slice per member;
-3. adapts each member into the shared normalized profile representation;
-4. evaluates the same layer kernel independently for each member;
-5. summarizes the member diagnostic values afterwards.
-
-Each member has its own geopotential layer depth, so layer depth is returned as a distribution as well.
+GEFS layer diagnostics are not calculated on an ensemble-mean profile. WFG expands the deterministic dependencies, fetches the minimal profile slice per member, evaluates the shared physical kernel independently for each member, and only then summarizes member results. Each member's geopotential layer depth is preserved and summarized separately.
 
 ## Whole-profile diagnostics
-
-Example:
 
 ```bash
 wfg profile-diagnostics \
@@ -133,22 +142,9 @@ wfg profile-diagnostics \
   --json
 ```
 
-Each member independently produces its own crossing/inversion structures through the same whole-profile kernel used by GFS. WFG then summarizes comparable descriptors rather than inventing an ensemble-mean structure.
+Each member independently produces crossing/inversion structures through the same whole-profile kernel used by GFS. WFG summarizes comparable descriptors rather than inventing an ensemble-mean structure.
 
-Freezing summaries include:
-
-- fraction/count of members with any crossing;
-- crossing-count distribution;
-- conditional lowest/highest crossing height and pressure distributions.
-
-Inversion summaries include:
-
-- fraction/count of members with any inversion;
-- layer-count distribution;
-- total sampled inversion-depth distribution;
-- conditional deepest/strongest inversion distributions.
-
-Conditional distributions state how many members contributed and disappear entirely when no member contains that structure.
+Freezing summaries include member event fraction/count, crossing-count distribution, and conditional lowest/highest crossing height and pressure distributions. Inversion summaries include member event fraction/count, layer-count distribution, total sampled inversion depth, and conditional deepest/strongest inversion distributions.
 
 See [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md).
 
@@ -166,7 +162,7 @@ wfg timeseries \
   --json
 ```
 
-The current GEFS raw time-series primitive accepts exactly one raw variable and one pressure surface. Member trajectories are omitted by default; `--include-members` adds them within the **same initialization cycle**.
+The current GEFS raw time-series primitive accepts exactly one raw variable and one pressure surface. Member trajectories are omitted by default; `--include-members` adds them within the same initialization cycle.
 
 ## Diagnostic time series
 
@@ -182,9 +178,7 @@ wfg diagnostic-timeseries \
   --json
 ```
 
-GEFS supports `layer` and `profile` diagnostic series. Each query fixes one run, member set, quantile set, pressure sampling, and diagnostic selection across all native three-hour steps.
-
-The series intentionally returns compact ensemble summaries only. Full member diagnostic structures are a single-time drill-down path through `layer --model gefs` or `profile-diagnostics --model gefs` / the corresponding MCP tools.
+GEFS supports `layer` and `profile` diagnostic series. Each query fixes one run, member set, quantile set, pressure sampling, and diagnostic selection across all native three-hour steps. The series intentionally returns compact summaries only; the corresponding single-time diagnostic tools provide member-level drill-down.
 
 See [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md).
 
@@ -203,9 +197,9 @@ wfg compare-runs \
   --json
 ```
 
-A GEFS run comparison fixes one raw field, pressure surface, valid time, member set and quantile set across 2–6 consecutive six-hour initialization cycles. Every cycle is summarized independently through the normal ensemble service. Adjacent transitions then report newer-minus-older shifts in mean, population spread, extrema, quantiles, and optional threshold member fraction.
+A GEFS run comparison fixes one raw field, pressure surface, valid time, member set and quantile set across 2–6 consecutive six-hour initialization cycles. Every cycle is summarized independently; adjacent transitions report newer-minus-older changes in comparable distribution descriptors.
 
-WFG deliberately does **not** calculate `p01(new) - p01(old)` or equivalent memberwise deltas across initialization cycles. Reused perturbation labels are not treated as continuous trajectories. Every transition therefore carries:
+WFG deliberately does not calculate `p01(new) - p01(old)` or equivalent memberwise deltas across initialization cycles. Every transition carries:
 
 `distribution_shift_between_model_cycles_not_member_trajectory`
 
@@ -213,33 +207,17 @@ See [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md).
 
 ## Run selection
 
-One-time GEFS operations accept `latest` or an explicit 00/06/12/18Z cycle.
+One-time and multi-point GEFS operations accept `latest` or an explicit 00/06/12/18Z cycle. `latest` resolves once for the entire request, including all selected members.
 
-For a time range, `latest` resolves one cycle that:
+For a time range, `latest` resolves one cycle that initializes no later than the requested start, covers the complete range inside the `f384` contract, and has all selected members published at both range ends. That run is then fixed across every intermediate step.
 
-1. initializes no later than the first requested valid time;
-2. can cover the complete requested range inside the current `f384` contract;
-3. has all selected members published at both range ends.
-
-That run is then passed explicitly to every intermediate step, preventing cycle drift during evaluation.
-
-For run comparison, `latest` resolves the newest usable **anchor** cycle for the selected valid time/member set. Older cycles are generated at exact six-hour intervals and every underlying ensemble query receives its explicit run.
+For run comparison, `latest` resolves the newest usable anchor cycle for the selected valid time/member set. Older cycles are generated at exact six-hour intervals and every underlying ensemble query receives its explicit run.
 
 ## Data access and caching
 
-GEFS uses NOAA AWS Open Data directly.
+GEFS uses NOAA AWS Open Data directly. WFG identifies each immutable member object, caches `.idx` inventories, selects required messages, downloads only the corresponding byte ranges, caches the resulting GRIB slices, decodes locally with `wgrib2`, and performs aggregation/derivation locally.
 
-For each selected member, WFG:
-
-1. identifies the immutable `pgrb2a` object for run/forecast hour/member;
-2. caches the `.idx` inventory;
-3. selects only required GRIB messages;
-4. downloads the relevant byte ranges;
-5. stitches multi-field selections into one cached GRIB slice per member;
-6. decodes locally with `wgrib2`;
-7. performs physical derivation and aggregation locally.
-
-Byte ranges are sequential inside one member while member work is bounded-concurrent. Diagnostic time series add bounded step concurrency around those existing member-aware single-time services. Run comparison adds bounded cycle concurrency around the existing scalar ensemble service.
+Profile and diagnostic queries can stitch several messages into one cached slice per member. Multi-point queries instead select one field slice per member and reuse it across all requested coordinates. Point decoding stays sequential inside a member while member work is bounded-concurrent, avoiding unbounded `wgrib2` process fan-out.
 
 AWS Open Data paths do not use the NOMADS scripted-access limiter.
 
@@ -251,10 +229,10 @@ See [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md).
 
 ## Explicit non-goals / unsupported surfaces
 
-The current GEFS contract does **not** yet provide:
+The current GEFS contract does not yet provide:
 
 - parcel/CAPE/CIN diagnostics, because the required surface/non-isobaric parcel inputs have not been added to the GEFS source contract;
-- multi-point GEFS queries;
+- GEFS multi-point time series;
 - GEFS transects;
 - GEFS area distributions;
 - calibrated probabilities;

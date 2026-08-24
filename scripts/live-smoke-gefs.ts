@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { GefsBatchPointsService } from "../src/core/gefs-batch-points.js";
 import { GefsDiagnosticTimeSeriesService } from "../src/core/gefs-diagnostic-timeseries.js";
 import { GefsEnsembleProfileService } from "../src/core/gefs-ensemble-profile.js";
 import { GefsEnsembleTimeSeriesService } from "../src/core/gefs-ensemble-timeseries.js";
@@ -15,6 +16,7 @@ const startTime = new Date(endTime.getTime() - 3 * 3_600_000);
 const latestRunResolver = new GefsLatestRunResolver();
 const run = await latestRunResolver.resolveLatestRunRange(startTime, endTime, members);
 const ensembleService = new GefsEnsembleService({ latestRunProvider: latestRunResolver });
+const batchPointsService = new GefsBatchPointsService({ latestRunProvider: latestRunResolver });
 const profileService = new GefsEnsembleProfileService({ latestRunProvider: latestRunResolver });
 const layerDiagnosticsService = new GefsLayerDiagnosticsService({ profileGetter: profileService });
 const profileDiagnosticsService = new GefsProfileDiagnosticsService({ profileGetter: profileService });
@@ -55,6 +57,41 @@ assert.equal(result.summary.threshold.interpretation, "raw_member_fraction_not_c
 assert.equal(result.source.provider, "NOAA AWS Open Data");
 assert.equal(result.source.access, "s3_range");
 assert.equal(result.source.product, "pgrb2a_0p50");
+
+const batchPoints = await batchPointsService.getPoints({
+  points: [
+    { latitude: 50.08, longitude: 14.43 },
+    { latitude: 49.1951, longitude: 16.6068 },
+    { latitude: 47.8095, longitude: 13.055 },
+  ],
+  run: run.toISOString(),
+  validTime: endTime.toISOString(),
+  variable: "temperature",
+  pressureLevelHpa: 850,
+  members: [...members],
+  quantiles: [0.1, 0.5, 0.9],
+  thresholdGte: 0,
+});
+
+assert.equal(batchPoints.model, "gefs_0p50");
+assert.equal(batchPoints.run, result.run);
+assert.equal(batchPoints.validTime, result.validTime);
+assert.equal(batchPoints.forecastHour, result.forecastHour);
+assert.deepEqual(batchPoints.selection.members, members);
+assert.deepEqual(batchPoints.selection.quantiles, [0.1, 0.5, 0.9]);
+assert.equal(batchPoints.points.length, 3);
+assert(batchPoints.points.every((point) => point.members === undefined));
+assert(batchPoints.points.every((point) => point.summary.memberCount === members.length));
+assert(batchPoints.points.every((point) => Number.isFinite(point.summary.mean)));
+assert(batchPoints.points.every((point) => Number.isFinite(point.summary.populationStdDev)));
+assert(batchPoints.points.every((point) => point.summary.quantiles.length === 3));
+assert(batchPoints.points.every((point) => point.summary.threshold?.interpretation === "raw_member_fraction_not_calibrated_probability"));
+assert.equal(batchPoints.source.memberFiles.length, members.length);
+assert.deepEqual(batchPoints.source.memberFiles.map((entry) => entry.member), members);
+// The scalar ensemble query above fetched these exact member/run/field slices first.
+// Multi-point access should therefore reuse all three cached slices and only resample them locally.
+assert.equal(batchPoints.source.allCacheHit, true);
+assert(batchPoints.source.memberFiles.every((entry) => entry.cacheHit));
 
 const profile = await profileService.getProfile({
   latitude: 50.08,
@@ -267,6 +304,15 @@ console.log(JSON.stringify({
     quantiles: result.summary.quantiles,
     cacheHit: result.source.allCacheHit,
   },
+  ensemblePoints: batchPoints.points.map((point) => ({
+    requestedPoint: point.requestedPoint,
+    gridPoint: point.gridPoint,
+    meanC: point.summary.mean,
+    populationStdDevC: point.summary.populationStdDev,
+    quantiles: point.summary.quantiles,
+    thresholdFractionGte0C: point.summary.threshold?.fraction,
+  })),
+  ensemblePointsMemberFiles: batchPoints.source.memberFiles,
   ensembleProfile: profile.summaries.map((summary) => ({
     variable: summary.variable,
     pressureLevelHpa: summary.pressureLevelHpa,

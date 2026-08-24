@@ -1,3 +1,4 @@
+import type { GefsBatchPointsService } from "./core/gefs-batch-points.js";
 import type { GefsDiagnosticTimeSeriesService } from "./core/gefs-diagnostic-timeseries.js";
 import type { GefsEnsembleProfileService } from "./core/gefs-ensemble-profile.js";
 import type { GefsEnsembleTimeSeriesService } from "./core/gefs-ensemble-timeseries.js";
@@ -5,6 +6,11 @@ import type { GefsEnsembleService } from "./core/gefs-ensemble.js";
 import type { GefsLayerDiagnosticsService } from "./core/gefs-layer-diagnostics.js";
 import type { GefsProfileDiagnosticsService } from "./core/gefs-profile-diagnostics.js";
 import type { GefsRunComparisonService } from "./core/gefs-run-comparison.js";
+import {
+  gefsBatchPointsResultSchema,
+  type GefsBatchPointsQueryInput,
+  type GefsBatchPointsResult,
+} from "./schema/gefs-batch-points.js";
 import {
   gefsDiagnosticTimeSeriesResultSchema,
   type GefsDiagnosticTimeSeriesQueryInput,
@@ -53,6 +59,10 @@ export interface GefsEnsembleProfileGetter {
   getProfile(query: GefsEnsembleProfileQueryInput): Promise<GefsEnsembleProfileResult>;
 }
 
+export interface GefsBatchPointsGetter {
+  getPoints(query: GefsBatchPointsQueryInput): Promise<GefsBatchPointsResult>;
+}
+
 export interface GefsLayerDiagnosticsGetter {
   getLayerDiagnostics(query: GefsLayerDiagnosticsQueryInput): Promise<GefsLayerDiagnosticsResult>;
 }
@@ -88,6 +98,13 @@ export async function handleGetGefsEnsembleProfile(
   query: GefsEnsembleProfileQueryInput,
 ) {
   return handle(async () => gefsEnsembleProfileResultSchema.parse(await service.getProfile(query)));
+}
+
+export async function handleGetGefsPoints(
+  service: Pick<GefsBatchPointsService, "getPoints"> | GefsBatchPointsGetter,
+  query: GefsBatchPointsQueryInput,
+) {
+  return handle(async () => gefsBatchPointsResultSchema.parse(await service.getPoints(query)));
 }
 
 export async function handleGetGefsLayerDiagnostics(

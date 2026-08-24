@@ -23,12 +23,12 @@ CLI is operation-oriented (`--model gfs|gefs` where an operation is shared). MCP
 | Operation | GFS 0.25° | GEFS 0.5° |
 | --- | --- | --- |
 | Pressure profile | ✅ deterministic | ✅ member distribution |
+| Multi-point | ✅ deterministic | ✅ distribution per point |
 | Raw point time series | ✅ multi-field | ✅ one-field distribution |
 | Layer diagnostics | ✅ | ✅ per member → summarized |
 | Whole-profile diagnostics | ✅ | ✅ per member → structural summaries |
 | Diagnostic time series | ✅ layer/profile/parcel | ✅ layer/profile |
 | Parcel / CAPE / CIN | ✅ | — current GEFS contract lacks required surface inputs |
-| Multi-point | ✅ | — |
 | Multi-point time series | ✅ | — |
 | Transect | ✅ | — |
 | Area statistics | ✅ | — |
@@ -61,6 +61,7 @@ The ensemble surface currently includes:
 - control `c00` plus perturbed members `p01`–`p30`;
 - scalar pressure-field member distributions;
 - multi-variable/multi-level ensemble pressure profiles;
+- **member-first multi-point distributions** that fetch one selected field slice per member and reuse it across all requested coordinates;
 - native three-hour raw-field ensemble time series from one fixed cycle;
 - member-first layer diagnostics using the same lapse-rate/shear/stability physics as GFS;
 - member-first freezing-level and sampled inversion diagnostics using the same whole-profile kernel as GFS;
@@ -69,7 +70,7 @@ The ensemble surface currently includes:
 - aligned deterministic GFS-vs-GEFS comparison from one shared initialization cycle;
 - direct NOAA AWS `.idx` byte-range access and immutable local caching.
 
-See [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md), [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md), [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md), [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md), and [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md).
+See [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md), [GEFS_MULTI_POINT.md](GEFS_MULTI_POINT.md), [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md), [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md), [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md), and [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md).
 
 ## Install
 
@@ -132,6 +133,26 @@ wfg profile \
 ```
 
 GEFS profile output is summary-only by default. Add `--include-members` for memberwise audit values.
+
+### Multi-point distributions
+
+```bash
+wfg points \
+  --model gefs \
+  --point 50.08,14.43 \
+  --point 49.20,16.61 \
+  --point 47.81,13.06 \
+  --valid 2026-08-24T12:00:00Z \
+  --vars temperature \
+  --levels 850 \
+  --quantiles 0.1,0.5,0.9 \
+  --gte 0 \
+  --json
+```
+
+GEFS currently accepts one raw variable/pressure surface and up to 20 coordinates. WFG downloads the selected field once per member, samples every requested point from those cached slices, and returns one ensemble distribution per location. Add `--include-members` only when point-level member values are needed.
+
+Deterministic GFS uses the same `points` CLI operation with its broader deterministic field selection and up to 50 points.
 
 ### Raw point time series
 
@@ -272,6 +293,8 @@ Current MCP tools include:
 - `get_latest_gfs_run`
 - `get_gfs_profile`
 - `get_gefs_ensemble_profile`
+- `get_gfs_points`
+- `get_gefs_points`
 - `get_gfs_timeseries`
 - `get_gefs_ensemble_timeseries`
 - `get_gfs_layer_diagnostics`
@@ -283,7 +306,6 @@ Current MCP tools include:
 - `get_gfs_parcel_diagnostics`
 - `get_gefs_ensemble`
 - `compare_gfs_to_gefs`
-- `get_gfs_points`
 - `get_gfs_points_timeseries`
 - `get_gfs_transect`
 - `compare_gfs_runs`
@@ -292,7 +314,13 @@ Current MCP tools include:
 
 MCP wrappers stay model-specific even where CLI operations are unified; this keeps agent input/output schemas smaller and less ambiguous.
 
-## Ensemble diagnostic semantics
+## Ensemble diagnostic and composition semantics
+
+### Multi-point reuse
+
+GEFS multi-point queries are member-first. One selected raw-field GRIB slice is fetched/cached for each member, then every requested coordinate is sampled locally from those same slices. This makes upstream selected-field transfer scale with member count rather than `members × points`, while each location still gets its own model-native ensemble distribution.
+
+For each requested coordinate all members must resolve to the same GEFS grid point. Member values are summary-only by default and opt-in for audit.
 
 ### Layer diagnostics
 
@@ -337,7 +365,7 @@ GFS query tools support:
 
 ### GEFS
 
-GEFS one-time tools support `latest` or an explicit 00/06/12/18Z cycle. Time-series tools use range-aware `latest`: one cycle must cover both ends of the complete requested range for all selected members, and that run is fixed across intermediate steps.
+GEFS one-time tools—including multi-point—support `latest` or an explicit 00/06/12/18Z cycle. Multi-point resolves `latest` exactly once for the complete coordinate set. Time-series tools use range-aware `latest`: one cycle must cover both ends of the complete requested range for all selected members, and that run is fixed across intermediate steps.
 
 GEFS run comparison uses `latest` as the newest anchor cycle whose selected members exist at the requested valid time, or accepts an explicit anchor. Older comparison cycles are then generated at six-hour intervals and requested explicitly so the comparison cannot drift while new output publishes.
 
@@ -349,7 +377,7 @@ The current WFG GEFS contract uses native three-hour output through `f384`.
 
 **NOAA AWS Open Data** is used for reusable deterministic slices and all GEFS member access. WFG reads `.idx` inventories, downloads selected GRIB byte ranges, caches immutable slices, and samples locally with `wgrib2`.
 
-GEFS multi-field/profile/diagnostic queries stitch the selected messages into one cached slice per member and decode that slice once. Byte-range requests are sequential within a member; member and time-step work is bounded-concurrent.
+GEFS multi-field/profile/diagnostic queries stitch selected messages into one cached slice per member. GEFS multi-point queries use one cached selected-field slice per member and sample all coordinates locally from it. Byte-range requests are sequential within a member; member and time-step work is bounded-concurrent.
 
 Default cache/state: `~/.cache/wfg/`. Override with `WFG_CACHE_DIR`.
 
@@ -370,7 +398,7 @@ The real-upstream suite is separate:
 npm run test:live:all
 ```
 
-The live suite covers deterministic AWS/NOMADS paths and deliberately small GEFS samples spanning scalar distributions, pressure profiles, layer diagnostics, whole-profile diagnostics, two-step diagnostic time series, raw-field time series, consecutive-cycle distribution comparison, and aligned GFS-vs-GEFS comparison. GitHub Actions runs it weekly and supports manual dispatch; normal PR/main CI remains offline.
+The live suite covers deterministic AWS/NOMADS paths and deliberately small GEFS samples spanning scalar distributions, **multi-point reuse**, pressure profiles, layer diagnostics, whole-profile diagnostics, two-step diagnostic time series, raw-field time series, consecutive-cycle distribution comparison, and aligned GFS-vs-GEFS comparison. GitHub Actions runs it weekly and supports manual dispatch; normal PR/main CI remains offline.
 
 See [LIVE_SMOKE.md](LIVE_SMOKE.md).
 
@@ -379,6 +407,7 @@ See [LIVE_SMOKE.md](LIVE_SMOKE.md).
 - [INSTALL.md](INSTALL.md) — install, Docker/npm, stdio/HTTP MCP, hosting
 - [ARCHITECTURE.md](ARCHITECTURE.md) — core boundaries, data paths, caching, surface design
 - [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — GEFS member/profile/raw-series contract
+- [GEFS_MULTI_POINT.md](GEFS_MULTI_POINT.md) — member-first spatial sampling and per-point distribution semantics
 - [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md) — freezing/inversion ensemble semantics
 - [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md) — fixed-cycle diagnostic temporal composition
 - [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md) — cycle-to-cycle ensemble distribution evolution
@@ -400,7 +429,7 @@ npm run typecheck
 npm test
 npm run build
 npm run test:smoke
-npm run dev -- profile --model gefs --help
+npm run dev -- points --model gefs --help
 npm run mcp
 npm run mcp:http
 ```

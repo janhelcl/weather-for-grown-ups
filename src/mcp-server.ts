@@ -3,6 +3,7 @@ import * as z from "zod/v4";
 import { AreaSummaryService } from "./core/area-summary.js";
 import { BatchPointsService } from "./core/batch-points.js";
 import { DiagnosticTimeSeriesService } from "./core/diagnostic-time-series.js";
+import { GefsBatchPointsService } from "./core/gefs-batch-points.js";
 import { GefsDiagnosticTimeSeriesService } from "./core/gefs-diagnostic-timeseries.js";
 import { GefsEnsembleProfileService } from "./core/gefs-ensemble-profile.js";
 import { GefsEnsembleTimeSeriesService } from "./core/gefs-ensemble-timeseries.js";
@@ -28,6 +29,7 @@ import {
   handleGetGefsEnsembleProfile,
   handleGetGefsEnsembleTimeSeries,
   handleGetGefsLayerDiagnostics,
+  handleGetGefsPoints,
   handleGetGefsProfileDiagnostics,
 } from "./mcp-gefs-tool.js";
 import { handleCompareGfsToGefs } from "./mcp-model-comparison-tool.js";
@@ -51,6 +53,10 @@ import { areaSummaryResultSchema } from "./schema/area-summary-result.js";
 import { catalogSearchQuerySchema, catalogSearchResultSchema } from "./schema/catalog-search.js";
 import { diagnosticTimeSeriesQuerySchema } from "./schema/diagnostic-time-series.js";
 import { diagnosticTimeSeriesResultSchema } from "./schema/diagnostic-time-series-result.js";
+import {
+  gefsBatchPointsQuerySchema,
+  gefsBatchPointsResultSchema,
+} from "./schema/gefs-batch-points.js";
 import {
   gefsDiagnosticTimeSeriesQuerySchema,
   gefsDiagnosticTimeSeriesResultSchema,
@@ -108,12 +114,13 @@ export function createMcpServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "WFG exposes NOAA numerical weather models with explicit model/run/valid-time/vertical semantics. GFS and GEFS share model-independent profile and diagnostic kernels while preserving deterministic-vs-ensemble result semantics. Use get_gfs_catalog or search_gfs_catalog to discover the deterministic GFS 0.25° surface. GFS query tools support query-aware run='latest', latest_complete through f384, and explicit reproducible cycles. Use get_gefs_ensemble for one-time member distributions, get_gefs_ensemble_profile for multi-variable/multi-level vertical distributions, get_gefs_ensemble_timeseries for one-field native-cadence distributions, get_gefs_layer_diagnostics and get_gefs_profile_diagnostics for member-first single-time diagnostics, get_gefs_diagnostic_timeseries for compact layer/profile diagnostic distributions across native three-hour steps from one fixed cycle, and compare_gefs_runs for distribution evolution across consecutive initialization cycles without treating member IDs as trajectories. compare_gfs_to_gefs places deterministic GFS inside an aligned GEFS member distribution. GEFS member fractions, profile/diagnostic summaries, cycle shifts, and GFS-vs-GEFS ranks are raw model/member evidence, not calibrated probabilities or uncertainty. WFG does not provide activity-specific interpretation or safety advice.",
+      instructions: "WFG exposes NOAA numerical weather models with explicit model/run/valid-time/vertical semantics. GFS and GEFS share model-independent profile and diagnostic kernels while preserving deterministic-vs-ensemble result semantics. Use get_gfs_catalog or search_gfs_catalog to discover the deterministic GFS 0.25° surface. GFS query tools support query-aware run='latest', latest_complete through f384, and explicit reproducible cycles. Use get_gefs_ensemble for one-time member distributions, get_gefs_ensemble_profile for multi-variable/multi-level vertical distributions, get_gefs_points for one raw field summarized across members at multiple locations using one selected field slice per member, get_gefs_ensemble_timeseries for one-field native-cadence distributions, get_gefs_layer_diagnostics and get_gefs_profile_diagnostics for member-first single-time diagnostics, get_gefs_diagnostic_timeseries for compact layer/profile diagnostic distributions across native three-hour steps from one fixed cycle, and compare_gefs_runs for distribution evolution across consecutive initialization cycles without treating member IDs as trajectories. compare_gfs_to_gefs places deterministic GFS inside an aligned GEFS member distribution. GEFS member fractions, profile/point/diagnostic summaries, cycle shifts, and GFS-vs-GEFS ranks are raw model/member evidence, not calibrated probabilities or uncertainty. WFG does not provide activity-specific interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
   const gefsEnsembleService = new GefsEnsembleService();
   const gefsEnsembleProfileService = new GefsEnsembleProfileService();
+  const gefsBatchPointsService = new GefsBatchPointsService();
   const gefsEnsembleTimeSeriesService = new GefsEnsembleTimeSeriesService({ ensembleGetter: gefsEnsembleService });
   const gefsLayerDiagnosticsService = new GefsLayerDiagnosticsService({ profileGetter: gefsEnsembleProfileService });
   const gefsProfileDiagnosticsService = new GefsProfileDiagnosticsService({ profileGetter: gefsEnsembleProfileService });
@@ -182,6 +189,13 @@ export function createMcpServer(): McpServer {
     inputSchema: gefsEnsembleProfileQuerySchema,
     outputSchema: gefsEnsembleProfileResultSchema,
   }, async (query) => handleGetGefsEnsembleProfile(gefsEnsembleProfileService, query));
+
+  server.registerTool("get_gefs_points", {
+    title: "Get GEFS distributions for multiple points",
+    description: "Sample one raw GEFS 0.5° pressure-level field at up to 20 locations from one fixed run and member selection. WFG fetches each selected member's field slice once, then samples all requested coordinates locally, so upstream field fetches scale with members rather than points × members. Returns a distribution summary per point; member values are omitted unless includeMembers=true. Threshold fractions are raw member fractions, not calibrated probabilities.",
+    inputSchema: gefsBatchPointsQuerySchema,
+    outputSchema: gefsBatchPointsResultSchema,
+  }, async (query) => handleGetGefsPoints(gefsBatchPointsService, query));
 
   server.registerTool("get_gefs_ensemble_timeseries", {
     title: "Get GEFS ensemble time series",

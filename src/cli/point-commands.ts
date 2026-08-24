@@ -1,10 +1,11 @@
 import type { Command } from "commander";
+import { AtmosphericBatchPointsService } from "../core/atmospheric-batch-points-service.js";
 import { AtmosphericProfileService } from "../core/atmospheric-profile-service.js";
 import { AtmosphericRunComparisonService } from "../core/atmospheric-run-comparison-service.js";
 import { AtmosphericTimeSeriesService } from "../core/atmospheric-timeseries-service.js";
-import { BatchPointsService } from "../core/batch-points.js";
 import { LatestRunResolver } from "../core/latest-run.js";
 import { PointsTimeSeriesService } from "../core/points-time-series.js";
+import { gefsBatchPointsResultSchema } from "../schema/gefs-batch-points.js";
 import { gefsEnsembleProfileResultSchema } from "../schema/gefs-ensemble-profile.js";
 import { gefsEnsembleTimeSeriesResultSchema } from "../schema/gefs-ensemble-timeseries.js";
 import { gefsRunComparisonResultSchema } from "../schema/gefs-run-comparison.js";
@@ -135,30 +136,92 @@ export function registerPointCommands(program: Command): void {
 
   program
     .command("points")
-    .description("Fetch one GFS field selection for multiple points using a shared S3 GRIB slice")
-    .requiredOption("--point <lat,lon>", "Point to sample; repeat up to 50 times", collectPoint)
-    .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
+    .description("Fetch one atmospheric field at multiple points from GFS or GEFS")
+    .option("--model <gfs|gefs>", "Atmospheric model family", "gfs")
+    .requiredOption("--point <lat,lon>", "Point to sample; repeat as needed (GFS max 50, GEFS max 20)", collectPoint)
+    .option("--run <iso|latest|latest_complete>", "Model initialization; GEFS accepts latest or an explicit cycle", "latest")
     .requiredOption("--valid <iso>", "Forecast valid time")
-    .option("--vars <list>", "Comma-separated pressure-level variables")
-    .option("--levels <list>", "Comma-separated pressure levels in hPa")
-    .option("--fields <list>", "Comma-separated non-isobaric field IDs")
+    .option("--vars <list>", "Pressure-level variables; GEFS requires exactly one")
+    .option("--levels <list>", "Pressure levels in hPa; GEFS requires exactly one")
+    .option("--fields <list>", "GFS-only comma-separated non-isobaric field IDs")
+    .option("--members <list>", "GEFS-only comma-separated members (c00,p01..p30); default all 31")
+    .option("--quantiles <list>", "GEFS-only comma-separated quantiles from 0 to 1")
+    .option("--gte <number>", "GEFS-only threshold in normalized output units", Number)
+    .option("--include-members", "GEFS-only: include member values for every point")
     .option("--json", "Output JSON")
     .action(async (options) => {
-      const selection = pointSelection(options.vars, options.levels, options.fields);
-      const result = await new BatchPointsService().getPoints({
-        points: options.point as PointCoordinate[],
-        run: options.run,
-        validTime: options.valid,
-        ...selection,
-      });
-      batchPointsResultSchema.parse(result);
+      const model = parseAtmosphericModel(options.model);
+      const service = new AtmosphericBatchPointsService();
+      const requestedPoints = options.point as PointCoordinate[];
+
+      if (model === "gfs") {
+        if (options.members !== undefined || options.quantiles !== undefined || options.gte !== undefined || options.includeMembers) {
+          throw new Error("--members, --quantiles, --gte and --include-members are only valid with --model gefs");
+        }
+        const selection = pointSelection(options.vars, options.levels, options.fields);
+        const result = batchPointsResultSchema.parse(await service.getPoints({
+          model: "gfs_0p25",
+          query: {
+            points: requestedPoints,
+            run: options.run,
+            validTime: options.valid,
+            ...selection,
+          },
+        }));
+        if (options.json) return console.log(JSON.stringify(result, null, 2));
+        console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+        console.log(`Source ${result.source.provider} (${result.source.access})  shared-slice cacheHit=${result.source.cacheHit}`);
+        for (const [index, point] of result.points.entries()) {
+          console.log(`Point ${index + 1}: ${point.requestedPoint.latitude},${point.requestedPoint.longitude} → grid ${point.gridPoint.latitude},${point.gridPoint.longitude}`);
+          if (point.levels.length > 0) console.table(point.levels);
+          if (point.fields) console.dir(point.fields, { depth: null });
+        }
+        return;
+      }
+
+      if (options.fields !== undefined) throw new Error("--fields is a deterministic GFS option and is not valid with --model gefs");
+      if (options.run === "latest_complete") throw new Error("GEFS multi-point queries support --run latest or an explicit GEFS cycle, not latest_complete");
+      const variables = parseGefsVariables(options.vars ?? "temperature");
+      const levels = parseLevels(options.levels ?? "850");
+      if (variables.length !== 1 || levels.length !== 1) {
+        throw new Error("GEFS multi-point queries require exactly one --vars variable and one --levels pressure surface");
+      }
+      const variable = variables[0];
+      const pressureLevelHpa = levels[0];
+      if (variable === undefined || pressureLevelHpa === undefined) throw new Error("GEFS multi-point selection is empty");
+      const result = gefsBatchPointsResultSchema.parse(await service.getPoints({
+        model: "gefs_0p50",
+        query: {
+          points: requestedPoints,
+          run: options.run,
+          validTime: options.valid,
+          variable,
+          pressureLevelHpa,
+          ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+          quantiles: parseNumbers(options.quantiles ?? "0.1,0.5,0.9"),
+          ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
+          includeMembers: Boolean(options.includeMembers),
+        },
+      }));
       if (options.json) return console.log(JSON.stringify(result, null, 2));
-      console.log(`GFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
-      console.log(`Source ${result.source.provider} (${result.source.access})  shared-slice cacheHit=${result.source.cacheHit}`);
-      for (const [index, point] of result.points.entries()) {
-        console.log(`Point ${index + 1}: ${point.requestedPoint.latitude},${point.requestedPoint.longitude} → grid ${point.gridPoint.latitude},${point.gridPoint.longitude}`);
-        if (point.levels.length > 0) console.table(point.levels);
-        if (point.fields) console.dir(point.fields, { depth: null });
+      console.log(`GEFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
+      console.log(`${result.selection.variable}@${result.selection.pressureLevelHpa}hPa (${result.selection.unit}); ${result.selection.members.length} members; ${result.points.length} points`);
+      console.log(`Source ${result.source.provider} (${result.source.access}); ${result.source.memberFiles.length} member slices; allCacheHit=${result.source.allCacheHit}`);
+      console.table(result.points.map((point, index) => ({
+        point: index + 1,
+        requested: `${point.requestedPoint.latitude},${point.requestedPoint.longitude}`,
+        grid: `${point.gridPoint.latitude},${point.gridPoint.longitude}`,
+        mean: point.summary.mean,
+        populationStdDev: point.summary.populationStdDev,
+        min: point.summary.min,
+        max: point.summary.max,
+        ...(point.summary.threshold ? { thresholdFraction: point.summary.threshold.fraction } : {}),
+      })));
+      if (options.includeMembers) {
+        for (const [index, point] of result.points.entries()) {
+          console.log(`Members at point ${index + 1} (${point.requestedPoint.latitude},${point.requestedPoint.longitude})`);
+          console.table(point.members ?? []);
+        }
       }
     });
 
