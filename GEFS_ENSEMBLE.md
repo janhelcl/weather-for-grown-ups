@@ -23,6 +23,7 @@ Current GEFS operations:
 - member-first layer diagnostics;
 - member-first whole-profile freezing/inversion diagnostics;
 - native three-hour layer/profile diagnostic time series;
+- run-to-run distribution comparison across consecutive model initializations;
 - aligned deterministic GFS-vs-GEFS comparison.
 
 The canonical shared CLI operations are:
@@ -33,11 +34,12 @@ layer                  --model gefs
 profile-diagnostics    --model gefs
 timeseries             --model gefs
 diagnostic-timeseries  --model gefs
+compare-runs           --model gefs
 ```
 
 `ensemble-profile` and `ensemble-timeseries` remain explicit compatibility aliases over the same core dispatchers.
 
-MCP keeps explicit wrappers such as `get_gefs_ensemble_profile`, `get_gefs_layer_diagnostics`, `get_gefs_profile_diagnostics`, and `get_gefs_diagnostic_timeseries` because smaller model-specific schemas are clearer for agents.
+MCP keeps explicit wrappers such as `get_gefs_ensemble_profile`, `get_gefs_layer_diagnostics`, `get_gefs_profile_diagnostics`, `get_gefs_diagnostic_timeseries`, and `compare_gefs_runs` because smaller model-specific schemas are clearer for agents.
 
 ## Supported pressure variables
 
@@ -164,7 +166,7 @@ wfg timeseries \
   --json
 ```
 
-The current GEFS raw time-series primitive accepts exactly one raw variable and one pressure surface. Member trajectories are omitted by default; `--include-members` adds them.
+The current GEFS raw time-series primitive accepts exactly one raw variable and one pressure surface. Member trajectories are omitted by default; `--include-members` adds them within the **same initialization cycle**.
 
 ## Diagnostic time series
 
@@ -186,6 +188,29 @@ The series intentionally returns compact ensemble summaries only. Full member di
 
 See [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md).
 
+## Run-to-run distribution comparison
+
+```bash
+wfg compare-runs \
+  --model gefs \
+  --lat 50.08 --lon 14.43 \
+  --valid 2026-08-24T18:00:00Z \
+  --vars temperature \
+  --levels 850 \
+  --quantiles 0.1,0.5,0.9 \
+  --gte 5 \
+  --cycles 3 \
+  --json
+```
+
+A GEFS run comparison fixes one raw field, pressure surface, valid time, member set and quantile set across 2–6 consecutive six-hour initialization cycles. Every cycle is summarized independently through the normal ensemble service. Adjacent transitions then report newer-minus-older shifts in mean, population spread, extrema, quantiles, and optional threshold member fraction.
+
+WFG deliberately does **not** calculate `p01(new) - p01(old)` or equivalent memberwise deltas across initialization cycles. Reused perturbation labels are not treated as continuous trajectories. Every transition therefore carries:
+
+`distribution_shift_between_model_cycles_not_member_trajectory`
+
+See [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md).
+
 ## Run selection
 
 One-time GEFS operations accept `latest` or an explicit 00/06/12/18Z cycle.
@@ -197,6 +222,8 @@ For a time range, `latest` resolves one cycle that:
 3. has all selected members published at both range ends.
 
 That run is then passed explicitly to every intermediate step, preventing cycle drift during evaluation.
+
+For run comparison, `latest` resolves the newest usable **anchor** cycle for the selected valid time/member set. Older cycles are generated at exact six-hour intervals and every underlying ensemble query receives its explicit run.
 
 ## Data access and caching
 
@@ -212,7 +239,7 @@ For each selected member, WFG:
 6. decodes locally with `wgrib2`;
 7. performs physical derivation and aggregation locally.
 
-Byte ranges are sequential inside one member while member work is bounded-concurrent. Diagnostic time series add bounded step concurrency around those existing member-aware single-time services.
+Byte ranges are sequential inside one member while member work is bounded-concurrent. Diagnostic time series add bounded step concurrency around those existing member-aware single-time services. Run comparison adds bounded cycle concurrency around the existing scalar ensemble service.
 
 AWS Open Data paths do not use the NOMADS scripted-access limiter.
 
