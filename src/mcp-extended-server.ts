@@ -2,12 +2,14 @@ import { GefsBundleTimeSeriesService } from "./core/gefs-bundle-timeseries.js";
 import { GefsMemberBundleService } from "./core/gefs-member-bundle.js";
 import { GefsPointsBundleTimeSeriesService } from "./core/gefs-points-bundle-timeseries.js";
 import { GefsPointsBundleService } from "./core/gefs-points-bundle.js";
+import { GefsTransectService } from "./core/gefs-transect.js";
 import {
   handleGetGefsFields,
   handleGetGefsFieldsTimeSeries,
 } from "./mcp-gefs-bundle-tool.js";
 import { handleGetGefsFieldsPointsTimeSeries } from "./mcp-gefs-points-bundle-timeseries-tool.js";
 import { handleGetGefsFieldsPoints } from "./mcp-gefs-points-bundle-tool.js";
+import { handleGetGefsTransect } from "./mcp-gefs-transect-tool.js";
 import { createMcpServer as createBaseMcpServer } from "./mcp-server.js";
 import {
   gefsBundleTimeSeriesQuerySchema,
@@ -25,6 +27,7 @@ import {
   gefsPointsBundleQuerySchema,
   gefsPointsBundleResultSchema,
 } from "./schema/gefs-points-bundle.js";
+import { gefsTransectQuerySchema, gefsTransectResultSchema } from "./schema/gefs-transect.js";
 
 /**
  * Extend the shared MCP server with GEFS mixed-field bundle operations without
@@ -37,6 +40,7 @@ export function createMcpServer() {
   const timeSeriesService = new GefsBundleTimeSeriesService({ bundleGetter: bundleService });
   const pointsService = new GefsPointsBundleService();
   const pointsTimeSeriesService = new GefsPointsBundleTimeSeriesService({ pointsGetter: pointsService });
+  const transectService = new GefsTransectService({ pointsGetter: pointsService });
 
   server.registerTool("get_gefs_fields", {
     title: "Get mixed GEFS field distributions",
@@ -65,6 +69,13 @@ export function createMcpServer() {
     inputSchema: gefsPointsBundleTimeSeriesQuerySchema,
     outputSchema: gefsPointsBundleTimeSeriesResultSchema,
   }, async (query) => handleGetGefsFieldsPointsTimeSeries(pointsTimeSeriesService, query));
+
+  server.registerTool("get_gefs_transect", {
+    title: "Get GEFS mixed-field transect",
+    description: "Sample a great-circle cross-section from GEFS using up to 20 evenly spaced coordinates. The path geometry is shared with deterministic GFS, while each sample contains ensemble distributions for one mixed pressure/non-isobaric selection. WFG delegates the complete path to one multi-point bundle request, so each selected member file is reused across all transect coordinates; local wgrib2 extraction remains point-oriented. Member arrays are optional and bounded. Ensemble summaries are raw model-member evidence, not calibrated probability or uncertainty.",
+    inputSchema: gefsTransectQuerySchema,
+    outputSchema: gefsTransectResultSchema,
+  }, async (query) => handleGetGefsTransect(transectService, query));
 
   return server;
 }
