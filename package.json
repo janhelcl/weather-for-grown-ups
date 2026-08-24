@@ -29,6 +29,7 @@
   ],
   "engines": { "node": ">=20" },
   "bin": {
+    "weather-for-grown-ups": "./dist/entry.js",
     "wfg": "./dist/cli.js",
     "wfg-mcp": "./dist/mcp-cli.js",
     "wfg-mcp-http": "./dist/mcp-http.js"
@@ -44,7 +45,7 @@
     "mcp:http": "tsx src/mcp-http.ts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:smoke": "node dist/cli.js --help && node dist/cli.js catalog --help && node dist/cli.js catalog --search cloud --sections fields --classification raw --limit 3 --json && node dist/cli.js latest --help && node dist/cli.js ensemble --help && node dist/cli.js ensemble-profile --help && node dist/cli.js ensemble-timeseries --help && node dist/cli.js ensemble-fields --help && node dist/cli.js ensemble-fields-timeseries --help && node dist/cli.js ensemble-fields-points --help && node dist/cli.js ensemble-fields-points-timeseries --help && node dist/cli.js compare-gfs-gefs --help && node dist/cli.js profile --help && node dist/cli.js layer --help && node dist/cli.js profile-diagnostics --help && node dist/cli.js parcel --help && node dist/cli.js diagnostic-timeseries --help && node dist/cli.js points --help && node dist/cli.js transect --help && node dist/cli.js timeseries --help && node dist/cli.js points-timeseries --help && node dist/cli.js compare-runs --help && node dist/cli.js area --help",
+    "test:smoke": "node dist/entry.js --help && node dist/cli.js --help && node dist/cli.js catalog --help && node dist/cli.js catalog --search cloud --sections fields --classification raw --limit 3 --json && node dist/cli.js latest --help && node dist/cli.js ensemble --help && node dist/cli.js ensemble-profile --help && node dist/cli.js ensemble-timeseries --help && node dist/cli.js ensemble-fields --help && node dist/cli.js ensemble-fields-timeseries --help && node dist/cli.js ensemble-fields-points --help && node dist/cli.js ensemble-fields-points-timeseries --help && node dist/cli.js compare-gfs-gefs --help && node dist/cli.js profile --help && node dist/cli.js layer --help && node dist/cli.js profile-diagnostics --help && node dist/cli.js parcel --help && node dist/cli.js diagnostic-timeseries --help && node dist/cli.js points --help && node dist/cli.js transect --help && node dist/cli.js timeseries --help && node dist/cli.js points-timeseries --help && node dist/cli.js compare-runs --help && node dist/cli.js area --help",
     "test:live": "tsx scripts/live-smoke.ts",
     "test:live:s3": "tsx scripts/live-smoke-s3.ts",
     "test:live:gefs": "tsx scripts/live-smoke-gefs.ts && tsx scripts/live-smoke-gefs-points-timeseries.ts && tsx scripts/live-smoke-gefs-points-bundle-timeseries.ts && tsx scripts/live-smoke-gefs-transect.ts",
@@ -57,6 +58,7 @@
     "prepublishOnly": "npm run typecheck && npm test && npm run build && npm run test:smoke"
   },
   "dependencies": {
+    "@mattnucc/gribberish": "^1.6.0",
     "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "commander": "^14.0.0",
