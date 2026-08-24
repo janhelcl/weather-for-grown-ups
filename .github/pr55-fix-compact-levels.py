@@ -2,6 +2,13 @@ from pathlib import Path
 
 runtime = Path("src/grib/gribberish-runtime.ts")
 text = runtime.read_text()
+alias_anchor = '  ["entire atmosphere as a single layer", "entire atmosphere (considered as a single layer)"],\n'
+alias_variant = '  ["entire atmosphere as single layer", "entire atmosphere (considered as a single layer)"],\n'
+if alias_variant not in text:
+    if alias_anchor not in text:
+        raise RuntimeError("entire-atmosphere alias anchor not found")
+    text = text.replace(alias_anchor, alias_anchor + alias_variant, 1)
+
 old = '''  const lowerKey = key.toLowerCase();
   for (const [decoderName, publicName] of NAMED_VERTICAL_ALIASES) {
     if (lowerKey.includes(`in ${decoderName}`)) return { namedVertical: publicName };
