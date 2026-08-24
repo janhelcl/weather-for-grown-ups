@@ -77,14 +77,17 @@ function buildEntries(): SearchableEntry[] {
   const variables: SearchableEntry[] = catalog.variables.map((definition) => ({
     section: "variables",
     id: definition.id,
-    classification: "raw",
+    classification: definition.kind === "raw" ? "raw" : "derived",
     kind: definition.kind,
     description: definition.description,
     verticalSemantics: `${definition.levelType}: ${definition.supportedPressureLevelsHpa.join(",")} hPa`,
-    gfsCode: definition.gfsCode,
-    sourceUnit: definition.sourceUnit,
+    ...( "gfsCode" in definition
+      ? { gfsCode: definition.gfsCode, sourceUnit: definition.sourceUnit }
+      : { dependencies: [...definition.dependencies] }),
     outputs: definition.outputs.map((output) => ({ ...output })),
-    searchParts: [definition.gfsCode, definition.sourceUnit, ...definition.supportedPressureLevelsHpa.map(String)],
+    searchParts: "gfsCode" in definition
+      ? [definition.gfsCode, definition.sourceUnit, ...definition.supportedPressureLevelsHpa.map(String)]
+      : [...definition.dependencies, ...definition.supportedPressureLevelsHpa.map(String)],
   }));
 
   const fields: SearchableEntry[] = catalog.fields.map((definition) => ({
@@ -128,7 +131,26 @@ function buildEntries(): SearchableEntry[] {
     searchParts: [...definition.dependencies],
   }));
 
-  return [...variables, ...fields, ...layerDiagnostics, ...profileDiagnostics];
+  const parcelDefinitions: SearchableEntry[] = catalog.parcelDefinitions.map((definition) => {
+    const dependencies = [
+      ...definition.pressureDependencies,
+      ...definition.fieldDependencies,
+      ...definition.staticDependencies,
+    ];
+    return {
+      section: "parcel_definitions",
+      id: definition.id,
+      classification: "derived",
+      kind: definition.kind,
+      description: definition.description,
+      verticalSemantics: "explicit sampled GEFS pressure profile plus member-specific surface state and same-cycle f000 model orography",
+      dependencies,
+      outputs: definition.outputs.map((output) => ({ ...output })),
+      searchParts: dependencies,
+    };
+  });
+
+  return [...variables, ...fields, ...layerDiagnostics, ...profileDiagnostics, ...parcelDefinitions];
 }
 
 function searchScore(entry: SearchableEntry, rawSearch: string | undefined): number | null {
