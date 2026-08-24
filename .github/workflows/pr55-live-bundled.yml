@@ -16,5 +16,7 @@ jobs:
         with:
           node-version: 24
       - run: npm ci --no-audit --no-fund
+      - name: Probe live statistical GRIB metadata
+        run: npx tsx scripts/live-debug-statistical.ts
       - name: Exercise bundled decoder against live NOAA data
         run: npm run test:live:bundled
