@@ -101,6 +101,56 @@ describe("GefsBatchPointsService", () => {
     ]);
   });
 
+  it("preserves non-temperature units and reports a fully cached member set", async () => {
+    const service = new GefsBatchPointsService({
+      source: { fetch: async (request) => ({ path: `/tmp/${request.member}.grib2`, cacheHit: true }) },
+      decoder: {
+        extractPoint: async (path) => [{
+          code: "RH",
+          pressureHpa: 850,
+          value: path.includes("p01") ? 55 : path.includes("p02") ? 65 : 45,
+          gridPoint: { latitude: 50, longitude: 14.5 },
+        }],
+      },
+    });
+
+    const result = await service.getPoints({
+      points: [points[0]!],
+      run: run.toISOString(),
+      validTime,
+      variable: "relative_humidity",
+      pressureLevelHpa: 850,
+      members,
+    });
+
+    expect(result.selection.unit).toBe("%");
+    expect(result.points[0]?.summary.mean).toBe(55);
+    expect(result.source.allCacheHit).toBe(true);
+  });
+
+  it("rejects a decoded member slice missing the selected field", async () => {
+    const service = new GefsBatchPointsService({
+      source: { fetch: async (request) => ({ path: `/tmp/${request.member}.grib2`, cacheHit: true }) },
+      decoder: {
+        extractPoint: async () => [{
+          code: "HGT",
+          pressureHpa: 850,
+          value: 1500,
+          gridPoint: { latitude: 50, longitude: 14.5 },
+        }],
+      },
+    });
+
+    await expect(service.getPoints({
+      points: [points[0]!],
+      run: run.toISOString(),
+      validTime,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members,
+    })).rejects.toThrow("subset is missing TMP@850mb");
+  });
+
   it("rejects inconsistent sampled grid points across members at one location", async () => {
     const service = new GefsBatchPointsService({
       source: { fetch: async (request) => ({ path: `/tmp/${request.member}.grib2`, cacheHit: false }) },
