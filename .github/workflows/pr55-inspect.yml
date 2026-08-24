@@ -1,0 +1,16 @@
+name: PR55 decoder audit
+
+on:
+  pull_request:
+
+jobs:
+  audit:
+    if: github.event.pull_request.number == 55
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate decoder provenance and runtime references
+        run: |
+          set -euo pipefail
+          echo '=== decoder references ==='
+          grep -RInE 'decoder|WGRIB2_PATH|WFG_DECODER' src test scripts README.md INSTALL.md package.json || true
