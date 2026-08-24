@@ -1,10 +1,19 @@
 import { execa } from "execa";
+import { GEFS_PGRB2A_FIELD_CATALOG } from "../catalog/gefs-fields.js";
 import { findNamedNonIsobaricLevel } from "../catalog/non-isobaric-fields.js";
-import { ALL_SUPPORTED_GFS_CODES, type GfsCode } from "../catalog/variables.js";
+import { ALL_SUPPORTED_GFS_CODES } from "../catalog/variables.js";
 import type { DecodedValue } from "../core/types.js";
 
-const SUPPORTED_CODE_SET = new Set<string>(ALL_SUPPORTED_GFS_CODES);
-const CODE_PATTERN = new RegExp(`:(${ALL_SUPPORTED_GFS_CODES.join("|")}):`);
+const GEFS_RAW_FIELDS = Object.values(GEFS_PGRB2A_FIELD_CATALOG).filter((definition) => definition.kind === "raw");
+const ALL_SUPPORTED_CODES = [...new Set([
+  ...ALL_SUPPORTED_GFS_CODES,
+  ...GEFS_RAW_FIELDS.map((definition) => definition.gfsCode),
+])];
+const SUPPORTED_CODE_SET = new Set<string>(ALL_SUPPORTED_CODES);
+const CODE_PATTERN = new RegExp(`:(${ALL_SUPPORTED_CODES.join("|")}):`);
+const GEFS_NAMED_VERTICALS = new Set(
+  GEFS_RAW_FIELDS.map((definition) => definition.level.gribLevel),
+);
 
 export class Wgrib2Decoder {
   constructor(private readonly executable = process.env.WGRIB2_PATH ?? "wgrib2") {}
@@ -49,11 +58,13 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
   const pressureMatch = gribLevel.match(/^(\d+(?:\.\d+)?) mb$/);
   const surfaceMatch = gribLevel === "surface";
   const heightMatch = gribLevel.match(/^(\d+(?:\.\d+)?) m above ground$/);
-  const namedLevel = findNamedNonIsobaricLevel(gribLevel);
+  const gfsNamedLevel = findNamedNonIsobaricLevel(gribLevel);
+  const modelNamedVertical = gfsNamedLevel?.gribLevel
+    ?? (GEFS_NAMED_VERTICALS.has(gribLevel) ? gribLevel : undefined);
   const pointMatch = line.match(/lon=([-+\d.eE]+),lat=([-+\d.eE]+)/);
   const valueMatch = line.match(/val=([-+\d.eE]+)/);
 
-  if (!codeMatch || (!pressureMatch && !surfaceMatch && !heightMatch && !namedLevel) || !pointMatch || !valueMatch) {
+  if (!codeMatch || (!pressureMatch && !surfaceMatch && !heightMatch && !modelNamedVertical) || !pointMatch || !valueMatch) {
     return null;
   }
 
@@ -68,10 +79,10 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
       ? { heightAboveGroundM: Number(heightMatch[1]) }
       : surfaceMatch
         ? { surface: true as const }
-        : { namedVertical: namedLevel!.gribLevel };
+        : { namedVertical: modelNamedVertical! };
 
   return {
-    code: code as GfsCode,
+    code,
     ...level,
     ...(accumulationMatch?.[1] !== undefined && accumulationMatch[2] !== undefined
       ? {

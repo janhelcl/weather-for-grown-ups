@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import type { RawGefsPgrb2aFieldId } from "../catalog/gefs-fields.js";
 import { GEFS_MEMBERS, type GefsPressureVariableId } from "../catalog/gefs.js";
 import { AtmosphericProfileService } from "../core/atmospheric-profile-service.js";
 import { AtmosphericTimeSeriesService } from "../core/atmospheric-timeseries-service.js";
@@ -11,25 +12,35 @@ import { parseGefsMembers, parseGefsVariables, parseNumbers } from "./shared.js"
 export function registerEnsembleCommand(program: Command): void {
   program
     .command("ensemble")
-    .description("Sample one GEFS 0.5° pressure-level field across control and perturbed members")
+    .description("Sample one raw GEFS 0.5° pgrb2a pressure-level or non-isobaric field across control and perturbed members")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .option("--run <iso|latest>", "GEFS run initialization; latest = newest cycle satisfying this member/time selection", "latest")
     .requiredOption("--valid <iso>", "Forecast valid time on the native three-hour GEFS cadence")
-    .requiredOption("--var <id>", "Pressure-level variable: temperature, relative_humidity, u_wind, v_wind, geopotential_height")
-    .requiredOption("--level <hpa>", "Pressure level in hPa", Number)
+    .option("--var <id>", "Pressure-level variable: temperature, relative_humidity, u_wind, v_wind, geopotential_height")
+    .option("--level <hpa>", "Pressure level in hPa; required with --var", Number)
+    .option("--field <id>", "Raw pgrb2a field, e.g. temperature_2m,total_precipitation,total_atmosphere_cloud_cover,cape_180mb")
     .option("--members <list>", "Comma-separated GEFS members (c00,p01..p30); default all 31")
     .option("--quantiles <list>", "Comma-separated quantiles from 0 to 1", "0.1,0.5,0.9")
     .option("--gte <number>", "Optional threshold in normalized output units", Number)
     .option("--json", "Output JSON")
     .action(async (options) => {
+      const hasField = options.field !== undefined;
+      if (hasField && (options.var !== undefined || options.level !== undefined)) {
+        throw new Error("ensemble accepts either --field or --var with --level, not both");
+      }
+      if (!hasField && (options.var === undefined || options.level === undefined)) {
+        throw new Error("ensemble requires --field or both --var and --level");
+      }
+      const selection = hasField
+        ? { field: options.field as RawGefsPgrb2aFieldId }
+        : { variable: options.var as GefsPressureVariableId, pressureLevelHpa: options.level as number };
       const result = await new GefsEnsembleService().getEnsemble({
         latitude: options.lat,
         longitude: options.lon,
         run: options.run,
         validTime: options.valid,
-        variable: options.var as GefsPressureVariableId,
-        pressureLevelHpa: options.level,
+        ...selection,
         ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
         quantiles: parseNumbers(options.quantiles),
         ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
@@ -38,7 +49,11 @@ export function registerEnsembleCommand(program: Command): void {
       if (options.json) return console.log(JSON.stringify(result, null, 2));
 
       console.log(`GEFS ${result.run}  valid ${result.validTime}  f${String(result.forecastHour).padStart(3, "0")}`);
-      console.log(`${result.selection.variable}@${result.selection.pressureLevelHpa}hPa (${result.selection.unit}); ${result.summary.memberCount} members`);
+      if (result.selection.field) {
+        console.log(`${result.selection.field} (${result.selection.unit}) @ ${result.selection.vertical?.description}; ${result.summary.memberCount} members; ${result.selection.temporal?.type}`);
+      } else {
+        console.log(`${result.selection.variable}@${result.selection.pressureLevelHpa}hPa (${result.selection.unit}); ${result.summary.memberCount} members`);
+      }
       console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
       console.table(result.members);
       console.table(result.summary.quantiles);
