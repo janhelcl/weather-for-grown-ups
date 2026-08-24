@@ -100,7 +100,7 @@ function buildEntries(): SearchableEntry[] {
       : { dependencies: [...definition.dependencies] }),
     outputs: definition.outputs.map((output) => ({ ...output })),
     searchParts: "gfsCode" in definition
-      ? [definition.gfsCode, definition.sourceUnit, definition.level.description]
+      ? [definition.gfsCode, definition.sourceUnit, definition.level.description].filter((value): value is string => value !== undefined)
       : [...definition.dependencies, definition.level.description],
   }));
 
