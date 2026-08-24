@@ -76,6 +76,27 @@ The live smoke intentionally uses only three GEFS members. The layer check uses 
 
 The 2026-08-23 validation provided a useful sanity check of the temporal semantics. At `f003`, all three selected members contained one freezing-level crossing; the mean lowest-crossing height was about **2943.7 gpm** with population spread about **75.9 gpm**. At `f006`, all three still contained exactly one crossing, but the mean was about **2942.1 gpm** with population spread only **0.94 gpm**. The series therefore preserved both a stable event fraction and a materially changing ensemble structural spread from one fixed initialization cycle.
 
+## GEFS run-comparison integration
+
+```bash
+npm run test:live:gefs-runs
+```
+
+This deliberately small check compares 850-hPa temperature over Prague for `c00`, `p01`, and `p02` across two consecutive GEFS initialization cycles at one common valid time.
+
+It verifies:
+
+- query-aware resolution of the newest usable anchor cycle;
+- an older comparison cycle exactly six hours behind the anchor;
+- explicit fixed run selection for both underlying ensemble queries;
+- the same requested field, member set, valid time, and sampled GEFS grid point across both cycles;
+- finite per-cycle mean, population spread, extrema and quantiles;
+- raw threshold member fractions retaining their non-calibrated interpretation;
+- newer-minus-older distribution shifts rather than member-ID trajectory deltas;
+- the explicit interpretation `distribution_shift_between_model_cycles_not_member_trajectory`.
+
+The 2026-08-24 validation used valid time **06Z**, comparing the **2026-08-23 18Z** run at `f012` with the **2026-08-24 00Z** run at `f006`. Across the three smoke-test members, 850-hPa temperature mean moved from about **5.646 °C** to **5.716 °C** (`+0.071 °C`), population spread widened from about **0.198 °C** to **0.238 °C** (`+0.040 °C`), and the median moved from about **5.685 °C** to **5.880 °C** (`+0.195 °C`). All three members remained at or above the deliberately low 0 °C threshold, so that raw member fraction stayed at 1.0. These values are compatibility evidence from only three members, not a calibrated ensemble forecast claim.
+
 ## Rich NOMADS area integration
 
 ```bash
@@ -126,7 +147,7 @@ Without `WFG_LIVE_SOURCE` it uses NOMADS; setting `s3` switches the source.
 
 Before the schedule was merged, the expanded deterministic workflow was deliberately executed against current NOAA data on 2026-08-23. The first attempt caught a real test defect: the parcel smoke requested unsupported 875/825/775 hPa levels. The smoke data was corrected to the canonical published GFS pressure-level set, and the rerun passed both AWS and NOMADS paths.
 
-The GEFS point, time-series, profile, and cross-model comparison capabilities were likewise exercised against current NOAA AWS data before merge. The unified-core change extended that same low-cost compatibility check to member-by-member layer diagnostics. GEFS whole-profile diagnostics extended the proof to variable-length structural meteorology: real GEFS multi-message profiles cross the normalized-profile boundary, feed the shared freezing/inversion kernel independently per member, and produce ensemble structural summaries without inventing an ensemble-mean structure. GEFS diagnostic time series now additionally prove that those already-validated single-time summaries can be composed across native forecast times while holding the model cycle, member set, sampling, and diagnostic selection fixed. This layer exists to catch assumptions that deterministic mocks and fixed fixtures cannot reveal without turning upstream availability into a permanent merge dependency.
+The GEFS point, time-series, profile, and cross-model comparison capabilities were likewise exercised against current NOAA AWS data before merge. The unified-core change extended that same low-cost compatibility check to member-by-member layer diagnostics. GEFS whole-profile diagnostics extended the proof to variable-length structural meteorology: real GEFS multi-message profiles cross the normalized-profile boundary, feed the shared freezing/inversion kernel independently per member, and produce ensemble structural summaries without inventing an ensemble-mean structure. GEFS diagnostic time series additionally prove that those already-validated single-time summaries can be composed across native forecast times while holding the model cycle, member set, sampling, and diagnostic selection fixed. GEFS run comparison now extends the proof across model initializations while intentionally comparing ensemble distributions rather than pretending equal perturbation labels form trajectories. This layer exists to catch assumptions that deterministic mocks and fixed fixtures cannot reveal without turning upstream availability into a permanent merge dependency.
 
 ## Failure triage
 

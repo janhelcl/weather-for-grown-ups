@@ -4,6 +4,7 @@ import type { GefsEnsembleTimeSeriesService } from "./core/gefs-ensemble-timeser
 import type { GefsEnsembleService } from "./core/gefs-ensemble.js";
 import type { GefsLayerDiagnosticsService } from "./core/gefs-layer-diagnostics.js";
 import type { GefsProfileDiagnosticsService } from "./core/gefs-profile-diagnostics.js";
+import type { GefsRunComparisonService } from "./core/gefs-run-comparison.js";
 import {
   gefsDiagnosticTimeSeriesResultSchema,
   type GefsDiagnosticTimeSeriesQueryInput,
@@ -34,6 +35,11 @@ import {
   type GefsProfileDiagnosticsQueryInput,
   type GefsProfileDiagnosticsResult,
 } from "./schema/gefs-profile-diagnostics.js";
+import {
+  gefsRunComparisonResultSchema,
+  type GefsRunComparisonQueryInput,
+  type GefsRunComparisonResult,
+} from "./schema/gefs-run-comparison.js";
 
 export interface GefsEnsembleGetter {
   getEnsemble(query: GefsEnsembleQueryInput): Promise<GefsEnsembleResult>;
@@ -57,6 +63,10 @@ export interface GefsProfileDiagnosticsGetter {
 
 export interface GefsDiagnosticTimeSeriesGetter {
   getDiagnosticTimeSeries(query: GefsDiagnosticTimeSeriesQueryInput): Promise<GefsDiagnosticTimeSeriesResult>;
+}
+
+export interface GefsRunComparisonGetter {
+  compareRuns(query: GefsRunComparisonQueryInput): Promise<GefsRunComparisonResult>;
 }
 
 export async function handleGetGefsEnsemble(
@@ -99,6 +109,13 @@ export async function handleGetGefsDiagnosticTimeSeries(
   query: GefsDiagnosticTimeSeriesQueryInput,
 ) {
   return handle(async () => gefsDiagnosticTimeSeriesResultSchema.parse(await service.getDiagnosticTimeSeries(query)));
+}
+
+export async function handleCompareGefsRuns(
+  service: Pick<GefsRunComparisonService, "compareRuns"> | GefsRunComparisonGetter,
+  query: GefsRunComparisonQueryInput,
+) {
+  return handle(async () => gefsRunComparisonResultSchema.parse(await service.compareRuns(query)));
 }
 
 async function handle<T extends Record<string, unknown>>(operation: () => Promise<T>) {

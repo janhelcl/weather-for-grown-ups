@@ -32,7 +32,7 @@ CLI is operation-oriented (`--model gfs|gefs` where an operation is shared). MCP
 | Multi-point time series | ✅ | — |
 | Transect | ✅ | — |
 | Area statistics | ✅ | — |
-| Run-to-run comparison | ✅ | — |
+| Run-to-run comparison | ✅ deterministic field deltas | ✅ distribution shifts |
 | Ensemble distribution | — | ✅ |
 | Aligned GFS-vs-GEFS comparison | ✅ | ✅ |
 
@@ -65,10 +65,11 @@ The ensemble surface currently includes:
 - member-first layer diagnostics using the same lapse-rate/shear/stability physics as GFS;
 - member-first freezing-level and sampled inversion diagnostics using the same whole-profile kernel as GFS;
 - native three-hour layer/profile **diagnostic time series** from one fixed cycle/member set;
+- run-to-run comparison of ensemble distribution descriptors across consecutive initializations;
 - aligned deterministic GFS-vs-GEFS comparison from one shared initialization cycle;
 - direct NOAA AWS `.idx` byte-range access and immutable local caching.
 
-See [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md), [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md), [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md), and [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md).
+See [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md), [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md), [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md), [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md), and [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md).
 
 ## Install
 
@@ -200,6 +201,27 @@ GEFS layer series uses `--kind layer --lower ... --upper ...`. The series fixes 
 
 GFS supports `--kind layer`, `profile`, and `parcel`; GEFS currently supports `layer` and `profile` only.
 
+### Run-to-run comparison
+
+GEFS distribution evolution:
+
+```bash
+wfg compare-runs \
+  --model gefs \
+  --lat 50.08 --lon 14.43 \
+  --valid 2026-08-24T18:00:00Z \
+  --vars temperature \
+  --levels 850 \
+  --quantiles 0.1,0.5,0.9 \
+  --gte 5 \
+  --cycles 3 \
+  --json
+```
+
+Each GEFS cycle is summarized independently with the same member selection. WFG then reports newer-minus-older shifts in mean, population spread, extrema, quantiles and optional threshold fraction. It deliberately does **not** subtract `p01` in one initialization from `p01` in another; repeated perturbation labels are not treated as trajectories across model cycles.
+
+Deterministic GFS uses the same `compare-runs` CLI operation but retains direct field-delta semantics.
+
 ### Scalar ensemble distribution
 
 ```bash
@@ -265,6 +287,7 @@ Current MCP tools include:
 - `get_gfs_points_timeseries`
 - `get_gfs_transect`
 - `compare_gfs_runs`
+- `compare_gefs_runs`
 - `summarize_gfs_area`
 
 MCP wrappers stay model-specific even where CLI operations are unified; this keeps agent input/output schemas smaller and less ambiguous.
@@ -298,6 +321,10 @@ Conditional distributions include the number of contributing members. If no memb
 
 GEFS diagnostic time series preserve those same semantics at every native three-hour step. `run="latest"` resolves one cycle capable of satisfying the **complete range**, then each step receives that explicit run. Member fractions do not become calibrated probabilities merely because they are tracked through time.
 
+### Across model cycles
+
+GEFS run comparison preserves the same model-native approach across initializations. Every cycle is summarized independently, and only comparable distribution descriptors are differenced. Transition results are explicitly labeled `distribution_shift_between_model_cycles_not_member_trajectory` so agents do not infer memberwise continuity that the ensemble design does not provide.
+
 ## Run selection
 
 ### GFS
@@ -311,6 +338,8 @@ GFS query tools support:
 ### GEFS
 
 GEFS one-time tools support `latest` or an explicit 00/06/12/18Z cycle. Time-series tools use range-aware `latest`: one cycle must cover both ends of the complete requested range for all selected members, and that run is fixed across intermediate steps.
+
+GEFS run comparison uses `latest` as the newest anchor cycle whose selected members exist at the requested valid time, or accepts an explicit anchor. Older comparison cycles are then generated at six-hour intervals and requested explicitly so the comparison cannot drift while new output publishes.
 
 The current WFG GEFS contract uses native three-hour output through `f384`.
 
@@ -341,7 +370,7 @@ The real-upstream suite is separate:
 npm run test:live:all
 ```
 
-The live suite covers deterministic AWS/NOMADS paths and a deliberately small GEFS sample spanning scalar distributions, pressure profiles, layer diagnostics, whole-profile diagnostics, two-step diagnostic time series, raw-field time series, and aligned GFS-vs-GEFS comparison. GitHub Actions runs it weekly and supports manual dispatch; normal PR/main CI remains offline.
+The live suite covers deterministic AWS/NOMADS paths and deliberately small GEFS samples spanning scalar distributions, pressure profiles, layer diagnostics, whole-profile diagnostics, two-step diagnostic time series, raw-field time series, consecutive-cycle distribution comparison, and aligned GFS-vs-GEFS comparison. GitHub Actions runs it weekly and supports manual dispatch; normal PR/main CI remains offline.
 
 See [LIVE_SMOKE.md](LIVE_SMOKE.md).
 
@@ -352,6 +381,7 @@ See [LIVE_SMOKE.md](LIVE_SMOKE.md).
 - [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — GEFS member/profile/raw-series contract
 - [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md) — freezing/inversion ensemble semantics
 - [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md) — fixed-cycle diagnostic temporal composition
+- [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md) — cycle-to-cycle ensemble distribution evolution
 - [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md) — aligned deterministic-vs-ensemble comparison
 - [DIAGNOSTIC_TIME_SERIES.md](DIAGNOSTIC_TIME_SERIES.md) — deterministic diagnostic series
 - [CATALOG_SEARCH.md](CATALOG_SEARCH.md) — GFS catalog search
