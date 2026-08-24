@@ -12,5 +12,7 @@ jobs:
       - name: Locate decoder provenance and runtime references
         run: |
           set -euo pipefail
-          echo '=== decoder references ==='
-          grep -RInE 'decoder|WGRIB2_PATH|WFG_DECODER' src test scripts README.md INSTALL.md package.json || true
+          echo '=== core hard-coded decoder provenance with context ==='
+          grep -RInC4E 'decoder: "wgrib2"|decoder !== "wgrib2"|decoder: "wgrib2";' src/core || true
+          echo '=== decoder interfaces ==='
+          grep -RInC2E 'interface .*Decoder|decoder\?:' src/core src/grib || true
