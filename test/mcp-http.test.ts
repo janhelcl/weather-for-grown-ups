@@ -88,6 +88,7 @@ describe("Streamable HTTP MCP", () => {
       expect(names).toContain("get_gefs_parcel_diagnostics");
       expect(names).toContain("get_gefs_fields");
       expect(names).toContain("get_gefs_fields_timeseries");
+      expect(names).toContain("get_gefs_fields_points");
     } finally {
       await client.close();
     }
