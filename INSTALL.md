@@ -128,11 +128,28 @@ docker run --rm -p 3000:3000 \
 
 ## Publishing
 
-`npm run pack:check` builds the package and shows exactly what npm would publish. `npm publish` also runs the typecheck, deterministic tests, build, and CLI smoke suite through `prepublishOnly`.
+`npm run pack:check` builds the package and shows exactly what npm would publish. Normal CI also packs the tarball, installs it into a clean temporary prefix, and invokes the package-name executable so missing `files`, `bin`, or runtime dependency metadata is caught before release.
 
-Tagged releases are intended to publish the matching container image to GitHub Container Registry. npm publication remains a separate explicit release action so package ownership/credentials are never hidden in ordinary CI.
+Tags matching `v*` drive both release surfaces:
 
-Before publishing, the release checks should verify the packed tarball rather than only the repository checkout: install the tarball into a clean temporary directory and invoke `weather-for-grown-ups --help` from its generated npm bin. That catches missing `files`, `bin`, or runtime dependency metadata before a release reaches npm.
+- `.github/workflows/release-image.yml` publishes the matching multi-architecture image to GitHub Container Registry.
+- `.github/workflows/release-npm.yml` verifies that the tag exactly matches `package.json` (for example `v0.1.0`), verifies the packed npm payload, and publishes the package to npm.
+
+The npm workflow is set up for npm Trusted Publishing through GitHub Actions OIDC. Configure the package's npm Trusted Publisher with:
+
+- provider: GitHub Actions
+- repository owner/user: `janhelcl`
+- repository: `weather-for-grown-ups`
+- workflow filename: `release-npm.yml`
+- allowed action: `npm publish`
+
+No long-lived npm publish token is stored in GitHub once Trusted Publishing is configured. The workflow uses GitHub's `id-token: write` permission and Node.js 24. npm automatically attaches provenance for a public package published from this public GitHub repository through Trusted Publishing.
+
+### First npm release
+
+npm requires a package to already exist before a Trusted Publisher can be attached. For the first-ever publication of `weather-for-grown-ups`, bootstrap package ownership once with an authenticated manual `npm publish` from a clean, tested checkout (npm requires account 2FA or an appropriately configured granular token for direct publishing). Then configure the Trusted Publisher above before relying on tag-driven releases.
+
+The tag workflow is intentionally idempotent: if that exact package version already exists on npm because it was used for the bootstrap publication, the workflow treats it as already released instead of attempting an impossible duplicate publish. Subsequent versions should be published only through the trusted tag workflow.
 
 ## Licensing note
 
