@@ -38,6 +38,8 @@ export interface GribGridStatistics {
   max: number;
 }
 
+type GribCoordinateLayout = "axes" | "points";
+
 const NAMED_VERTICAL_ALIASES: ReadonlyArray<readonly [string, string]> = [
   ["entire atmosphere as a single layer", "entire atmosphere (considered as a single layer)"],
   ["entire atmosphere", "entire atmosphere"],
@@ -124,27 +126,57 @@ export function temporalForSelector(message: GribMessage, selector: GribMessageS
 export function gridPointsInBox(message: GribMessage, box: GribBox): GribGridPoint[] {
   const coordinates = message.latlngAdjusted(true, false);
   const data = message.dataAdjusted(true, false);
-  assertAligned(message, coordinates.latitude, coordinates.longitude, data);
+  const layout = coordinateLayout(message, coordinates.latitude, coordinates.longitude, data);
   const points: GribGridPoint[] = [];
-  for (let index = 0; index < data.length; index += 1) {
-    const value = data[index];
-    const pointLatitude = coordinates.latitude[index];
-    const pointLongitude = coordinates.longitude[index];
-    if (
-      value === undefined
-      || pointLatitude === undefined
-      || pointLongitude === undefined
-      || !Number.isFinite(value)
-      || !Number.isFinite(pointLatitude)
-      || !Number.isFinite(pointLongitude)
-      || !contains(box, pointLongitude, pointLatitude)
-    ) continue;
-    points.push({
-      longitude: toSignedLongitude(pointLongitude),
-      latitude: pointLatitude,
-      value,
-    });
+
+  if (layout === "axes") {
+    const { rows, cols } = message.gridShape;
+    for (let row = 0; row < rows; row += 1) {
+      const pointLatitude = coordinates.latitude[row];
+      if (
+        pointLatitude === undefined
+        || !Number.isFinite(pointLatitude)
+        || pointLatitude < box.southLatitude
+        || pointLatitude > box.northLatitude
+      ) continue;
+      for (let col = 0; col < cols; col += 1) {
+        const pointLongitude = coordinates.longitude[col];
+        if (
+          pointLongitude === undefined
+          || !Number.isFinite(pointLongitude)
+          || !contains(box, pointLongitude, pointLatitude)
+        ) continue;
+        const value = data[row * cols + col];
+        if (value === undefined || !Number.isFinite(value)) continue;
+        points.push({
+          longitude: toSignedLongitude(pointLongitude),
+          latitude: pointLatitude,
+          value,
+        });
+      }
+    }
+  } else {
+    for (let index = 0; index < data.length; index += 1) {
+      const value = data[index];
+      const pointLatitude = coordinates.latitude[index];
+      const pointLongitude = coordinates.longitude[index];
+      if (
+        value === undefined
+        || pointLatitude === undefined
+        || pointLongitude === undefined
+        || !Number.isFinite(value)
+        || !Number.isFinite(pointLatitude)
+        || !Number.isFinite(pointLongitude)
+        || !contains(box, pointLongitude, pointLatitude)
+      ) continue;
+      points.push({
+        longitude: toSignedLongitude(pointLongitude),
+        latitude: pointLatitude,
+        value,
+      });
+    }
   }
+
   if (points.length === 0) throw new Error("Requested bbox contains no defined GFS grid points");
   return points;
 }
@@ -173,16 +205,51 @@ export function summarizeMessageInBox(message: GribMessage, box: GribBox): GribG
 function nearestPoint(message: GribMessage, longitude: number, latitude: number): GribGridPoint {
   const coordinates = message.latlngAdjusted(true, false);
   const data = message.dataAdjusted(true, false);
-  assertAligned(message, coordinates.latitude, coordinates.longitude, data);
-
+  const layout = coordinateLayout(message, coordinates.latitude, coordinates.longitude, data);
   const targetLongitude = toSignedLongitude(longitude);
+
+  if (layout === "axes") {
+    const latitudeIndex = nearestAxisIndex(
+      coordinates.latitude,
+      (value) => Math.abs(value - latitude),
+    );
+    const longitudeIndex = nearestAxisIndex(
+      coordinates.longitude,
+      (value) => Math.abs(wrappedLongitudeDelta(toSignedLongitude(value), targetLongitude)),
+    );
+    if (latitudeIndex < 0 || longitudeIndex < 0) {
+      throw new Error("Bundled GRIB2 decoder found no grid coordinates");
+    }
+    const pointLatitude = coordinates.latitude[latitudeIndex];
+    const pointLongitude = coordinates.longitude[longitudeIndex];
+    const value = data[latitudeIndex * message.gridShape.cols + longitudeIndex];
+    if (
+      value === undefined
+      || pointLatitude === undefined
+      || pointLongitude === undefined
+      || !Number.isFinite(value)
+    ) {
+      throw new Error("Nearest GRIB2 grid point is undefined for the requested field");
+    }
+    return {
+      longitude: toSignedLongitude(pointLongitude),
+      latitude: pointLatitude,
+      value,
+    };
+  }
+
   const longitudeWeight = Math.max(0.01, Math.cos(latitude * Math.PI / 180));
   let bestIndex = -1;
   let bestScore = Number.POSITIVE_INFINITY;
   for (let index = 0; index < data.length; index += 1) {
     const pointLatitude = coordinates.latitude[index];
     const pointLongitude = coordinates.longitude[index];
-    if (pointLatitude === undefined || pointLongitude === undefined) continue;
+    if (
+      pointLatitude === undefined
+      || pointLongitude === undefined
+      || !Number.isFinite(pointLatitude)
+      || !Number.isFinite(pointLongitude)
+    ) continue;
     const deltaLatitude = pointLatitude - latitude;
     const deltaLongitude = wrappedLongitudeDelta(toSignedLongitude(pointLongitude), targetLongitude);
     const score = deltaLatitude * deltaLatitude + (deltaLongitude * longitudeWeight) ** 2;
@@ -208,6 +275,40 @@ function nearestPoint(message: GribMessage, longitude: number, latitude: number)
     latitude: pointLatitude,
     value,
   };
+}
+
+function nearestAxisIndex(values: readonly number[], distance: (value: number) => number): number {
+  let bestIndex = -1;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    if (value === undefined || !Number.isFinite(value)) continue;
+    const candidateDistance = distance(value);
+    if (candidateDistance < bestDistance) {
+      bestDistance = candidateDistance;
+      bestIndex = index;
+    }
+  }
+  return bestIndex;
+}
+
+function coordinateLayout(
+  message: GribMessage,
+  latitudes: readonly number[],
+  longitudes: readonly number[],
+  data: readonly number[],
+): GribCoordinateLayout {
+  const { rows, cols } = message.gridShape;
+  const expected = rows * cols;
+  if (data.length === expected && latitudes.length === expected && longitudes.length === expected) {
+    return "points";
+  }
+  if (data.length === expected && latitudes.length === rows && longitudes.length === cols) {
+    return "axes";
+  }
+  throw new Error(
+    `Bundled GRIB2 decoder returned misaligned grid arrays (${latitudes.length}/${longitudes.length}/${data.length}, expected points=${expected} or axes=${rows}/${cols})`,
+  );
 }
 
 function verticalFromKey(key: string): Omit<DecodedValue, "code" | "value" | "gridPoint" | "accumulation" | "average"> | null {
@@ -293,20 +394,6 @@ function contains(box: GribBox, longitude: number, latitude: number): boolean {
   return west <= east
     ? signedLongitude >= west && signedLongitude <= east
     : signedLongitude >= west || signedLongitude <= east;
-}
-
-function assertAligned(
-  message: GribMessage,
-  latitudes: readonly number[],
-  longitudes: readonly number[],
-  data: readonly number[],
-): void {
-  const expected = message.gridShape.rows * message.gridShape.cols;
-  if (latitudes.length !== expected || longitudes.length !== expected || data.length !== expected) {
-    throw new Error(
-      `Bundled GRIB2 decoder returned misaligned grid arrays (${latitudes.length}/${longitudes.length}/${data.length}, expected ${expected})`,
-    );
-  }
 }
 
 function wrappedLongitudeDelta(left: number, right: number): number {
