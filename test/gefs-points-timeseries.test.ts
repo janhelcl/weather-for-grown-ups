@@ -143,6 +143,26 @@ describe("GEFS multi-point time-series service", () => {
     expect(result.series[0]?.points[0]?.members?.map((sample) => sample.member)).toEqual(["c00", "p01", "p02"]);
   });
 
+  it("reports a fully cached matrix when every step is cached", async () => {
+    const service = new GefsPointsTimeSeriesService({
+      batchPointsGetter: { getPoints: async (query) => resultFor(query) },
+    });
+
+    const result = await service.getPointsTimeSeries({
+      points,
+      run,
+      startTime: "2026-08-24T03:00:00Z",
+      endTime: "2026-08-24T03:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["c00", "p01"],
+    });
+
+    expect(result.series).toHaveLength(1);
+    expect(result.series[0]?.allCacheHit).toBe(true);
+    expect(result.source.allCacheHit).toBe(true);
+  });
+
   it("rejects oversized point-step matrices before run resolution or data access", async () => {
     let resolutions = 0;
     let calls = 0;
@@ -168,6 +188,33 @@ describe("GEFS multi-point time-series service", () => {
 
     expect(resolutions).toBe(0);
     expect(calls).toBe(0);
+  });
+
+  it("rejects field-selection drift returned by a batched step", async () => {
+    const service = new GefsPointsTimeSeriesService({
+      batchPointsGetter: {
+        getPoints: async (query) => {
+          const result = resultFor(query);
+          return {
+            ...result,
+            selection: {
+              ...result.selection,
+              pressureLevelHpa: 700,
+            },
+          };
+        },
+      },
+    });
+
+    await expect(service.getPointsTimeSeries({
+      points,
+      run,
+      startTime: "2026-08-24T03:00:00Z",
+      endTime: "2026-08-24T03:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["c00", "p01"],
+    })).rejects.toThrow("changed field selection");
   });
 
   it("rejects grid-cell drift for a requested point across forecast steps", async () => {
