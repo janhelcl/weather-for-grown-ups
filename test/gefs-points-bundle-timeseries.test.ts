@@ -151,8 +151,13 @@ describe("GEFS multi-point mixed bundle time series", () => {
       run: run.toISOString(),
       startTime: "2026-08-24T03:00:00Z",
       endTime: "2026-08-24T06:00:00Z",
-      selection: { fields: ["temperature_2m"] },
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+        fields: ["temperature_2m", "wind_10m"],
+      },
       members: ["c00", "p01"],
+      quantiles: [0.5],
       maxPointSteps: 6,
     })).rejects.toThrow("grid point changed across forecast steps");
   });
