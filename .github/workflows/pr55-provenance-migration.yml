@@ -18,6 +18,7 @@ jobs:
         with:
           node-version: 24
       - run: python .github/pr55-migrate.py
+      - run: python .github/pr55-coverage.py
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
       - run: npm test
