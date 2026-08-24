@@ -24,14 +24,16 @@ describe("atmospheric model capability catalog", () => {
     expect(modelSupportsOperation("gefs_0p50", "diagnostic_timeseries")).toBe(true);
     expect(modelSupportsOperation("gfs_0p25", "points_timeseries")).toBe(true);
     expect(modelSupportsOperation("gefs_0p50", "points_timeseries")).toBe(true);
+    expect(modelSupportsOperation("gfs_0p25", "transect")).toBe(true);
+    expect(modelSupportsOperation("gefs_0p50", "transect")).toBe(true);
+    expect(modelSupportsOperation("gfs_0p25", "area_summary")).toBe(true);
+    expect(modelSupportsOperation("gefs_0p50", "area_summary")).toBe(true);
     expect(modelSupportsOperation("gfs_0p25", "run_comparison")).toBe(true);
     expect(modelSupportsOperation("gefs_0p50", "run_comparison")).toBe(true);
   });
 
-  it("keeps unsupported capabilities explicit", () => {
-    expect(modelSupportsOperation("gfs_0p25", "area_summary")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "area_summary")).toBe(false);
-    expect(modelSupportsOperation("gfs_0p25", "transect")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "transect")).toBe(false);
+  it("keeps ensemble-only operations explicit", () => {
+    expect(modelSupportsOperation("gfs_0p25", "ensemble_distribution")).toBe(false);
+    expect(modelSupportsOperation("gefs_0p50", "ensemble_distribution")).toBe(true);
   });
 });
