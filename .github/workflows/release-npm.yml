@@ -1,0 +1,32 @@
+name: Release npm package
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm ci --no-audit --no-fund
+      - name: Verify tag matches package version
+        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
+      - name: Verify publish payload
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --silent)"
+          prefix="$(mktemp -d)"
+          npm install --prefix "$prefix" --no-audit --no-fund "./$tarball"
+          "$prefix/node_modules/.bin/weather-for-grown-ups" --help
+      - run: npm publish
