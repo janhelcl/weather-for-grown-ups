@@ -131,7 +131,7 @@ export class Wgrib2StatsDecoder {
     } catch (error) {
       if (error instanceof Error && error.message.includes("ENOENT")) {
         throw new Error(
-          `Native wgrib2 was explicitly requested but was not found. Install it or unset WGRIB2_PATH/WFG_DECODER. Original error: ${error.message}`,
+          `Native wgrib2 is required but was not found because it was explicitly requested. Install it or unset WGRIB2_PATH/WFG_DECODER. Original error: ${error.message}`,
         );
       }
       throw error;
