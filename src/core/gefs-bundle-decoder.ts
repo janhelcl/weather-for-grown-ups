@@ -16,7 +16,6 @@ import {
   type RawVariableDefinition,
   type VariableDefinition,
 } from "../catalog/variables.js";
-import { deriveDewPointC, derivePotentialTemperatureK } from "../derived/thermodynamics.js";
 import { deriveWind } from "../derived/wind.js";
 import type {
   GefsBundleSelection,
@@ -26,6 +25,7 @@ import {
   summarizeCircularDegrees,
   summarizeNumericDistribution,
 } from "./ensemble-statistics.js";
+import { deriveGefsProfileValue, gefsRawPressureKey } from "./gefs-profile-derivation.js";
 import type { DecodedValue } from "./types.js";
 
 export interface PreparedGefsBundleSelection {
@@ -99,7 +99,7 @@ export function decodeGefsMemberBundle(input: {
     input.selection.requestedPressureVariables.map(({ id }) => ({
       variable: id,
       pressureLevelHpa,
-      value: derivedPressureValue(id, pressureLevelHpa, rawPressureValues),
+      value: deriveGefsProfileValue(id, pressureLevelHpa, rawPressureValues),
     })),
   );
   const fields = input.selection.fields.map((id) =>
@@ -218,31 +218,10 @@ function readRawPressureValues(
       if (!candidate) {
         throw new Error(`Decoded GEFS ${member} bundle is missing ${definition.gfsCode}@${pressureLevelHpa}mb`);
       }
-      values.set(pressureKey(id, pressureLevelHpa), normalizePressureValue(definition, candidate.value));
+      values.set(gefsRawPressureKey(id, pressureLevelHpa), normalizePressureValue(definition, candidate.value));
     }
   }
   return values;
-}
-
-function derivedPressureValue(
-  variable: GefsProfileVariableId,
-  pressureLevelHpa: number,
-  rawValues: ReadonlyMap<string, number>,
-): number {
-  switch (variable) {
-    case "dew_point":
-      return deriveDewPointC(
-        requireRawPressure(rawValues, "temperature", pressureLevelHpa),
-        requireRawPressure(rawValues, "relative_humidity", pressureLevelHpa),
-      );
-    case "potential_temperature":
-      return derivePotentialTemperatureK(
-        requireRawPressure(rawValues, "temperature", pressureLevelHpa),
-        pressureLevelHpa,
-      );
-    default:
-      return requireRawPressure(rawValues, variable, pressureLevelHpa);
-  }
 }
 
 function readFieldValue(
@@ -338,18 +317,6 @@ function normalizeFieldValue(definition: RawGefsFieldDefinition, value: number):
   return value;
 }
 
-function requireRawPressure(
-  values: ReadonlyMap<string, number>,
-  variable: GefsPressureVariableId,
-  pressureLevelHpa: number,
-): number {
-  const value = values.get(pressureKey(variable, pressureLevelHpa));
-  if (value === undefined) {
-    throw new Error(`Internal GEFS bundle dependency missing: ${variable}@${pressureLevelHpa}mb`);
-  }
-  return value;
-}
-
 function requiredMemberPressureValue(
   sample: DecodedGefsMemberBundle,
   variable: GefsProfileVariableId,
@@ -372,10 +339,6 @@ function requiredOutput(values: Readonly<Record<string, number>>, output: string
   const value = values[output];
   if (value === undefined) throw new Error(`GEFS bundle aggregation is missing ${field}.${output}`);
   return value;
-}
-
-function pressureKey(variable: GefsPressureVariableId, pressureLevelHpa: number): string {
-  return `${variable}@${pressureLevelHpa}`;
 }
 
 function sameTemporal(left: GefsFieldTemporalResult, right: GefsFieldTemporalResult): boolean {
