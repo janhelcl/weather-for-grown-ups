@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { GefsEnsembleProfileService } from "../src/core/gefs-ensemble-profile.js";
-import { deriveDewPointC, derivePotentialTemperatureK } from "../src/derived/thermodynamics.js";
+import { deriveSpecificHumidityFromRelativeHumidityKgKg } from "../src/derived/humidity.js";
+import {
+  deriveAirDensityKgM3,
+  deriveDewPointC,
+  deriveEquivalentPotentialTemperatureK,
+  deriveMixingRatioKgKg,
+  derivePotentialTemperatureK,
+  deriveVirtualTemperatureC,
+  deriveWetBulbTemperatureC,
+} from "../src/derived/thermodynamics.js";
 import { gefsEnsembleProfileQuerySchema } from "../src/schema/gefs-ensemble-profile.js";
 
 const run = "2026-08-24T00:00:00Z";
@@ -67,6 +76,55 @@ describe("GEFS derived pressure-profile variables", () => {
     });
   });
 
+  it("exposes the GFS moisture thermodynamic family from member T/RH/pressure", async () => {
+    const service = new GefsEnsembleProfileService({
+      concurrency: 1,
+      source: { fetchSelection: vi.fn(async (request) => ({ path: request.member, cacheHit: true })) },
+      decoder: {
+        extractPoint: vi.fn(async (path) => {
+          const warm = path === "p01";
+          return [
+            { code: "TMP", pressureHpa: 850, value: 273.15 + (warm ? 14 : 10), gridPoint: { latitude: 50, longitude: 14.5 } },
+            { code: "RH", pressureHpa: 850, value: warm ? 80 : 55, gridPoint: { latitude: 50, longitude: 14.5 } },
+          ];
+        }),
+      },
+    });
+    const variables = [
+      "specific_humidity",
+      "mixing_ratio",
+      "virtual_temperature",
+      "air_density",
+      "wet_bulb_temperature",
+      "equivalent_potential_temperature",
+    ] as const;
+
+    const result = await service.getProfile({
+      latitude: 50,
+      longitude: 14.5,
+      run,
+      validTime,
+      variables: [...variables],
+      pressureLevelsHpa: [850],
+      members: ["c00", "p01"],
+      includeMembers: true,
+    });
+
+    const q = deriveSpecificHumidityFromRelativeHumidityKgKg(10, 55, 850);
+    const expected = [
+      q,
+      deriveMixingRatioKgKg(q),
+      deriveVirtualTemperatureC(10, q),
+      deriveAirDensityKgM3(10, q, 850),
+      deriveWetBulbTemperatureC(10, q, 850),
+      deriveEquivalentPotentialTemperatureK(10, q, 850),
+    ];
+    expect(result.members?.[0]?.values.map((value) => value.value)).toEqual(expected);
+    expect(result.summaries.map((summary) => summary.dependencies)).toEqual(
+      variables.map(() => ["temperature", "relative_humidity"]),
+    );
+  });
+
   it("deduplicates raw dependencies when raw and derived variables are requested together", async () => {
     const fetchSelection = vi.fn(async (request) => ({ path: request.member, cacheHit: true }));
     const service = new GefsEnsembleProfileService({
@@ -84,13 +142,34 @@ describe("GEFS derived pressure-profile variables", () => {
       longitude: 14.5,
       run,
       validTime,
-      variables: ["temperature", "dew_point", "potential_temperature"],
+      variables: ["temperature", "dew_point", "specific_humidity", "equivalent_potential_temperature"],
       pressureLevelsHpa: [850],
       members: ["c00", "p01"],
     });
 
     expect(fetchSelection).toHaveBeenCalledTimes(2);
     expect(fetchSelection.mock.calls[0]?.[0]).toMatchObject({ variableCodes: ["TMP", "RH"] });
+  });
+
+  it("supports native vertical velocity only on its verified 850 hPa pgrb2a surface", () => {
+    expect(() => gefsEnsembleProfileQuerySchema.parse({
+      latitude: 50,
+      longitude: 14,
+      run,
+      validTime,
+      variables: ["vertical_velocity"],
+      pressureLevelsHpa: [850],
+      members: ["c00", "p01"],
+    })).not.toThrow();
+    expect(() => gefsEnsembleProfileQuerySchema.parse({
+      latitude: 50,
+      longitude: 14,
+      run,
+      validTime,
+      variables: ["vertical_velocity"],
+      pressureLevelsHpa: [700],
+      members: ["c00", "p01"],
+    })).toThrow("raw dependencies are unavailable");
   });
 
   it("rejects a derived variable when one dependency is unavailable at a pressure level", () => {

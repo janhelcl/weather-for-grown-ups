@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   gefsProfileRawDependencies,
+  isNativeGefsPressureVariable,
   sortGefsMembers,
   type GefsMember,
   type GefsPressureVariableId,
@@ -16,10 +17,6 @@ import {
   GefsS3SubsetCache,
   type GefsMemberSelectionSource,
 } from "../cache/gefs-s3-subset-cache.js";
-import {
-  deriveDewPointC,
-  derivePotentialTemperatureK,
-} from "../derived/thermodynamics.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
 import {
   gefsEnsembleProfileQuerySchema,
@@ -31,6 +28,7 @@ import { mapConcurrent } from "./concurrency.js";
 import { summarizeNumericDistribution } from "./ensemble-statistics.js";
 import { DEFAULT_GEFS_MEMBER_CONCURRENCY, type GefsPointDecoder } from "./gefs-ensemble.js";
 import { GefsLatestRunResolver, type GefsLatestRunProvider } from "./gefs-latest-run.js";
+import { deriveGefsProfileValue, gefsRawPressureKey } from "./gefs-profile-derivation.js";
 import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
 
 export interface GefsEnsembleProfileServiceOptions {
@@ -119,9 +117,9 @@ export class GefsEnsembleProfileService {
         if (!output) throw new Error(`GEFS profile variable ${id} has no output definition`);
         return {
           variable: id,
-          ...(definition.kind === "raw"
-            ? { gfsCode: definition.gfsCode }
-            : { dependencies: [...definition.dependencies] }),
+          ...(isNativeGefsPressureVariable(id)
+            ? { gfsCode: (VARIABLE_CATALOG[id] as RawVariableDefinition).gfsCode }
+            : { dependencies: gefsProfileRawDependencies(id) }),
           pressureLevelHpa,
           outputField: output.field,
           unit: output.unit,
@@ -195,7 +193,7 @@ export class GefsEnsembleProfileService {
           throw new Error(`Decoded GEFS ${member} profile fields resolved to inconsistent grid points`);
         }
         gridPoint ??= candidate.gridPoint;
-        rawValues.set(rawKey(id, pressureLevelHpa), normalizeValue(definition, candidate.value));
+        rawValues.set(gefsRawPressureKey(id, pressureLevelHpa), normalizeValue(definition, candidate.value));
       }
     }
 
@@ -204,7 +202,7 @@ export class GefsEnsembleProfileService {
       requestedVariables.map(({ id }) => ({
         variable: id,
         pressureLevelHpa,
-        value: memberVariableValue(id, pressureLevelHpa, rawValues),
+        value: deriveGefsProfileValue(id, pressureLevelHpa, rawValues),
       })),
     );
     return { member, cacheHit: file.cacheHit, gridPoint, values };
@@ -222,43 +220,6 @@ function expandRawDependencies(
     id,
     definition: VARIABLE_CATALOG[id] as RawVariableDefinition,
   }));
-}
-
-function memberVariableValue(
-  variable: GefsProfileVariableId,
-  pressureLevelHpa: number,
-  rawValues: ReadonlyMap<string, number>,
-): number {
-  switch (variable) {
-    case "dew_point":
-      return deriveDewPointC(
-        requireRaw(rawValues, "temperature", pressureLevelHpa),
-        requireRaw(rawValues, "relative_humidity", pressureLevelHpa),
-      );
-    case "potential_temperature":
-      return derivePotentialTemperatureK(
-        requireRaw(rawValues, "temperature", pressureLevelHpa),
-        pressureLevelHpa,
-      );
-    default:
-      return requireRaw(rawValues, variable, pressureLevelHpa);
-  }
-}
-
-function requireRaw(
-  values: ReadonlyMap<string, number>,
-  variable: GefsPressureVariableId,
-  pressureLevelHpa: number,
-): number {
-  const value = values.get(rawKey(variable, pressureLevelHpa));
-  if (value === undefined) {
-    throw new Error(`Internal GEFS derived-variable dependency missing: ${variable}@${pressureLevelHpa}mb`);
-  }
-  return value;
-}
-
-function rawKey(variable: GefsPressureVariableId, pressureLevelHpa: number): string {
-  return `${variable}@${pressureLevelHpa}`;
 }
 
 function normalizeValue(variable: RawVariableDefinition, value: number): number {

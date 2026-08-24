@@ -17,7 +17,7 @@ export const gefsEnsembleProfileQuerySchema = z.object({
   run: gefsRunSelectorSchema,
   validTime: isoDateTimeSchema.describe("Forecast valid time on the native three-hour GEFS cadence"),
   variables: z.array(gefsProfileVariableSchema).min(1).max(GEFS_PROFILE_VARIABLES.length).describe(
-    "GEFS pgrb2a pressure-profile variables. Dew point and potential temperature are derived independently inside each member before ensemble aggregation.",
+    "GEFS pgrb2a pressure-profile variables. Verified native fields are read directly; moisture thermodynamics unavailable as native pgrb2a messages are derived independently inside each member from temperature, relative humidity and pressure before ensemble aggregation.",
   ),
   pressureLevelsHpa: z.array(z.number().positive()).min(1).max(12).describe(
     "Published GEFS pressure surfaces in hPa; every raw dependency required by the selected variables must exist at every selected level",

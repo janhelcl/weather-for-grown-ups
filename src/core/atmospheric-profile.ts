@@ -57,26 +57,19 @@ export function memberValuesToLevels(
 
 function setPressureValue(level: ProfileLevel, variable: GefsProfileVariableId, value: number): void {
   switch (variable) {
-    case "temperature":
-      level.temperatureC = value;
-      return;
-    case "relative_humidity":
-      level.relativeHumidityPct = value;
-      return;
-    case "u_wind":
-      level.uWindMs = value;
-      return;
-    case "v_wind":
-      level.vWindMs = value;
-      return;
-    case "geopotential_height":
-      level.geopotentialHeightGpm = value;
-      return;
-    case "dew_point":
-      level.dewPointC = value;
-      return;
-    case "potential_temperature":
-      level.potentialTemperatureK = value;
-      return;
+    case "temperature": level.temperatureC = value; return;
+    case "relative_humidity": level.relativeHumidityPct = value; return;
+    case "u_wind": level.uWindMs = value; return;
+    case "v_wind": level.vWindMs = value; return;
+    case "geopotential_height": level.geopotentialHeightGpm = value; return;
+    case "vertical_velocity": level.verticalVelocityPaS = value; return;
+    case "dew_point": level.dewPointC = value; return;
+    case "potential_temperature": level.potentialTemperatureK = value; return;
+    case "specific_humidity": level.specificHumidityKgKg = value; return;
+    case "mixing_ratio": level.mixingRatioKgKg = value; return;
+    case "virtual_temperature": level.virtualTemperatureC = value; return;
+    case "air_density": level.airDensityKgM3 = value; return;
+    case "wet_bulb_temperature": level.wetBulbTemperatureC = value; return;
+    case "equivalent_potential_temperature": level.equivalentPotentialTemperatureK = value; return;
   }
 }

@@ -3,13 +3,15 @@ import { PARCEL_DIAGNOSTIC_CATALOG } from "./parcel-diagnostics.js";
 import { PROFILE_DIAGNOSTIC_CATALOG } from "./profile-diagnostics.js";
 import {
   GEFS_PGRB2A_COMMON_PRESSURE_LEVELS_HPA,
+  GEFS_PGRB2A_VERTICAL_VELOCITY_LEVELS_HPA,
   GEFS_PGRB2A_WIND_EXTRA_PRESSURE_LEVELS_HPA,
   GEFS_PROFILE_VARIABLES,
   gefsProfileRawDependencies,
+  isNativeGefsPressureVariable,
   type GefsProfileVariableId,
 } from "./gefs.js";
 import { GEFS_PGRB2A_FIELD_CATALOG } from "./gefs-fields.js";
-import { VARIABLE_CATALOG } from "./variables.js";
+import { VARIABLE_CATALOG, type RawVariableDefinition } from "./variables.js";
 
 export function getGefsCatalog() {
   return {
@@ -18,28 +20,30 @@ export function getGefsCatalog() {
     members: 31,
     levelType: "isobaric_hpa" as const,
     availabilityNote:
-      "The WFG GEFS pgrb2a contract exposes only combinations verified for this product. Pressure-level support is intentionally narrower than deterministic GFS; pgrb2b expansion is a separate product surface.",
+      "The WFG GEFS pgrb2a contract exposes only combinations verified for this product. Pressure-level support is intentionally narrower than deterministic GFS; where pgrb2a lacks specific humidity, WFG derives moisture thermodynamics member-by-member from temperature, relative humidity and pressure rather than pretending the raw field exists.",
     variables: GEFS_PROFILE_VARIABLES.map((id) => {
       const definition = VARIABLE_CATALOG[id];
       const supportedPressureLevelsHpa = supportedLevels(id);
-      if (definition.kind === "raw") {
+      if (isNativeGefsPressureVariable(id)) {
+        const rawDefinition = definition as RawVariableDefinition;
         return {
           id,
-          kind: definition.kind,
-          levelType: definition.levelType,
-          gfsCode: definition.gfsCode,
-          sourceUnit: definition.sourceUnit,
-          description: definition.description,
-          outputs: [...definition.outputs],
+          kind: "raw" as const,
+          levelType: rawDefinition.levelType,
+          gfsCode: rawDefinition.gfsCode,
+          sourceUnit: rawDefinition.sourceUnit,
+          description: rawDefinition.description,
+          outputs: [...rawDefinition.outputs],
           supportedPressureLevelsHpa,
         };
       }
+      const dependencies = gefsProfileRawDependencies(id);
       return {
         id,
-        kind: definition.kind,
+        kind: "derived" as const,
         levelType: definition.levelType,
-        dependencies: [...definition.dependencies],
-        description: `${definition.description}; evaluated independently for every selected GEFS member before distribution aggregation`,
+        dependencies,
+        description: `${definition.description}; evaluated independently for every selected GEFS member from ${dependencies.join(", ")} before distribution aggregation`,
         outputs: [...definition.outputs],
         supportedPressureLevelsHpa,
       };
@@ -103,6 +107,7 @@ export function getGefsCatalog() {
 }
 
 function supportedLevels(variable: GefsProfileVariableId): number[] {
+  if (variable === "vertical_velocity") return [...GEFS_PGRB2A_VERTICAL_VELOCITY_LEVELS_HPA];
   const dependencies = gefsProfileRawDependencies(variable);
   const windOnly = dependencies.every((dependency) => dependency === "u_wind" || dependency === "v_wind");
   return [
