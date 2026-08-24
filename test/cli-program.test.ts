@@ -30,6 +30,7 @@ const EXPECTED_COMMANDS = [
   "ensemble-timeseries",
   "ensemble-fields",
   "ensemble-fields-timeseries",
+  "ensemble-fields-points",
   "ensemble-parcel",
   "ensemble-parcel-timeseries",
   "compare-gfs-gefs",
