@@ -3,7 +3,6 @@ import { PARCEL_DIAGNOSTIC_CATALOG } from "./parcel-diagnostics.js";
 import { PROFILE_DIAGNOSTIC_CATALOG } from "./profile-diagnostics.js";
 import {
   GEFS_PGRB2A_COMMON_PRESSURE_LEVELS_HPA,
-  GEFS_PGRB2A_PRESSURE_VARIABLES,
   GEFS_PGRB2A_WIND_EXTRA_PRESSURE_LEVELS_HPA,
   GEFS_PROFILE_VARIABLES,
   gefsProfileRawDependencies,
@@ -11,8 +10,6 @@ import {
 } from "./gefs.js";
 import { GEFS_PGRB2A_FIELD_CATALOG } from "./gefs-fields.js";
 import { VARIABLE_CATALOG } from "./variables.js";
-
-const rawPressureVariables = new Set<string>(GEFS_PGRB2A_PRESSURE_VARIABLES);
 
 export function getGefsCatalog() {
   return {
