@@ -29,7 +29,7 @@ CLI is operation-oriented (`--model gfs|gefs` where an operation is shared). MCP
 | Whole-profile diagnostics | ✅ | ✅ per member → structural summaries |
 | Diagnostic time series | ✅ layer/profile/parcel | ✅ layer/profile |
 | Parcel / CAPE / CIN | ✅ | — current GEFS contract lacks required surface inputs |
-| Multi-point time series | ✅ | — |
+| Multi-point time series | ✅ | ✅ one-field distribution per point-step |
 | Transect | ✅ | — |
 | Area statistics | ✅ | — |
 | Run-to-run comparison | ✅ deterministic field deltas | ✅ distribution shifts |
@@ -62,6 +62,7 @@ The ensemble surface currently includes:
 - scalar pressure-field member distributions;
 - multi-variable/multi-level ensemble pressure profiles;
 - **member-first multi-point distributions** that fetch one selected field slice per member and reuse it across all requested coordinates;
+- **member-first multi-point time series** that repeat that reuse pattern across native three-hour steps from one fixed cycle;
 - native three-hour raw-field ensemble time series from one fixed cycle;
 - member-first layer diagnostics using the same lapse-rate/shear/stability physics as GFS;
 - member-first freezing-level and sampled inversion diagnostics using the same whole-profile kernel as GFS;
@@ -70,7 +71,7 @@ The ensemble surface currently includes:
 - aligned deterministic GFS-vs-GEFS comparison from one shared initialization cycle;
 - direct NOAA AWS `.idx` byte-range access and immutable local caching.
 
-See [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md), [GEFS_MULTI_POINT.md](GEFS_MULTI_POINT.md), [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md), [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md), [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md), and [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md).
+See [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md), [GEFS_MULTI_POINT.md](GEFS_MULTI_POINT.md), [GEFS_MULTI_POINT_TIME_SERIES.md](GEFS_MULTI_POINT_TIME_SERIES.md), [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md), [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md), [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md), and [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md).
 
 ## Install
 
@@ -170,6 +171,25 @@ wfg timeseries \
 ```
 
 The current GEFS raw time-series primitive accepts one raw variable and one pressure surface. `ensemble-profile` and `ensemble-timeseries` remain compatibility aliases over the same unified dispatchers.
+
+### Multi-point time series
+
+```bash
+wfg points-timeseries \
+  --model gefs \
+  --point 50.08,14.43 \
+  --point 49.20,16.61 \
+  --point 47.81,13.06 \
+  --from 2026-08-24T06:00:00Z \
+  --to 2026-08-25T18:00:00Z \
+  --vars temperature \
+  --levels 850 \
+  --quantiles 0.1,0.5,0.9 \
+  --gte 10 \
+  --json
+```
+
+GEFS multi-point time series fixes one model cycle for the complete range. At each native three-hour step WFG fetches one selected field slice per member, samples all requested coordinates locally, and summarizes each location across members. `maxSteps` defaults to 80 and `maxSamples` defaults to 1,600 point-steps; both can be lowered or raised within schema limits. Add `--include-members` only when raw member values are required at every point-step.
 
 ### Layer diagnostics
 
@@ -297,6 +317,8 @@ Current MCP tools include:
 - `get_gefs_points`
 - `get_gfs_timeseries`
 - `get_gefs_ensemble_timeseries`
+- `get_gfs_points_timeseries`
+- `get_gefs_points_timeseries`
 - `get_gfs_layer_diagnostics`
 - `get_gefs_layer_diagnostics`
 - `get_gfs_profile_diagnostics`
@@ -306,7 +328,6 @@ Current MCP tools include:
 - `get_gfs_parcel_diagnostics`
 - `get_gefs_ensemble`
 - `compare_gfs_to_gefs`
-- `get_gfs_points_timeseries`
 - `get_gfs_transect`
 - `compare_gfs_runs`
 - `compare_gefs_runs`
@@ -320,7 +341,9 @@ MCP wrappers stay model-specific even where CLI operations are unified; this kee
 
 GEFS multi-point queries are member-first. One selected raw-field GRIB slice is fetched/cached for each member, then every requested coordinate is sampled locally from those same slices. This makes upstream selected-field transfer scale with member count rather than `members × points`, while each location still gets its own model-native ensemble distribution.
 
-For each requested coordinate all members must resolve to the same GEFS grid point. Member values are summary-only by default and opt-in for audit.
+Multi-point time series repeat that same member-first batch once per native forecast step from one fixed cycle. Selected-field upstream work therefore scales with `steps × members`, not `steps × members × points`.
+
+For each requested coordinate all members must resolve to the same GEFS grid point. Multi-point time series additionally require that sampled grid point to remain stable across forecast steps. Member values are summary-only by default and opt-in for audit.
 
 ### Layer diagnostics
 
@@ -347,7 +370,7 @@ Conditional distributions include the number of contributing members. If no memb
 
 ### Through time
 
-GEFS diagnostic time series preserve those same semantics at every native three-hour step. `run="latest"` resolves one cycle capable of satisfying the **complete range**, then each step receives that explicit run. Member fractions do not become calibrated probabilities merely because they are tracked through time.
+GEFS raw-field and diagnostic time series preserve their one-time semantics at every native three-hour step. `run="latest"` resolves one cycle capable of satisfying the **complete range**, then each step receives that explicit run. Member fractions do not become calibrated probabilities merely because they are tracked through time.
 
 ### Across model cycles
 
@@ -365,7 +388,7 @@ GFS query tools support:
 
 ### GEFS
 
-GEFS one-time tools—including multi-point—support `latest` or an explicit 00/06/12/18Z cycle. Multi-point resolves `latest` exactly once for the complete coordinate set. Time-series tools use range-aware `latest`: one cycle must cover both ends of the complete requested range for all selected members, and that run is fixed across intermediate steps.
+GEFS one-time tools—including multi-point—support `latest` or an explicit 00/06/12/18Z cycle. Multi-point resolves `latest` exactly once for the complete coordinate set. Time-series tools—including multi-point time series—use range-aware `latest`: one cycle must cover both ends of the complete requested range for all selected members, and that run is fixed across intermediate steps.
 
 GEFS run comparison uses `latest` as the newest anchor cycle whose selected members exist at the requested valid time, or accepts an explicit anchor. Older comparison cycles are then generated at six-hour intervals and requested explicitly so the comparison cannot drift while new output publishes.
 
@@ -377,7 +400,7 @@ The current WFG GEFS contract uses native three-hour output through `f384`.
 
 **NOAA AWS Open Data** is used for reusable deterministic slices and all GEFS member access. WFG reads `.idx` inventories, downloads selected GRIB byte ranges, caches immutable slices, and samples locally with `wgrib2`.
 
-GEFS multi-field/profile/diagnostic queries stitch selected messages into one cached slice per member. GEFS multi-point queries use one cached selected-field slice per member and sample all coordinates locally from it. Byte-range requests are sequential within a member; member and time-step work is bounded-concurrent.
+GEFS multi-field/profile/diagnostic queries stitch selected messages into one cached slice per member. GEFS multi-point queries use one cached selected-field slice per member and sample all coordinates locally from it. GEFS multi-point time series repeat that selected-field/member reuse at each native step from the same fixed cycle. Byte-range requests are sequential within a member; member and time-step work is bounded-concurrent.
 
 Default cache/state: `~/.cache/wfg/`. Override with `WFG_CACHE_DIR`.
 
@@ -408,6 +431,7 @@ See [LIVE_SMOKE.md](LIVE_SMOKE.md).
 - [ARCHITECTURE.md](ARCHITECTURE.md) — core boundaries, data paths, caching, surface design
 - [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — GEFS member/profile/raw-series contract
 - [GEFS_MULTI_POINT.md](GEFS_MULTI_POINT.md) — member-first spatial sampling and per-point distribution semantics
+- [GEFS_MULTI_POINT_TIME_SERIES.md](GEFS_MULTI_POINT_TIME_SERIES.md) — bounded fixed-cycle spatial × temporal ensemble composition
 - [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md) — freezing/inversion ensemble semantics
 - [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md) — fixed-cycle diagnostic temporal composition
 - [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md) — cycle-to-cycle ensemble distribution evolution

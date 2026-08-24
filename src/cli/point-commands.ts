@@ -3,11 +3,13 @@ import { AtmosphericBatchPointsService } from "../core/atmospheric-batch-points-
 import { AtmosphericProfileService } from "../core/atmospheric-profile-service.js";
 import { AtmosphericRunComparisonService } from "../core/atmospheric-run-comparison-service.js";
 import { AtmosphericTimeSeriesService } from "../core/atmospheric-timeseries-service.js";
+import { GefsPointsTimeSeriesService } from "../core/gefs-points-timeseries.js";
 import { LatestRunResolver } from "../core/latest-run.js";
 import { PointsTimeSeriesService } from "../core/points-time-series.js";
 import { gefsBatchPointsResultSchema } from "../schema/gefs-batch-points.js";
 import { gefsEnsembleProfileResultSchema } from "../schema/gefs-ensemble-profile.js";
 import { gefsEnsembleTimeSeriesResultSchema } from "../schema/gefs-ensemble-timeseries.js";
+import { gefsPointsTimeSeriesResultSchema } from "../schema/gefs-points-timeseries.js";
 import { gefsRunComparisonResultSchema } from "../schema/gefs-run-comparison.js";
 import type { PointCoordinate, ProfileSourceId } from "../schema/query.js";
 import {
@@ -21,7 +23,6 @@ import { runComparisonResultSchema } from "../schema/run-comparison-result.js";
 import {
   DEFAULT_GEFS_PROFILE_VARIABLES,
   DEFAULT_LEVELS,
-  RUN_HELP,
   collectPoint,
   parseAtmosphericModel,
   parseGefsMembers,
@@ -336,38 +337,100 @@ export function registerPointCommands(program: Command): void {
 
   program
     .command("points-timeseries")
-    .description("Fetch native GFS forecast steps for multiple points using one shared S3 GRIB slice per step")
+    .description("Fetch native forecast time series for multiple points from GFS or GEFS")
+    .option("--model <gfs|gefs>", "Atmospheric model family", "gfs")
     .requiredOption("--point <lat,lon>", "Point to sample; repeat up to 20 times", collectPoint)
-    .option("--run <iso|latest|latest_complete>", RUN_HELP, "latest")
+    .option("--run <iso|latest|latest_complete>", "Model initialization; GEFS accepts latest or an explicit cycle", "latest")
     .requiredOption("--from <iso>", "Inclusive valid-time range start")
     .requiredOption("--to <iso>", "Inclusive valid-time range end")
-    .option("--vars <list>", "Comma-separated pressure-level variables")
-    .option("--levels <list>", "Comma-separated pressure levels in hPa")
-    .option("--fields <list>", "Comma-separated non-isobaric field IDs")
+    .option("--vars <list>", "Pressure-level variables; GEFS requires exactly one")
+    .option("--levels <list>", "Pressure levels in hPa; GEFS requires exactly one")
+    .option("--fields <list>", "GFS-only comma-separated non-isobaric field IDs")
+    .option("--members <list>", "GEFS-only comma-separated members (c00,p01..p30); default all 31")
+    .option("--quantiles <list>", "GEFS-only comma-separated quantiles from 0 to 1")
+    .option("--gte <number>", "GEFS-only threshold in normalized output units", Number)
+    .option("--include-members", "GEFS-only: include member values for every point-step")
     .option("--max-steps <number>", "Maximum native forecast steps", Number, 80)
     .option("--max-samples <number>", "Maximum point × forecast-step samples", Number, 1600)
     .option("--json", "Output JSON")
     .action(async (options) => {
-      const selection = pointSelection(options.vars, options.levels, options.fields);
-      const result = await new PointsTimeSeriesService().getPointsTimeSeries({
-        points: options.point as PointCoordinate[],
+      const model = parseAtmosphericModel(options.model);
+      const requestedPoints = options.point as PointCoordinate[];
+
+      if (model === "gfs") {
+        if (options.members !== undefined || options.quantiles !== undefined || options.gte !== undefined || options.includeMembers) {
+          throw new Error("--members, --quantiles, --gte and --include-members are only valid with --model gefs");
+        }
+        const selection = pointSelection(options.vars, options.levels, options.fields);
+        const result = await new PointsTimeSeriesService().getPointsTimeSeries({
+          points: requestedPoints,
+          run: options.run,
+          startTime: options.from,
+          endTime: options.to,
+          ...selection,
+          maxSteps: options.maxSteps,
+          maxSamples: options.maxSamples,
+        });
+        pointsTimeSeriesResultSchema.parse(result);
+        if (options.json) return console.log(JSON.stringify(result, null, 2));
+        console.log(`GFS ${result.run}  ${result.requestedStartTime} → ${result.requestedEndTime}`);
+        console.log(`Source ${result.source.provider} (${result.source.access}); one shared selected-message slice per forecast step`);
+        for (const step of result.series) {
+          console.log(`Valid ${step.validTime}  f${String(step.forecastHour).padStart(3, "0")}  shared-slice cacheHit=${step.cacheHit}`);
+          for (const [index, point] of step.points.entries()) {
+            console.log(`Point ${index + 1}: ${point.requestedPoint.latitude},${point.requestedPoint.longitude} → grid ${point.gridPoint.latitude},${point.gridPoint.longitude}`);
+            if (point.levels.length > 0) console.table(point.levels);
+            if (point.fields) console.dir(point.fields, { depth: null });
+          }
+        }
+        return;
+      }
+
+      if (options.fields !== undefined) throw new Error("--fields is a deterministic GFS option and is not valid with --model gefs");
+      if (options.run === "latest_complete") throw new Error("GEFS multi-point time series support --run latest or an explicit GEFS cycle, not latest_complete");
+      const variables = parseGefsVariables(options.vars ?? "temperature");
+      const levels = parseLevels(options.levels ?? "850");
+      if (variables.length !== 1 || levels.length !== 1) {
+        throw new Error("GEFS multi-point time series require exactly one --vars variable and one --levels pressure surface");
+      }
+      const variable = variables[0];
+      const pressureLevelHpa = levels[0];
+      if (variable === undefined || pressureLevelHpa === undefined) throw new Error("GEFS multi-point time-series selection is empty");
+      const result = gefsPointsTimeSeriesResultSchema.parse(await new GefsPointsTimeSeriesService().getPointsTimeSeries({
+        points: requestedPoints,
         run: options.run,
         startTime: options.from,
         endTime: options.to,
-        ...selection,
+        variable,
+        pressureLevelHpa,
+        ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+        quantiles: parseNumbers(options.quantiles ?? "0.1,0.5,0.9"),
+        ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
+        includeMembers: Boolean(options.includeMembers),
         maxSteps: options.maxSteps,
         maxSamples: options.maxSamples,
-      });
-      pointsTimeSeriesResultSchema.parse(result);
+      }));
       if (options.json) return console.log(JSON.stringify(result, null, 2));
-      console.log(`GFS ${result.run}  ${result.requestedStartTime} → ${result.requestedEndTime}`);
-      console.log(`Source ${result.source.provider} (${result.source.access}); one shared selected-message slice per forecast step`);
+      console.log(`GEFS ${result.run}  ${result.startTime} → ${result.endTime}  ${result.series.length} steps`);
+      console.log(`${result.selection.variable}@${result.selection.pressureLevelHpa}hPa (${result.selection.unit}); ${result.selection.members.length} members; ${requestedPoints.length} points`);
+      console.log(`Source ${result.source.provider} (${result.source.access}); one selected field slice per member and forecast step; allCacheHit=${result.source.allCacheHit}`);
       for (const step of result.series) {
-        console.log(`Valid ${step.validTime}  f${String(step.forecastHour).padStart(3, "0")}  shared-slice cacheHit=${step.cacheHit}`);
-        for (const [index, point] of step.points.entries()) {
-          console.log(`Point ${index + 1}: ${point.requestedPoint.latitude},${point.requestedPoint.longitude} → grid ${point.gridPoint.latitude},${point.gridPoint.longitude}`);
-          if (point.levels.length > 0) console.table(point.levels);
-          if (point.fields) console.dir(point.fields, { depth: null });
+        console.log(`Valid ${step.validTime}  f${String(step.forecastHour).padStart(3, "0")}  allCacheHit=${step.allCacheHit}`);
+        console.table(step.points.map((point, index) => ({
+          point: index + 1,
+          requested: `${point.requestedPoint.latitude},${point.requestedPoint.longitude}`,
+          grid: `${point.gridPoint.latitude},${point.gridPoint.longitude}`,
+          mean: point.summary.mean,
+          populationStdDev: point.summary.populationStdDev,
+          min: point.summary.min,
+          max: point.summary.max,
+          ...(point.summary.threshold ? { thresholdFraction: point.summary.threshold.fraction } : {}),
+        })));
+        if (result.includeMembers) {
+          for (const [index, point] of step.points.entries()) {
+            console.log(`Members at point ${index + 1} (${point.requestedPoint.latitude},${point.requestedPoint.longitude})`);
+            console.table(point.members ?? []);
+          }
         }
       }
     });

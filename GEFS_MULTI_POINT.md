@@ -103,16 +103,19 @@ Both model families support the conceptual `points` operation:
 
 This is another example of WFG's architecture rule: unify operations, preserve model semantics.
 
-## Relationship to future multi-point time series
+## Multi-point time series
 
-The natural temporal composition is:
+The temporal composition is implemented as `points-timeseries --model gefs` and MCP tool `get_gefs_points_timeseries`:
 
 ```text
-one forecast step
-  -> one selected field slice per member
-  -> sample all requested points
-  -> summarize per point
-repeat across native GEFS steps from one fixed cycle
+one fixed GEFS run
+  -> one forecast step
+     -> one selected field slice per member
+     -> sample all requested points
+     -> summarize per point
+  -> repeat across native three-hour steps
 ```
 
-That can support `points-timeseries --model gefs` without introducing a new physical data-access pattern. It is intentionally left as a separate bounded-response capability rather than being hidden inside this one-time primitive.
+The matrix is explicitly bounded by `maxSteps` and `maxSamples`, and `run="latest"` is resolved once for the complete range before member data is accessed.
+
+See [GEFS_MULTI_POINT_TIME_SERIES.md](GEFS_MULTI_POINT_TIME_SERIES.md) for the full temporal contract and execution semantics.
