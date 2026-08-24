@@ -105,13 +105,13 @@ describe("GefsRunComparisonService", () => {
     expect(result.comparisons[0]?.mean).toEqual({ from: 5, to: 6.5, delta: 1.5 });
     expect(result.comparisons[0]?.populationStdDev).toEqual({ from: 2, to: 1.5, delta: -0.5 });
     expect(result.comparisons[1]?.mean).toEqual({ from: 6.5, to: 8, delta: 1.5 });
-    expect(result.comparisons[1]?.thresholdFraction).toEqual({
+    expect(result.comparisons[1]?.thresholdFraction).toMatchObject({
       operator: "gte",
       threshold: 7,
       from: 2 / 3,
       to: 1,
-      delta: 1 / 3,
     });
+    expect(result.comparisons[1]?.thresholdFraction?.delta).toBeCloseTo(1 / 3);
     expect(result.comparisons.every((comparison) =>
       comparison.interpretation === "distribution_shift_between_model_cycles_not_member_trajectory",
     )).toBe(true);
