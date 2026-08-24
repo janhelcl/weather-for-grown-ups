@@ -20,6 +20,8 @@ describe("atmospheric model capability catalog", () => {
     expect(modelSupportsOperation("gefs_0p50", "profile_diagnostics")).toBe(true);
     expect(modelSupportsOperation("gfs_0p25", "diagnostic_timeseries")).toBe(true);
     expect(modelSupportsOperation("gefs_0p50", "diagnostic_timeseries")).toBe(true);
+    expect(modelSupportsOperation("gfs_0p25", "points_timeseries")).toBe(true);
+    expect(modelSupportsOperation("gefs_0p50", "points_timeseries")).toBe(true);
     expect(modelSupportsOperation("gfs_0p25", "run_comparison")).toBe(true);
     expect(modelSupportsOperation("gefs_0p50", "run_comparison")).toBe(true);
   });
@@ -27,8 +29,6 @@ describe("atmospheric model capability catalog", () => {
   it("keeps unsupported capabilities explicit", () => {
     expect(modelSupportsOperation("gfs_0p25", "parcel_diagnostics")).toBe(true);
     expect(modelSupportsOperation("gefs_0p50", "parcel_diagnostics")).toBe(false);
-    expect(modelSupportsOperation("gfs_0p25", "points_timeseries")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "points_timeseries")).toBe(false);
     expect(modelSupportsOperation("gfs_0p25", "area_summary")).toBe(true);
     expect(modelSupportsOperation("gefs_0p50", "area_summary")).toBe(false);
   });
