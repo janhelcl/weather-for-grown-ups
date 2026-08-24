@@ -76,4 +76,13 @@ describe("GEFS points time-series MCP handler", () => {
     expect(response.isError).toBe(true);
     expect(response.content[0]!.text).toBe("boom");
   });
+
+  it("stringifies non-Error failures", async () => {
+    const response = await handleGetGefsPointsTimeSeries({
+      getPointsTimeSeries: async () => { throw "boom-string"; },
+    }, query);
+
+    expect(response.isError).toBe(true);
+    expect(response.content[0]!.text).toBe("boom-string");
+  });
 });
