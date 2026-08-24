@@ -24,6 +24,7 @@ import {
 } from "../schema/gefs-area-summary.js";
 import type { GefsFieldTemporalResult } from "../schema/gefs-member-bundle.js";
 import { computeAreaDistribution } from "./area-distribution.js";
+import type { GribDecoderName } from "./types.js";
 import { mapConcurrent } from "./concurrency.js";
 import { summarizeNumericDistribution } from "./ensemble-statistics.js";
 import { DEFAULT_GEFS_MEMBER_CONCURRENCY } from "./gefs-ensemble.js";
@@ -31,6 +32,7 @@ import { GefsLatestRunResolver, type GefsLatestRunProvider } from "./gefs-latest
 import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
 
 export interface GefsAreaGridDecoder {
+  readonly engine?: GribDecoderName;
   extractBox(path: string, box: AreaBox): Promise<GridValuePoint[]>;
   extractSelectedMessage(path: string, box: AreaBox, selector: AreaMessageSelector): Promise<SelectedGridValues>;
 }
@@ -136,7 +138,7 @@ export class GefsAreaSummaryService {
       source: {
         provider: "NOAA AWS Open Data" as const,
         access: "s3_range" as const,
-        decoder: "wgrib2" as const,
+        decoder: this.gridDecoder.engine ?? "wgrib2",
         product: "pgrb2a_0p50" as const,
         allCacheHit: memberComputations.every((member) => member.cacheHit),
       },

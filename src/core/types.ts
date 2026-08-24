@@ -88,10 +88,12 @@ export interface NonIsobaricFieldResult {
   values: Record<string, number>;
 }
 
+export type GribDecoderName = "gribberish" | "wgrib2";
+
 export interface SourceProvenance {
   provider: ProfileProvider;
   access: ProfileAccessMethod;
-  decoder: "wgrib2";
+  decoder: GribDecoderName;
 }
 
 export interface ProfileResult {
@@ -176,7 +178,7 @@ export interface BatchPointsResult {
   source: {
     provider: "NOAA AWS Open Data";
     access: "s3_range";
-    decoder: "wgrib2";
+    decoder: GribDecoderName;
     cacheHit: boolean;
   };
 }
@@ -215,7 +217,7 @@ export interface PointsTimeSeriesResult {
   source: {
     provider: "NOAA AWS Open Data";
     access: "s3_range";
-    decoder: "wgrib2";
+    decoder: GribDecoderName;
   };
   series: PointsTimeSeriesStep[];
 }
@@ -243,7 +245,7 @@ export interface AreaSummaryResult {
   source: {
     provider: "NOAA NOMADS";
     access: "nomads_grib_filter";
-    decoder: "wgrib2";
+    decoder: GribDecoderName;
     cacheHit: boolean;
   };
 }

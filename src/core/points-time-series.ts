@@ -114,7 +114,7 @@ export class PointsTimeSeriesService {
       if (
         batch.source.provider !== "NOAA AWS Open Data"
         || batch.source.access !== "s3_range"
-        || batch.source.decoder !== "wgrib2"
+        || batch.source.decoder !== first.source.decoder
       ) {
         throw new Error("Multi-point time series require the NOAA AWS S3 byte-range source");
       }
@@ -147,7 +147,7 @@ export class PointsTimeSeriesService {
       source: {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
-        decoder: "wgrib2",
+        decoder: first.source.decoder,
       },
       series: batches.map((batch) => ({
         validTime: batch.validTime,

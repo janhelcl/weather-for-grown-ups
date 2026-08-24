@@ -155,7 +155,7 @@ export class GefsDiagnosticTimeSeriesService {
       source: {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
-        decoder: "wgrib2",
+        decoder: results[0]!.result.source.decoder,
         product: "pgrb2a_0p50",
         allCacheHit: results.every((tagged) => tagged.result.source.allCacheHit),
       },

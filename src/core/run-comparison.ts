@@ -11,6 +11,7 @@ import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
 import { ProfileService } from "./profile.js";
 import type {
   FieldTemporalResult,
+  GribDecoderName,
   GridPoint,
   NonIsobaricFieldResult,
   ProfileLevel,
@@ -68,7 +69,7 @@ export interface RunComparisonResult {
   source: {
     provider: "NOAA AWS Open Data";
     access: "s3_range";
-    decoder: "wgrib2";
+    decoder: GribDecoderName;
   };
   runs: RunComparisonSnapshot[];
   comparisons: RunComparisonTransition[];
@@ -156,7 +157,15 @@ export class RunComparisonService {
 
     for (const [index, profile] of profiles.entries()) {
       const expectedRun = runs[index]!.toISOString();
-      assertSnapshotInvariant(profile, expectedRun, validTime.toISOString(), query.latitude, query.longitude, first.gridPoint);
+      assertSnapshotInvariant(
+        profile,
+        expectedRun,
+        validTime.toISOString(),
+        query.latitude,
+        query.longitude,
+        first.gridPoint,
+        first.source.decoder,
+      );
     }
 
     const snapshots: RunComparisonSnapshot[] = profiles.map((profile) => ({
@@ -176,7 +185,7 @@ export class RunComparisonService {
       source: {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
-        decoder: "wgrib2",
+        decoder: first.source.decoder,
       },
       runs: snapshots,
       comparisons: profiles.slice(1).map((newer, index) => compareProfiles(profiles[index]!, newer)),
@@ -191,6 +200,7 @@ function assertSnapshotInvariant(
   latitude: number,
   longitude: number,
   gridPoint: GridPoint,
+  expectedDecoder: GribDecoderName,
 ): void {
   if (profile.run !== expectedRun) throw new Error(`Profile service changed requested comparison run from ${expectedRun} to ${profile.run}`);
   if (profile.validTime !== expectedValidTime) throw new Error("Profile service changed valid time within one run comparison");
@@ -203,7 +213,7 @@ function assertSnapshotInvariant(
   if (
     profile.source.provider !== "NOAA AWS Open Data"
     || profile.source.access !== "s3_range"
-    || profile.source.decoder !== "wgrib2"
+    || profile.source.decoder !== expectedDecoder
   ) {
     throw new Error("Run comparison requires the NOAA AWS S3 byte-range source");
   }

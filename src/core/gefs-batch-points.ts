@@ -150,7 +150,7 @@ export class GefsBatchPointsService {
       source: {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
-        decoder: "wgrib2",
+        decoder: this.decoder.engine ?? "wgrib2",
         product: "pgrb2a_0p50",
         memberFiles: memberSamples.map(({ member, cacheHit }) => ({ member, cacheHit })),
         allCacheHit: memberSamples.every((sample) => sample.cacheHit),

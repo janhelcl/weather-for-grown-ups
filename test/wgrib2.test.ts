@@ -37,7 +37,7 @@ describe("parseWgrib2PointLine", () => {
   });
 });
 
-describe("Wgrib2Decoder", () => {
+describe("Wgrib2Decoder native compatibility path", () => {
   it("invokes wgrib2 with -s -lon and converts negative longitude to 0-360", async () => {
     execaMock.mockResolvedValue({ stdout: "1:1:d=2026081906:TMP:850 mb:6 hour fcst:lon=350,lat=50,val=285.4" } as never);
     const values = await new Wgrib2Decoder("/opt/wgrib2").extractPoint("/tmp/test.grib2", -10, 50);
@@ -51,22 +51,22 @@ describe("Wgrib2Decoder", () => {
       "1:1:d=2026081906:HGT:850 mb:6 hour fcst:lon=14.5,lat=50,val=1500",
       "2:2:d=2026081906:VVEL:850 mb:6 hour fcst:lon=14.5,lat=50,val=-0.2",
     ].join("\n") } as never);
-    await expect(new Wgrib2Decoder().extractPoint("field.grib2", 14.5, 50)).resolves.toHaveLength(2);
+    await expect(new Wgrib2Decoder("/opt/wgrib2").extractPoint("field.grib2", 14.5, 50)).resolves.toHaveLength(2);
   });
 
   it("fails clearly when wgrib2 returns no supported point values", async () => {
     execaMock.mockResolvedValue({ stdout: "only unsupported output" } as never);
-    await expect(new Wgrib2Decoder().extractPoint("field.grib2", 14.5, 50)).rejects.toThrow(/no supported point values/);
+    await expect(new Wgrib2Decoder("/opt/wgrib2").extractPoint("field.grib2", 14.5, 50)).rejects.toThrow(/no supported point values/);
   });
 
   it("translates ENOENT into an actionable installation error", async () => {
     execaMock.mockRejectedValue(new Error("spawn wgrib2 ENOENT"));
-    await expect(new Wgrib2Decoder().extractPoint("field.grib2", 14.5, 50)).rejects.toThrow(/wgrib2 is required but was not found/);
+    await expect(new Wgrib2Decoder("/opt/wgrib2").extractPoint("field.grib2", 14.5, 50)).rejects.toThrow(/wgrib2 is required but was not found/);
   });
 
   it("rethrows non-ENOENT process errors", async () => {
     const error = new Error("permission denied");
     execaMock.mockRejectedValue(error);
-    await expect(new Wgrib2Decoder().extractPoint("field.grib2", 14.5, 50)).rejects.toBe(error);
+    await expect(new Wgrib2Decoder("/opt/wgrib2").extractPoint("field.grib2", 14.5, 50)).rejects.toBe(error);
   });
 });

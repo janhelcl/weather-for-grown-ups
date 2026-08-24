@@ -36,6 +36,7 @@ import { forecastHour, parseGfsRun } from "./forecast-hour.js";
 import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
 import type {
   FieldTemporalResult,
+  GribDecoderName,
   NonIsobaricFieldLevelResult,
 } from "./types.js";
 
@@ -43,6 +44,7 @@ const HOUR_MS = 3_600_000;
 
 export interface AreaFileCache { fetch(url: string): Promise<{ path: string; cacheHit: boolean }>; }
 export interface AreaStatsDecoder {
+  readonly engine?: GribDecoderName;
   summarizeBox(path: string, box: AreaBox): Promise<GridStatistics>;
   summarizeSelectedMessage(
     path: string,
@@ -51,6 +53,7 @@ export interface AreaStatsDecoder {
   ): Promise<SelectedGridStatistics>;
 }
 export interface AreaGridDecoder {
+  readonly engine?: GribDecoderName;
   extractBox(path: string, box: AreaBox): Promise<GridValuePoint[]>;
   extractSelectedMessage(
     path: string,
@@ -153,7 +156,10 @@ export class AreaSummaryService {
       },
       statistics,
       ...(distribution === undefined ? {} : { distribution }),
-      source: areaSource(cached.cacheHit),
+      source: areaSource(
+        cached.cacheHit,
+        distributionRequested ? this.gridDecoder.engine ?? "wgrib2" : this.decoder.engine ?? "wgrib2",
+      ),
     };
   }
 
@@ -212,7 +218,10 @@ export class AreaSummaryService {
       },
       statistics,
       ...(distribution === undefined ? {} : { distribution }),
-      source: areaSource(cached.cacheHit),
+      source: areaSource(
+        cached.cacheHit,
+        distributionRequested ? this.gridDecoder.engine ?? "wgrib2" : this.decoder.engine ?? "wgrib2",
+      ),
     };
   }
 
@@ -327,11 +336,11 @@ function publicTemporal(temporal: SelectedMessageTemporal, run: Date): FieldTemp
   };
 }
 
-function areaSource(cacheHit: boolean): AreaSummaryResult["source"] {
+function areaSource(cacheHit: boolean, decoder: GribDecoderName): AreaSummaryResult["source"] {
   return {
     provider: "NOAA NOMADS",
     access: "nomads_grib_filter",
-    decoder: "wgrib2",
+    decoder,
     cacheHit,
   };
 }

@@ -1,10 +1,10 @@
 FROM node:24-bookworm-slim AS build
 
 WORKDIR /app
-COPY package.json tsconfig.json ./
+COPY package.json package-lock.json tsconfig.json ./
 COPY src ./src
 
-RUN npm install --no-audit --no-fund \
+RUN npm ci --no-audit --no-fund \
   && npm run build
 
 FROM build AS prod-deps

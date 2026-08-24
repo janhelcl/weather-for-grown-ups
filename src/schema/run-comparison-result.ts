@@ -66,7 +66,7 @@ export const runComparisonResultSchema = z.object({
   source: z.object({
     provider: z.literal("NOAA AWS Open Data"),
     access: z.literal("s3_range"),
-    decoder: z.literal("wgrib2"),
+    decoder: z.enum(["gribberish", "wgrib2"]),
   }),
   runs: z.array(runComparisonSnapshotSchema).min(2).max(6),
   comparisons: z.array(runComparisonTransitionSchema).min(1).max(5),

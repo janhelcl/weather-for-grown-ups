@@ -67,7 +67,11 @@ export class BatchPointsService {
       if (profile.run !== run.toISOString() || profile.validTime !== validTime.toISOString() || profile.forecastHour !== fh) {
         throw new Error("Profile result changed run or valid time within one batched point query");
       }
-      if (profile.source.provider !== "NOAA AWS Open Data" || profile.source.access !== "s3_range") {
+      if (
+        profile.source.provider !== "NOAA AWS Open Data"
+        || profile.source.access !== "s3_range"
+        || profile.source.decoder !== profiles[0]!.source.decoder
+      ) {
         throw new Error("Batched point queries require the NOAA AWS S3 byte-range source");
       }
     }
@@ -86,7 +90,7 @@ export class BatchPointsService {
       source: {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
-        decoder: "wgrib2",
+        decoder: profiles[0]!.source.decoder,
         cacheHit: profiles.every((profile) => profile.source.cacheHit),
       },
     };

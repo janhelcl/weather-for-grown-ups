@@ -1,7 +1,13 @@
 import { execa } from "execa";
 import type { FieldTemporalSemantics } from "../catalog/non-isobaric-fields.js";
 import type { GfsCode } from "../catalog/variables.js";
-import type { ForecastInterval } from "../core/types.js";
+import type { ForecastInterval, GribDecoderName } from "../core/types.js";
+import {
+  readGribMessages,
+  selectMessage,
+  summarizeMessageInBox,
+  temporalForSelector,
+} from "./gribberish-runtime.js";
 
 export interface AreaBox {
   westLongitude: number;
@@ -41,13 +47,30 @@ const defaultRunner: Wgrib2CommandRunner = async (executable, args) => {
   return { stdout };
 };
 
+/**
+ * Area statistics decoder. The class name remains for compatibility, but the
+ * default path is the npm-bundled GRIB2 decoder. Native wgrib2 is opt-in via
+ * WGRIB2_PATH or WFG_DECODER=wgrib2.
+ */
 export class Wgrib2StatsDecoder {
+  readonly engine: GribDecoderName;
+
   constructor(
-    private readonly executable = process.env.WGRIB2_PATH ?? "wgrib2",
+    private readonly executable = defaultNativeExecutable(),
     private readonly runner: Wgrib2CommandRunner = defaultRunner,
-  ) {}
+  ) {
+    this.engine = executable === undefined ? "gribberish" : "wgrib2";
+  }
 
   async summarizeBox(path: string, box: AreaBox): Promise<GridStatistics> {
+    if (this.executable === undefined) {
+      const messages = await readGribMessages(path);
+      if (messages.length !== 1) {
+        throw new Error(`Bundled GRIB2 area distribution expected exactly one GRIB record, found ${messages.length}`);
+      }
+      return summarizeMessageInBox(messages[0]!, box);
+    }
+
     const stdout = await this.run([
       path,
       "-s",
@@ -65,6 +88,14 @@ export class Wgrib2StatsDecoder {
     box: AreaBox,
     selector: AreaMessageSelector,
   ): Promise<SelectedGridStatistics> {
+    if (this.executable === undefined) {
+      const message = selectMessage(await readGribMessages(path), selector);
+      return {
+        ...summarizeMessageInBox(message, box),
+        temporal: temporalForSelector(message, selector),
+      };
+    }
+
     const inventory = await this.run([path, "-s"]);
     const matches = inventory
       .split(/\r?\n/)
@@ -97,13 +128,14 @@ export class Wgrib2StatsDecoder {
   }
 
   private async run(args: string[]): Promise<string> {
+    if (this.executable === undefined) throw new Error("Internal error: native wgrib2 path is not configured");
     try {
       const { stdout } = await this.runner(this.executable, args);
       return stdout;
     } catch (error) {
       if (error instanceof Error && error.message.includes("ENOENT")) {
         throw new Error(
-          `wgrib2 is required but was not found. Install it or set WGRIB2_PATH. Original error: ${error.message}`,
+          `Native wgrib2 is required but was not found because it was explicitly requested. Install it or unset WGRIB2_PATH/WFG_DECODER. Original error: ${error.message}`,
         );
       }
       throw error;
@@ -189,6 +221,11 @@ function fieldNumber(line: string, field: string): number | null {
   if (!match?.[1]) return null;
   const value = Number(match[1]);
   return Number.isFinite(value) ? value : null;
+}
+
+function defaultNativeExecutable(): string | undefined {
+  if (process.env.WGRIB2_PATH) return process.env.WGRIB2_PATH;
+  return process.env.WFG_DECODER === "wgrib2" ? "wgrib2" : undefined;
 }
 
 function toLongitude360(longitude: number): number {

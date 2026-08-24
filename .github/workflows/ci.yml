@@ -41,6 +41,16 @@ jobs:
           node-version: 24
       - run: npm install --no-audit --no-fund
       - run: npm run pack:check
+      - name: Install packed package and invoke package-name bin
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --silent)"
+          prefix="$(mktemp -d)"
+          npm install --prefix "$prefix" --no-audit --no-fund "./$tarball"
+          "$prefix/node_modules/.bin/weather-for-grown-ups" --help
+          test -x "$prefix/node_modules/.bin/wfg"
+          test -x "$prefix/node_modules/.bin/wfg-mcp"
+          test -x "$prefix/node_modules/.bin/wfg-mcp-http"
 
   docker:
     runs-on: ubuntu-latest

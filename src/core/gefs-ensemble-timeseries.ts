@@ -103,7 +103,7 @@ export class GefsEnsembleTimeSeriesService {
       source: {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
-        decoder: "wgrib2",
+        decoder: results[0]!.source.decoder,
         product: "pgrb2a_0p50",
         allCacheHit: results.every((result) => result.source.allCacheHit),
       },

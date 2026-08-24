@@ -119,7 +119,7 @@ export class GefsRunComparisonService {
       source: {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
-        decoder: "wgrib2",
+        decoder: results[0]!.source.decoder,
         product: "pgrb2a_0p50",
       },
     });

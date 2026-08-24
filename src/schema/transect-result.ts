@@ -25,7 +25,7 @@ export const transectResultSchema = z.object({
   source: z.object({
     provider: z.literal("NOAA AWS Open Data"),
     access: z.literal("s3_range"),
-    decoder: z.literal("wgrib2"),
+    decoder: z.enum(["gribberish", "wgrib2"]),
     cacheHit: z.boolean(),
   }),
 });

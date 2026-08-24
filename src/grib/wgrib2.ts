@@ -2,7 +2,8 @@ import { execa } from "execa";
 import { GEFS_PGRB2A_FIELD_CATALOG } from "../catalog/gefs-fields.js";
 import { findNamedNonIsobaricLevel } from "../catalog/non-isobaric-fields.js";
 import { ALL_SUPPORTED_GFS_CODES } from "../catalog/variables.js";
-import type { DecodedValue } from "../core/types.js";
+import type { DecodedValue, GribDecoderName } from "../core/types.js";
+import { decodePointMessages, readGribMessages } from "./gribberish-runtime.js";
 
 const GEFS_RAW_FIELDS = Object.values(GEFS_PGRB2A_FIELD_CATALOG).filter((definition) => definition.kind === "raw");
 const ALL_SUPPORTED_CODES = [...new Set([
@@ -15,10 +16,27 @@ const GEFS_NAMED_VERTICALS = new Set(
   GEFS_RAW_FIELDS.map((definition) => definition.level.gribLevel),
 );
 
+/**
+ * Point decoder kept under its original public class name for API compatibility.
+ * The default implementation is bundled through npm and needs no system executable.
+ * Set WGRIB2_PATH (or WFG_DECODER=wgrib2) to opt into the legacy native wgrib2 path.
+ */
 export class Wgrib2Decoder {
-  constructor(private readonly executable = process.env.WGRIB2_PATH ?? "wgrib2") {}
+  readonly engine: GribDecoderName;
+
+  constructor(private readonly executable = defaultNativeExecutable()) {
+    this.engine = executable === undefined ? "gribberish" : "wgrib2";
+  }
 
   async extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]> {
+    if (this.executable === undefined) {
+      const decoded = decodePointMessages(await readGribMessages(path), longitude, latitude);
+      if (decoded.length === 0) {
+        throw new Error("Bundled GRIB2 decoder returned no supported point values");
+      }
+      return decoded;
+    }
+
     let stdout: string;
     try {
       const longitude360 = ((longitude % 360) + 360) % 360;
@@ -32,7 +50,7 @@ export class Wgrib2Decoder {
     } catch (error) {
       if (error instanceof Error && error.message.includes("ENOENT")) {
         throw new Error(
-          `wgrib2 is required but was not found. Install it or set WGRIB2_PATH. Original error: ${error.message}`,
+          `Native wgrib2 is required but was not found because it was explicitly requested. Install it or unset WGRIB2_PATH/WFG_DECODER. Original error: ${error.message}`,
         );
       }
       throw error;
@@ -106,6 +124,11 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
       latitude: Number(pointMatch[2]),
     },
   };
+}
+
+function defaultNativeExecutable(): string | undefined {
+  if (process.env.WGRIB2_PATH) return process.env.WGRIB2_PATH;
+  return process.env.WFG_DECODER === "wgrib2" ? "wgrib2" : undefined;
 }
 
 function toSignedLongitude(longitude: number): number {
