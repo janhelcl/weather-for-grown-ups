@@ -58,7 +58,7 @@ describe("GEFS area statistics", () => {
     expect(result.source.allCacheHit).toBe(false);
   });
 
-  it("preserves accumulation windows and rejects cross-member temporal drift", async () => {
+  it("preserves accumulation windows across members", async () => {
     const service = new GefsAreaSummaryService({
       concurrency: 1,
       source: { fetchSelection: vi.fn(async (request) => ({ path: request.member, cacheHit: true })) },
@@ -87,6 +87,76 @@ describe("GEFS area statistics", () => {
       endTime: "2026-08-24T06:00:00.000Z",
     });
     expect(result.statistics.mean.mean).toBe(2);
+  });
+
+  it("preserves instantaneous field semantics", async () => {
+    const service = new GefsAreaSummaryService({
+      concurrency: 1,
+      source: { fetchSelection: vi.fn(async (request) => ({ path: request.member, cacheHit: true })) },
+      gridDecoder: {
+        extractBox: vi.fn(async () => { throw new Error("not used"); }),
+        extractSelectedMessage: vi.fn(async () => ({
+          points: [{ longitude: 14, latitude: 50, value: 100000 }],
+          temporal: { type: "instantaneous" as const },
+        })),
+      },
+    });
+
+    const result = await service.summarize({
+      ...box,
+      run,
+      validTime,
+      field: "surface_pressure",
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+    });
+    expect(result.selection.temporal).toEqual({ type: "instantaneous" });
+  });
+
+  it("rejects cross-member temporal drift", async () => {
+    const service = new GefsAreaSummaryService({
+      concurrency: 1,
+      source: { fetchSelection: vi.fn(async (request) => ({ path: request.member, cacheHit: true })) },
+      gridDecoder: {
+        extractBox: vi.fn(async () => { throw new Error("not used"); }),
+        extractSelectedMessage: vi.fn(async (path: string) => ({
+          points: [{ longitude: 14, latitude: 50, value: 1 }],
+          temporal: path === "c00"
+            ? { type: "accumulation" as const, startForecastHour: 3, endForecastHour: 6 }
+            : { type: "accumulation" as const, startForecastHour: 0, endForecastHour: 6 },
+        })),
+      },
+    });
+
+    await expect(service.summarize({
+      ...box,
+      run,
+      validTime,
+      field: "total_precipitation",
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+    })).rejects.toThrow("inconsistent temporal intervals across members");
+  });
+
+  it("keeps non-temperature pressure variables in native units", async () => {
+    const service = new GefsAreaSummaryService({
+      concurrency: 1,
+      source: { fetchSelection: vi.fn(async (request) => ({ path: request.member, cacheHit: true })) },
+      gridDecoder: {
+        extractBox: vi.fn(async () => [{ longitude: 14, latitude: 50, value: 60 }]),
+        extractSelectedMessage: vi.fn(async () => { throw new Error("not used"); }),
+      },
+    });
+    const result = await service.summarize({
+      ...box,
+      run,
+      validTime,
+      variable: "relative_humidity",
+      pressureLevelHpa: 850,
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+    });
+    expect(result.statistics.mean.mean).toBe(60);
   });
 
   it("preflights both per-member and member-grid guardrails", async () => {
