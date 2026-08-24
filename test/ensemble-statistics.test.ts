@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   quantile,
+  summarizeCircularDegrees,
   summarizeNumericDistribution,
   thresholdGteSummary,
 } from "../src/core/ensemble-statistics.js";
@@ -21,6 +22,13 @@ describe("shared ensemble statistics", () => {
     });
   });
 
+  it("uses circular rather than scalar averaging for directions around north", () => {
+    const summary = summarizeCircularDegrees([350, 10]);
+    expect(summary.memberCount).toBe(2);
+    expect(Math.min(summary.meanDirectionDeg, 360 - summary.meanDirectionDeg)).toBeCloseTo(0, 10);
+    expect(summary.resultantLength).toBeCloseTo(Math.cos(10 * Math.PI / 180), 10);
+  });
+
   it("preserves raw threshold-member semantics", () => {
     expect(thresholdGteSummary([0, 2, 4, 6], 3)).toEqual({
       operator: "gte",
@@ -33,6 +41,7 @@ describe("shared ensemble statistics", () => {
 
   it("rejects invalid/empty distribution operations", () => {
     expect(() => summarizeNumericDistribution([], [0.5])).toThrow("empty ensemble");
+    expect(() => summarizeCircularDegrees([])).toThrow("empty circular ensemble");
     expect(() => quantile([1, 2], 1.1)).toThrow("between 0 and 1");
   });
 });

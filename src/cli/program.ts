@@ -3,6 +3,7 @@ import { registerAreaCommand } from "./area-command.js";
 import { registerCatalogCommand } from "./catalog-command.js";
 import { registerDiagnosticCommands } from "./diagnostic-commands.js";
 import { registerEnsembleCommand } from "./ensemble-command.js";
+import { registerGefsBundleCommands } from "./gefs-bundle-command.js";
 import { registerGefsParcelCommand } from "./gefs-parcel-command.js";
 import { registerGefsParcelTimeSeriesCommand } from "./gefs-parcel-timeseries-command.js";
 import { registerModelComparisonCommand } from "./model-comparison-command.js";
@@ -18,6 +19,7 @@ export function createCliProgram(): Command {
   registerCatalogCommand(program);
   registerPointCommands(program);
   registerEnsembleCommand(program);
+  registerGefsBundleCommands(program);
   registerGefsParcelCommand(program);
   registerGefsParcelTimeSeriesCommand(program);
   registerModelComparisonCommand(program);

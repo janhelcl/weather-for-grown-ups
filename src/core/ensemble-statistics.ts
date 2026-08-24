@@ -12,6 +12,12 @@ export interface NumericDistributionSummary {
   quantiles: QuantileValue[];
 }
 
+export interface CircularDirectionSummary {
+  memberCount: number;
+  meanDirectionDeg: number;
+  resultantLength: number;
+}
+
 export interface ThresholdGteSummary {
   operator: "gte";
   value: number;
@@ -35,6 +41,19 @@ export function summarizeNumericDistribution(
       quantile: q,
       value: quantile(values, q),
     })),
+  };
+}
+
+export function summarizeCircularDegrees(values: readonly number[]): CircularDirectionSummary {
+  if (values.length === 0) throw new Error("Cannot summarize an empty circular ensemble distribution");
+  const radians = values.map((value) => ((value % 360 + 360) % 360) * Math.PI / 180);
+  const meanSin = radians.reduce((sum, value) => sum + Math.sin(value), 0) / radians.length;
+  const meanCos = radians.reduce((sum, value) => sum + Math.cos(value), 0) / radians.length;
+  const meanDirectionDeg = (Math.atan2(meanSin, meanCos) * 180 / Math.PI + 360) % 360;
+  return {
+    memberCount: values.length,
+    meanDirectionDeg,
+    resultantLength: Math.hypot(meanSin, meanCos),
   };
 }
 
