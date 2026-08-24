@@ -1,10 +1,12 @@
 import { GefsBundleTimeSeriesService } from "./core/gefs-bundle-timeseries.js";
 import { GefsMemberBundleService } from "./core/gefs-member-bundle.js";
+import { GefsPointsBundleTimeSeriesService } from "./core/gefs-points-bundle-timeseries.js";
 import { GefsPointsBundleService } from "./core/gefs-points-bundle.js";
 import {
   handleGetGefsFields,
   handleGetGefsFieldsTimeSeries,
 } from "./mcp-gefs-bundle-tool.js";
+import { handleGetGefsFieldsPointsTimeSeries } from "./mcp-gefs-points-bundle-timeseries-tool.js";
 import { handleGetGefsFieldsPoints } from "./mcp-gefs-points-bundle-tool.js";
 import { createMcpServer as createBaseMcpServer } from "./mcp-server.js";
 import {
@@ -15,6 +17,10 @@ import {
   gefsMemberBundleQuerySchema,
   gefsMemberBundleResultSchema,
 } from "./schema/gefs-member-bundle.js";
+import {
+  gefsPointsBundleTimeSeriesQuerySchema,
+  gefsPointsBundleTimeSeriesResultSchema,
+} from "./schema/gefs-points-bundle-timeseries.js";
 import {
   gefsPointsBundleQuerySchema,
   gefsPointsBundleResultSchema,
@@ -30,6 +36,7 @@ export function createMcpServer() {
   const bundleService = new GefsMemberBundleService();
   const timeSeriesService = new GefsBundleTimeSeriesService({ bundleGetter: bundleService });
   const pointsService = new GefsPointsBundleService();
+  const pointsTimeSeriesService = new GefsPointsBundleTimeSeriesService({ pointsGetter: pointsService });
 
   server.registerTool("get_gefs_fields", {
     title: "Get mixed GEFS field distributions",
@@ -51,6 +58,13 @@ export function createMcpServer() {
     inputSchema: gefsPointsBundleQuerySchema,
     outputSchema: gefsPointsBundleResultSchema,
   }, async (query) => handleGetGefsFieldsPoints(pointsService, query));
+
+  server.registerTool("get_gefs_fields_points_timeseries", {
+    title: "Get mixed GEFS fields for multiple points over time",
+    description: "Track one mixed GEFS pressure/non-isobaric selection across up to 20 coordinates and native three-hour valid times from one fixed model cycle and member set. Each step reuses one selected-message file per member across all requested points, so upstream fetches scale with steps × members rather than steps × members × points; local wgrib2 extraction remains point-oriented. maxPointSteps and maxMemberSamples bound matrix and opt-in member payload size. Field-specific accumulation/average intervals and circular wind-direction aggregation remain explicit. Ensemble summaries are raw member evidence, not calibrated probability or uncertainty.",
+    inputSchema: gefsPointsBundleTimeSeriesQuerySchema,
+    outputSchema: gefsPointsBundleTimeSeriesResultSchema,
+  }, async (query) => handleGetGefsFieldsPointsTimeSeries(pointsTimeSeriesService, query));
 
   return server;
 }
