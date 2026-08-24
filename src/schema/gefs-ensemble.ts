@@ -76,10 +76,11 @@ const temporalSchema = z.discriminatedUnion("type", [
 ]);
 
 const selectionSchema = z.object({
+  // Keep the established pressure-selection serialization order stable for MCP/text clients.
   variable: gefsPressureVariableSchema.optional(),
+  gfsCode: z.string().min(1),
   pressureLevelHpa: z.number().positive().optional(),
   field: gefsRawFieldSchema.optional(),
-  gfsCode: z.string().min(1),
   outputField: z.string().min(1),
   unit: z.string().min(1),
   vertical: z.object({
