@@ -52,7 +52,7 @@ describe("CLI program registration", () => {
 
   it("keeps canonical shared operations model-selectable without multiplying commands", () => {
     const program = createCliProgram();
-    for (const name of ["profile", "points", "timeseries", "layer", "profile-diagnostics", "diagnostic-timeseries", "compare-runs"]) {
+    for (const name of ["profile", "points", "timeseries", "points-timeseries", "layer", "profile-diagnostics", "diagnostic-timeseries", "compare-runs"]) {
       const command = program.commands.find((candidate) => candidate.name() === name);
       expect(command?.options.some((option) => option.long === "--model")).toBe(true);
     }
