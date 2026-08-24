@@ -1,4 +1,4 @@
-import type { GefsMember, GefsPressureVariableId } from "../catalog/gefs.js";
+import type { GefsMember, GefsProfileVariableId } from "../catalog/gefs.js";
 import type { AtmosphericModelId } from "../catalog/models.js";
 import type { GefsEnsembleProfileResult } from "../schema/gefs-ensemble-profile.js";
 import type { GridPoint, ProfileLevel, ProfileResult } from "./types.js";
@@ -44,7 +44,7 @@ export function fromGefsMemberProfiles(profile: GefsEnsembleProfileResult): Atmo
 
 export function memberValuesToLevels(
   pressureLevelsHpa: readonly number[],
-  values: readonly { variable: GefsPressureVariableId; pressureLevelHpa: number; value: number }[],
+  values: readonly { variable: GefsProfileVariableId; pressureLevelHpa: number; value: number }[],
 ): ProfileLevel[] {
   return pressureLevelsHpa.map((pressureHpa) => {
     const level: ProfileLevel = { pressureHpa };
@@ -55,7 +55,7 @@ export function memberValuesToLevels(
   });
 }
 
-function setPressureValue(level: ProfileLevel, variable: GefsPressureVariableId, value: number): void {
+function setPressureValue(level: ProfileLevel, variable: GefsProfileVariableId, value: number): void {
   switch (variable) {
     case "temperature":
       level.temperatureC = value;
@@ -71,6 +71,12 @@ function setPressureValue(level: ProfileLevel, variable: GefsPressureVariableId,
       return;
     case "geopotential_height":
       level.geopotentialHeightGpm = value;
+      return;
+    case "dew_point":
+      level.dewPointC = value;
+      return;
+    case "potential_temperature":
+      level.potentialTemperatureK = value;
       return;
   }
 }
