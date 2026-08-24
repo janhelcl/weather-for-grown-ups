@@ -1,7 +1,10 @@
 import type { Command } from "commander";
 import { GefsPointsBundleTimeSeriesService } from "../core/gefs-points-bundle-timeseries.js";
 import { GefsPointsBundleService } from "../core/gefs-points-bundle.js";
-import { gefsPointsBundleResultSchema } from "../schema/gefs-points-bundle.js";
+import {
+  gefsPointsBundleResultSchema,
+  type GefsPointsBundleResult,
+} from "../schema/gefs-points-bundle.js";
 import { gefsPointsBundleTimeSeriesResultSchema } from "../schema/gefs-points-bundle-timeseries.js";
 import type { PointCoordinate } from "../schema/query.js";
 import {
@@ -91,23 +94,7 @@ export function registerGefsPointsBundleCommand(program: Command): void {
     });
 }
 
-function printPoints(points: readonly {
-  requestedPoint: { latitude: number; longitude: number };
-  gridPoint: { latitude: number; longitude: number };
-  pressureSummaries: readonly {
-    pressureLevelHpa: number;
-    variable: string;
-    unit: string;
-    distribution: { mean: number; populationStdDev: number; min: number; max: number };
-  }[];
-  fieldSummaries: readonly unknown[];
-  members?: readonly {
-    member: string;
-    cacheHit: boolean;
-    pressureValues: readonly unknown[];
-    fields: readonly unknown[];
-  }[];
-}[]): void {
+function printPoints(points: GefsPointsBundleResult["points"]): void {
   for (const [index, point] of points.entries()) {
     console.log(`Point ${index + 1}: ${point.requestedPoint.latitude},${point.requestedPoint.longitude} → grid ${point.gridPoint.latitude},${point.gridPoint.longitude}`);
     if (point.pressureSummaries.length > 0) {
