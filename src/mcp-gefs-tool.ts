@@ -4,6 +4,7 @@ import type { GefsEnsembleProfileService } from "./core/gefs-ensemble-profile.js
 import type { GefsEnsembleTimeSeriesService } from "./core/gefs-ensemble-timeseries.js";
 import type { GefsEnsembleService } from "./core/gefs-ensemble.js";
 import type { GefsLayerDiagnosticsService } from "./core/gefs-layer-diagnostics.js";
+import type { GefsParcelDiagnosticsService } from "./core/gefs-parcel-diagnostics.js";
 import type { GefsProfileDiagnosticsService } from "./core/gefs-profile-diagnostics.js";
 import type { GefsRunComparisonService } from "./core/gefs-run-comparison.js";
 import {
@@ -37,6 +38,11 @@ import {
   type GefsLayerDiagnosticsResult,
 } from "./schema/gefs-layer-diagnostics.js";
 import {
+  gefsParcelDiagnosticsResultSchema,
+  type GefsParcelDiagnosticsQueryInput,
+  type GefsParcelDiagnosticsResult,
+} from "./schema/gefs-parcel-diagnostics.js";
+import {
   gefsProfileDiagnosticsResultSchema,
   type GefsProfileDiagnosticsQueryInput,
   type GefsProfileDiagnosticsResult,
@@ -69,6 +75,10 @@ export interface GefsLayerDiagnosticsGetter {
 
 export interface GefsProfileDiagnosticsGetter {
   getProfileDiagnostics(query: GefsProfileDiagnosticsQueryInput): Promise<GefsProfileDiagnosticsResult>;
+}
+
+export interface GefsParcelDiagnosticsGetter {
+  getParcelDiagnostics(query: GefsParcelDiagnosticsQueryInput): Promise<GefsParcelDiagnosticsResult>;
 }
 
 export interface GefsDiagnosticTimeSeriesGetter {
@@ -119,6 +129,13 @@ export async function handleGetGefsProfileDiagnostics(
   query: GefsProfileDiagnosticsQueryInput,
 ) {
   return handle(async () => gefsProfileDiagnosticsResultSchema.parse(await service.getProfileDiagnostics(query)));
+}
+
+export async function handleGetGefsParcelDiagnostics(
+  service: Pick<GefsParcelDiagnosticsService, "getParcelDiagnostics"> | GefsParcelDiagnosticsGetter,
+  query: GefsParcelDiagnosticsQueryInput,
+) {
+  return handle(async () => gefsParcelDiagnosticsResultSchema.parse(await service.getParcelDiagnostics(query)));
 }
 
 export async function handleGetGefsDiagnosticTimeSeries(

@@ -9,6 +9,7 @@ import { GefsEnsembleProfileService } from "./core/gefs-ensemble-profile.js";
 import { GefsEnsembleTimeSeriesService } from "./core/gefs-ensemble-timeseries.js";
 import { GefsEnsembleService } from "./core/gefs-ensemble.js";
 import { GefsLayerDiagnosticsService } from "./core/gefs-layer-diagnostics.js";
+import { GefsParcelDiagnosticsService } from "./core/gefs-parcel-diagnostics.js";
 import { GefsPointsTimeSeriesService } from "./core/gefs-points-timeseries.js";
 import { GefsProfileDiagnosticsService } from "./core/gefs-profile-diagnostics.js";
 import { GefsRunComparisonService } from "./core/gefs-run-comparison.js";
@@ -31,6 +32,7 @@ import {
   handleGetGefsEnsembleProfile,
   handleGetGefsEnsembleTimeSeries,
   handleGetGefsLayerDiagnostics,
+  handleGetGefsParcelDiagnostics,
   handleGetGefsPoints,
   handleGetGefsProfileDiagnostics,
 } from "./mcp-gefs-tool.js";
@@ -77,6 +79,10 @@ import {
   gefsLayerDiagnosticsResultSchema,
 } from "./schema/gefs-layer-diagnostics.js";
 import {
+  gefsParcelDiagnosticsQuerySchema,
+  gefsParcelDiagnosticsResultSchema,
+} from "./schema/gefs-parcel-diagnostics.js";
+import {
   gefsPointsTimeSeriesQuerySchema,
   gefsPointsTimeSeriesResultSchema,
 } from "./schema/gefs-points-timeseries.js";
@@ -120,7 +126,7 @@ export function createMcpServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "WFG exposes NOAA numerical weather models with explicit model/run/valid-time/vertical semantics. GFS and GEFS share model-independent profile and diagnostic kernels while preserving deterministic-vs-ensemble result semantics. Use get_gfs_catalog or search_gfs_catalog to discover the deterministic GFS 0.25° surface. GFS query tools support query-aware run='latest', latest_complete through f384, and explicit reproducible cycles. Use get_gefs_ensemble for one-time member distributions, get_gefs_ensemble_profile for multi-variable/multi-level vertical distributions, get_gefs_points for one raw field summarized across members at multiple locations using one selected field slice per member, get_gefs_ensemble_timeseries for one-field native-cadence distributions at one location, get_gefs_points_timeseries for the same raw-field distributions across multiple locations and native three-hour steps from one fixed cycle, get_gefs_layer_diagnostics and get_gefs_profile_diagnostics for member-first single-time diagnostics, get_gefs_diagnostic_timeseries for compact layer/profile diagnostic distributions across native three-hour steps from one fixed cycle, and compare_gefs_runs for distribution evolution across consecutive initialization cycles without treating member IDs as trajectories. compare_gfs_to_gefs places deterministic GFS inside an aligned GEFS member distribution. GEFS member fractions, profile/point/diagnostic summaries, cycle shifts, and GFS-vs-GEFS ranks are raw model/member evidence, not calibrated probabilities or uncertainty. WFG does not provide activity-specific interpretation or safety advice.",
+      instructions: "WFG exposes NOAA numerical weather models with explicit model/run/valid-time/vertical semantics. GFS and GEFS share model-independent profile and diagnostic kernels while preserving deterministic-vs-ensemble result semantics. Use get_gfs_catalog or search_gfs_catalog to discover the deterministic GFS 0.25° surface. GFS query tools support query-aware run='latest', latest_complete through f384, and explicit reproducible cycles. Use get_gefs_ensemble for one-time member distributions, get_gefs_ensemble_profile for multi-variable/multi-level vertical distributions, get_gefs_points for one raw field summarized across members at multiple locations using one selected field slice per member, get_gefs_ensemble_timeseries for one-field native-cadence distributions at one location, get_gefs_points_timeseries for the same raw-field distributions across multiple locations and native three-hour steps from one fixed cycle, get_gefs_layer_diagnostics, get_gefs_profile_diagnostics, and get_gefs_parcel_diagnostics for member-first single-time diagnostics, get_gefs_diagnostic_timeseries for compact layer/profile diagnostic distributions across native three-hour steps from one fixed cycle, and compare_gefs_runs for distribution evolution across consecutive initialization cycles without treating member IDs as trajectories. compare_gfs_to_gefs places deterministic GFS inside an aligned GEFS member distribution. GEFS member fractions, profile/point/diagnostic summaries, cycle shifts, and GFS-vs-GEFS ranks are raw model/member evidence, not calibrated probabilities or uncertainty. WFG does not provide activity-specific interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
@@ -131,6 +137,7 @@ export function createMcpServer(): McpServer {
   const gefsEnsembleTimeSeriesService = new GefsEnsembleTimeSeriesService({ ensembleGetter: gefsEnsembleService });
   const gefsLayerDiagnosticsService = new GefsLayerDiagnosticsService({ profileGetter: gefsEnsembleProfileService });
   const gefsProfileDiagnosticsService = new GefsProfileDiagnosticsService({ profileGetter: gefsEnsembleProfileService });
+  const gefsParcelDiagnosticsService = new GefsParcelDiagnosticsService();
   const gefsDiagnosticTimeSeriesService = new GefsDiagnosticTimeSeriesService({
     layerDiagnosticsGetter: gefsLayerDiagnosticsService,
     profileDiagnosticsGetter: gefsProfileDiagnosticsService,
@@ -192,7 +199,7 @@ export function createMcpServer(): McpServer {
 
   server.registerTool("get_gefs_ensemble_profile", {
     title: "Get GEFS ensemble pressure profile",
-    description: "Summarize multiple raw GEFS 0.5° pgrb2a pressure-level variables across multiple published pressure surfaces and selected members at one point/time. WFG fetches one multi-message slice per member and returns per variable/level mean, population spread, extrema, and quantiles. Member profiles are omitted by default; set includeMembers=true only when memberwise vertical trajectories are needed.",
+    description: "Summarize multiple GEFS 0.5° pgrb2a pressure-level variables across multiple published pressure surfaces and selected members at one point/time. Raw variables plus member-first dew point and potential-temperature derivations are supported. WFG fetches one dependency slice per member and returns per variable/level mean, population spread, extrema, and quantiles. Member profiles are omitted by default; set includeMembers=true only when memberwise vertical trajectories are needed.",
     inputSchema: gefsEnsembleProfileQuerySchema,
     outputSchema: gefsEnsembleProfileResultSchema,
   }, async (query) => handleGetGefsEnsembleProfile(gefsEnsembleProfileService, query));
@@ -231,6 +238,13 @@ export function createMcpServer(): McpServer {
     inputSchema: gefsProfileDiagnosticsQuerySchema,
     outputSchema: gefsProfileDiagnosticsResultSchema,
   }, async (query) => handleGetGefsProfileDiagnostics(gefsProfileDiagnosticsService, query));
+
+  server.registerTool("get_gefs_parcel_diagnostics", {
+    title: "Get GEFS parcel diagnostic distributions",
+    description: "Lift the same explicit surface, 100 hPa mixed-layer, or most-unstable parcel independently through every selected GEFS member sounding. Pressure-level and 2 m specific humidity are derived from pgrb2a temperature/RH/pressure per member; static surface geopotential height comes from the same cycle's cached f000 orography. Returns CAPE/CIN and parcel-start/LCL distributions plus raw-member LFC/EL event fractions. Complete member soundings and parcel paths are omitted unless includeMembers=true. Ensemble fractions are not calibrated probabilities.",
+    inputSchema: gefsParcelDiagnosticsQuerySchema,
+    outputSchema: gefsParcelDiagnosticsResultSchema,
+  }, async (query) => handleGetGefsParcelDiagnostics(gefsParcelDiagnosticsService, query));
 
   server.registerTool("get_gefs_diagnostic_timeseries", {
     title: "Get GEFS diagnostic time series",
