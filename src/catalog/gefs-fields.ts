@@ -1,4 +1,4 @@
-import type { GfsCode, VariableOutput } from "./variables.js";
+import type { VariableOutput } from "./variables.js";
 
 export const GEFS_PGRB2A_FIELD_IDS = [
   "surface_pressure",
@@ -28,7 +28,7 @@ export interface GefsFieldLevel {
 export interface RawGefsFieldDefinition {
   id: RawGefsPgrb2aFieldId;
   kind: "raw";
-  gfsCode: GfsCode;
+  gfsCode: string;
   level: GefsFieldLevel;
   temporalSemantics: GefsFieldTemporalSemantics;
   sourceUnit: string;
@@ -61,7 +61,7 @@ const meanSeaLevel = { gribLevel: "mean sea level", description: "mean sea level
 
 function raw(
   id: RawGefsPgrb2aFieldId,
-  gfsCode: GfsCode,
+  gfsCode: string,
   level: GefsFieldLevel,
   sourceUnit: string,
   description: string,
