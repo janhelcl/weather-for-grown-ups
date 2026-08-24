@@ -11,6 +11,10 @@ import type {
   GefsLayerDiagnosticsResult,
 } from "../schema/gefs-layer-diagnostics.js";
 import type {
+  GefsParcelDiagnosticsQueryInput,
+  GefsParcelDiagnosticsResult,
+} from "../schema/gefs-parcel-diagnostics.js";
+import type {
   GefsProfileDiagnosticsQueryInput,
   GefsProfileDiagnosticsResult,
 } from "../schema/gefs-profile-diagnostics.js";
@@ -20,6 +24,7 @@ import {
   type GefsLatestRunRangeProvider,
 } from "./gefs-latest-run.js";
 import { GefsLayerDiagnosticsService } from "./gefs-layer-diagnostics.js";
+import { GefsParcelDiagnosticsService } from "./gefs-parcel-diagnostics.js";
 import { GefsProfileDiagnosticsService } from "./gefs-profile-diagnostics.js";
 import {
   gefsForecastHour,
@@ -37,26 +42,34 @@ export interface GefsProfileDiagnosticsGetter {
   getProfileDiagnostics(query: GefsProfileDiagnosticsQueryInput): Promise<GefsProfileDiagnosticsResult>;
 }
 
+export interface GefsParcelDiagnosticsGetter {
+  getParcelDiagnostics(query: GefsParcelDiagnosticsQueryInput): Promise<GefsParcelDiagnosticsResult>;
+}
+
 export interface GefsDiagnosticTimeSeriesServiceOptions {
   layerDiagnosticsGetter?: GefsLayerDiagnosticsGetter;
   profileDiagnosticsGetter?: GefsProfileDiagnosticsGetter;
+  parcelDiagnosticsGetter?: GefsParcelDiagnosticsGetter;
   latestRunRangeProvider?: GefsLatestRunRangeProvider;
   stepConcurrency?: number;
 }
 
 type TaggedResult =
   | { kind: "layer"; result: GefsLayerDiagnosticsResult }
-  | { kind: "profile"; result: GefsProfileDiagnosticsResult };
+  | { kind: "profile"; result: GefsProfileDiagnosticsResult }
+  | { kind: "parcel"; result: GefsParcelDiagnosticsResult };
 
 export class GefsDiagnosticTimeSeriesService {
   private readonly layerDiagnosticsGetter: GefsLayerDiagnosticsGetter;
   private readonly profileDiagnosticsGetter: GefsProfileDiagnosticsGetter;
+  private readonly parcelDiagnosticsGetter: GefsParcelDiagnosticsGetter;
   private readonly latestRunRangeProvider: GefsLatestRunRangeProvider;
   private readonly stepConcurrency: number;
 
   constructor(options: GefsDiagnosticTimeSeriesServiceOptions = {}) {
     this.layerDiagnosticsGetter = options.layerDiagnosticsGetter ?? new GefsLayerDiagnosticsService();
     this.profileDiagnosticsGetter = options.profileDiagnosticsGetter ?? new GefsProfileDiagnosticsService();
+    this.parcelDiagnosticsGetter = options.parcelDiagnosticsGetter ?? new GefsParcelDiagnosticsService();
     this.latestRunRangeProvider = options.latestRunRangeProvider ?? new GefsLatestRunResolver();
     this.stepConcurrency = options.stepConcurrency ?? DEFAULT_GEFS_DIAGNOSTIC_TIME_STEP_CONCURRENCY;
   }
@@ -107,6 +120,15 @@ export class GefsDiagnosticTimeSeriesService {
               diagnostics: diagnostic.diagnostics,
             }),
           };
+        case "parcel":
+          return {
+            kind: "parcel",
+            result: await this.parcelDiagnosticsGetter.getParcelDiagnostics({
+              ...common,
+              pressureLevelsHpa: diagnostic.pressureLevelsHpa,
+              parcel: diagnostic.parcel,
+            }),
+          };
       }
     });
 
@@ -118,6 +140,7 @@ export class GefsDiagnosticTimeSeriesService {
       assertInvariant(tagged.result, expectedRun, expectedTime, first.gridPoint);
     }
 
+    const firstParcel = results.find((tagged): tagged is Extract<TaggedResult, { kind: "parcel" }> => tagged.kind === "parcel");
     return gefsDiagnosticTimeSeriesResultSchema.parse({
       model: "gefs_0p50",
       run: expectedRun,
@@ -127,6 +150,7 @@ export class GefsDiagnosticTimeSeriesService {
       requestedPoint: { latitude: query.latitude, longitude: query.longitude },
       gridPoint: first.gridPoint,
       selection: { diagnostic, members, quantiles },
+      ...(firstParcel ? { parcelMethodology: firstParcel.result.methodology } : {}),
       series: results.map(toCompactStep),
       source: {
         provider: "NOAA AWS Open Data",
@@ -149,11 +173,16 @@ function normalizeSelection(selection: GefsDiagnosticTimeSeriesSelection): GefsD
         pressureLevelsHpa: [...new Set(selection.pressureLevelsHpa)].sort((a, b) => b - a),
         diagnostics: [...new Set(selection.diagnostics)],
       };
+    case "parcel":
+      return {
+        ...selection,
+        pressureLevelsHpa: [...new Set(selection.pressureLevelsHpa)].sort((a, b) => b - a),
+      };
   }
 }
 
 function assertInvariant(
-  result: GefsLayerDiagnosticsResult | GefsProfileDiagnosticsResult,
+  result: GefsLayerDiagnosticsResult | GefsProfileDiagnosticsResult | GefsParcelDiagnosticsResult,
   expectedRun: string,
   expectedValidTime: Date,
   expectedGridPoint: { latitude: number; longitude: number },
@@ -191,6 +220,15 @@ function toCompactStep(tagged: TaggedResult) {
         forecastHour: tagged.result.forecastHour,
         sampledPressureLevelsHpa: tagged.result.sampledPressureLevelsHpa,
         summaries: tagged.result.summaries,
+        allCacheHit: tagged.result.source.allCacheHit,
+      };
+    case "parcel":
+      return {
+        kind: "parcel" as const,
+        validTime: tagged.result.validTime,
+        forecastHour: tagged.result.forecastHour,
+        sampledPressureLevelsHpa: tagged.result.sampledPressureLevelsHpa,
+        summary: tagged.result.summary,
         allCacheHit: tagged.result.source.allCacheHit,
       };
   }
