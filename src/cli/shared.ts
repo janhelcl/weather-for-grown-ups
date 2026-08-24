@@ -1,4 +1,9 @@
-import type { GefsMember, GefsPressureVariableId } from "../catalog/gefs.js";
+import type { GefsPgrb2aFieldId } from "../catalog/gefs-fields.js";
+import type {
+  GefsMember,
+  GefsPressureVariableId,
+  GefsProfileVariableId,
+} from "../catalog/gefs.js";
 import type {
   LayerDiagnosticId,
   NonIsobaricFieldId,
@@ -49,6 +54,33 @@ export function pointSelection(vars: unknown, levels: unknown, fields: unknown):
   };
 }
 
+export function gefsBundleSelection(
+  vars: unknown,
+  levels: unknown,
+  fields: unknown,
+  defaultVariables = DEFAULT_GEFS_PROFILE_VARIABLES,
+  defaultLevels = DEFAULT_LEVELS,
+): {
+  variables: GefsProfileVariableId[];
+  pressureLevelsHpa: number[];
+  fields: GefsPgrb2aFieldId[];
+} {
+  const parsedFields = parseGefsFields(fields);
+  const hasExplicitPressureSelection = vars !== undefined || levels !== undefined;
+  const includeDefaultPressureSelection = !hasExplicitPressureSelection && parsedFields.length === 0;
+  const variables = vars !== undefined
+    ? parseGefsProfileVariables(vars)
+    : hasExplicitPressureSelection || includeDefaultPressureSelection
+      ? parseGefsProfileVariables(defaultVariables)
+      : [];
+  const pressureLevelsHpa = levels !== undefined
+    ? parseLevels(levels)
+    : hasExplicitPressureSelection || includeDefaultPressureSelection
+      ? parseLevels(defaultLevels)
+      : [];
+  return { variables, pressureLevelsHpa, fields: parsedFields };
+}
+
 export function collectPoint(value: string, previous: PointCoordinate[] | undefined): PointCoordinate[] {
   const parts = value.split(",").map((part) => part.trim());
   if (parts.length !== 2) throw new Error(`Expected --point lat,lon, received: ${value}`);
@@ -66,6 +98,15 @@ export function parseVariables(value: unknown): VariableId[] {
 
 export function parseGefsVariables(value: unknown): GefsPressureVariableId[] {
   return String(value).split(",").map((variable) => variable.trim()).filter(Boolean) as GefsPressureVariableId[];
+}
+
+export function parseGefsProfileVariables(value: unknown): GefsProfileVariableId[] {
+  return String(value).split(",").map((variable) => variable.trim()).filter(Boolean) as GefsProfileVariableId[];
+}
+
+export function parseGefsFields(value: unknown): GefsPgrb2aFieldId[] {
+  if (value === undefined) return [];
+  return String(value).split(",").map((field) => field.trim()).filter(Boolean) as GefsPgrb2aFieldId[];
 }
 
 export function parseGefsMembers(value: unknown): GefsMember[] {
