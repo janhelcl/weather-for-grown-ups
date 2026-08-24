@@ -21,7 +21,7 @@ jobs:
       - name: Commit regenerated lockfile if needed
         run: |
           set -euo pipefail
-          if git diff --quiet -- package-lock.json; then
+          if [[ -z "$(git status --porcelain -- package-lock.json)" ]]; then
             echo "package-lock.json is already current"
             exit 0
           fi
