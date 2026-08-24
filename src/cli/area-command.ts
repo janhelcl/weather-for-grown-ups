@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import type { GefsPgrb2aFieldId } from "../catalog/gefs-fields.js";
+import type { RawGefsPgrb2aFieldId } from "../catalog/gefs-fields.js";
 import type { GefsPressureVariableId } from "../catalog/gefs.js";
 import { AreaSummaryService } from "../core/area-summary.js";
 import { GefsAreaSummaryService } from "../core/gefs-area-summary.js";
@@ -49,7 +49,7 @@ export function registerAreaCommand(program: Command): void {
           validTime: options.valid,
           ...(options.var === undefined ? {} : { variable: options.var as GefsPressureVariableId }),
           ...(options.level === undefined ? {} : { pressureLevelHpa: options.level as number }),
-          ...(options.field === undefined ? {} : { field: options.field as GefsPgrb2aFieldId }),
+          ...(options.field === undefined ? {} : { field: options.field as RawGefsPgrb2aFieldId }),
           ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
           quantiles: parseNumbers(options.quantiles),
           ...(options.percentiles === undefined ? {} : { percentiles: parseNumberList(options.percentiles) }),
