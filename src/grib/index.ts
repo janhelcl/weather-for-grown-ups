@@ -1,7 +1,4 @@
-import type {
-  FieldTemporalSemantics,
-  RawNonIsobaricFieldDefinition,
-} from "../catalog/non-isobaric-fields.js";
+import type { FieldTemporalSemantics } from "../catalog/non-isobaric-fields.js";
 
 export interface GribIndexRecord {
   message: string;
@@ -15,6 +12,13 @@ export interface GribIndexRecord {
 export interface ByteRange {
   start: number;
   end?: number;
+}
+
+export interface NonIsobaricGribSelector {
+  id: string;
+  gfsCode: string;
+  level: { gribLevel: string };
+  temporalSemantics: FieldTemporalSemantics;
 }
 
 export function parseGribIndex(text: string): GribIndexRecord[] {
@@ -84,7 +88,7 @@ export function selectPressureByteRanges(
 
 export function selectNonIsobaricByteRanges(
   records: GribIndexRecord[],
-  fields: Iterable<RawNonIsobaricFieldDefinition>,
+  fields: Iterable<NonIsobaricGribSelector>,
 ): ByteRange[] {
   const selectedStarts = new Set<number>();
   const missing: string[] = [];

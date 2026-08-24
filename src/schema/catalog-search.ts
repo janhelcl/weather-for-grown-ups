@@ -41,7 +41,7 @@ export const catalogSearchMatchSchema = z.object({
 });
 
 export const catalogSearchResultSchema = z.object({
-  model: z.literal("gfs_0p25"),
+  model: z.union([z.literal("gfs_0p25"), z.literal("gefs_0p50")]),
   query: z.object({
     search: z.string().optional(),
     sections: z.array(catalogSearchSectionSchema),
