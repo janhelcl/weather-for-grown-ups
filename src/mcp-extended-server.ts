@@ -1,8 +1,10 @@
+import { GefsAreaSummaryService } from "./core/gefs-area-summary.js";
 import { GefsBundleTimeSeriesService } from "./core/gefs-bundle-timeseries.js";
 import { GefsMemberBundleService } from "./core/gefs-member-bundle.js";
 import { GefsPointsBundleTimeSeriesService } from "./core/gefs-points-bundle-timeseries.js";
 import { GefsPointsBundleService } from "./core/gefs-points-bundle.js";
 import { GefsTransectService } from "./core/gefs-transect.js";
+import { handleGetGefsAreaSummary } from "./mcp-gefs-area-tool.js";
 import {
   handleGetGefsFields,
   handleGetGefsFieldsTimeSeries,
@@ -11,6 +13,10 @@ import { handleGetGefsFieldsPointsTimeSeries } from "./mcp-gefs-points-bundle-ti
 import { handleGetGefsFieldsPoints } from "./mcp-gefs-points-bundle-tool.js";
 import { handleGetGefsTransect } from "./mcp-gefs-transect-tool.js";
 import { createMcpServer as createBaseMcpServer } from "./mcp-server.js";
+import {
+  gefsAreaSummaryQuerySchema,
+  gefsAreaSummaryResultSchema,
+} from "./schema/gefs-area-summary.js";
 import {
   gefsBundleTimeSeriesQuerySchema,
   gefsBundleTimeSeriesResultSchema,
@@ -30,7 +36,7 @@ import {
 import { gefsTransectQuerySchema, gefsTransectResultSchema } from "./schema/gefs-transect.js";
 
 /**
- * Extend the shared MCP server with GEFS mixed-field bundle operations without
+ * Extend the shared MCP server with GEFS model-native operations without
  * duplicating the existing registry. Both stdio and Streamable HTTP entrypoints
  * use this factory, so the public MCP tool catalog remains transport-identical.
  */
@@ -41,10 +47,11 @@ export function createMcpServer() {
   const pointsService = new GefsPointsBundleService();
   const pointsTimeSeriesService = new GefsPointsBundleTimeSeriesService({ pointsGetter: pointsService });
   const transectService = new GefsTransectService({ pointsGetter: pointsService });
+  const areaService = new GefsAreaSummaryService();
 
   server.registerTool("get_gefs_fields", {
     title: "Get mixed GEFS field distributions",
-    description: "Fetch one mixed GEFS 0.5° pgrb2a selection at one point/time: multiple pressure variables/levels plus non-isobaric fields such as 2 m temperature/RH, 10 m wind, precipitation, PWAT, cloud cover, CAPE/CIN, or MSLP. WFG merges all raw dependencies into one selected GRIB slice and one wgrib2 decode per member, derives supported thermodynamics and wind member-by-member, then summarizes across members. Accumulation/average intervals are explicit; wind direction uses circular aggregation. Member arrays are optional. Ensemble summaries are raw member evidence, not calibrated probability or uncertainty.",
+    description: "Fetch one mixed GEFS 0.5° pgrb2a selection at one point/time: multiple pressure variables/levels plus non-isobaric fields such as 2 m temperature/RH, 10 m wind, precipitation, PWAT, cloud cover, CAPE/CIN, or MSLP. WFG merges all raw dependencies into one selected GRIB slice and one wgrib2 decode per member, derives supported thermodynamics member-by-member, then summarizes across members. Accumulation/average intervals are explicit; wind direction uses circular aggregation. Member arrays are optional. Ensemble summaries are raw member evidence, not calibrated probability or uncertainty.",
     inputSchema: gefsMemberBundleQuerySchema,
     outputSchema: gefsMemberBundleResultSchema,
   }, async (query) => handleGetGefsFields(bundleService, query));
@@ -76,6 +83,13 @@ export function createMcpServer() {
     inputSchema: gefsTransectQuerySchema,
     outputSchema: gefsTransectResultSchema,
   }, async (query) => handleGetGefsTransect(transectService, query));
+
+  server.registerTool("get_gefs_area_summary", {
+    title: "Get GEFS member-first area statistics",
+    description: "Summarize one raw GEFS pgrb2a pressure variable or non-isobaric field over a bounded box. WFG computes spatial mean/min/max, requested spatial percentiles and threshold fractions independently inside every member, then returns ensemble mean/spread/quantiles for those member-level statistics. This preserves the spatial and ensemble axes rather than flattening grid cells and members into one sample. Optional extrema locations are returned per member. Threshold-fraction distributions are raw member evidence, not calibrated probabilities.",
+    inputSchema: gefsAreaSummaryQuerySchema,
+    outputSchema: gefsAreaSummaryResultSchema,
+  }, async (query) => handleGetGefsAreaSummary(areaService, query));
 
   return server;
 }
