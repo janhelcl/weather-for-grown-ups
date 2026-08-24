@@ -4,36 +4,44 @@ WFG exposes NOAA Global Ensemble Forecast System (GEFS) data as a model-native e
 
 GEFS is integrated into WFG's shared atmospheric core: operations and physical kernels are reused where scientifically valid, while member/distribution semantics remain explicit.
 
-## Scope
+## Current contract
 
-The current GEFS surface covers:
+- product: operational atmospheric `pgrb2a` 0.5°;
+- members: control `c00` plus `p01`–`p30`;
+- cycles: 00/06/12/18Z;
+- current WFG horizon: `f000`–`f384`;
+- native cadence: 3 hours;
+- source: NOAA AWS Open Data `.idx` + byte-range access;
+- decoder: `wgrib2`;
+- immutable local member-slice caching.
 
-- operational atmospheric `pgrb2a` 0.5° product;
-- control `c00` plus perturbed `p01` through `p30`;
-- scalar distributions for one raw variable/pressure surface;
-- vertical profiles over explicit Cartesian raw-variable / pressure-surface selections;
-- pressure-layer diagnostic distributions calculated member-by-member;
-- one-field native three-hour time series from one fixed cycle;
-- aligned deterministic GFS-vs-GEFS comparisons;
-- native three-hour forecast cadence from `f000` through `f384` in the current WFG contract;
-- NOAA AWS Open Data `.idx` byte-range access only;
-- compact distribution summaries with memberwise data opt-in where response size could become large.
+Current GEFS operations:
 
-The canonical CLI operations shared with GFS are:
+- scalar raw pressure-field distributions;
+- multi-variable/multi-level pressure profiles;
+- native three-hour raw-field time series;
+- member-first layer diagnostics;
+- member-first whole-profile freezing/inversion diagnostics;
+- native three-hour layer/profile diagnostic time series;
+- aligned deterministic GFS-vs-GEFS comparison.
+
+The canonical shared CLI operations are:
 
 ```text
-profile    --model gefs
-layer      --model gefs
-timeseries --model gefs
+profile                --model gefs
+layer                  --model gefs
+profile-diagnostics    --model gefs
+timeseries             --model gefs
+diagnostic-timeseries  --model gefs
 ```
 
-`ensemble-profile` and `ensemble-timeseries` remain explicit GEFS compatibility aliases routed through the same core dispatchers.
+`ensemble-profile` and `ensemble-timeseries` remain explicit compatibility aliases over the same core dispatchers.
 
-MCP deliberately keeps explicit model-named wrappers such as `get_gefs_ensemble_profile` and `get_gefs_layer_diagnostics`, while the underlying meteorological/core primitives are shared.
+MCP keeps explicit wrappers such as `get_gefs_ensemble_profile`, `get_gefs_layer_diagnostics`, `get_gefs_profile_diagnostics`, and `get_gefs_diagnostic_timeseries` because smaller model-specific schemas are clearer for agents.
 
-## Supported pressure-level variables
+## Supported pressure variables
 
-WFG validates against the GEFS `pgrb2a` inventory before network access instead of reusing the broader deterministic GFS 0.25° inventory.
+WFG validates against the GEFS `pgrb2a` inventory rather than silently inheriting deterministic GFS's broader catalog.
 
 Common supported pressure levels are `10,50,100,200,250,500,700,850,925,1000` hPa for:
 
@@ -45,35 +53,35 @@ Common supported pressure levels are `10,50,100,200,250,500,700,850,925,1000` hP
 
 `u_wind` and `v_wind` additionally support `300` and `400` hPa in the current contract.
 
-For a profile, every requested variable must exist at every requested pressure surface. For a diagnostic, every dependency required by that diagnostic must exist at every required pressure surface. Unsupported combinations fail validation before network access rather than being silently substituted.
+A raw profile is an explicit Cartesian selection: every requested variable must exist at every requested pressure surface. A diagnostic query must have every raw dependency available at every required pressure surface. Invalid combinations fail before network access.
 
-For example, U/V wind exists at 300/400 hPa, but a 400→300-hPa `wind_shear` query also needs geopotential height at both surfaces. If that complete dependency set is unavailable in the current WFG GEFS inventory, the diagnostic query is rejected before a download.
+## Ensemble statistics
 
-## CLI
+All GEFS numeric distribution surfaces use the same implementation for:
 
-### Scalar distribution at one valid time
+- arithmetic mean;
+- population standard deviation;
+- min/max;
+- caller-selected quantiles with linear interpolation over sorted values.
 
-```bash
-wfg ensemble \
-  --lat 50.08 \
-  --lon 14.43 \
-  --valid 2026-08-24T12:00:00Z \
-  --var temperature \
-  --level 850 \
-  --quantiles 0.1,0.5,0.9 \
-  --gte 10 \
-  --json
-```
+Thus spread/quantile semantics are identical whether the sampled quantity is a raw temperature, a profile cell, a member-specific layer depth, or a diagnostic output.
 
-By default all 31 members are sampled. A subset can be requested with `--members c00,p01,p02,...`.
+### Raw member fractions
 
-### Ensemble pressure profile — canonical operation
+When a surface reports a member fraction, it is labeled:
+
+`raw_member_fraction_not_calibrated_probability`
+
+For example, 20/31 members exceeding a threshold or containing a sampled inversion is useful model evidence, but WFG does not claim that value is a calibrated real-world probability.
+
+## Pressure profiles
+
+Example:
 
 ```bash
 wfg profile \
   --model gefs \
-  --lat 50.08 \
-  --lon 14.43 \
+  --lat 50.08 --lon 14.43 \
   --valid 2026-08-24T12:00:00Z \
   --vars temperature,relative_humidity,geopotential_height \
   --levels 1000,925,850,700,500 \
@@ -81,221 +89,148 @@ wfg profile \
   --json
 ```
 
-The default result contains one distribution summary for every requested variable/level cell. It deliberately omits the full memberwise profile to keep agent context compact. Add `--include-members` only when individual member vertical states are required.
+The default output is compact: one distribution summary per variable/level cell. `--include-members` adds every selected member's raw normalized profile values.
 
-Profile queries are Cartesian: if `temperature,geopotential_height` and `850,500` are requested, the result covers all four variable/level cells.
+Within one member all decoded fields must resolve to one GEFS grid point, and all selected members must resolve to the same GEFS grid point. WFG fails rather than combining inconsistent samples.
 
-`wfg ensemble-profile` is an explicit GEFS alias over the same underlying profile service.
+## Layer diagnostics
 
-### Layer diagnostics — shared physics
+Example:
 
 ```bash
 wfg layer \
   --model gefs \
-  --lat 50.08 \
-  --lon 14.43 \
+  --lat 50.08 --lon 14.43 \
   --valid 2026-08-24T12:00:00Z \
-  --lower 850 \
-  --upper 500 \
+  --lower 850 --upper 500 \
   --diagnostics temperature_lapse_rate,wind_shear,potential_temperature_gradient \
-  --quantiles 0.1,0.5,0.9 \
   --json
 ```
 
-This is **not** a diagnostic calculated on the ensemble-mean profile. WFG instead:
+GEFS layer diagnostics are **not** calculated on an ensemble-mean profile. WFG:
 
-1. expands the same diagnostic dependencies used by GFS;
-2. fetches the needed GEFS profile cells for every selected member;
-3. adapts each member into the shared normalized pressure-level representation;
-4. runs the exact same layer diagnostic kernel independently for each member;
-5. summarizes those member diagnostic results across the ensemble.
+1. expands the same raw dependencies used by deterministic GFS;
+2. fetches one minimal multi-message profile slice per member;
+3. adapts each member into the shared normalized profile representation;
+4. evaluates the same layer kernel independently for each member;
+5. summarizes the member diagnostic values afterwards.
 
-This distinction matters for nonlinear quantities and for height normalization. The physical depth between 850 and 500 hPa varies between members because member geopotential heights vary. GEFS therefore returns a **layer-depth distribution** alongside diagnostic-output distributions.
+Each member has its own geopotential layer depth, so layer depth is returned as a distribution as well.
 
-`includeMembers=true` / `--include-members` adds each member's endpoint heights/depth and diagnostic values for auditability.
+## Whole-profile diagnostics
 
-Current shared layer diagnostics are:
+Example:
 
-- `temperature_lapse_rate`;
-- `wind_shear`;
-- `potential_temperature_gradient`.
+```bash
+wfg profile-diagnostics \
+  --model gefs \
+  --lat 50.08 --lon 14.43 \
+  --valid 2026-08-24T12:00:00Z \
+  --levels 1000,925,850,700,500 \
+  --diagnostics freezing_level_crossings,temperature_inversion_layers \
+  --json
+```
 
-### Native three-hour time series — canonical operation
+Each member independently produces its own crossing/inversion structures through the same whole-profile kernel used by GFS. WFG then summarizes comparable descriptors rather than inventing an ensemble-mean structure.
+
+Freezing summaries include:
+
+- fraction/count of members with any crossing;
+- crossing-count distribution;
+- conditional lowest/highest crossing height and pressure distributions.
+
+Inversion summaries include:
+
+- fraction/count of members with any inversion;
+- layer-count distribution;
+- total sampled inversion-depth distribution;
+- conditional deepest/strongest inversion distributions.
+
+Conditional distributions state how many members contributed and disappear entirely when no member contains that structure.
+
+See [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md).
+
+## Raw-field time series
 
 ```bash
 wfg timeseries \
   --model gefs \
-  --lat 50.08 \
-  --lon 14.43 \
+  --lat 50.08 --lon 14.43 \
   --from 2026-08-24T06:00:00Z \
   --to 2026-08-25T18:00:00Z \
   --vars temperature \
   --levels 850 \
   --quantiles 0.1,0.5,0.9 \
-  --gte 10 \
   --json
 ```
 
-The current GEFS time-series operation accepts exactly one raw variable and one pressure surface. Distribution summaries are compact by default. Add `--include-members` only when member trajectories are required.
+The current GEFS raw time-series primitive accepts exactly one raw variable and one pressure surface. Member trajectories are omitted by default; `--include-members` adds them.
 
-`wfg ensemble-timeseries` remains an explicit GEFS alias over the same time-series dispatcher.
+## Diagnostic time series
 
-`--max-steps` bounds accepted output size. The hard GEFS contract maximum is 129 steps, corresponding to `f000` through `f384` at three-hour cadence.
+```bash
+wfg diagnostic-timeseries \
+  --model gefs \
+  --kind profile \
+  --lat 50.08 --lon 14.43 \
+  --start 2026-08-24T06:00:00Z \
+  --end 2026-08-25T18:00:00Z \
+  --levels 1000,925,850,700,500 \
+  --diagnostics freezing_level_crossings,temperature_inversion_layers \
+  --json
+```
 
-## MCP
+GEFS supports `layer` and `profile` diagnostic series. Each query fixes one run, member set, quantile set, pressure sampling, and diagnostic selection across all native three-hour steps.
 
-Current GEFS-related MCP tools are:
+The series intentionally returns compact ensemble summaries only. Full member diagnostic structures are a single-time drill-down path through `layer --model gefs` or `profile-diagnostics --model gefs` / the corresponding MCP tools.
 
-- `get_gefs_ensemble` — one raw variable/pressure surface at one valid time;
-- `get_gefs_ensemble_profile` — multiple raw variables and pressure surfaces at one valid time;
-- `get_gefs_layer_diagnostics` — shared layer physics evaluated per member and summarized;
-- `get_gefs_ensemble_timeseries` — one raw variable/pressure surface across a native-cadence range;
-- `compare_gfs_to_gefs` — deterministic GFS positioned inside an aligned GEFS member distribution.
-
-MCP wrappers stay explicit even though profile/time-series/layer operations share internal dispatch/physics with GFS. This keeps tool schemas simple for agents.
-
-## Distribution semantics
-
-All GEFS distribution-producing surfaces use one shared implementation for:
-
-- arithmetic mean;
-- population standard deviation;
-- minimum and maximum;
-- caller-selected quantiles using linear interpolation over sorted members.
-
-This means a p50 or population spread has identical mathematical semantics for raw temperature, a profile cell, layer depth, or a member-derived wind-shear value.
-
-### Threshold fractions are not calibrated probabilities
-
-If 20 of 31 requested members exceed a scalar threshold, WFG reports `20 / 31` and labels it `raw_member_fraction_not_calibrated_probability`.
-
-WFG does not claim that this means a calibrated 64.5% real-world probability. Calibration, model weighting, climatological correction and decision-specific interpretation belong in higher layers.
-
-## Profile semantics
-
-An ensemble profile fixes one initialization cycle, valid time, coordinate, member selection, variable selection and pressure-level selection.
-
-For every variable/level cell, the compact result returns:
-
-- normalized output field and unit;
-- member count;
-- arithmetic mean;
-- population standard deviation;
-- min/max;
-- caller-selected quantiles.
-
-Pressure levels are returned in descending pressure order. Member order is canonicalized to `c00,p01,...,p30`.
-
-With `includeMembers=true`, the result additionally includes every requested member's normalized value for every selected variable/level cell plus member-slice cache state.
-
-All decoded fields inside one member profile must resolve to one GEFS grid point, and all requested members must resolve to that same GEFS grid point. WFG fails rather than combining inconsistent samples.
-
-## Layer diagnostic semantics
-
-A GEFS layer diagnostic has fixed pressure bounds but does **not** have one fixed physical height/depth across the ensemble.
-
-For each member, WFG retains:
-
-- lower/upper pressure surfaces;
-- lower/upper member geopotential heights;
-- member layer depth;
-- diagnostic output values.
-
-The compact public result returns:
-
-- a distribution for member layer depth;
-- one distribution for every declared output field of every selected diagnostic;
-- selected member list and quantiles;
-- model/run/valid-time/grid/source provenance.
-
-This preserves the distinction between the pressure-coordinate request and the member-specific geometric realization of that layer.
-
-## Time-series semantics
-
-A GEFS ensemble time series resolves **one initialization cycle for the complete range** and passes that explicit run to every step. This prevents cycle drift while a newer GEFS run is partially publishing.
-
-Every step contains:
-
-- native valid time and forecast hour;
-- member count;
-- mean and population standard deviation;
-- min/max;
-- requested quantiles;
-- optional threshold count/fraction.
-
-Individual member values are omitted by default. `includeMembers=true` adds the member array at every step.
+See [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md).
 
 ## Run selection
 
-### One-time profile/scalar/layer operations
+One-time GEFS operations accept `latest` or an explicit 00/06/12/18Z cycle.
 
-`run="latest"` starts from the newest six-hour GEFS cycle that could precede the requested valid time and walks backward until all selected member files exist at the required native forecast hour. Variable/pressure/diagnostic dependency validation happens before source access.
+For a time range, `latest` resolves one cycle that:
 
-### Time range
+1. initializes no later than the first requested valid time;
+2. can cover the complete requested range inside the current `f384` contract;
+3. has all selected members published at both range ends.
 
-For a range, `run="latest"` starts from the newest cycle that could precede the **first** requested valid time. A candidate is accepted only when all selected members are available at both start and end forecast hours. That cycle is then fixed across every intermediate step.
-
-This preserves:
-
-1. the model run never initializes after the first requested valid time;
-2. the complete range fits inside the `f000`–`f384` contract;
-3. every returned step belongs to one model initialization.
-
-Explicit `00Z`, `06Z`, `12Z`, or `18Z` initialization timestamps are supported for reproducibility.
+That run is then passed explicitly to every intermediate step, preventing cycle drift during evaluation.
 
 ## Data access and caching
 
 GEFS uses NOAA AWS Open Data directly.
 
-For a scalar point query WFG:
+For each selected member, WFG:
 
-1. resolves the member-specific immutable `pgrb2a` object;
-2. fetches and caches its `.idx` inventory;
-3. selects the requested GRIB variable/pressure byte range;
-4. caches the immutable selected-message subset;
-5. samples locally with `wgrib2`;
-6. aggregates normalized member values locally.
+1. identifies the immutable `pgrb2a` object for run/forecast hour/member;
+2. caches the `.idx` inventory;
+3. selects only required GRIB messages;
+4. downloads the relevant byte ranges;
+5. stitches multi-field selections into one cached GRIB slice per member;
+6. decodes locally with `wgrib2`;
+7. performs physical derivation and aggregation locally.
 
-For profile and layer-diagnostic work, WFG selects all required variable/level messages from the same member object, downloads the selected ranges, stitches them into **one cached multi-message slice per member**, and decodes that slice once. Range requests are bounded inside each member while members are processed with bounded concurrency.
+Byte ranges are sequential inside one member while member work is bounded-concurrent. Diagnostic time series add bounded step concurrency around those existing member-aware single-time services.
 
-Equivalent profile selections are canonicalized for cache identity, so reordering the same variables or pressure levels reuses the same immutable member slice.
+AWS Open Data paths do not use the NOMADS scripted-access limiter.
 
-A time series repeats the scalar primitive at each native forecast step with bounded step/member concurrency.
+## Aligned deterministic comparison
 
-The cache lives under `~/.cache/wfg/gefs-s3` by default, or beneath `WFG_CACHE_DIR` when configured.
+`compare_gfs_to_gefs` / `wfg compare-gfs-gefs` resolves one initialization cycle that can satisfy deterministic GFS and every selected GEFS member at the same valid time. The result preserves distinct GFS 0.25° and GEFS 0.5° sampled grid points and reports descriptive model-vs-member-distribution metrics rather than a binary outlier judgment.
 
-These paths do not use the 11-second NOMADS courtesy limiter because they read public AWS Open Data objects/ranges rather than the scripted NOMADS filter service.
+See [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md).
 
-## Relationship to deterministic GFS
+## Explicit non-goals / unsupported surfaces
 
-GEFS is neither a copy of the GFS API nor an unrelated parallel stack.
+The current GEFS contract does **not** yet provide:
 
-Shared today:
-
-- operation vocabulary for profile/time series/layer diagnostics;
-- normalized pressure-profile representation;
-- layer meteorological kernels;
-- ensemble distribution mathematics where aggregation is needed;
-- decoder abstraction and broad provenance conventions.
-
-Still model-specific:
-
-- upstream inventory and supported pressure surfaces;
-- source/object paths;
-- run/member availability semantics;
-- deterministic versus ensemble result contracts;
-- GFS-only non-isobaric/parcel/spatial capabilities not yet supported by GEFS.
-
-## Deliberate non-goals of the current GEFS surface
-
-Not yet included:
-
-- ensemble whole-profile diagnostic distributions such as freezing-level/inversion ensemble structure;
-- ensemble parcel/LCL/LFC/EL/CAPE/CIN diagnostics;
-- ensemble diagnostic time series;
-- ensemble profile time series;
-- spatial ensemble areas or transects;
+- parcel/CAPE/CIN diagnostics, because the required surface/non-isobaric parcel inputs have not been added to the GEFS source contract;
+- multi-point GEFS queries;
+- GEFS transects;
+- GEFS area distributions;
 - calibrated probabilities;
-- ensemble-derived activity suitability or safety judgments.
+- activity-specific suitability or safety judgments.
 
-Future ensemble diagnostics should continue the existing pattern: obtain member atmospheric states through model adapters, run shared physical kernels per member, and aggregate only afterward.
+Those should be added only when their model/source semantics are explicit, not by mechanically copying deterministic GFS endpoints.

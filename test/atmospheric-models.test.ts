@@ -14,6 +14,10 @@ describe("atmospheric model capability catalog", () => {
     expect(modelSupportsOperation("gefs_0p50", "timeseries")).toBe(true);
     expect(modelSupportsOperation("gfs_0p25", "layer_diagnostics")).toBe(true);
     expect(modelSupportsOperation("gefs_0p50", "layer_diagnostics")).toBe(true);
+    expect(modelSupportsOperation("gfs_0p25", "profile_diagnostics")).toBe(true);
+    expect(modelSupportsOperation("gefs_0p50", "profile_diagnostics")).toBe(true);
+    expect(modelSupportsOperation("gfs_0p25", "diagnostic_timeseries")).toBe(true);
+    expect(modelSupportsOperation("gefs_0p50", "diagnostic_timeseries")).toBe(true);
   });
 
   it("keeps unsupported capabilities explicit", () => {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { GefsDiagnosticTimeSeriesService } from "../src/core/gefs-diagnostic-timeseries.js";
 import { GefsEnsembleProfileService } from "../src/core/gefs-ensemble-profile.js";
 import { GefsEnsembleTimeSeriesService } from "../src/core/gefs-ensemble-timeseries.js";
 import { GefsEnsembleService } from "../src/core/gefs-ensemble.js";
@@ -17,6 +18,11 @@ const ensembleService = new GefsEnsembleService({ latestRunProvider: latestRunRe
 const profileService = new GefsEnsembleProfileService({ latestRunProvider: latestRunResolver });
 const layerDiagnosticsService = new GefsLayerDiagnosticsService({ profileGetter: profileService });
 const profileDiagnosticsService = new GefsProfileDiagnosticsService({ profileGetter: profileService });
+const diagnosticTimeSeriesService = new GefsDiagnosticTimeSeriesService({
+  layerDiagnosticsGetter: layerDiagnosticsService,
+  profileDiagnosticsGetter: profileDiagnosticsService,
+  latestRunRangeProvider: latestRunResolver,
+});
 const timeSeriesService = new GefsEnsembleTimeSeriesService({
   ensembleGetter: ensembleService,
   latestRunRangeProvider: latestRunResolver,
@@ -156,6 +162,43 @@ assert.equal(profileDiagnostics.source.provider, "NOAA AWS Open Data");
 assert.equal(profileDiagnostics.source.access, "s3_range");
 assert.equal(profileDiagnostics.source.product, "pgrb2a_0p50");
 
+const diagnosticSeries = await diagnosticTimeSeriesService.getDiagnosticTimeSeries({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: run.toISOString(),
+  startTime: startTime.toISOString(),
+  endTime: endTime.toISOString(),
+  diagnostic: {
+    kind: "profile",
+    pressureLevelsHpa: [1000, 925, 850, 700, 500],
+    diagnostics: ["freezing_level_crossings"],
+  },
+  members: [...members],
+  quantiles: [0.1, 0.5, 0.9],
+  maxSteps: 2,
+});
+
+assert.equal(diagnosticSeries.model, "gefs_0p50");
+assert.equal(diagnosticSeries.run, run.toISOString());
+assert.equal(diagnosticSeries.startTime, startTime.toISOString());
+assert.equal(diagnosticSeries.endTime, endTime.toISOString());
+assert.equal(diagnosticSeries.stepHours, 3);
+assert.equal(diagnosticSeries.series.length, 2);
+assert.deepEqual(diagnosticSeries.series.map((step) => step.validTime), [startTime.toISOString(), endTime.toISOString()]);
+assert(diagnosticSeries.series.every((step) => step.kind === "profile"));
+for (const step of diagnosticSeries.series) {
+  if (step.kind !== "profile") throw new Error("Expected live GEFS profile diagnostic time-series step");
+  assert.equal(step.summaries.length, 1);
+  const freezing = step.summaries[0];
+  assert(freezing?.id === "freezing_level_crossings");
+  assert.equal(freezing.membersWithAnyCrossing.memberCount, members.length);
+  assert(freezing.membersWithAnyCrossing.fraction >= 0 && freezing.membersWithAnyCrossing.fraction <= 1);
+  assert.equal(freezing.crossingCount.quantiles.length, 3);
+}
+assert.equal(diagnosticSeries.source.provider, "NOAA AWS Open Data");
+assert.equal(diagnosticSeries.source.access, "s3_range");
+assert.equal(diagnosticSeries.source.product, "pgrb2a_0p50");
+
 const series = await timeSeriesService.getTimeSeries({
   latitude: 50.08,
   longitude: 14.43,
@@ -243,6 +286,13 @@ console.log(JSON.stringify({
     summaries: profileDiagnostics.summaries,
     cacheHit: profileDiagnostics.source.allCacheHit,
   },
+  ensembleDiagnosticTimeSeries: diagnosticSeries.series.map((step) => ({
+    validTime: step.validTime,
+    forecastHour: step.forecastHour,
+    kind: step.kind,
+    summaries: step.kind === "profile" ? step.summaries : [],
+    cacheHit: step.allCacheHit,
+  })),
   ensembleTimeSeries: series.series.map((step) => ({
     validTime: step.validTime,
     forecastHour: step.forecastHour,
