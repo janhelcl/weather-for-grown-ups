@@ -15,15 +15,19 @@ A request such as:
 - CAPE/CIN;
 - mean sea-level pressure;
 
-should not require one NOAA selected-message request per logical output. `GefsMemberBundleService` expands raw dependencies, builds one canonical mixed selection, fetches one selected GRIB slice per ensemble member, and decodes that local slice once.
+should not require one NOAA selected-message request per logical output. WFG expands raw dependencies, builds one canonical mixed selection, fetches one selected GRIB slice per ensemble member, derives supported quantities member-by-member, and only then aggregates across the ensemble.
 
 For one point and one forecast step, upstream/decode work therefore scales approximately with **members**, not **members × requested fields**.
+
+For multiple points, WFG reuses each member's selected file across all coordinates. Upstream fetches still scale with **members**, while the current point-oriented `wgrib2` adapter performs local decodes at **members × points**.
+
+For multiple points over time, one GEFS cycle is fixed for the full range and the multi-point primitive is called once per native three-hour step. Upstream selected-file work scales with **steps × members**; local point extraction scales with **steps × members × points**.
 
 ## Public surfaces
 
 ### CLI
 
-Single time:
+Single point, single time:
 
 ```bash
 wfg ensemble-fields \
@@ -36,7 +40,7 @@ wfg ensemble-fields \
   --json
 ```
 
-Time series:
+Single point, time series:
 
 ```bash
 wfg ensemble-fields-timeseries \
@@ -50,12 +54,44 @@ wfg ensemble-fields-timeseries \
   --json
 ```
 
-`--include-members` is optional. For time series it is additionally protected by `--max-member-samples`, which bounds forecast-step × member × scalar-output cells before any run resolution or upstream access.
+Multiple points, single time:
+
+```bash
+wfg ensemble-fields-points \
+  --point 50.08,14.43 \
+  --point 49.20,16.61 \
+  --point 47.81,13.06 \
+  --valid 2026-08-24T15:00:00Z \
+  --vars temperature,dew_point \
+  --levels 850 \
+  --fields temperature_2m,wind_10m,total_precipitation \
+  --json
+```
+
+Multiple points, time series:
+
+```bash
+wfg ensemble-fields-points-timeseries \
+  --point 50.08,14.43 \
+  --point 49.20,16.61 \
+  --point 47.81,13.06 \
+  --from 2026-08-24T15:00:00Z \
+  --to 2026-08-25T15:00:00Z \
+  --vars temperature,dew_point \
+  --levels 850 \
+  --fields temperature_2m,wind_10m,total_precipitation \
+  --max-point-steps 800 \
+  --json
+```
+
+`--include-members` is optional. Time and point×time surfaces are protected by response guardrails before run resolution or upstream access. The point×time operation bounds both `points × steps` and, when member payloads are requested, `points × steps × members × scalar outputs`.
 
 ### MCP
 
 - `get_gefs_fields` — one mixed selection at one point/time.
 - `get_gefs_fields_timeseries` — one mixed selection across native three-hour valid times from one fixed model cycle.
+- `get_gefs_fields_points` — one mixed selection across up to 20 points with one selected file per member.
+- `get_gefs_fields_points_timeseries` — one mixed selection across up to 20 points and native three-hour valid times from one fixed model cycle.
 
 Both MCP transports use the same extended server factory, so stdio and Streamable HTTP expose identical bundle tools.
 
@@ -110,16 +146,16 @@ It deliberately does not return ordinary scalar direction quantiles.
 
 Bundle summaries contain model-member distributions. They are not calibrated real-world probability or uncertainty. When individual members are omitted, the summary still reflects member-first computation; omission is only a response-size choice.
 
-## Time-series invariants
+## Composition invariants
 
-`GefsBundleTimeSeriesService`:
+The time-series composers:
 
-1. validates the complete range and response guardrails before upstream calls;
-2. resolves `latest` once to a GEFS cycle that can satisfy the whole range;
-3. uses native three-hour valid times;
-4. calls the single-time bundle primitive with that explicit cycle for every step;
-5. rejects run, valid-time, forecast-hour, or sampled-grid drift;
-6. preserves each field's own decoded temporal interval;
-7. aggregates cache state over the complete series.
+1. validate the complete range and response guardrails before upstream calls;
+2. resolve `latest` once to a GEFS cycle that can satisfy the whole range;
+3. use native three-hour valid times;
+4. call the relevant single-time primitive with that explicit cycle for every step;
+5. reject run, valid-time, forecast-hour, selection, point-order, or sampled-grid drift;
+6. preserve each field's own decoded temporal interval;
+7. aggregate cache state over the complete series.
 
-This keeps temporal composition separate from meteorological decoding and makes the single-time bundle the reusable foundation for future multi-point, transect, and area ensemble operations.
+This keeps temporal composition separate from meteorological decoding and makes the single-time mixed bundle decoder reusable across point, multi-point, and time-series operations.
