@@ -68,7 +68,7 @@ describe("bundled GRIB2 point decoding", () => {
     expect(decoded).toMatchObject(expectedVertical);
   });
 
-  it("carries the statistical forecast interval for downstream field semantics", () => {
+  it("preserves accumulation rather than tagging every interval as both statistics", () => {
     const [decoded] = decodePointMessages([
       fakeMessage({
         key: "APCP:202608240600: in surface:Accumulation Forecast",
@@ -79,7 +79,21 @@ describe("bundled GRIB2 point decoding", () => {
     ], 14, 50);
 
     expect(decoded?.accumulation).toEqual({ startForecastHour: 3, endForecastHour: 6 });
-    expect(decoded?.average).toEqual({ startForecastHour: 3, endForecastHour: 6 });
+    expect(decoded?.average).toBeUndefined();
+  });
+
+  it("preserves average intervals independently", () => {
+    const [decoded] = decodePointMessages([
+      fakeMessage({
+        key: "TCDC:202608240600: in entire atmosphere:Average Forecast",
+        code: "TCDC",
+        forecast: "2026-08-24T00:00:00Z",
+        forecastEnd: "2026-08-24T06:00:00Z",
+      }),
+    ], 14, 50);
+
+    expect(decoded?.average).toEqual({ startForecastHour: 0, endForecastHour: 6 });
+    expect(decoded?.accumulation).toBeUndefined();
   });
 });
 
