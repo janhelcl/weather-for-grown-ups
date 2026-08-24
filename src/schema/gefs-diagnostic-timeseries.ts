@@ -4,12 +4,17 @@ import { GEFS_TOTAL_NATIVE_FORECAST_STEPS } from "../core/gefs-time.js";
 import { gefsMemberSchema, gefsRunSelectorSchema } from "./gefs-ensemble.js";
 import { gefsLayerDiagnosticsQuerySchema, gefsLayerDiagnosticsResultSchema } from "./gefs-layer-diagnostics.js";
 import {
+  gefsParcelDiagnosticsQuerySchema,
+  gefsParcelDiagnosticsResultSchema,
+} from "./gefs-parcel-diagnostics.js";
+import {
   gefsProfileDiagnosticsQuerySchema,
   gefsProfileDiagnosticSummarySchema,
 } from "./gefs-profile-diagnostics.js";
 import {
   isoDateTimeSchema,
   layerDiagnosticIdSchema,
+  parcelDefinitionIdSchema,
   pointCoordinateSchema,
   profileDiagnosticIdSchema,
 } from "./query.js";
@@ -27,6 +32,11 @@ export const gefsDiagnosticTimeSeriesSelectionSchema = z.discriminatedUnion("kin
     kind: z.literal("profile"),
     pressureLevelsHpa: z.array(z.number().positive()).min(2).max(12),
     diagnostics: z.array(profileDiagnosticIdSchema).min(1),
+  }),
+  z.object({
+    kind: z.literal("parcel"),
+    pressureLevelsHpa: z.array(z.number().positive()).min(2).max(12),
+    parcel: parcelDefinitionIdSchema,
   }),
 ]);
 
@@ -61,7 +71,9 @@ export const gefsDiagnosticTimeSeriesQuerySchema = z.object({
   };
   const validated = query.diagnostic.kind === "layer"
     ? gefsLayerDiagnosticsQuerySchema.safeParse({ ...common, ...query.diagnostic })
-    : gefsProfileDiagnosticsQuerySchema.safeParse({ ...common, ...query.diagnostic });
+    : query.diagnostic.kind === "profile"
+      ? gefsProfileDiagnosticsQuerySchema.safeParse({ ...common, ...query.diagnostic })
+      : gefsParcelDiagnosticsQuerySchema.safeParse({ ...common, ...query.diagnostic });
   if (!validated.success) {
     for (const issue of validated.error.issues) {
       context.addIssue({
@@ -92,9 +104,19 @@ const profileStepSchema = z.object({
   allCacheHit: z.boolean(),
 });
 
+const parcelStepSchema = z.object({
+  kind: z.literal("parcel"),
+  validTime: isoDateTimeSchema,
+  forecastHour: z.number().int().min(0).max(384),
+  sampledPressureLevelsHpa: z.array(z.number().positive()).min(2),
+  summary: gefsParcelDiagnosticsResultSchema.shape.summary,
+  allCacheHit: z.boolean(),
+});
+
 export const gefsDiagnosticTimeSeriesStepSchema = z.discriminatedUnion("kind", [
   layerStepSchema,
   profileStepSchema,
+  parcelStepSchema,
 ]);
 
 export const gefsDiagnosticTimeSeriesResultSchema = z.object({
@@ -110,6 +132,7 @@ export const gefsDiagnosticTimeSeriesResultSchema = z.object({
     members: z.array(gefsMemberSchema).min(2),
     quantiles: z.array(z.number().min(0).max(1)).min(1),
   }),
+  parcelMethodology: gefsParcelDiagnosticsResultSchema.shape.methodology.optional(),
   series: z.array(gefsDiagnosticTimeSeriesStepSchema).min(1).max(GEFS_TOTAL_NATIVE_FORECAST_STEPS),
   source: z.object({
     provider: z.literal("NOAA AWS Open Data"),
@@ -127,6 +150,12 @@ export const gefsDiagnosticTimeSeriesResultSchema = z.object({
         message: `GEFS diagnostic time-series step kind ${step.kind} does not match selection kind ${value.selection.diagnostic.kind}`,
       });
     }
+  }
+  if (value.selection.diagnostic.kind === "parcel" && value.parcelMethodology === undefined) {
+    context.addIssue({ code: "custom", path: ["parcelMethodology"], message: "GEFS parcel time series must expose its parcel methodology once at the root" });
+  }
+  if (value.selection.diagnostic.kind !== "parcel" && value.parcelMethodology !== undefined) {
+    context.addIssue({ code: "custom", path: ["parcelMethodology"], message: "parcelMethodology is only valid for GEFS parcel time series" });
   }
 });
 
