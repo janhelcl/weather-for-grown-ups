@@ -26,6 +26,7 @@ const EXPECTED_COMMANDS = [
   "ensemble-profile",
   "ensemble-timeseries",
   "ensemble-parcel",
+  "ensemble-parcel-timeseries",
   "compare-gfs-gefs",
   "layer",
   "profile-diagnostics",
