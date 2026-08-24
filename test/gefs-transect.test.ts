@@ -57,6 +57,16 @@ function batchFor(points: readonly { latitude: number; longitude: number }[], in
   };
 }
 
+const baseQuery = {
+  start: { latitude: 50, longitude: 14 },
+  end: { latitude: 49, longitude: 16 },
+  run,
+  validTime: "2026-08-24T12:00:00Z",
+  selection: { fields: ["temperature_2m"] as ["temperature_2m"] },
+  members: ["c00", "p01"] as ["c00", "p01"],
+  samples: 3,
+};
+
 describe("GEFS mixed-field transect", () => {
   it("reuses great-circle geometry and delegates the complete path to one multi-point bundle call", async () => {
     const getPoints = vi.fn(async (query: { points: { latitude: number; longitude: number }[]; includeMembers?: boolean }) =>
@@ -94,16 +104,7 @@ describe("GEFS mixed-field transect", () => {
     const service = new GefsTransectService({
       pointsGetter: { getPoints: async (query) => batchFor(query.points, true) },
     });
-    const result = await service.getTransect({
-      start: { latitude: 50, longitude: 14 },
-      end: { latitude: 49, longitude: 16 },
-      run,
-      validTime: "2026-08-24T12:00:00Z",
-      selection: { fields: ["temperature_2m"] },
-      members: ["c00", "p01"],
-      includeMembers: true,
-      samples: 3,
-    });
+    const result = await service.getTransect({ ...baseQuery, includeMembers: true });
     expect(result.includeMembers).toBe(true);
     expect(result.samples.every((sample) => sample.members?.length === 2)).toBe(true);
   });
@@ -118,14 +119,30 @@ describe("GEFS mixed-field transect", () => {
         },
       },
     });
-    await expect(service.getTransect({
-      start: { latitude: 50, longitude: 14 },
-      end: { latitude: 49, longitude: 16 },
-      run,
-      validTime: "2026-08-24T12:00:00Z",
-      selection: { fields: ["temperature_2m"] },
-      members: ["c00", "p01"],
-      samples: 3,
-    })).rejects.toThrow("changed requested point order");
+    await expect(service.getTransect(baseQuery)).rejects.toThrow("changed requested point order");
+  });
+
+  it("rejects a point-count mismatch from the multi-point primitive", async () => {
+    const service = new GefsTransectService({
+      pointsGetter: {
+        getPoints: async (query) => batchFor(query.points.slice(0, -1)),
+      },
+    });
+    await expect(service.getTransect(baseQuery)).rejects.toThrow("returned 2 points for 3 requested samples");
+  });
+
+  it("rejects an omitted member payload when members were explicitly requested", async () => {
+    const service = new GefsTransectService({
+      pointsGetter: {
+        getPoints: async (query) => {
+          const batch = batchFor(query.points, true);
+          delete batch.points[1]!.members;
+          return batch;
+        },
+      },
+    });
+    await expect(service.getTransect({ ...baseQuery, includeMembers: true })).rejects.toThrow(
+      "member payload was requested but omitted at sample 1",
+    );
   });
 });
