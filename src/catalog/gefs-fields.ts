@@ -1,12 +1,11 @@
 import type { VariableOutput } from "./variables.js";
 
-export const GEFS_PGRB2A_FIELD_IDS = [
+export const GEFS_PGRB2A_RAW_FIELD_IDS = [
   "surface_pressure",
   "temperature_2m",
   "relative_humidity_2m",
   "u_wind_10m",
   "v_wind_10m",
-  "wind_10m",
   "total_precipitation",
   "precipitable_water",
   "total_atmosphere_cloud_cover",
@@ -15,8 +14,13 @@ export const GEFS_PGRB2A_FIELD_IDS = [
   "mean_sea_level_pressure",
 ] as const;
 
+export const GEFS_PGRB2A_FIELD_IDS = [
+  ...GEFS_PGRB2A_RAW_FIELD_IDS,
+  "wind_10m",
+] as const;
+
 export type GefsPgrb2aFieldId = (typeof GEFS_PGRB2A_FIELD_IDS)[number];
-export type RawGefsPgrb2aFieldId = Exclude<GefsPgrb2aFieldId, "wind_10m">;
+export type RawGefsPgrb2aFieldId = (typeof GEFS_PGRB2A_RAW_FIELD_IDS)[number];
 
 export type GefsFieldTemporalSemantics = "instantaneous" | "accumulation" | "average";
 

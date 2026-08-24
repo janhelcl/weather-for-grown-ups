@@ -5,7 +5,6 @@ import type {
   NonIsobaricNamedLevelId,
 } from "../catalog/non-isobaric-fields.js";
 import type { ParcelComputation } from "../derived/parcel-diagnostics.js";
-import type { GfsCode } from "../catalog/variables.js";
 import type {
   FreezingLevelCrossing,
   TemperatureInversionLayer,
@@ -22,7 +21,8 @@ export interface ForecastInterval {
 }
 
 export interface DecodedValue {
-  code: GfsCode;
+  /** Raw GRIB short name. Kept model-neutral because GFS and GEFS publish overlapping but non-identical code sets. */
+  code: string;
   pressureHpa?: number;
   surface?: true;
   heightAboveGroundM?: number;

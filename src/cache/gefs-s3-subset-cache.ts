@@ -3,7 +3,14 @@ import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises
 import { join } from "node:path";
 import type { GefsMember } from "../catalog/gefs.js";
 import type { GfsCode } from "../catalog/variables.js";
-import { parseGribIndex, selectPressureByteRanges, type ByteRange } from "../grib/index.js";
+import {
+  mergeByteRanges,
+  parseGribIndex,
+  selectNonIsobaricByteRanges,
+  selectPressureByteRanges,
+  type ByteRange,
+  type NonIsobaricGribSelector,
+} from "../grib/index.js";
 import { buildGefsS3ForecastIndexUrl, buildGefsS3ForecastUrl } from "../sources/gefs-s3.js";
 
 export interface GefsMemberDataRequest {
@@ -20,6 +27,7 @@ export interface GefsMemberSelectionDataRequest {
   member: GefsMember;
   variableCodes: GfsCode[];
   pressureLevelsHpa: number[];
+  fields?: NonIsobaricGribSelector[];
 }
 
 export interface GefsSubsetFile {
@@ -49,17 +57,20 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
       request,
       [request.variableCode],
       [request.pressureLevelHpa],
+      [],
     );
   }
 
   async fetchSelection(request: GefsMemberSelectionDataRequest): Promise<GefsSubsetFile> {
     const variableCodes = [...new Set(request.variableCodes)].sort();
     const pressureLevelsHpa = [...new Set(request.pressureLevelsHpa)].sort((a, b) => a - b);
+    const fields = canonicalFields(request.fields ?? []);
     return this.fetchCached(
-      selectionSubsetKey({ ...request, variableCodes, pressureLevelsHpa }),
+      selectionSubsetKey({ ...request, variableCodes, pressureLevelsHpa, fields }),
       request,
       variableCodes,
       pressureLevelsHpa,
+      fields,
     );
   }
 
@@ -68,6 +79,7 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
     request: Pick<GefsMemberDataRequest, "run" | "forecastHour" | "member">,
     variableCodes: GfsCode[],
     pressureLevelsHpa: number[],
+    fields: NonIsobaricGribSelector[],
   ): Promise<GefsSubsetFile> {
     await mkdir(this.rootDir, { recursive: true });
     const path = join(this.rootDir, `${key}.grib2`);
@@ -79,7 +91,7 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
       return { ...result, cacheHit: true };
     }
 
-    const operation = this.download(request, variableCodes, pressureLevelsHpa, path)
+    const operation = this.download(request, variableCodes, pressureLevelsHpa, fields, path)
       .finally(() => this.inFlight.delete(key));
     this.inFlight.set(key, operation);
     return operation;
@@ -89,15 +101,20 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
     request: Pick<GefsMemberDataRequest, "run" | "forecastHour" | "member">,
     variableCodes: GfsCode[],
     pressureLevelsHpa: number[],
+    fields: NonIsobaricGribSelector[],
     path: string,
   ): Promise<GefsSubsetFile> {
     const gribUrl = buildGefsS3ForecastUrl(request.run, request.forecastHour, request.member);
     const indexUrl = buildGefsS3ForecastIndexUrl(request.run, request.forecastHour, request.member);
     const records = parseGribIndex(await this.fetchIndex(indexUrl));
-    const ranges = selectPressureByteRanges(records, variableCodes, pressureLevelsHpa);
+    const ranges = mergeByteRanges(
+      selectPressureByteRanges(records, variableCodes, pressureLevelsHpa),
+      selectNonIsobaricByteRanges(records, fields),
+    );
+    if (ranges.length === 0) throw new Error("GEFS subset request selected no GRIB messages");
     // Keep range fan-out bounded by fetching one selected GRIB message at a time per member.
-    // Profile service already samples multiple members concurrently, so this caps aggregate
-    // AWS concurrency at the member concurrency instead of multiplying it by profile cells.
+    // Member-first services already run members concurrently, so this prevents field count
+    // from multiplying aggregate AWS request concurrency.
     const chunks: Uint8Array[] = [];
     for (const range of ranges) chunks.push(await this.fetchRange(gribUrl, range));
     const totalBytes = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
@@ -169,13 +186,28 @@ function subsetKey(request: GefsMemberDataRequest): string {
 }
 
 function selectionSubsetKey(request: GefsMemberSelectionDataRequest): string {
+  const fields = canonicalFields(request.fields ?? []);
   return createHash("sha256").update(JSON.stringify({
     run: request.run.toISOString(),
     forecastHour: request.forecastHour,
     member: request.member,
     variableCodes: request.variableCodes,
     pressureLevelsHpa: request.pressureLevelsHpa,
+    ...(fields.length === 0 ? {} : {
+      fields: fields.map((field) => ({
+        id: field.id,
+        gfsCode: field.gfsCode,
+        gribLevel: field.level.gribLevel,
+        temporalSemantics: field.temporalSemantics,
+      })),
+    }),
   })).digest("hex");
+}
+
+function canonicalFields(fields: NonIsobaricGribSelector[]): NonIsobaricGribSelector[] {
+  return [...fields].sort((left, right) =>
+    `${left.id}|${left.gfsCode}|${left.level.gribLevel}|${left.temporalSemantics}`
+      .localeCompare(`${right.id}|${right.gfsCode}|${right.level.gribLevel}|${right.temporalSemantics}`));
 }
 
 async function exists(path: string): Promise<boolean> {
