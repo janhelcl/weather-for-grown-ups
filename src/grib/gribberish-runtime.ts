@@ -42,6 +42,7 @@ type GribCoordinateLayout = "axes" | "points";
 
 const NAMED_VERTICAL_ALIASES: ReadonlyArray<readonly [string, string]> = [
   ["entire atmosphere as a single layer", "entire atmosphere (considered as a single layer)"],
+  ["entire atmosphere as single layer", "entire atmosphere (considered as a single layer)"],
   ["entire atmosphere", "entire atmosphere"],
   ["low cloud layer", "low cloud layer"],
   ["middle cloud layer", "middle cloud layer"],
@@ -332,11 +333,17 @@ function verticalFromKey(key: string): Omit<DecodedValue, "code" | "value" | "gr
     return { namedVertical: `${first}-${second} mb above ground` };
   }
 
-  const lowerKey = key.toLowerCase();
+  const normalizedKey = normalizeNamedVerticalText(key);
   for (const [decoderName, publicName] of NAMED_VERTICAL_ALIASES) {
-    if (lowerKey.includes(`in ${decoderName}`)) return { namedVertical: publicName };
+    if (normalizedKey.includes(`in${normalizeNamedVerticalText(decoderName)}`)) {
+      return { namedVertical: publicName };
+    }
   }
   return null;
+}
+
+function normalizeNamedVerticalText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
 function matchesGribLevel(key: string, gribLevel: string): boolean {

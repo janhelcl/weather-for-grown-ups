@@ -321,4 +321,17 @@ describe("bundled GRIB2 edge semantics", () => {
     })).toThrow(/did not contain RH/);
   });
 
+
+  it("accepts compact named verticals emitted by gribberish", () => {
+    const cases = [
+      ["LCDC:202608240600:0 in lowcloudlayer:average forecast", "LCDC", "low cloud layer"],
+      ["PWAT:202608240600:0 in entireatmosphereassinglelayer:forecast", "PWAT", "entire atmosphere (considered as a single layer)"],
+      ["HGT:202608240600:0 in cloudceiling:forecast", "HGT", "cloud ceiling"],
+    ] as const;
+    for (const [key, code, namedVertical] of cases) {
+      const [decoded] = decodePointMessages([fakeMessage({ key, code })], 14, 50);
+      expect(decoded).toMatchObject({ namedVertical });
+    }
+  });
+
 });
