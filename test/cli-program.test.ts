@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import { createCliProgram } from "../src/cli/program.js";
 import {
   collectPoint,
+  gefsBundleSelection,
   parseAtmosphericModel,
   parseFields,
+  parseGefsFields,
   parseGefsMembers,
+  parseGefsProfileVariables,
   parseGefsVariables,
   parseLayerDiagnostics,
   parseLevels,
@@ -25,6 +28,8 @@ const EXPECTED_COMMANDS = [
   "ensemble",
   "ensemble-profile",
   "ensemble-timeseries",
+  "ensemble-fields",
+  "ensemble-fields-timeseries",
   "ensemble-parcel",
   "ensemble-parcel-timeseries",
   "compare-gfs-gefs",
@@ -73,6 +78,11 @@ describe("CLI shared parsing", () => {
     expect(pointSelection(undefined, undefined, "temperature_2m,wind_10m")).toEqual({
       fields: ["temperature_2m", "wind_10m"],
     });
+    expect(gefsBundleSelection(undefined, undefined, "temperature_2m,wind_10m", "temperature", "850")).toEqual({
+      variables: [],
+      pressureLevelsHpa: [],
+      fields: ["temperature_2m", "wind_10m"],
+    });
   });
 
   it("fills the missing half of an explicit pressure selection with defaults", () => {
@@ -83,6 +93,16 @@ describe("CLI shared parsing", () => {
     expect(pointSelection(undefined, "850,700", undefined)).toEqual({
       variables: ["temperature", "relative_humidity", "wind"],
       pressureLevelsHpa: [850, 700],
+    });
+    expect(gefsBundleSelection("dew_point", undefined, undefined, "temperature", "850")).toEqual({
+      variables: ["dew_point"],
+      pressureLevelsHpa: [850],
+      fields: [],
+    });
+    expect(gefsBundleSelection(undefined, "850,700", undefined, "temperature", "850")).toEqual({
+      variables: ["temperature"],
+      pressureLevelsHpa: [850, 700],
+      fields: [],
     });
   });
 
@@ -99,6 +119,8 @@ describe("CLI shared parsing", () => {
   it("parses comma-separated CLI lists consistently", () => {
     expect(parseVariables("temperature, wind")).toEqual(["temperature", "wind"]);
     expect(parseGefsVariables("temperature, u_wind")).toEqual(["temperature", "u_wind"]);
+    expect(parseGefsProfileVariables("temperature, dew_point")).toEqual(["temperature", "dew_point"]);
+    expect(parseGefsFields("temperature_2m, wind_10m")).toEqual(["temperature_2m", "wind_10m"]);
     expect(parseGefsMembers("p02, c00,p01")).toEqual(["p02", "c00", "p01"]);
     expect(parseNumbers("0.1, 0.5,0.9")).toEqual([0.1, 0.5, 0.9]);
     expect(parseLevels("1000, 850,700")).toEqual([1000, 850, 700]);
