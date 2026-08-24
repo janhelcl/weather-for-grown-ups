@@ -1,21 +1,26 @@
 import * as z from "zod/v4";
-import { GEFS_MEMBERS, isSupportedGefsPressureSelection } from "../catalog/gefs.js";
+import {
+  GEFS_MEMBERS,
+  GEFS_PROFILE_VARIABLES,
+  isSupportedGefsProfileSelection,
+} from "../catalog/gefs.js";
 import {
   gefsMemberSchema,
-  gefsPressureVariableSchema,
   gefsRunSelectorSchema,
 } from "./gefs-ensemble.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
+
+export const gefsProfileVariableSchema = z.enum(GEFS_PROFILE_VARIABLES);
 
 export const gefsEnsembleProfileQuerySchema = z.object({
   ...pointCoordinateSchema.shape,
   run: gefsRunSelectorSchema,
   validTime: isoDateTimeSchema.describe("Forecast valid time on the native three-hour GEFS cadence"),
-  variables: z.array(gefsPressureVariableSchema).min(1).max(5).describe(
-    "Raw GEFS pgrb2a pressure-level variables; every selected variable must exist at every selected pressure level",
+  variables: z.array(gefsProfileVariableSchema).min(1).max(GEFS_PROFILE_VARIABLES.length).describe(
+    "GEFS pgrb2a pressure-profile variables. Dew point and potential temperature are derived independently inside each member before ensemble aggregation.",
   ),
   pressureLevelsHpa: z.array(z.number().positive()).min(1).max(12).describe(
-    "Published GEFS pressure surfaces in hPa; the Cartesian variable/level selection must be supported",
+    "Published GEFS pressure surfaces in hPa; every raw dependency required by the selected variables must exist at every selected level",
   ),
   members: z.array(gefsMemberSchema).min(2).max(GEFS_MEMBERS.length).default([...GEFS_MEMBERS]),
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).default([0.1, 0.5, 0.9]),
@@ -37,11 +42,11 @@ export const gefsEnsembleProfileQuerySchema = z.object({
   }
   for (const variable of query.variables) {
     for (const pressureLevelHpa of query.pressureLevelsHpa) {
-      if (!isSupportedGefsPressureSelection(variable, pressureLevelHpa)) {
+      if (!isSupportedGefsProfileSelection(variable, pressureLevelHpa)) {
         context.addIssue({
           code: "custom",
           path: ["pressureLevelsHpa"],
-          message: `GEFS pgrb2a does not publish ${variable} at ${pressureLevelHpa} hPa in the WFG ensemble profile contract`,
+          message: `GEFS pgrb2a cannot satisfy ${variable} at ${pressureLevelHpa} hPa because one or more raw dependencies are unavailable`,
         });
       }
     }
@@ -54,8 +59,9 @@ const quantileSchema = z.object({
 });
 
 const summarySchema = z.object({
-  variable: gefsPressureVariableSchema,
-  gfsCode: z.string().min(1),
+  variable: gefsProfileVariableSchema,
+  gfsCode: z.string().min(1).optional(),
+  dependencies: z.array(z.string().min(1)).min(1).optional(),
   pressureLevelHpa: z.number().positive(),
   outputField: z.string().min(1),
   unit: z.string().min(1),
@@ -65,10 +71,14 @@ const summarySchema = z.object({
   min: z.number(),
   max: z.number(),
   quantiles: z.array(quantileSchema).min(1),
+}).superRefine((summary, context) => {
+  if ((summary.gfsCode === undefined) === (summary.dependencies === undefined)) {
+    context.addIssue({ code: "custom", message: "GEFS profile summary must identify either one raw GRIB code or derived-variable dependencies" });
+  }
 });
 
 const memberValueSchema = z.object({
-  variable: gefsPressureVariableSchema,
+  variable: gefsProfileVariableSchema,
   pressureLevelHpa: z.number().positive(),
   value: z.number(),
 });
@@ -81,7 +91,7 @@ export const gefsEnsembleProfileResultSchema = z.object({
   requestedPoint: pointCoordinateSchema,
   gridPoint: pointCoordinateSchema,
   selection: z.object({
-    variables: z.array(gefsPressureVariableSchema).min(1),
+    variables: z.array(gefsProfileVariableSchema).min(1),
     pressureLevelsHpa: z.array(z.number().positive()).min(1),
     members: z.array(gefsMemberSchema).min(2),
     quantiles: z.array(z.number().min(0).max(1)).min(1),
