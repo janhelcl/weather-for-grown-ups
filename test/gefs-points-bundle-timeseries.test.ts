@@ -136,7 +136,7 @@ describe("GEFS multi-point mixed bundle time series", () => {
     const getPoints = vi.fn(async (query: { validTime: string }) => {
       const result = resultFor(query.validTime);
       if (query.validTime === "2026-08-24T06:00:00.000Z") {
-        result.points[1]!.gridPoint = { latitude: 99, longitude: 99 };
+        result.points[1]!.gridPoint = { latitude: 48.5, longitude: 17 };
       }
       return result;
     });
