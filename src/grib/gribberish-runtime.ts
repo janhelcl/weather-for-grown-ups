@@ -76,10 +76,12 @@ export function decodePointMessages(
     if (vertical === null) continue;
     const sample = nearestPoint(message, longitude, latitude);
     const interval = forecastInterval(message);
+    const semantics = interval === undefined ? "instantaneous" : statisticalSemantics(message.key);
     values.push({
       code: message.varAbbrev,
       ...vertical,
-      ...(interval === undefined ? {} : { accumulation: interval, average: interval }),
+      ...(semantics === "accumulation" && interval !== undefined ? { accumulation: interval } : {}),
+      ...(semantics === "average" && interval !== undefined ? { average: interval } : {}),
       value: sample.value,
       gridPoint: { latitude: sample.latitude, longitude: sample.longitude },
     });
@@ -251,12 +253,15 @@ function matchesTemporalSemantics(
   message: GribMessage,
   semantics: GribMessageSelector["temporalSemantics"],
 ): boolean {
-  const hasInterval = message.forecastEndDate !== null;
-  if (semantics === "instantaneous") return !hasInterval;
-  if (!hasInterval) return false;
-  const key = message.key.toLowerCase();
-  if (semantics === "accumulation") return /(?:^|[: ])(?:acc|accumulation)(?:[ :]|$)/i.test(key);
-  return /(?:^|[: ])(?:avg|average)(?:[ :]|$)/i.test(key);
+  if (message.forecastEndDate === null) return semantics === "instantaneous";
+  return statisticalSemantics(message.key) === semantics;
+}
+
+function statisticalSemantics(key: string): "accumulation" | "average" | undefined {
+  const lowerKey = key.toLowerCase();
+  if (/(?:^|[: ])(?:acc|accumulation)(?:[ :]|$)/.test(lowerKey)) return "accumulation";
+  if (/(?:^|[: ])(?:avg|average)(?:[ :]|$)/.test(lowerKey)) return "average";
+  return undefined;
 }
 
 function forecastInterval(message: GribMessage): ForecastInterval | undefined {
