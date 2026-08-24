@@ -1,4 +1,4 @@
-import type { RawVariableId } from "../schema/query.js";
+import type { RawVariableId, VariableId } from "../schema/query.js";
 
 export const GEFS_MEMBERS = [
   "c00",
@@ -19,6 +19,19 @@ export const GEFS_PGRB2A_PRESSURE_VARIABLES = [
 
 export type GefsPressureVariableId = (typeof GEFS_PGRB2A_PRESSURE_VARIABLES)[number];
 
+export const GEFS_DERIVED_PROFILE_VARIABLES = [
+  "dew_point",
+  "potential_temperature",
+] as const satisfies readonly VariableId[];
+
+export type GefsDerivedProfileVariableId = (typeof GEFS_DERIVED_PROFILE_VARIABLES)[number];
+export type GefsProfileVariableId = GefsPressureVariableId | GefsDerivedProfileVariableId;
+
+export const GEFS_PROFILE_VARIABLES = [
+  ...GEFS_PGRB2A_PRESSURE_VARIABLES,
+  ...GEFS_DERIVED_PROFILE_VARIABLES,
+] as const satisfies readonly VariableId[];
+
 export const GEFS_PGRB2A_COMMON_PRESSURE_LEVELS_HPA = [
   10, 50, 100, 200, 250, 500, 700, 850, 925, 1000,
 ] as const;
@@ -35,6 +48,22 @@ export function isSupportedGefsPressureSelection(
 ): boolean {
   if (COMMON_LEVELS.has(pressureLevelHpa)) return true;
   return (variable === "u_wind" || variable === "v_wind") && WIND_EXTRA_LEVELS.has(pressureLevelHpa);
+}
+
+export function gefsProfileRawDependencies(variable: GefsProfileVariableId): GefsPressureVariableId[] {
+  switch (variable) {
+    case "dew_point": return ["temperature", "relative_humidity"];
+    case "potential_temperature": return ["temperature"];
+    default: return [variable];
+  }
+}
+
+export function isSupportedGefsProfileSelection(
+  variable: GefsProfileVariableId,
+  pressureLevelHpa: number,
+): boolean {
+  return gefsProfileRawDependencies(variable)
+    .every((dependency) => isSupportedGefsPressureSelection(dependency, pressureLevelHpa));
 }
 
 export function sortGefsMembers(members: readonly GefsMember[]): GefsMember[] {
