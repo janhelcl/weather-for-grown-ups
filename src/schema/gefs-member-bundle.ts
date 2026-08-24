@@ -41,14 +41,14 @@ export const gefsBundleSelectionSchema = z.object({
       message: "Request at least one pressure-level variable or non-isobaric GEFS field",
     });
   }
-  for (const [path, values] of [
-    ["variables", selection.variables],
-    ["pressureLevelsHpa", selection.pressureLevelsHpa],
-    ["fields", selection.fields],
-  ] as const) {
-    if (new Set(values).size !== values.length) {
-      context.addIssue({ code: "custom", path: [path], message: `GEFS bundle ${path} must not contain duplicates` });
-    }
+  if (new Set(selection.variables).size !== selection.variables.length) {
+    context.addIssue({ code: "custom", path: ["variables"], message: "GEFS bundle variables must not contain duplicates" });
+  }
+  if (new Set(selection.pressureLevelsHpa).size !== selection.pressureLevelsHpa.length) {
+    context.addIssue({ code: "custom", path: ["pressureLevelsHpa"], message: "GEFS bundle pressureLevelsHpa must not contain duplicates" });
+  }
+  if (new Set(selection.fields).size !== selection.fields.length) {
+    context.addIssue({ code: "custom", path: ["fields"], message: "GEFS bundle fields must not contain duplicates" });
   }
   for (const variable of selection.variables) {
     for (const pressureLevelHpa of selection.pressureLevelsHpa) {
