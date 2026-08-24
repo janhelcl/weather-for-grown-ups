@@ -22,11 +22,29 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Verify tag matches package version
         run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
+      - id: version
+        name: Check whether version is already published
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if npm view "${name}@${version}" version --json >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Verify publish payload
+        if: steps.version.outputs.published != 'true'
         run: |
           set -euo pipefail
           tarball="$(npm pack --silent)"
           prefix="$(mktemp -d)"
           npm install --prefix "$prefix" --no-audit --no-fund "./$tarball"
           "$prefix/node_modules/.bin/weather-for-grown-ups" --help
-      - run: npm publish
+      - name: Publish to npm
+        if: steps.version.outputs.published != 'true'
+        run: npm publish
+      - name: Version already published
+        if: steps.version.outputs.published == 'true'
+        run: echo "$GITHUB_REF_NAME is already on npm; nothing to publish."
