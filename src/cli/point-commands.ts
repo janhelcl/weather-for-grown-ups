@@ -1,12 +1,13 @@
 import type { Command } from "commander";
-import { BatchPointsService } from "../core/batch-points.js";
 import { AtmosphericProfileService } from "../core/atmospheric-profile-service.js";
+import { AtmosphericRunComparisonService } from "../core/atmospheric-run-comparison-service.js";
 import { AtmosphericTimeSeriesService } from "../core/atmospheric-timeseries-service.js";
+import { BatchPointsService } from "../core/batch-points.js";
 import { LatestRunResolver } from "../core/latest-run.js";
 import { PointsTimeSeriesService } from "../core/points-time-series.js";
-import { RunComparisonService } from "../core/run-comparison.js";
 import { gefsEnsembleProfileResultSchema } from "../schema/gefs-ensemble-profile.js";
 import { gefsEnsembleTimeSeriesResultSchema } from "../schema/gefs-ensemble-timeseries.js";
+import { gefsRunComparisonResultSchema } from "../schema/gefs-run-comparison.js";
 import type { PointCoordinate, ProfileSourceId } from "../schema/query.js";
 import {
   batchPointsResultSchema,
@@ -310,44 +311,116 @@ export function registerPointCommands(program: Command): void {
 
   program
     .command("compare-runs")
-    .description("Compare one point/valid time across consecutive six-hour GFS model cycles")
+    .description("Compare one point/valid time across consecutive GFS or GEFS six-hour model cycles")
+    .option("--model <gfs|gefs>", "Atmospheric model family", "gfs")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
-    .option("--anchor <iso|latest|latest_complete>", "Newest run in the comparison", "latest")
+    .option("--anchor <iso|latest|latest_complete>", "Newest run in the comparison; GEFS accepts latest or an explicit cycle", "latest")
     .requiredOption("--valid <iso>", "Forecast valid time compared across cycles")
-    .option("--vars <list>", "Comma-separated pressure-level variables")
-    .option("--levels <list>", "Comma-separated pressure levels in hPa")
-    .option("--fields <list>", "Comma-separated non-isobaric field IDs")
+    .option("--vars <list>", "Pressure-level variables; GEFS requires exactly one")
+    .option("--levels <list>", "Pressure levels in hPa; GEFS requires exactly one")
+    .option("--fields <list>", "GFS-only comma-separated non-isobaric field IDs")
+    .option("--members <list>", "GEFS-only comma-separated members (c00,p01..p30); default all 31")
+    .option("--quantiles <list>", "GEFS-only comma-separated quantiles from 0 to 1")
+    .option("--gte <number>", "GEFS-only threshold in normalized output units", Number)
     .option("--cycles <number>", "Number of consecutive six-hour model cycles to compare (2-6)", Number, 3)
     .option("--json", "Output JSON")
     .action(async (options) => {
-      const selection = pointSelection(options.vars, options.levels, options.fields);
-      const result = await new RunComparisonService().compareRuns({
-        latitude: options.lat,
-        longitude: options.lon,
-        anchorRun: options.anchor,
-        validTime: options.valid,
-        ...selection,
-        cycles: options.cycles,
-      });
-      runComparisonResultSchema.parse(result);
+      const model = parseAtmosphericModel(options.model);
+      const service = new AtmosphericRunComparisonService();
+
+      if (model === "gfs") {
+        if (options.members !== undefined || options.quantiles !== undefined || options.gte !== undefined) {
+          throw new Error("--members, --quantiles and --gte are only valid with --model gefs");
+        }
+        const selection = pointSelection(options.vars, options.levels, options.fields);
+        const result = runComparisonResultSchema.parse(await service.compareRuns({
+          model: "gfs_0p25",
+          query: {
+            latitude: options.lat,
+            longitude: options.lon,
+            anchorRun: options.anchor,
+            validTime: options.valid,
+            ...selection,
+            cycles: options.cycles,
+          },
+        }));
+        if (options.json) return console.log(JSON.stringify(result, null, 2));
+        console.log(`GFS run comparison  valid ${result.validTime}`);
+        console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
+        console.log(`Anchor ${result.anchorRun}; source ${result.source.provider} (${result.source.access})`);
+        console.table(result.runs.map((run) => ({ run: run.run, forecastHour: run.forecastHour, cacheHit: run.cacheHit })));
+        for (const comparison of result.comparisons) {
+          console.log(`${comparison.fromRun} → ${comparison.toRun}  (f${comparison.fromForecastHour} → f${comparison.toForecastHour}); deltas = newer - older`);
+          const pressureRows = comparison.pressureLevels.flatMap((level) => level.changes.map((change) => ({
+            pressureHpa: level.pressureHpa,
+            field: change.field,
+            from: change.from,
+            to: change.to,
+            delta: change.delta,
+            deltaKind: change.deltaKind,
+          })));
+          if (pressureRows.length > 0) console.table(pressureRows);
+          if (comparison.fields.length > 0) console.dir(comparison.fields, { depth: null });
+        }
+        return;
+      }
+
+      if (options.fields !== undefined) throw new Error("--fields is a deterministic GFS option and is not valid with --model gefs");
+      if (options.anchor === "latest_complete") throw new Error("GEFS run comparison supports --anchor latest or an explicit GEFS cycle, not latest_complete");
+      const variables = parseGefsVariables(options.vars ?? "temperature");
+      const levels = parseLevels(options.levels ?? "850");
+      if (variables.length !== 1 || levels.length !== 1) {
+        throw new Error("GEFS run comparison requires exactly one --vars variable and one --levels pressure surface");
+      }
+      const variable = variables[0];
+      const pressureLevelHpa = levels[0];
+      if (variable === undefined || pressureLevelHpa === undefined) throw new Error("GEFS run-comparison selection is empty");
+      const result = gefsRunComparisonResultSchema.parse(await service.compareRuns({
+        model: "gefs_0p50",
+        query: {
+          latitude: options.lat,
+          longitude: options.lon,
+          anchorRun: options.anchor,
+          validTime: options.valid,
+          variable,
+          pressureLevelHpa,
+          ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+          quantiles: parseNumbers(options.quantiles ?? "0.1,0.5,0.9"),
+          ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
+          cycles: options.cycles,
+        },
+      }));
       if (options.json) return console.log(JSON.stringify(result, null, 2));
-      console.log(`GFS run comparison  valid ${result.validTime}`);
+      console.log(`GEFS run comparison  valid ${result.validTime}`);
+      console.log(`${result.selection.variable}@${result.selection.pressureLevelHpa}hPa (${result.selection.unit}); ${result.selection.members.length} members`);
       console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
       console.log(`Anchor ${result.anchorRun}; source ${result.source.provider} (${result.source.access})`);
-      console.table(result.runs.map((run) => ({ run: run.run, forecastHour: run.forecastHour, cacheHit: run.cacheHit })));
+      console.table(result.runs.map((run) => ({
+        run: run.run,
+        forecastHour: run.forecastHour,
+        mean: run.summary.mean,
+        populationStdDev: run.summary.populationStdDev,
+        min: run.summary.min,
+        max: run.summary.max,
+        ...(run.summary.threshold ? { thresholdFraction: run.summary.threshold.fraction } : {}),
+        allCacheHit: run.allCacheHit,
+      })));
       for (const comparison of result.comparisons) {
-        console.log(`${comparison.fromRun} → ${comparison.toRun}  (f${comparison.fromForecastHour} → f${comparison.toForecastHour}); deltas = newer - older`);
-        const pressureRows = comparison.pressureLevels.flatMap((level) => level.changes.map((change) => ({
-          pressureHpa: level.pressureHpa,
-          field: change.field,
-          from: change.from,
-          to: change.to,
-          delta: change.delta,
-          deltaKind: change.deltaKind,
-        })));
-        if (pressureRows.length > 0) console.table(pressureRows);
-        if (comparison.fields.length > 0) console.dir(comparison.fields, { depth: null });
+        console.log(`${comparison.fromRun} → ${comparison.toRun}  (f${comparison.fromForecastHour} → f${comparison.toForecastHour}); distribution deltas = newer - older`);
+        console.table([
+          { metric: "mean", ...comparison.mean },
+          { metric: "populationStdDev", ...comparison.populationStdDev },
+          { metric: "min", ...comparison.min },
+          { metric: "max", ...comparison.max },
+          ...comparison.quantiles.map((quantile) => ({ metric: `q${quantile.quantile}`, from: quantile.from, to: quantile.to, delta: quantile.delta })),
+          ...(comparison.thresholdFraction ? [{
+            metric: `fraction>=${comparison.thresholdFraction.threshold}`,
+            from: comparison.thresholdFraction.from,
+            to: comparison.thresholdFraction.to,
+            delta: comparison.thresholdFraction.delta,
+          }] : []),
+        ]);
       }
     });
 }
