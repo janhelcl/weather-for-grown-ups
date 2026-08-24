@@ -87,6 +87,7 @@ function buildEntries(): SearchableEntry[] {
     outputs: definition.outputs.map((output) => ({ ...output })),
     searchParts: "gfsCode" in definition
       ? [definition.gfsCode, definition.sourceUnit, ...definition.supportedPressureLevelsHpa.map(String)]
+          .filter((value): value is string => value !== undefined)
       : [...definition.dependencies, ...definition.supportedPressureLevelsHpa.map(String)],
   }));
 
