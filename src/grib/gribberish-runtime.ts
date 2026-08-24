@@ -216,7 +216,7 @@ function verticalFromKey(key: string): Omit<DecodedValue, "code" | "value" | "gr
   }
   const heightMatch = key.match(/:([-+]?\d+(?:\.\d+)?) in above ground(?=:|$)/i);
   if (heightMatch?.[1] !== undefined) return { heightAboveGroundM: Number(heightMatch[1]) };
-  if (/:(?:0 )?in surface(?=:|$)/i.test(key)) return { surface: true };
+  if (/:\s*(?:0\s+)?in surface(?=:|$)/i.test(key)) return { surface: true };
 
   const pressureDifferenceMatch = key.match(
     /:([-+]?\d+(?:\.\d+)?) in level at specified pressure difference from ground to level(?::([-+]?\d+(?:\.\d+)?) in level at specified pressure difference from ground to level)?/i,
