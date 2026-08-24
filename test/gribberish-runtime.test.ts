@@ -1,5 +1,8 @@
 import type { GribMessage } from "@mattnucc/gribberish";
 import { describe, expect, it } from "vitest";
+import { Wgrib2GridDecoder } from "../src/grib/wgrib2-grid.js";
+import { Wgrib2StatsDecoder } from "../src/grib/wgrib2-stats.js";
+import { Wgrib2Decoder } from "../src/grib/wgrib2.js";
 import {
   decodePointMessages,
   gridPointsInBox,
@@ -175,4 +178,147 @@ describe("bundled GRIB2 area decoding", () => {
     });
     expect(points.map((point) => point.value)).toEqual([1, 4]);
   });
+});
+
+
+describe("bundled GRIB2 edge semantics", () => {
+  it.each([
+    ["TCDC:202608240600: in low cloud layer:Forecast", "low cloud layer"],
+    ["TCDC:202608240600: in middle cloud layer:Forecast", "middle cloud layer"],
+    ["TCDC:202608240600: in high cloud layer:Forecast", "high cloud layer"],
+    ["TCDC:202608240600: in convective cloud layer:Forecast", "convective cloud layer"],
+    ["TCDC:202608240600: in boundary layer cloud layer:Forecast", "boundary layer cloud layer"],
+    ["HGT:202608240600: in cloud ceiling:Forecast", "cloud ceiling"],
+    ["HGT:202608240600: in convective cloud bottom level:Forecast", "convective cloud bottom level"],
+    ["HGT:202608240600: in low cloud bottom level:Forecast", "low cloud bottom level"],
+    ["HGT:202608240600: in middle cloud bottom level:Forecast", "middle cloud bottom level"],
+    ["HGT:202608240600: in high cloud bottom level:Forecast", "high cloud bottom level"],
+    ["HGT:202608240600: in convective cloud top level:Forecast", "convective cloud top level"],
+    ["HGT:202608240600: in low cloud top level:Forecast", "low cloud top level"],
+    ["HGT:202608240600: in middle cloud top level:Forecast", "middle cloud top level"],
+    ["HGT:202608240600: in high cloud top level:Forecast", "high cloud top level"],
+    ["PRMSL:202608240600: in mean sea level:Forecast", "mean sea level"],
+  ])("maps named vertical alias %s", (key, namedVertical) => {
+    const [decoded] = decodePointMessages([fakeMessage({ key, code: key.split(":")[0] })], 14, 50);
+    expect(decoded).toMatchObject({ namedVertical });
+  });
+
+  it("normalizes encoded pressure values and explicit zero-surface keys", () => {
+    const [pressure] = decodePointMessages([
+      fakeMessage({ key: "TMP:202608240600:85000 in mb:Forecast" }),
+    ], 14, 50);
+    const [surface] = decodePointMessages([
+      fakeMessage({ key: "PRES:202608240600:0 in surface:Forecast", code: "PRES" }),
+    ], 14, 50);
+    expect(pressure?.pressureHpa).toBe(850);
+    expect(surface?.surface).toBe(true);
+  });
+
+  it("normalizes both pressure-difference layer bounds", () => {
+    const [decoded] = decodePointMessages([
+      fakeMessage({
+        key: "CAPE:202608240600:18000 in level at specified pressure difference from ground to level:9000 in level at specified pressure difference from ground to level:Forecast",
+        code: "CAPE",
+      }),
+    ], 14, 50);
+    expect(decoded?.namedVertical).toBe("180-90 mb above ground");
+  });
+
+  it("skips unsupported vertical coordinates", () => {
+    expect(decodePointMessages([
+      fakeMessage({ key: "TMP:202608240600: in some unsupported vertical:Forecast" }),
+    ], 14, 50)).toEqual([]);
+  });
+
+  it("rejects an interval selector when the selected message has no interval", () => {
+    const message = fakeMessage({ key: "APCP:202608240600: in surface:Accumulation Forecast", code: "APCP" });
+    expect(() => temporalForSelector(message, {
+      code: "APCP",
+      gribLevel: "surface",
+      temporalSemantics: "accumulation",
+    })).toThrow(/without a forecast interval/);
+  });
+
+  it("rejects misaligned decoded arrays", () => {
+    const message = fakeMessage({
+      key: "TMP:202608240600:850 in mb:Forecast",
+      latitudes: [50],
+      longitudes: [14],
+      values: [280],
+    });
+    expect(() => gridPointsInBox(message, {
+      westLongitude: 13,
+      eastLongitude: 15,
+      southLatitude: 49,
+      northLatitude: 51,
+    })).toThrow(/misaligned grid arrays/);
+  });
+
+  it("rejects boxes without defined points", () => {
+    const message = fakeMessage({
+      key: "TMP:202608240600:850 in mb:Forecast",
+      values: [Number.NaN, Number.NaN, Number.NaN, Number.NaN],
+    });
+    expect(() => gridPointsInBox(message, {
+      westLongitude: 13,
+      eastLongitude: 15,
+      southLatitude: 49,
+      northLatitude: 51,
+    })).toThrow(/no defined GFS grid points/);
+  });
+
+  it("reports bundled and native decoder engine identity", () => {
+    const previousPath = process.env.WGRIB2_PATH;
+    const previousDecoder = process.env.WFG_DECODER;
+    try {
+      delete process.env.WGRIB2_PATH;
+      delete process.env.WFG_DECODER;
+      expect(new Wgrib2Decoder().engine).toBe("gribberish");
+      expect(new Wgrib2GridDecoder().engine).toBe("gribberish");
+      expect(new Wgrib2StatsDecoder().engine).toBe("gribberish");
+
+      process.env.WFG_DECODER = "wgrib2";
+      expect(new Wgrib2Decoder().engine).toBe("wgrib2");
+      expect(new Wgrib2GridDecoder().engine).toBe("wgrib2");
+      expect(new Wgrib2StatsDecoder().engine).toBe("wgrib2");
+
+      process.env.WGRIB2_PATH = "/custom/wgrib2";
+      expect(new Wgrib2Decoder().engine).toBe("wgrib2");
+      expect(new Wgrib2GridDecoder().engine).toBe("wgrib2");
+      expect(new Wgrib2StatsDecoder().engine).toBe("wgrib2");
+    } finally {
+      if (previousPath === undefined) delete process.env.WGRIB2_PATH;
+      else process.env.WGRIB2_PATH = previousPath;
+      if (previousDecoder === undefined) delete process.env.WFG_DECODER;
+      else process.env.WFG_DECODER = previousDecoder;
+    }
+  });
+
+
+  it("rejects a point decode with no usable coordinates", () => {
+    const message = fakeMessage({
+      key: "TMP:202608240600:850 in mb:Forecast",
+      latitudes: [Number.NaN, Number.NaN, Number.NaN, Number.NaN],
+      longitudes: [Number.NaN, Number.NaN, Number.NaN, Number.NaN],
+    });
+    expect(() => decodePointMessages([message], 14, 50)).toThrow(/no grid coordinates/);
+  });
+
+  it("rejects an undefined nearest point value", () => {
+    const message = fakeMessage({
+      key: "TMP:202608240600:850 in mb:Forecast",
+      values: [Number.NaN, 281, 282, 283],
+    });
+    expect(() => decodePointMessages([message], 14, 50)).toThrow(/nearest GRIB2 grid point is undefined/i);
+  });
+
+  it("rejects an exact selector with no matching message", () => {
+    const message = fakeMessage({ key: "TMP:202608240600:850 in mb:Forecast" });
+    expect(() => selectMessage([message], {
+      code: "RH",
+      gribLevel: "850 mb",
+      temporalSemantics: "instantaneous",
+    })).toThrow(/did not contain RH/);
+  });
+
 });

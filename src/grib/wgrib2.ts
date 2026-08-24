@@ -2,7 +2,7 @@ import { execa } from "execa";
 import { GEFS_PGRB2A_FIELD_CATALOG } from "../catalog/gefs-fields.js";
 import { findNamedNonIsobaricLevel } from "../catalog/non-isobaric-fields.js";
 import { ALL_SUPPORTED_GFS_CODES } from "../catalog/variables.js";
-import type { DecodedValue } from "../core/types.js";
+import type { DecodedValue, GribDecoderName } from "../core/types.js";
 import { decodePointMessages, readGribMessages } from "./gribberish-runtime.js";
 
 const GEFS_RAW_FIELDS = Object.values(GEFS_PGRB2A_FIELD_CATALOG).filter((definition) => definition.kind === "raw");
@@ -22,7 +22,11 @@ const GEFS_NAMED_VERTICALS = new Set(
  * Set WGRIB2_PATH (or WFG_DECODER=wgrib2) to opt into the legacy native wgrib2 path.
  */
 export class Wgrib2Decoder {
-  constructor(private readonly executable = defaultNativeExecutable()) {}
+  readonly engine: GribDecoderName;
+
+  constructor(private readonly executable = defaultNativeExecutable()) {
+    this.engine = executable === undefined ? "gribberish" : "wgrib2";
+  }
 
   async extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]> {
     if (this.executable === undefined) {

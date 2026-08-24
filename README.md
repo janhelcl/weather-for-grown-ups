@@ -75,31 +75,34 @@ See [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md), [GEFS_MULTI_POINT.md](GEFS_MULTI_POINT
 
 ## Install
 
-### Docker — recommended
+### npx — recommended
 
-The image includes Node.js 24 and `wgrib2 3.8.0`:
-
-```bash
-docker build -t weather-for-grown-ups .
-docker run --rm weather-for-grown-ups --help
-```
-
-Tagged releases are designed for GHCR:
+With Node.js 20 or newer, WFG can run directly from npm with no separate GRIB installation:
 
 ```bash
-docker run --rm ghcr.io/janhelcl/weather-for-grown-ups:0.1.0 --help
+npx weather-for-grown-ups --help
+npx weather-for-grown-ups catalog --search cloud --json
 ```
 
-### npm
+The npm package includes the GRIB2 decoder. Native `wgrib2` is **not required** for normal CLI or MCP use.
+
+The same package starts either MCP transport:
+
+```bash
+npx weather-for-grown-ups mcp
+npx weather-for-grown-ups mcp-http
+```
+
+A global install remains optional for frequent local use:
 
 ```bash
 npm install -g weather-for-grown-ups
-wfg --help
+weather-for-grown-ups --help
 ```
 
-The npm package provides `wfg`, `wfg-mcp`, and `wfg-mcp-http`. It intentionally does not install the native GRIB decoder; `wgrib2` must be on `PATH` or configured through `WGRIB2_PATH`.
+Docker remains available for pinned deployments and additionally includes native `wgrib2 3.8.0` as an explicit compatibility/debug path.
 
-See [INSTALL.md](INSTALL.md) for Docker, npm, stdio MCP, Streamable HTTP MCP, hosting, and release details.
+See [INSTALL.md](INSTALL.md) for npx, Docker, npm, stdio MCP, Streamable HTTP MCP, hosting, and release details.
 
 ## CLI examples
 
@@ -398,7 +401,7 @@ The current WFG GEFS contract uses native three-hour output through `f384`.
 
 **NOMADS Grib Filter** is used where geographic subsetting is valuable, especially deterministic single-point/area work. Every physical NOMADS request passes through a cross-process file-backed limiter with an **11-second post-request cooldown**.
 
-**NOAA AWS Open Data** is used for reusable deterministic slices and all GEFS member access. WFG reads `.idx` inventories, downloads selected GRIB byte ranges, caches immutable slices, and samples locally with `wgrib2`.
+**NOAA AWS Open Data** is used for reusable deterministic slices and all GEFS member access. WFG reads `.idx` inventories, downloads selected GRIB byte ranges, caches immutable slices, and samples locally with its bundled GRIB2 decoder by default.
 
 GEFS multi-field/profile/diagnostic queries stitch selected messages into one cached slice per member. GEFS multi-point queries use one cached selected-field slice per member and sample all coordinates locally from it. GEFS multi-point time series repeat that selected-field/member reuse at each native step from the same fixed cycle. Byte-range requests are sequential within a member; member and time-step work is bounded-concurrent.
 

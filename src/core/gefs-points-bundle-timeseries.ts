@@ -144,7 +144,7 @@ export class GefsPointsBundleTimeSeriesService {
       source: {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
-        decoder: "wgrib2",
+        decoder: first.source.decoder,
         product: "pgrb2a_0p50",
         allCacheHit: batches.every((batch) => batch.source.allCacheHit),
       },
@@ -179,7 +179,7 @@ function assertBatchInvariant(
   if (
     batch.source.provider !== "NOAA AWS Open Data"
     || batch.source.access !== "s3_range"
-    || batch.source.decoder !== "wgrib2"
+    || batch.source.decoder !== expected.first.source.decoder
     || batch.source.product !== "pgrb2a_0p50"
   ) {
     throw new Error("GEFS multi-point bundle time series require the NOAA AWS S3 pgrb2a byte-range source");

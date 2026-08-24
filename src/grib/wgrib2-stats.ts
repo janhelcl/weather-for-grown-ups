@@ -1,7 +1,7 @@
 import { execa } from "execa";
 import type { FieldTemporalSemantics } from "../catalog/non-isobaric-fields.js";
 import type { GfsCode } from "../catalog/variables.js";
-import type { ForecastInterval } from "../core/types.js";
+import type { ForecastInterval, GribDecoderName } from "../core/types.js";
 import {
   readGribMessages,
   selectMessage,
@@ -53,10 +53,14 @@ const defaultRunner: Wgrib2CommandRunner = async (executable, args) => {
  * WGRIB2_PATH or WFG_DECODER=wgrib2.
  */
 export class Wgrib2StatsDecoder {
+  readonly engine: GribDecoderName;
+
   constructor(
     private readonly executable = defaultNativeExecutable(),
     private readonly runner: Wgrib2CommandRunner = defaultRunner,
-  ) {}
+  ) {
+    this.engine = executable === undefined ? "gribberish" : "wgrib2";
+  }
 
   async summarizeBox(path: string, box: AreaBox): Promise<GridStatistics> {
     if (this.executable === undefined) {

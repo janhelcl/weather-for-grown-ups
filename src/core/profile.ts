@@ -36,6 +36,7 @@ import type {
   DecodedValue,
   FieldTemporalResult,
   ForecastInterval,
+  GribDecoderName,
   NonIsobaricFieldResult,
   ProfileLevel,
   ProfileResult,
@@ -46,6 +47,7 @@ export interface ProfileCache {
 }
 
 export interface PointDecoder {
+  readonly engine?: GribDecoderName;
   extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]>;
 }
 
@@ -151,7 +153,7 @@ export class ProfileService {
       source: {
         provider: source.provider,
         access: source.access,
-        decoder: "wgrib2",
+        decoder: this.decoder.engine ?? "wgrib2",
         cacheHit: cached.cacheHit,
       },
     };

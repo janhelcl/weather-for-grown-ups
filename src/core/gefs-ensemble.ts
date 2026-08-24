@@ -18,7 +18,7 @@ import {
   type GefsEnsembleQueryInput,
   type GefsEnsembleResult,
 } from "../schema/gefs-ensemble.js";
-import type { DecodedValue, FieldTemporalResult } from "./types.js";
+import type { DecodedValue, FieldTemporalResult, GribDecoderName } from "./types.js";
 import { mapConcurrent } from "./concurrency.js";
 import { summarizeNumericDistribution, thresholdGteSummary } from "./ensemble-statistics.js";
 import { GefsLatestRunResolver, type GefsLatestRunProvider } from "./gefs-latest-run.js";
@@ -27,6 +27,7 @@ import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
 export const DEFAULT_GEFS_MEMBER_CONCURRENCY = 6;
 
 export interface GefsPointDecoder {
+  readonly engine?: GribDecoderName;
   extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]>;
 }
 
@@ -149,7 +150,7 @@ export class GefsEnsembleService {
       source: {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
-        decoder: "wgrib2",
+        decoder: this.decoder.engine ?? "wgrib2",
         product: "pgrb2a_0p50",
         allCacheHit: samples.every((sample) => sample.cacheHit),
       },

@@ -150,7 +150,7 @@ export const gefsAreaSummaryResultSchema = z.object({
   source: z.object({
     provider: z.literal("NOAA AWS Open Data"),
     access: z.literal("s3_range"),
-    decoder: z.literal("wgrib2"),
+    decoder: z.enum(["gribberish", "wgrib2"]),
     product: z.literal("pgrb2a_0p50"),
     allCacheHit: z.boolean(),
   }),

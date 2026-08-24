@@ -14,7 +14,7 @@ import {
 export const sourceProvenanceSchema = z.object({
   provider: z.union([z.literal("NOAA NOMADS"), z.literal("NOAA AWS Open Data")]),
   access: z.union([z.literal("nomads_grib_filter"), z.literal("s3_range")]),
-  decoder: z.literal("wgrib2"),
+  decoder: z.enum(["gribberish", "wgrib2"]),
 });
 
 export const profileLevelResultSchema = z.object({
@@ -239,7 +239,7 @@ export const batchPointsResultSchema = z.object({
   source: z.object({
     provider: z.literal("NOAA AWS Open Data"),
     access: z.literal("s3_range"),
-    decoder: z.literal("wgrib2"),
+    decoder: z.enum(["gribberish", "wgrib2"]),
     cacheHit: z.boolean(),
   }),
 });
@@ -269,7 +269,7 @@ export const pointsTimeSeriesResultSchema = z.object({
   source: z.object({
     provider: z.literal("NOAA AWS Open Data"),
     access: z.literal("s3_range"),
-    decoder: z.literal("wgrib2"),
+    decoder: z.enum(["gribberish", "wgrib2"]),
   }),
   series: z.array(z.object({
     validTime: isoDateTimeSchema,
@@ -312,7 +312,7 @@ export const areaSummaryResultSchema = z.object({
   source: z.object({
     provider: z.literal("NOAA NOMADS"),
     access: z.literal("nomads_grib_filter"),
-    decoder: z.literal("wgrib2"),
+    decoder: z.enum(["gribberish", "wgrib2"]),
     cacheHit: z.boolean(),
   }),
 }).superRefine((value, context) => {

@@ -1,4 +1,5 @@
 import { execa } from "execa";
+import type { GribDecoderName } from "../core/types.js";
 import {
   gridPointsInBox,
   readGribMessages,
@@ -36,10 +37,14 @@ const defaultRunner: Wgrib2GridCommandRunner = async (executable, args) => {
  * WGRIB2_PATH or WFG_DECODER=wgrib2.
  */
 export class Wgrib2GridDecoder {
+  readonly engine: GribDecoderName;
+
   constructor(
     private readonly executable = defaultNativeExecutable(),
     private readonly runner: Wgrib2GridCommandRunner = defaultRunner,
-  ) {}
+  ) {
+    this.engine = executable === undefined ? "gribberish" : "wgrib2";
+  }
 
   async extractBox(path: string, box: AreaBox): Promise<GridValuePoint[]> {
     if (this.executable === undefined) {

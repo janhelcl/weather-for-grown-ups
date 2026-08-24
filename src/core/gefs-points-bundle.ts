@@ -144,7 +144,7 @@ export class GefsPointsBundleService {
       source: {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
-        decoder: "wgrib2",
+        decoder: this.decoder.engine ?? "wgrib2",
         product: "pgrb2a_0p50",
         memberFiles: memberFiles.map(({ member, cacheHit }) => ({ member, cacheHit })),
         allCacheHit: memberFiles.every((file) => file.cacheHit),
