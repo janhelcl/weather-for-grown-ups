@@ -1,9 +1,11 @@
 import { GefsBundleTimeSeriesService } from "./core/gefs-bundle-timeseries.js";
 import { GefsMemberBundleService } from "./core/gefs-member-bundle.js";
+import { GefsPointsBundleService } from "./core/gefs-points-bundle.js";
 import {
   handleGetGefsFields,
   handleGetGefsFieldsTimeSeries,
 } from "./mcp-gefs-bundle-tool.js";
+import { handleGetGefsFieldsPoints } from "./mcp-gefs-points-bundle-tool.js";
 import { createMcpServer as createBaseMcpServer } from "./mcp-server.js";
 import {
   gefsBundleTimeSeriesQuerySchema,
@@ -13,6 +15,10 @@ import {
   gefsMemberBundleQuerySchema,
   gefsMemberBundleResultSchema,
 } from "./schema/gefs-member-bundle.js";
+import {
+  gefsPointsBundleQuerySchema,
+  gefsPointsBundleResultSchema,
+} from "./schema/gefs-points-bundle.js";
 
 /**
  * Extend the shared MCP server with GEFS mixed-field bundle operations without
@@ -23,6 +29,7 @@ export function createMcpServer() {
   const server = createBaseMcpServer();
   const bundleService = new GefsMemberBundleService();
   const timeSeriesService = new GefsBundleTimeSeriesService({ bundleGetter: bundleService });
+  const pointsService = new GefsPointsBundleService();
 
   server.registerTool("get_gefs_fields", {
     title: "Get mixed GEFS field distributions",
@@ -37,6 +44,13 @@ export function createMcpServer() {
     inputSchema: gefsBundleTimeSeriesQuerySchema,
     outputSchema: gefsBundleTimeSeriesResultSchema,
   }, async (query) => handleGetGefsFieldsTimeSeries(timeSeriesService, query));
+
+  server.registerTool("get_gefs_fields_points", {
+    title: "Get mixed GEFS fields for multiple points",
+    description: "Evaluate one mixed GEFS pressure/non-isobaric selection at up to 20 coordinates for one run and valid time. WFG fetches one selected-message file per member independent of point count, then samples each requested coordinate locally from those immutable files. Every point is summarized independently with the same member-first thermodynamics, field temporal semantics and circular wind-direction aggregation as get_gefs_fields. Local wgrib2 extraction still scales with members × points. Member payloads are optional and bounded by maxMemberSamples. Ensemble summaries are raw member evidence, not calibrated probability or uncertainty.",
+    inputSchema: gefsPointsBundleQuerySchema,
+    outputSchema: gefsPointsBundleResultSchema,
+  }, async (query) => handleGetGefsFieldsPoints(pointsService, query));
 
   return server;
 }
