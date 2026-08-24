@@ -13,6 +13,6 @@ jobs:
         run: |
           set -euo pipefail
           echo '=== core hard-coded decoder provenance with context ==='
-          grep -RInC4E 'decoder: "wgrib2"|decoder !== "wgrib2"|decoder: "wgrib2";' src/core || true
+          grep -RIn -C 4 -E 'decoder: "wgrib2"|decoder !== "wgrib2"|decoder: "wgrib2";' src/core || true
           echo '=== decoder interfaces ==='
-          grep -RInC2E 'interface .*Decoder|decoder\?:' src/core src/grib || true
+          grep -RIn -C 2 -E 'interface .*Decoder|decoder\?:' src/core src/grib || true
