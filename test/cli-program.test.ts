@@ -50,9 +50,9 @@ describe("CLI program registration", () => {
     expect(program.commands).toHaveLength(EXPECTED_COMMANDS.length);
   });
 
-  it("keeps canonical profile, timeseries and layer commands model-selectable without multiplying commands", () => {
+  it("keeps canonical shared operations model-selectable without multiplying commands", () => {
     const program = createCliProgram();
-    for (const name of ["profile", "timeseries", "layer"]) {
+    for (const name of ["profile", "timeseries", "layer", "profile-diagnostics", "diagnostic-timeseries", "compare-runs"]) {
       const command = program.commands.find((candidate) => candidate.name() === name);
       expect(command?.options.some((option) => option.long === "--model")).toBe(true);
     }
