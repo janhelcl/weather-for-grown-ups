@@ -5,7 +5,7 @@ import {
   toNodeHandler,
 } from "@modelcontextprotocol/node";
 import { createMcpHandler } from "@modelcontextprotocol/server";
-import { createMcpServer } from "./mcp-server.js";
+import { createMcpServer } from "./mcp-extended-server.js";
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
 
