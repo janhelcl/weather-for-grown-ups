@@ -6,6 +6,7 @@ import { registerEnsembleCommand } from "./ensemble-command.js";
 import { registerGefsBundleCommands } from "./gefs-bundle-command.js";
 import { registerGefsParcelCommand } from "./gefs-parcel-command.js";
 import { registerGefsParcelTimeSeriesCommand } from "./gefs-parcel-timeseries-command.js";
+import { registerGefsPointsBundleCommand } from "./gefs-points-bundle-command.js";
 import { registerModelComparisonCommand } from "./model-comparison-command.js";
 import { registerPointCommands } from "./point-commands.js";
 import { registerTransectCommand } from "./transect-command.js";
@@ -20,6 +21,7 @@ export function createCliProgram(): Command {
   registerPointCommands(program);
   registerEnsembleCommand(program);
   registerGefsBundleCommands(program);
+  registerGefsPointsBundleCommand(program);
   registerGefsParcelCommand(program);
   registerGefsParcelTimeSeriesCommand(program);
   registerModelComparisonCommand(program);
