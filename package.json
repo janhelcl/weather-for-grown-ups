@@ -35,8 +35,7 @@
     "wfg-mcp-http": "./dist/mcp-http.js"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
