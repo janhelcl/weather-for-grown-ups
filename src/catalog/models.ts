@@ -99,6 +99,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "parcel_diagnostics",
       "points",
       "points_timeseries",
+      "transect",
     ],
   },
 };
