@@ -92,20 +92,23 @@ describe("HistoricalPointsTimeSeriesService", () => {
   });
 
   it("supports fields-only matrices and forwards de-duplicated fields", async () => {
-    const getPoints = vi.fn(async (query: { analysisTime: string; fields?: string[] }) => ({
+    const getPoints = vi.fn(async (query: { analysisTime: string; fields?: string[]; points: typeof points }) => ({
       ...batch(new Date(query.analysisTime).toISOString()),
       selection: { fields: ["wind_10m" as const] },
-      points: batch(new Date(query.analysisTime).toISOString()).points.map((point) => ({
-        requestedPoint: point.requestedPoint,
-        gridPoint: point.gridPoint,
+      points: query.points.map((requestedPoint) => ({
+        requestedPoint,
+        gridPoint: {
+          latitude: Math.round(requestedPoint.latitude * 2) / 2,
+          longitude: Math.round(requestedPoint.longitude * 2) / 2,
+        },
         fields: [{
           id: "wind_10m" as const,
           level: { type: "height_above_ground_m" as const, heightM: 10 },
           temporal: { type: "instantaneous" as const },
           values: { windSpeedMs: 5, windDirectionDeg: 220 },
         }],
-        dataset: point.dataset,
-        cacheHit: point.cacheHit,
+        dataset: "archive.grb2",
+        cacheHit: true,
       })),
     }));
     const service = new HistoricalPointsTimeSeriesService({
