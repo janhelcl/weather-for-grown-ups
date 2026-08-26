@@ -167,7 +167,7 @@ export function parseHistoricalProfileCsv(
   const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
   if (lines.length < 2) throw new Error("NCEI historical GFS response contains no data rows");
 
-  const headers = parseCsvLine(lines[0]).map(normalizeHeader);
+  const headers = parseCsvLine(lines[0]!).map(normalizeHeader);
   const pressureIndex = findHeaderIndex(headers, ["vertCoord", "isobaric", "isobaric1", "isobaric2", "isobaric3", "isobaric4", "isobaric5"]);
   if (pressureIndex < 0) throw new Error("NCEI historical GFS response is missing a pressure coordinate");
 
