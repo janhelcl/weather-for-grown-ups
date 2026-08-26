@@ -38,9 +38,10 @@ describe("atmospheric dataset capability catalog", () => {
     expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "layer_diagnostics")).toBe(true);
     expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "profile_diagnostics")).toBe(true);
     expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "parcel_diagnostics")).toBe(true);
-
-    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "points")).toBe(false);
-    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "transect")).toBe(false);
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "diagnostic_timeseries")).toBe(true);
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "points")).toBe(true);
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "points_timeseries")).toBe(true);
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "transect")).toBe(true);
     expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "area_summary")).toBe(false);
     expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "run_comparison")).toBe(false);
     expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "ensemble_distribution")).toBe(false);
