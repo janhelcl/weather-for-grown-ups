@@ -1,19 +1,19 @@
-# Historical GFS analysis
+# Historical GFS analysis and verification
 
-WFG can query historical NOAA GFS model analyses from the NCEI Grid 4 archive. This is a separate product from the current operational GFS 0.25° forecast surface.
+WFG can query historical NOAA GFS model analyses from the NCEI Grid 4 archive and compare archived Grid 4 forecasts with the later analysis at the same valid time. This is separate from the current operational GFS 0.25° forecast surface.
 
 ## What this is
 
-The history surface exposes **GFS Grid 4 analysis fields on the 0.5° grid** for exact 00, 06, 12 and 18 UTC analysis cycles. NCEI's online Grid 4 analysis archive begins in 2007.
+The history surface exposes **GFS Grid 4 fields on the 0.5° grid**. Analysis history uses exact 00, 06, 12 and 18 UTC cycles; NCEI's Grid 4 analysis archive begins in 2007.
 
 An analysis is the model's assimilated atmospheric state at the analysis time. It is useful for questions such as:
 
 - What did the GFS analysis show over Prague at 850 hPa on a historical day?
 - What did the vertical temperature, humidity and wind profile look like during a past event?
 - How did a selected part of the historical model state evolve across several analysis cycles?
-- Can I retrieve comparable model-state inputs for a known past date?
+- What did GFS predict 24, 48 or 72 hours before a known event, and how did that forecast differ from the later analysis?
 
-It is **not** a direct observation, and the long GFS record is **not a homogeneous climatological reanalysis**. Model versions, assimilation systems and available fields changed over time. WFG therefore labels the result `gfs_grid4_analysis_0p5` and returns an explicit caveat rather than presenting it as climatology.
+It is **not** a direct observation, and the long GFS record is **not a homogeneous climatological reanalysis**. Model versions, assimilation systems and available fields changed over time. WFG labels the products explicitly rather than presenting them as climatology or observations.
 
 ## Supported variables
 
@@ -30,7 +30,7 @@ The history surface intentionally uses a stable subset of the long archive:
 - `dew_point` — derived from temperature/RH
 - `potential_temperature` — derived from temperature and pressure
 
-A requested pressure level must actually exist for every requested variable in that historical file. Older GFS analyses do not expose every modern pressure level for every field; WFG reports missing fields explicitly instead of silently interpolating them.
+A requested pressure level must actually exist for every requested variable in that historical file. Older GFS files do not expose every modern pressure level for every field; WFG reports missing fields explicitly instead of silently interpolating them.
 
 Older Grid 4 files also use different pressure axes for some variables. WFG groups compatible variables into one NCSS request and fetches incompatible axes separately before merging them by pressure level. For example, temperature, humidity, wind and geopotential height can share the full pressure profile while vertical velocity and absolute vorticity may require their own archive requests.
 
@@ -54,8 +54,6 @@ wfg history \
 
 Tool: `get_gfs_historical_profile`
 
-Example input:
-
 ```json
 {
   "latitude": 50.08,
@@ -70,14 +68,14 @@ The result includes the requested point, sampled 0.5° grid point, normalized pr
 
 ## Historical time series
 
-Historical ranges are deliberately bounded because the NCEI archive is file-oriented: each selected analysis cycle is a separate immutable archive file. WFG therefore exposes two controls rather than allowing an unbounded archive scan:
+Historical ranges are deliberately bounded because the NCEI archive is file-oriented: each selected analysis cycle is a separate immutable archive file. WFG exposes two controls rather than allowing an unbounded archive scan:
 
 - `cycleHoursUtc` / `--cycles` chooses which native 00, 06, 12 and 18 UTC analyses to sample;
 - `maxSteps` / `--max-steps` caps the number of selected analyses before any archive request starts.
 
-The default maximum is **8 analyses** and the hard maximum is **16**. The default cycle selection is all four native cycles. Sparse selection is useful for comparable daily samples; for example, choosing only 12 UTC gives one profile per day instead of four.
+The default maximum is **8 analyses** and the hard maximum is **16**. Sparse selection is useful for comparable daily samples; choosing only 12 UTC gives one profile per day instead of four.
 
-Archive cycles are fetched serially. This preserves WFG's NOAA courtesy pacing and avoids turning one agent call into a burst of concurrent NCEI requests. Each time-series step keeps its own exact archive dataset path and cache-hit flag.
+Archive cycles are fetched serially. Each step keeps its own exact archive dataset path and cache-hit flag.
 
 ### CLI
 
@@ -94,13 +92,9 @@ wfg history-timeseries \
   --json
 ```
 
-The example samples one 12 UTC analysis per day for seven days. A range that would select more than `maxSteps` fails before any archive data are fetched.
-
 ### MCP
 
 Tool: `get_gfs_historical_timeseries`
-
-Example input:
 
 ```json
 {
@@ -115,20 +109,60 @@ Example input:
 }
 ```
 
-The result carries shared point/source metadata plus one entry per selected analysis with its profile levels, exact dataset path and cache status.
+## Archived forecast verification
+
+Verification compares **one archived Grid 4 forecast** with the later Grid 4 analysis on the same 0.5° grid point and valid time. This deliberately keeps the primitive atomic: one tool call verifies one lead. An agent can compose calls for 24/48/72-hour comparisons when it actually needs a verification curve, without every request automatically becoming several throttled archive reads.
+
+The input is anchored on the historical `validTime`; WFG derives the forecast run as `validTime - leadHours`. `leadHours` must be a multiple of 6 and is bounded to **0–192 hours**, so the verification target is always a native analysis cycle.
+
+Changes are reported as **analysis − forecast**. Directional quantities such as wind direction use signed circular-degree differences rather than naïve subtraction.
+
+### CLI
+
+```bash
+wfg history-verify \
+  --lat 50.08 \
+  --lon 14.43 \
+  --valid 2019-12-26T18:00:00Z \
+  --lead-hours 54 \
+  --vars temperature,relative_humidity,wind,geopotential_height \
+  --levels 850,700,500 \
+  --json
+```
+
+### MCP
+
+Tool: `verify_gfs_historical_forecast`
+
+```json
+{
+  "latitude": 50.08,
+  "longitude": 14.43,
+  "validTime": "2019-12-26T18:00:00Z",
+  "leadHours": 54,
+  "variables": ["temperature", "relative_humidity", "wind", "geopotential_height"],
+  "pressureLevelsHpa": [850, 700, 500]
+}
+```
+
+The result contains both normalized profiles, exact forecast and analysis dataset paths, cache status and per-pressure-level numeric changes.
+
+NCEI documents Grid 4 forecast history beginning in 2006, but continuously online THREDDS availability is more limited than the analysis archive; older forecast data may require retrieval through NCEI HAS. WFG surfaces this distinction explicitly when an archived forecast is not available online.
+
+Verification is against **GFS analysis, not observations**. It answers how a forecast differed from the model's later assimilated state. It does not measure observational error, and long-period comparisons must account for changes in historical GFS versions.
 
 ## Data access and caching
 
-WFG uses NCEI's THREDDS NetCDF Subset Service (NCSS) in grid-as-point mode. A history query requests pressure profiles at one point rather than downloading the full historical GRIB file. Compatible variables are bundled together; variables that use different historical pressure axes are fetched separately and merged locally.
+WFG uses NCEI's THREDDS NetCDF Subset Service (NCSS) in grid-as-point mode. Queries request selected pressure profiles at one point rather than downloading full historical GRIB files. Compatible variables are bundled together; variables using different historical pressure axes are fetched separately and merged locally.
 
-Responses are cached locally because historical analyses are immutable. Cache misses use the same file-based NOAA request throttle as the existing NOMADS path; the default cooldown remains 11 seconds. Multi-axis requests and multi-step historical time series therefore also preserve the required delay between successive NOAA calls.
+Historical responses are cached because archive files are immutable. Cache misses use WFG's file-based NOAA request throttle; the default cooldown remains 11 seconds. Analysis time series and forecast verification are therefore serial rather than bursty.
 
-The NCEI archive has two filename conventions. WFG handles the historical `gfsanl_4_...` layout before June 2020 and the later `gfs_4_...` layout from June 2020 onward.
+Analysis archive naming changes around June 2020: WFG handles historical `gfsanl_4_...` files and later `gfs_4_...` analysis files. Forecast history similarly handles `model-gfs-004-files-old` before June 2020 and `model-gfs-004-files` afterward.
 
 ## What comes next
 
-The history surface deliberately provides **historical model state**, not climatological statistics. Natural follow-ons are:
+The history surface deliberately separates model history from climatology. Natural follow-ons are:
 
-1. analog-day search over selected variables/levels;
+1. analog-day search, but only after choosing a materialized/indexed history strategy rather than scanning NCEI interactively;
 2. anomaly and percentile calculations against a deliberately chosen homogeneous reanalysis/climatology source;
-3. archived-forecast verification, kept separate from analysis history.
+3. multi-lead verification summaries built on the atomic verification primitive once archive caching/indexing makes them efficient.
