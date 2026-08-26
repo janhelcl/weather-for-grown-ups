@@ -9,6 +9,8 @@ import { HistoricalDiagnosticsService } from "./core/history-diagnostics.js";
 import { HistoricalFieldsTimeSeriesService } from "./core/history-fields-timeseries.js";
 import { HistoricalFieldsService } from "./core/history-fields.js";
 import { HistoricalIndexService } from "./core/history-index.js";
+import { HistoricalParcelTimeSeriesService } from "./core/history-parcel-timeseries.js";
+import { HistoricalParcelService } from "./core/history-parcel.js";
 import { HistoricalTimeSeriesService } from "./core/history-time-series.js";
 import { HistoricalForecastVerificationService } from "./core/history-verification.js";
 import { handleGetGefsAreaSummary } from "./mcp-gefs-area-tool.js";
@@ -27,6 +29,10 @@ import {
   handleGetGfsHistoricalFields,
   handleGetGfsHistoricalFieldsTimeSeries,
 } from "./mcp-history-fields-tool.js";
+import {
+  handleGetGfsHistoricalParcel,
+  handleGetGfsHistoricalParcelTimeSeries,
+} from "./mcp-history-parcel-tool.js";
 import {
   handleBackfillGfsHistoryIndex,
   handleFindGfsHistoricalAnalogs,
@@ -71,6 +77,12 @@ import {
   historicalFieldsQuerySchema,
   historicalFieldsResultSchema,
 } from "./schema/history-fields.js";
+import {
+  historicalParcelQuerySchema,
+  historicalParcelResultSchema,
+  historicalParcelTimeSeriesQuerySchema,
+  historicalParcelTimeSeriesResultSchema,
+} from "./schema/history-parcel.js";
 import { historicalTimeSeriesResultSchema } from "./schema/history-result.js";
 import {
   historicalAnalogQuerySchema,
@@ -94,6 +106,10 @@ export function createMcpServer() {
   const historicalFieldsService = new HistoricalFieldsService();
   const historicalFieldsTimeSeriesService = new HistoricalFieldsTimeSeriesService({
     fieldsGetter: historicalFieldsService,
+  });
+  const historicalParcelService = new HistoricalParcelService({ fieldsGetter: historicalFieldsService });
+  const historicalParcelTimeSeriesService = new HistoricalParcelTimeSeriesService({
+    parcelGetter: historicalParcelService,
   });
   const historicalDiagnosticsService = new HistoricalDiagnosticsService();
   const historicalIndexService = new HistoricalIndexService();
@@ -126,6 +142,20 @@ export function createMcpServer() {
     inputSchema: historicalFieldsTimeSeriesQuerySchema,
     outputSchema: historicalFieldsTimeSeriesResultSchema,
   }, async (query) => handleGetGfsHistoricalFieldsTimeSeries(historicalFieldsTimeSeriesService, query));
+
+  server.registerTool("get_gfs_historical_parcel", {
+    title: "Get historical GFS parcel diagnostics",
+    description: "Lift an explicit surface-2m, mixed-layer-100hPa, or most-unstable-300hPa parcel through one archived GFS Grid 4 analysis and derive LCL/LFC/EL/CAPE/CIN with the same parcel engine as operational GFS. Historical pressure-level and 2 m moisture are reconstructed from stable analysis humidity inputs where needed. This is model-analysis diagnostics, not direct observations or homogeneous climatological reanalysis.",
+    inputSchema: historicalParcelQuerySchema,
+    outputSchema: historicalParcelResultSchema,
+  }, async (query) => handleGetGfsHistoricalParcel(historicalParcelService, query));
+
+  server.registerTool("get_gfs_historical_parcel_timeseries", {
+    title: "Get historical GFS parcel time series",
+    description: "Evaluate one explicit parcel definition across a bounded series of native 00/06/12/18 UTC GFS Grid 4 analysis cycles. Each step uses the same historical pressure/surface state and parcel engine as get_gfs_historical_parcel; default maxSteps is 8 and the hard maximum is 16. Archive reads remain serial under WFG's NOAA courtesy limiter.",
+    inputSchema: historicalParcelTimeSeriesQuerySchema,
+    outputSchema: historicalParcelTimeSeriesResultSchema,
+  }, async (query) => handleGetGfsHistoricalParcelTimeSeries(historicalParcelTimeSeriesService, query));
 
   server.registerTool("get_gfs_historical_layer_diagnostics", {
     title: "Get historical GFS layer diagnostics",
