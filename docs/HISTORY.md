@@ -1,6 +1,6 @@
 # Historical GFS analysis and verification
 
-WFG can query historical NOAA GFS model analyses from the NCEI Grid 4 archive and compare archived Grid 4 forecasts with the later analysis at the same valid time. This is separate from the current operational GFS 0.25° forecast surface.
+WFG can query historical NOAA GFS model analyses from the NCEI Grid 4 archive, materialize selected profiles for local analog search, and compare archived Grid 4 forecasts with the later analysis at the same valid time. This is separate from the current operational GFS 0.25° forecast surface.
 
 ## What this is
 
@@ -10,7 +10,7 @@ An analysis is the model's assimilated atmospheric state at the analysis time. I
 
 - What did the GFS analysis show over Prague at 850 hPa on a historical day?
 - What did the vertical temperature, humidity and wind profile look like during a past event?
-- How did a selected part of the historical model state evolve across several analysis cycles?
+- Which already materialized historical days had the most similar atmospheric profile over Prague?
 - What did GFS predict 24, 48 or 72 hours before a known event, and how did that forecast differ from the later analysis?
 
 It is **not** a direct observation, and the long GFS record is **not a homogeneous climatological reanalysis**. Model versions, assimilation systems and available fields changed over time. WFG labels the products explicitly rather than presenting them as climatology or observations.
@@ -109,6 +109,91 @@ Tool: `get_gfs_historical_timeseries`
 }
 ```
 
+## Materialized history and analog search
+
+Analog search does **not** scan years of NCEI files during one agent call. Historical profiles are first materialized into a deliberately simple local JSONL index. Each build call uses the same bounded archive access as `history-timeseries`, so the caller grows the index incrementally rather than triggering an accidental long-running archive crawl.
+
+By default the index lives at:
+
+```text
+~/.cache/wfg/history-index/profiles.jsonl
+```
+
+`WFG_CACHE_DIR` moves the normal WFG cache root. `WFG_HISTORY_INDEX_PATH` can point the history index at a specific JSONL file. The store is append-only; semantic duplicate records are deduplicated when read, and normal materialization avoids appending a duplicate that already exists.
+
+A semantic record key consists of the analysis time, sampled Grid 4 point and normalized variable/pressure selection. Analog candidates must match the target's **same sampled grid point and same selection**. This prevents apparently similar profiles from different locations or different feature sets from being mixed silently.
+
+### Build the index
+
+CLI:
+
+```bash
+wfg history-index \
+  --lat 50.08 \
+  --lon 14.43 \
+  --from 2017-05-01T00:00:00Z \
+  --to 2017-05-08T23:59:59Z \
+  --cycles 12 \
+  --vars temperature,relative_humidity,wind,geopotential_height \
+  --levels 850,700,500 \
+  --max-steps 8 \
+  --json
+```
+
+MCP tool: `materialize_gfs_history_index`
+
+```json
+{
+  "latitude": 50.08,
+  "longitude": 14.43,
+  "startTime": "2017-05-01T00:00:00Z",
+  "endTime": "2017-05-08T23:59:59Z",
+  "cycleHoursUtc": [12],
+  "variables": ["temperature", "relative_humidity", "wind", "geopotential_height"],
+  "pressureLevelsHpa": [850, 700, 500],
+  "maxSteps": 8
+}
+```
+
+Repeated calls can materialize adjacent ranges. Archive access remains serial and subject to WFG's NOAA courtesy limiter; already cached NCEI responses remain cheap to reuse.
+
+### Find analogs
+
+CLI:
+
+```bash
+wfg history-analogs \
+  --lat 50.08 \
+  --lon 14.43 \
+  --target 2017-05-09T12:00:00Z \
+  --vars temperature,relative_humidity,wind,geopotential_height \
+  --levels 850,700,500 \
+  --count 5 \
+  --exclude-within-hours 24 \
+  --json
+```
+
+MCP tool: `find_gfs_historical_analogs`
+
+```json
+{
+  "latitude": 50.08,
+  "longitude": 14.43,
+  "targetTime": "2017-05-09T12:00:00Z",
+  "variables": ["temperature", "relative_humidity", "wind", "geopotential_height"],
+  "pressureLevelsHpa": [850, 700, 500],
+  "count": 5,
+  "excludeWithinHours": 24,
+  "fetchTargetIfMissing": true
+}
+```
+
+Candidate search is local. If the target analysis itself is not materialized and `fetchTargetIfMissing=true`, WFG fetches only that one target profile, stores it, then searches the local candidate set. Set `fetchTargetIfMissing=false` (CLI: `--no-fetch-target`) for a strictly offline lookup.
+
+Similarity uses **standardized Euclidean distance** over the selected pressure-level values. Feature scales are estimated from the target plus eligible local candidates so temperature, geopotential height and other differently scaled quantities do not compete in raw units. For `wind`, WFG uses the underlying **U/V components**, not direction degrees, avoiding the artificial discontinuity between directions such as 359° and 1°. If `wind` and `u_wind`/`v_wind` are selected together, duplicate component features are included only once.
+
+The returned distance is a model-state similarity score only. It is not a climatological percentile, a probability, or a statement that two days produced the same surface impacts.
+
 ## Archived forecast verification
 
 Verification compares **one archived Grid 4 forecast** with the later Grid 4 analysis on the same 0.5° grid point and valid time. This deliberately keeps the primitive atomic: one tool call verifies one lead. An agent can compose calls for 24/48/72-hour comparisons when it actually needs a verification curve, without every request automatically becoming several throttled archive reads.
@@ -155,7 +240,9 @@ Verification is against **GFS analysis, not observations**. It answers how a for
 
 WFG uses NCEI's THREDDS NetCDF Subset Service (NCSS) in grid-as-point mode. Queries request selected pressure profiles at one point rather than downloading full historical GRIB files. Compatible variables are bundled together; variables using different historical pressure axes are fetched separately and merged locally.
 
-Historical responses are cached because archive files are immutable. Cache misses use WFG's file-based NOAA request throttle; the default cooldown remains 11 seconds. Analysis time series and forecast verification are therefore serial rather than bursty.
+Historical responses are cached because archive files are immutable. Cache misses use WFG's file-based NOAA request throttle; the default cooldown remains 11 seconds. Analysis time series, history materialization and forecast verification are therefore serial rather than bursty.
+
+The analog index is intentionally source-agnostic. Today it is populated through the NCEI profile surface; a future bulk historical source can write the same normalized records without changing analog-search semantics.
 
 Analysis archive naming changes around June 2020: WFG handles historical `gfsanl_4_...` files and later `gfs_4_...` analysis files. Forecast history similarly handles `model-gfs-004-files-old` before June 2020 and `model-gfs-004-files` afterward.
 
@@ -163,6 +250,7 @@ Analysis archive naming changes around June 2020: WFG handles historical `gfsanl
 
 The history surface deliberately separates model history from climatology. Natural follow-ons are:
 
-1. analog-day search, but only after choosing a materialized/indexed history strategy rather than scanning NCEI interactively;
+1. faster/bulk index ingestion so years of candidate history can be built efficiently without interactive NCSS calls;
 2. anomaly and percentile calculations against a deliberately chosen homogeneous reanalysis/climatology source;
-3. multi-lead verification summaries built on the atomic verification primitive once archive caching/indexing makes them efficient.
+3. optional seasonal or impact-specific analog filters built on top of the generic model-state metric;
+4. multi-lead verification summaries once archive caching/indexing makes them efficient.
