@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  handleGetGfsHistoricalDiagnosticTimeSeries,
   handleGetGfsHistoricalLayerDiagnostics,
   handleGetGfsHistoricalProfileDiagnostics,
 } from "../src/mcp-history-diagnostics-tool.js";
@@ -12,6 +13,62 @@ const source = {
 };
 
 describe("historical diagnostics MCP handlers", () => {
+  it("returns structured historical diagnostic time series", async () => {
+    const getDiagnosticTimeSeries = vi.fn(async () => ({
+      model: "gfs_grid4_analysis_0p5" as const,
+      requestedStartTime: "2017-05-09T12:00:00.000Z",
+      requestedEndTime: "2017-05-09T12:00:00.000Z",
+      requestedPoint: { latitude: 50.08, longitude: 14.43 },
+      gridPoint: { latitude: 50, longitude: 14.5 },
+      diagnostic: {
+        kind: "layer" as const,
+        lowerPressureHpa: 850,
+        upperPressureHpa: 700,
+        diagnostics: ["temperature_lapse_rate" as const],
+      },
+      cycleHoursUtc: [12 as const],
+      source: { provider: "NOAA NCEI" as const, access: "ncei_thredds_ncss" as const },
+      series: [{
+        kind: "layer" as const,
+        analysisTime: "2017-05-09T12:00:00.000Z",
+        layer: {
+          lowerPressureHpa: 850,
+          upperPressureHpa: 700,
+          lowerGeopotentialHeightGpm: 1500,
+          upperGeopotentialHeightGpm: 3000,
+          depthGpm: 1500,
+        },
+        diagnostics: [{ id: "temperature_lapse_rate" as const, values: { temperatureLapseRateCPerKm: 6.6 } }],
+        dataset: "archive.grb2",
+        cacheHit: true,
+      }],
+      caveat: "Diagnostics are derived from GFS model analysis; not direct observations or homogeneous climatological reanalysis" as const,
+    }));
+
+    const result = await handleGetGfsHistoricalDiagnosticTimeSeries(
+      { getDiagnosticTimeSeries } as never,
+      {
+        latitude: 50.08,
+        longitude: 14.43,
+        startTime: "2017-05-09T12:00:00Z",
+        endTime: "2017-05-09T12:00:00Z",
+        diagnostic: {
+          kind: "layer",
+          lowerPressureHpa: 850,
+          upperPressureHpa: 700,
+          diagnostics: ["temperature_lapse_rate"],
+        },
+        cycleHoursUtc: [12],
+        maxSteps: 1,
+      },
+    );
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      model: "gfs_grid4_analysis_0p5",
+      series: [{ analysisTime: "2017-05-09T12:00:00.000Z" }],
+    });
+  });
+
   it("returns structured historical layer diagnostics", async () => {
     const getLayerDiagnostics = vi.fn(async () => ({
       model: "gfs_grid4_analysis_0p5" as const,
