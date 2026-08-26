@@ -1,0 +1,280 @@
+# GEFS ensemble access
+
+WFG exposes NOAA's Global Ensemble Forecast System as a **model-native ensemble**, not as a hidden confidence score wrapped around deterministic GFS.
+
+GEFS shares model-independent meteorological kernels with GFS where scientifically valid, while member identities, distributions, spatial statistics and run semantics remain explicit.
+
+## v0.1.0 contract
+
+- product: operational atmospheric `pgrb2a` 0.5°;
+- members: control `c00` plus perturbed `p01`–`p30`;
+- cycles: 00/06/12/18Z;
+- WFG forecast horizon: `f000`–`f384`;
+- native cadence: 3 hours;
+- source: NOAA AWS Open Data `.idx` inventories + byte ranges;
+- normal decoder: bundled npm GRIB2 decoder;
+- optional compatibility/debug decoder: native `wgrib2`;
+- immutable local selected-slice caching.
+
+## Current GEFS capabilities
+
+v0.1.0 includes:
+
+- searchable GEFS catalog and source semantics;
+- scalar raw field distributions;
+- multi-variable/multi-level pressure profiles;
+- member-first derived pressure thermodynamics;
+- mixed pressure/non-isobaric field bundles;
+- raw and mixed-field time series;
+- raw and mixed-field multi-point queries;
+- raw and mixed-field multi-point time series;
+- member-first layer diagnostics;
+- member-first freezing/inversion diagnostics;
+- member-first parcel/LCL/LFC/EL/CAPE/CIN diagnostics;
+- layer/profile/parcel diagnostic time series;
+- ensemble-native mixed-field transects;
+- member-first bounded-area statistics;
+- run-to-run distribution comparison;
+- aligned deterministic GFS-vs-GEFS comparison.
+
+The older limitations around GEFS parcel diagnostics, multi-point time series, transects and area statistics no longer apply to v0.1.0.
+
+## Member-first semantics
+
+For nonlinear meteorology, WFG never derives a quantity from an ensemble-mean atmospheric profile unless an operation explicitly defines that quantity.
+
+The pattern is:
+
+```text
+selected GEFS member
+      ↓
+fetch minimal raw dependencies
+      ↓
+normalize one member's atmospheric state
+      ↓
+run shared physical calculation
+      ↓
+repeat for selected members
+      ↓
+summarize member results
+```
+
+That pattern applies to lapse rate, shear, stability gradients, inversion/freezing structures and parcel diagnostics.
+
+All numeric ensemble distribution surfaces share arithmetic mean, population standard deviation, extrema and caller-selected quantiles. Threshold/event fractions are explicitly raw member evidence, **not calibrated probability**.
+
+## Surface guide
+
+### Catalog
+
+```bash
+wfg catalog --model gefs --search cloud --json
+```
+
+MCP: `get_gefs_catalog`, `search_gefs_catalog`.
+
+### Scalar ensemble distribution
+
+```bash
+wfg ensemble \
+  --lat 50.08 --lon 14.43 \
+  --valid 2026-08-24T12:00:00Z \
+  --var temperature --level 850 \
+  --quantiles 0.1,0.5,0.9 \
+  --json
+```
+
+MCP: `get_gefs_ensemble`.
+
+### Pressure profile
+
+```bash
+wfg profile \
+  --model gefs \
+  --lat 50.08 --lon 14.43 \
+  --valid 2026-08-24T12:00:00Z \
+  --vars temperature,relative_humidity,geopotential_height \
+  --levels 1000,925,850,700,500 \
+  --quantiles 0.1,0.5,0.9 \
+  --json
+```
+
+MCP: `get_gefs_ensemble_profile`.
+
+Member profiles are omitted by default and can be requested for audit/composition.
+
+### Mixed field bundle
+
+GEFS mixed bundles combine pressure variables/levels with supported non-isobaric fields in one member-first query.
+
+```bash
+wfg ensemble-fields \
+  --lat 50.08 --lon 14.43 \
+  --valid 2026-08-24T12:00:00Z \
+  --var temperature --level 850 \
+  --field temperature_2m \
+  --field wind_10m \
+  --quantiles 0.1,0.5,0.9 \
+  --json
+```
+
+Related CLI commands:
+
+- `ensemble-fields`
+- `ensemble-fields-timeseries`
+- `ensemble-fields-points`
+- `ensemble-fields-points-timeseries`
+
+MCP equivalents:
+
+- `get_gefs_fields`
+- `get_gefs_fields_timeseries`
+- `get_gefs_fields_points`
+- `get_gefs_fields_points_timeseries`
+
+See [GEFS_FIELD_BUNDLES.md](GEFS_FIELD_BUNDLES.md).
+
+### Raw multi-point and time-series primitives
+
+Shared model-selectable operations remain available for compact one-field ensemble queries:
+
+```text
+points             --model gefs
+timeseries         --model gefs
+points-timeseries  --model gefs
+```
+
+These are useful when the caller needs one raw field rather than a mixed bundle. See [GEFS_MULTI_POINT.md](GEFS_MULTI_POINT.md) and [GEFS_MULTI_POINT_TIME_SERIES.md](GEFS_MULTI_POINT_TIME_SERIES.md).
+
+### Layer diagnostics
+
+```bash
+wfg layer \
+  --model gefs \
+  --lat 50.08 --lon 14.43 \
+  --valid 2026-08-24T12:00:00Z \
+  --lower 850 --upper 500 \
+  --diagnostics temperature_lapse_rate,wind_shear,potential_temperature_gradient \
+  --json
+```
+
+Every member gets its own endpoint fields and geopotential layer depth before the diagnostic distribution is summarized.
+
+MCP: `get_gefs_layer_diagnostics`.
+
+### Whole-profile diagnostics
+
+```bash
+wfg profile-diagnostics \
+  --model gefs \
+  --lat 50.08 --lon 14.43 \
+  --valid 2026-08-24T12:00:00Z \
+  --levels 1000,925,850,700,500 \
+  --diagnostics freezing_level_crossings,temperature_inversion_layers \
+  --json
+```
+
+Variable-length structures are summarized through event/count and conditional descriptor distributions rather than an invented ensemble-mean structure.
+
+MCP: `get_gefs_profile_diagnostics`. See [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md).
+
+### Parcel diagnostics
+
+GEFS v0.1.0 supports the same explicit parcel definitions as GFS, evaluated member by member:
+
+- `surface_2m`
+- `mixed_layer_100hpa`
+- `most_unstable_300hpa`
+
+```bash
+wfg parcel \
+  --model gefs \
+  --lat 45.80 --lon 11.77 \
+  --valid 2026-08-24T12:00:00Z \
+  --parcel surface_2m \
+  --levels 1000,925,850,700,500,400,300 \
+  --json
+```
+
+MCP: `get_gefs_parcel_diagnostics`.
+
+### Diagnostic time series
+
+`diagnostic-timeseries --model gefs` supports layer, profile and parcel series from one fixed model cycle and member set. The series returns compact ensemble summaries; use single-time operations for member-level drill-down.
+
+MCP: `get_gefs_diagnostic_timeseries`. See [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md).
+
+### Transect
+
+```bash
+wfg transect \
+  --model gefs \
+  --from 45.80,11.77 \
+  --to 46.50,12.50 \
+  --valid 2026-08-24T12:00:00Z \
+  --samples 10 \
+  --json
+```
+
+GEFS transects are ensemble-native mixed-field cross-sections. The path delegates to one multi-point bundle request so selected member slices are reused across coordinates.
+
+MCP: `get_gefs_transect`. See [GEFS_TRANSECT.md](GEFS_TRANSECT.md).
+
+### Area statistics
+
+```bash
+wfg area \
+  --model gefs \
+  --north 56 --south 55 \
+  --west 7 --east 9 \
+  --valid 2026-08-24T12:00:00Z \
+  --var u_wind --level 850 \
+  --json
+```
+
+WFG computes the requested spatial statistic independently within every member, then summarizes those member-level statistics across the ensemble. It does not flatten member × grid-cell values into one distribution.
+
+MCP: `get_gefs_area_summary`.
+
+### Run comparison
+
+```bash
+wfg compare-runs \
+  --model gefs \
+  --lat 50.08 --lon 14.43 \
+  --valid 2026-08-24T18:00:00Z \
+  --vars temperature \
+  --levels 850 \
+  --cycles 3 \
+  --json
+```
+
+Each initialization is summarized independently. WFG compares distribution descriptors across cycles and deliberately does not treat `p01(new) - p01(old)` as a physical member trajectory.
+
+MCP: `compare_gefs_runs`. See [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md).
+
+### Aligned GFS-vs-GEFS comparison
+
+`compare-gfs-gefs` / `compare_gfs_to_gefs` resolves one initialization cycle capable of satisfying both models and places deterministic GFS inside the GEFS member distribution without inventing a binary confidence judgment.
+
+See [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md).
+
+## Run selection and consistency
+
+`latest` resolves once for the complete query. Multi-time operations keep one cycle fixed across every valid step. Member sets and quantiles remain fixed too.
+
+Within point/profile operations, selected fields for one member must resolve consistently to one model grid point, and selected members must resolve consistently for the sampled location. Spatial-temporal compositions additionally guard against grid drift where their contracts require stable sampling.
+
+## Data access and caching
+
+GEFS uses NOAA AWS Open Data. WFG caches `.idx` inventories, selects only required byte ranges, stores immutable selected-message slices and performs decoding, sampling, derivation and aggregation locally.
+
+Mixed bundles merge dependencies so one member query does not need a separate upstream object transfer per requested normalized output. Multi-point and transect operations reuse those member slices across coordinates.
+
+AWS Open Data paths do not use the NOMADS scripted-access limiter.
+
+## Explicit non-goals
+
+WFG does not turn GEFS spread into a calibrated confidence score, choose weather-dependent activities, produce safety advice, or hide model disagreements behind one convenience number.
+
+Those interpretations belong to the consuming agent or a domain-specific layer built on WFG.
