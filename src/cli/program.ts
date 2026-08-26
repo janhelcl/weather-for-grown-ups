@@ -11,6 +11,7 @@ import { registerHistoryDiagnosticCommands } from "./history-diagnostic-commands
 import { registerHistoryFieldsCommand } from "./history-fields-command.js";
 import { registerHistoryParcelCommands } from "./history-parcel-command.js";
 import { registerHistoryPointsCommand } from "./history-points-command.js";
+import { registerHistoryTransectCommand } from "./history-transect-command.js";
 import { registerHistoryCommand } from "./history-command.js";
 import { registerModelComparisonCommand } from "./model-comparison-command.js";
 import { registerPointCommands } from "./point-commands.js";
@@ -28,6 +29,7 @@ export function createCliProgram(): Command {
   registerHistoryFieldsCommand(program);
   registerHistoryParcelCommands(program);
   registerHistoryPointsCommand(program);
+  registerHistoryTransectCommand(program);
   registerHistoryDiagnosticCommands(program);
   registerEnsembleCommand(program);
   registerGefsBundleCommands(program);
