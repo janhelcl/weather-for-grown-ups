@@ -1,12 +1,23 @@
 import type { Command } from "commander";
+import { HistoricalFieldsTimeSeriesService } from "../core/history-fields-timeseries.js";
 import { HistoricalFieldsService } from "../core/history-fields.js";
+import {
+  DEFAULT_HISTORICAL_TIME_SERIES_MAX_STEPS,
+  HISTORICAL_GFS_CYCLE_HOURS_UTC,
+  type HistoricalGfsVariableId,
+} from "../schema/history.js";
+import {
+  historicalFieldsTimeSeriesResultSchema,
+} from "../schema/history-fields-timeseries.js";
 import {
   HISTORICAL_GFS_FIELD_IDS,
   historicalFieldsResultSchema,
   type HistoricalGfsFieldId,
 } from "../schema/history-fields.js";
-import type { HistoricalGfsVariableId } from "../schema/history.js";
+import { parseHistoryCycles } from "./history-command.js";
 import { parseLevels } from "./shared.js";
+
+const DEFAULT_HISTORY_CYCLES = HISTORICAL_GFS_CYCLE_HOURS_UTC.join(",");
 
 export function registerHistoryFieldsCommand(program: Command): void {
   program
@@ -37,6 +48,46 @@ export function registerHistoryFieldsCommand(program: Command): void {
       console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
       if (result.levels) console.table(result.levels);
       console.table(result.fields.map((field) => ({ id: field.id, level: formatLevel(field.level), ...field.values })));
+      console.log(result.caveat);
+    });
+
+  program
+    .command("history-fields-timeseries")
+    .description("Fetch a bounded time series of historical mixed GFS analysis fields")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--from <iso>", "Inclusive start of historical range")
+    .requiredOption("--to <iso>", "Inclusive end of historical range")
+    .requiredOption("--fields <list>", "Comma-separated historical non-isobaric fields")
+    .option("--vars <list>", "Optional comma-separated historical pressure variables")
+    .option("--levels <list>", "Pressure levels in hPa when --vars is supplied")
+    .option("--cycles <list>", "Comma-separated UTC analysis hours: 0,6,12,18", DEFAULT_HISTORY_CYCLES)
+    .option("--max-steps <number>", "Maximum selected analysis cycles", Number, DEFAULT_HISTORICAL_TIME_SERIES_MAX_STEPS)
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const variables = options.vars === undefined ? undefined : parseHistoryVariables(options.vars);
+      const pressureLevelsHpa = options.levels === undefined ? undefined : parseLevels(options.levels);
+      const service = new HistoricalFieldsTimeSeriesService();
+      const result = historicalFieldsTimeSeriesResultSchema.parse(await service.getHistoricalFieldsTimeSeries({
+        latitude: options.lat,
+        longitude: options.lon,
+        startTime: options.from,
+        endTime: options.to,
+        ...(variables ? { variables } : {}),
+        ...(pressureLevelsHpa ? { pressureLevelsHpa } : {}),
+        fields: parseHistoricalFields(options.fields),
+        cycleHoursUtc: parseHistoryCycles(options.cycles),
+        maxSteps: options.maxSteps,
+      }));
+
+      if (options.json) return console.log(JSON.stringify(result, null, 2));
+      console.log(`Historical GFS mixed fields ${result.requestedStartTime} → ${result.requestedEndTime}`);
+      console.log(`Cycles UTC: ${result.selection.cycleHoursUtc.map((hour) => String(hour).padStart(2, "0")).join(", ")}`);
+      for (const step of result.series) {
+        console.log(`\n${step.analysisTime} (${step.cacheHit ? "cache" : "upstream"})`);
+        if (step.levels) console.table(step.levels);
+        console.table(step.fields.map((field) => ({ id: field.id, level: formatLevel(field.level), ...field.values })));
+      }
       console.log(result.caveat);
     });
 }
