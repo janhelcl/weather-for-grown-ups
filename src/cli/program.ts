@@ -7,6 +7,7 @@ import { registerGefsBundleCommands } from "./gefs-bundle-command.js";
 import { registerGefsParcelCommand } from "./gefs-parcel-command.js";
 import { registerGefsParcelTimeSeriesCommand } from "./gefs-parcel-timeseries-command.js";
 import { registerGefsPointsBundleCommand } from "./gefs-points-bundle-command.js";
+import { registerHistoryAreaCommand } from "./history-area-command.js";
 import { registerHistoryDiagnosticCommands } from "./history-diagnostic-commands.js";
 import { registerHistoryFieldsCommand } from "./history-fields-command.js";
 import { registerHistoryParcelCommands } from "./history-parcel-command.js";
@@ -26,6 +27,7 @@ export function createCliProgram(): Command {
   registerCatalogCommand(program);
   registerPointCommands(program);
   registerHistoryCommand(program);
+  registerHistoryAreaCommand(program);
   registerHistoryFieldsCommand(program);
   registerHistoryParcelCommands(program);
   registerHistoryPointsCommand(program);
