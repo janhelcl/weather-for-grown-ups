@@ -4,6 +4,8 @@ import {
   deriveAirDensityKgM3,
   deriveEquivalentPotentialTemperatureK,
   deriveMixingRatioKgKg,
+  deriveSaturationVaporPressureHpa,
+  deriveSpecificHumidityFromMixingRatioKgKg,
   deriveVirtualTemperatureC,
   deriveWetBulbTemperatureC,
 } from "../src/derived/thermodynamics.js";
@@ -12,14 +14,9 @@ import type { HistoricalAnalysisDataSource } from "../src/sources/ncei-gfs-histo
 
 const dataset = "model-gfs-g4-anl-files-old/201705/20170509/gfsanl_4_20170509_1200_000.grb2";
 
-const temperatureCsv = [
-  'station_name,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,vertCoord[unit="Pa"],Temperature_isobaric[unit="K"]',
-  'point,50,14.5,2017-05-09T12:00:00Z,85000,285.15',
-].join("\n");
-
-const humidityCsv = [
-  'station_name,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,isobaric5[unit="Pa"],Specific_humidity_isobaric[unit="kg/kg"]',
-  'point,50,14.5,2017-05-09T12:00:00Z,85000,0.0065',
+const thermoCsv = [
+  'station_name,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,vertCoord[unit="Pa"],Temperature_isobaric[unit="K"],Relative_humidity_isobaric[unit="%"]',
+  'point,50,14.5,2017-05-09T12:00:00Z,85000,285.15,65',
 ].join("\n");
 
 const cloudCsv = [
@@ -36,12 +33,17 @@ function sourceForParity(): HistoricalAnalysisDataSource {
   return {
     fetch: vi.fn(async (request) => {
       const variable = request.variables[0];
-      if (variable === "Specific_humidity_isobaric") return { csv: humidityCsv, dataset, cacheHit: true };
       if (variable === "Cloud_mixing_ratio_isobaric") return { csv: cloudCsv, dataset, cacheHit: true };
       if (variable === "Ozone_Mixing_Ratio_isobaric") return { csv: ozoneCsv, dataset, cacheHit: true };
-      return { csv: temperatureCsv, dataset, cacheHit: true };
+      return { csv: thermoCsv, dataset, cacheHit: true };
     }),
   };
+}
+
+function expectedSpecificHumidity(temperatureC: number, relativeHumidityPct: number, pressureHpa: number): number {
+  const vaporPressureHpa = deriveSaturationVaporPressureHpa(temperatureC) * relativeHumidityPct / 100;
+  const mixingRatioKgKg = 0.622 * vaporPressureHpa / (pressureHpa - vaporPressureHpa);
+  return deriveSpecificHumidityFromMixingRatioKgKg(mixingRatioKgKg);
 }
 
 describe("historical pressure parity", () => {
@@ -58,7 +60,7 @@ describe("historical pressure parity", () => {
     ]));
   });
 
-  it("reuses the operational thermodynamic kernels on archived native specific humidity", async () => {
+  it("derives archive-stable specific humidity from temperature/RH and reuses shared downstream kernels", async () => {
     const source = sourceForParity();
     const service = new HistoricalProfileService({ source });
     const result = await service.getHistoricalProfile({
@@ -78,17 +80,21 @@ describe("historical pressure parity", () => {
     });
 
     const level = result.levels[0]!;
+    const q = expectedSpecificHumidity(12, 65, 850);
     expect(level.temperatureC).toBeCloseTo(12, 8);
-    expect(level.specificHumidityKgKg).toBe(0.0065);
-    expect(level.mixingRatioKgKg).toBeCloseTo(deriveMixingRatioKgKg(0.0065), 12);
-    expect(level.virtualTemperatureC).toBeCloseTo(deriveVirtualTemperatureC(12, 0.0065), 12);
-    expect(level.airDensityKgM3).toBeCloseTo(deriveAirDensityKgM3(12, 0.0065, 850), 12);
-    expect(level.wetBulbTemperatureC).toBeCloseTo(deriveWetBulbTemperatureC(12, 0.0065, 850), 12);
+    expect(level.specificHumidityKgKg).toBeCloseTo(q, 12);
+    expect(level.mixingRatioKgKg).toBeCloseTo(deriveMixingRatioKgKg(q), 12);
+    expect(level.virtualTemperatureC).toBeCloseTo(deriveVirtualTemperatureC(12, q), 12);
+    expect(level.airDensityKgM3).toBeCloseTo(deriveAirDensityKgM3(12, q, 850), 12);
+    expect(level.wetBulbTemperatureC).toBeCloseTo(deriveWetBulbTemperatureC(12, q, 850), 12);
     expect(level.equivalentPotentialTemperatureK).toBeCloseTo(
-      deriveEquivalentPotentialTemperatureK(12, 0.0065, 850),
+      deriveEquivalentPotentialTemperatureK(12, q, 850),
       12,
     );
-    expect(source.fetch).toHaveBeenCalledTimes(2);
+    expect(source.fetch).toHaveBeenCalledTimes(1);
+    expect(source.fetch).toHaveBeenCalledWith(expect.objectContaining({
+      variables: ["Temperature_isobaric", "Relative_humidity_isobaric"],
+    }));
   });
 
   it("maps archive-native cloud water and ozone pressure fields without changing units", async () => {
