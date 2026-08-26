@@ -14,6 +14,7 @@ import { GefsPointsTimeSeriesService } from "./core/gefs-points-timeseries.js";
 import { GefsProfileDiagnosticsService } from "./core/gefs-profile-diagnostics.js";
 import { GefsRunComparisonService } from "./core/gefs-run-comparison.js";
 import { GfsGefsComparisonService } from "./core/gfs-gefs-comparison.js";
+import { HistoricalProfileService } from "./core/history.js";
 import { LayerDiagnosticsService } from "./core/layer-diagnostics.js";
 import { LatestRunResolver } from "./core/latest-run.js";
 import { ParcelDiagnosticsService } from "./core/parcel-diagnostics.js";
@@ -37,6 +38,7 @@ import {
   handleGetGefsPoints,
   handleGetGefsProfileDiagnostics,
 } from "./mcp-gefs-tool.js";
+import { handleGetGfsHistoricalProfile } from "./mcp-history-tool.js";
 import { handleCompareGfsToGefs } from "./mcp-model-comparison-tool.js";
 import {
   handleCompareGfsRuns,
@@ -99,6 +101,8 @@ import {
   gfsGefsComparisonQuerySchema,
   gfsGefsComparisonResultSchema,
 } from "./schema/gfs-gefs-comparison.js";
+import { historicalProfileQuerySchema } from "./schema/history.js";
+import { historicalProfileResultSchema } from "./schema/history-result.js";
 import {
   batchPointsQuerySchema,
   layerDiagnosticsQuerySchema,
@@ -127,7 +131,7 @@ export function createMcpServer(): McpServer {
   const server = new McpServer(
     { name: "weather-for-grown-ups", version: "0.1.0" },
     {
-      instructions: "WFG exposes NOAA numerical weather models with explicit model/run/valid-time/vertical semantics. GFS and GEFS share model-independent profile and diagnostic kernels while preserving deterministic-vs-ensemble result semantics. Use get_gfs_catalog/search_gfs_catalog for deterministic GFS discovery and get_gefs_catalog/search_gefs_catalog for the ensemble GEFS pgrb2a surface, including member-first derived profile and parcel capabilities. GFS query tools support query-aware run='latest', latest_complete through f384, and explicit reproducible cycles. Use get_gefs_ensemble for one-time member distributions, get_gefs_ensemble_profile for multi-variable/multi-level vertical distributions, get_gefs_points for one raw field summarized across members at multiple locations using one selected field slice per member, get_gefs_ensemble_timeseries for one-field native-cadence distributions at one location, get_gefs_points_timeseries for the same raw-field distributions across multiple locations and native three-hour steps from one fixed cycle, get_gefs_layer_diagnostics, get_gefs_profile_diagnostics, and get_gefs_parcel_diagnostics for member-first single-time diagnostics, get_gefs_diagnostic_timeseries for compact layer/profile/parcel diagnostic distributions across native three-hour steps from one fixed cycle, and compare_gefs_runs for distribution evolution across consecutive initialization cycles without treating member IDs as trajectories. compare_gfs_to_gefs places deterministic GFS inside an aligned GEFS member distribution. GEFS member fractions, profile/point/diagnostic summaries, cycle shifts, and GFS-vs-GEFS ranks are raw model/member evidence, not calibrated probabilities or uncertainty. WFG does not provide activity-specific interpretation or safety advice.",
+      instructions: "WFG exposes NOAA numerical weather models with explicit model/run/valid-time/vertical semantics. GFS and GEFS share model-independent profile and diagnostic kernels while preserving deterministic-vs-ensemble result semantics. Use get_gfs_catalog/search_gfs_catalog for deterministic GFS discovery and get_gefs_catalog/search_gefs_catalog for the ensemble GEFS pgrb2a surface, including member-first derived profile and parcel capabilities. GFS query tools support query-aware run='latest', latest_complete through f384, and explicit reproducible cycles. get_gfs_historical_profile accesses the separate NOAA NCEI GFS Grid 4 0.5° analysis archive for historical model state; it is not direct observation data or a homogeneous climatological reanalysis. Use get_gefs_ensemble for one-time member distributions, get_gefs_ensemble_profile for multi-variable/multi-level vertical distributions, get_gefs_points for one raw field summarized across members at multiple locations using one selected field slice per member, get_gefs_ensemble_timeseries for one-field native-cadence distributions at one location, get_gefs_points_timeseries for the same raw-field distributions across multiple locations and native three-hour steps from one fixed cycle, get_gefs_layer_diagnostics, get_gefs_profile_diagnostics, and get_gefs_parcel_diagnostics for member-first single-time diagnostics, get_gefs_diagnostic_timeseries for compact layer/profile/parcel diagnostic distributions across native three-hour steps from one fixed cycle, and compare_gefs_runs for distribution evolution across consecutive initialization cycles without treating member IDs as trajectories. compare_gfs_to_gefs places deterministic GFS inside an aligned GEFS member distribution. GEFS member fractions, profile/point/diagnostic summaries, cycle shifts, and GFS-vs-GEFS ranks are raw model/member evidence, not calibrated probabilities or uncertainty. WFG does not provide activity-specific interpretation or safety advice.",
     },
   );
   const latestRunResolver = new LatestRunResolver();
@@ -146,6 +150,7 @@ export function createMcpServer(): McpServer {
   });
   const gefsRunComparisonService = new GefsRunComparisonService({ ensembleGetter: gefsEnsembleService });
   const profileService = new ProfileService({ latestRunProvider: latestRunResolver });
+  const historyService = new HistoricalProfileService();
   const gfsGefsComparisonService = new GfsGefsComparisonService({
     profileGetter: profileService,
     ensembleGetter: gefsEnsembleService,
@@ -204,6 +209,13 @@ export function createMcpServer(): McpServer {
     inputSchema: z.object({}),
     outputSchema: latestGfsRunResultSchema,
   }, async () => handleGetLatestGfsRun(latestRunResolver));
+
+  server.registerTool("get_gfs_historical_profile", {
+    title: "Get historical GFS analysis profile",
+    description: "Fetch one NOAA NCEI GFS Grid 4 0.5° historical analysis cycle at one point and selected pressure levels. Supports a stable long-record subset of pressure variables plus deterministic wind, dew-point, and potential-temperature derivations. The online analysis archive begins in 2007. This is GFS model analysis, not direct observations or a homogeneous climatological reanalysis.",
+    inputSchema: historicalProfileQuerySchema,
+    outputSchema: historicalProfileResultSchema,
+  }, async (query) => handleGetGfsHistoricalProfile(historyService, query));
 
   server.registerTool("get_gefs_ensemble", {
     title: "Get GEFS pressure-level ensemble",
