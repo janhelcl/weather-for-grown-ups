@@ -1,3 +1,4 @@
+import type { HistoricalIndexBackfillService } from "./core/history-backfill.js";
 import type { HistoricalIndexService } from "./core/history-index.js";
 import type { HistoricalTimeSeriesService } from "./core/history-time-series.js";
 import type { HistoricalForecastVerificationService } from "./core/history-verification.js";
@@ -12,10 +13,12 @@ import {
 } from "./schema/history-result.js";
 import type {
   HistoricalAnalogQueryInput,
+  HistoricalIndexBackfillQueryInput,
   HistoricalIndexBuildQueryInput,
 } from "./schema/history-index.js";
 import {
   historicalAnalogResultSchema,
+  historicalIndexBackfillResultSchema,
   historicalIndexBuildResultSchema,
 } from "./schema/history-index.js";
 import type { HistoricalForecastVerificationQueryInput } from "./schema/history-verification.js";
@@ -61,6 +64,21 @@ export async function handleMaterializeGfsHistoryIndex(
 ) {
   try {
     const output = historicalIndexBuildResultSchema.parse(await indexService.materialize(query));
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(output) }],
+      structuredContent: { ...output },
+    };
+  } catch (error) {
+    return errorResult(error);
+  }
+}
+
+export async function handleBackfillGfsHistoryIndex(
+  backfillService: Pick<HistoricalIndexBackfillService, "backfill">,
+  query: HistoricalIndexBackfillQueryInput,
+) {
+  try {
+    const output = historicalIndexBackfillResultSchema.parse(await backfillService.backfill(query));
     return {
       content: [{ type: "text" as const, text: JSON.stringify(output) }],
       structuredContent: { ...output },

@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { HistoricalIndexBackfillService } from "../core/history-backfill.js";
 import { HistoricalIndexService } from "../core/history-index.js";
 import { HistoricalTimeSeriesService } from "../core/history-time-series.js";
 import { HistoricalForecastVerificationService } from "../core/history-verification.js";
@@ -14,7 +15,9 @@ import {
   historicalTimeSeriesResultSchema,
 } from "../schema/history-result.js";
 import {
+  DEFAULT_HISTORICAL_BACKFILL_MAX_FETCHES,
   historicalAnalogResultSchema,
+  historicalIndexBackfillResultSchema,
   historicalIndexBuildResultSchema,
 } from "../schema/history-index.js";
 import { historicalForecastVerificationResultSchema } from "../schema/history-verification-result.js";
@@ -117,6 +120,45 @@ export function registerHistoryCommand(program: Command): void {
       console.log(`Historical index: ${result.indexPath}`);
       console.log(`Materialized ${result.materialized} new profiles; ${result.totalMatchingRecords} matching profiles now available.`);
       console.log(`Range ${result.requestedStartTime} → ${result.requestedEndTime}`);
+    });
+
+  program
+    .command("history-backfill")
+    .description("Backfill a large historical GFS analysis range into the local analog index with resumable progress")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--from <iso>", "Inclusive start of historical range")
+    .requiredOption("--to <iso>", "Inclusive end of historical range")
+    .option("--cycles <list>", "Comma-separated UTC analysis hours to backfill: 0,6,12,18", DEFAULT_HISTORY_CYCLES)
+    .option("--vars <list>", "Comma-separated historical pressure variables", DEFAULT_HISTORY_VARIABLES)
+    .option("--levels <list>", "Comma-separated pressure levels in hPa", DEFAULT_LEVELS)
+    .option("--max-fetches <number>", "Maximum missing profiles attempted by this invocation", Number, DEFAULT_HISTORICAL_BACKFILL_MAX_FETCHES)
+    .option("--newest-first", "Fill the newest missing cycles first")
+    .option("--dry-run", "Plan the backfill without fetching or writing profiles")
+    .option("--continue-on-error", "Continue to later missing cycles after an archive/profile error")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const service = new HistoricalIndexBackfillService();
+      const result = historicalIndexBackfillResultSchema.parse(await service.backfill({
+        latitude: options.lat,
+        longitude: options.lon,
+        startTime: options.from,
+        endTime: options.to,
+        cycleHoursUtc: parseHistoryCycles(options.cycles),
+        variables: parseHistoryVariables(options.vars),
+        pressureLevelsHpa: parseLevels(options.levels),
+        maxFetches: options.maxFetches,
+        order: options.newestFirst ? "newest_first" : "oldest_first",
+        dryRun: Boolean(options.dryRun),
+        continueOnError: Boolean(options.continueOnError),
+      }));
+
+      if (options.json) return console.log(JSON.stringify(result, null, 2));
+      console.log(`Historical backfill ${result.status}: ${result.indexPath}`);
+      console.log(`${result.selectedCycleCount} selected; ${result.alreadyMaterialized} already materialized.`);
+      console.log(`Attempted ${result.attempted}/${result.fetchBudget}: ${result.upstreamFetches} upstream, ${result.cacheHits} cached; wrote ${result.materialized}.`);
+      console.log(`${result.remaining} profiles remain${result.nextAnalysisTime ? `; next ${result.nextAnalysisTime}` : ""}.`);
+      if (result.failures.length > 0) console.table(result.failures);
     });
 
   program
