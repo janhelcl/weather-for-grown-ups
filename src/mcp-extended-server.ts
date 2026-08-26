@@ -12,6 +12,7 @@ import { HistoricalFieldsService } from "./core/history-fields.js";
 import { HistoricalIndexService } from "./core/history-index.js";
 import { HistoricalParcelTimeSeriesService } from "./core/history-parcel-timeseries.js";
 import { HistoricalParcelService } from "./core/history-parcel.js";
+import { HistoricalPointsService } from "./core/history-points.js";
 import { HistoricalTimeSeriesService } from "./core/history-time-series.js";
 import { HistoricalForecastVerificationService } from "./core/history-verification.js";
 import { handleGetGefsAreaSummary } from "./mcp-gefs-area-tool.js";
@@ -35,6 +36,7 @@ import {
   handleGetGfsHistoricalParcel,
   handleGetGfsHistoricalParcelTimeSeries,
 } from "./mcp-history-parcel-tool.js";
+import { handleGetGfsHistoricalPoints } from "./mcp-history-points-tool.js";
 import {
   handleBackfillGfsHistoryIndex,
   handleFindGfsHistoricalAnalogs,
@@ -84,6 +86,10 @@ import {
   historicalFieldsResultSchema,
 } from "./schema/history-fields.js";
 import {
+  historicalPointsQuerySchema,
+  historicalPointsResultSchema,
+} from "./schema/history-points.js";
+import {
   historicalParcelQuerySchema,
   historicalParcelResultSchema,
   historicalParcelTimeSeriesQuerySchema,
@@ -118,6 +124,9 @@ export function createMcpServer() {
     parcelGetter: historicalParcelService,
   });
   const historicalDiagnosticsService = new HistoricalDiagnosticsService();
+  const historicalPointsService = new HistoricalPointsService({
+    fieldsGetter: historicalFieldsService,
+  });
   const historicalDiagnosticTimeSeriesService = new HistoricalDiagnosticTimeSeriesService({
     layerDiagnosticsGetter: historicalDiagnosticsService,
     profileDiagnosticsGetter: historicalDiagnosticsService,
@@ -146,6 +155,13 @@ export function createMcpServer() {
     inputSchema: historicalFieldsQuerySchema,
     outputSchema: historicalFieldsResultSchema,
   }, async (query) => handleGetGfsHistoricalFields(historicalFieldsService, query));
+
+  server.registerTool("get_gfs_historical_points", {
+    title: "Get historical GFS fields for multiple points",
+    description: "Evaluate one historical GFS Grid 4 analysis selection across up to 10 coordinates. Supports the historical pressure-variable and non-isobaric field subsets, preserving each requested coordinate, sampled 0.5° grid point, archive dataset path and cache status. NCEI access is composed as serial point queries under WFG's NOAA courtesy limiter; unlike operational AWS-backed multi-point queries, this does not claim shared-slice reuse.",
+    inputSchema: historicalPointsQuerySchema,
+    outputSchema: historicalPointsResultSchema,
+  }, async (query) => handleGetGfsHistoricalPoints(historicalPointsService, query));
 
   server.registerTool("get_gfs_historical_fields_timeseries", {
     title: "Get historical GFS mixed-field time series",
