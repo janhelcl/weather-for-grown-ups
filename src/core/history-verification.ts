@@ -9,10 +9,11 @@ import { NCEI_GFS_GRID4_FORECAST_START } from "../sources/ncei-gfs-forecast-hist
 import { ArchivedGfsForecastProfileService, type ArchivedGfsForecastProfileQuery, type ArchivedGfsForecastProfileResult } from "./history-forecast.js";
 import { HistoricalProfileService } from "./history.js";
 import { circularDegreeDelta } from "./run-comparison.js";
-import type { ProfileLevel } from "./types.js";
 
 const HOUR_MS = 60 * 60 * 1_000;
 const CAVEAT = "Forecast verification against GFS model analysis, not direct observations; historical GFS model versions changed over time" as const;
+
+type HistoricalLevel = HistoricalProfileResult["levels"][number];
 
 export interface HistoricalAnalysisProfileGetter {
   getHistoricalProfile(input: HistoricalProfileQueryInput): Promise<HistoricalProfileResult>;
@@ -119,8 +120,8 @@ export class HistoricalForecastVerificationService {
 }
 
 export function compareForecastToAnalysis(
-  forecastLevels: readonly ProfileLevel[],
-  analysisLevels: readonly ProfileLevel[],
+  forecastLevels: readonly HistoricalLevel[],
+  analysisLevels: readonly HistoricalLevel[],
 ): HistoricalForecastVerificationResult["pressureLevels"] {
   const forecasts = new Map(forecastLevels.map((level) => [level.pressureHpa, level]));
   const analyses = new Map(analysisLevels.map((level) => [level.pressureHpa, level]));
@@ -132,7 +133,7 @@ export function compareForecastToAnalysis(
   }));
 }
 
-function compareLevel(forecast: ProfileLevel | undefined, analysis: ProfileLevel | undefined) {
+function compareLevel(forecast: HistoricalLevel | undefined, analysis: HistoricalLevel | undefined) {
   if (!forecast || !analysis) return [];
   const forecastRecord = forecast as unknown as Record<string, unknown>;
   const analysisRecord = analysis as unknown as Record<string, unknown>;
