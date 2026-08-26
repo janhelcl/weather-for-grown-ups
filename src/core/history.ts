@@ -13,6 +13,7 @@ import {
   NCEI_GFS_GRID4_ANALYSIS_START,
   NceiGfsHistorySource,
   type HistoricalAnalysisDataSource,
+  type HistoricalAnalysisResponse,
 } from "../sources/ncei-gfs-history.js";
 import type { ProfileLevel } from "./types.js";
 
@@ -23,38 +24,48 @@ type HistoricalRawVariableId = Exclude<
   "wind" | "dew_point" | "potential_temperature"
 >;
 
+type HistoricalPressureAxisGroup = "full_profile" | "vertical_velocity" | "absolute_vorticity";
+
 interface RawHistoryVariable {
   ncssName: string;
+  pressureAxisGroup: HistoricalPressureAxisGroup;
   apply(level: ProfileLevel, value: number): void;
 }
 
 const RAW_HISTORY_VARIABLES: Record<HistoricalRawVariableId, RawHistoryVariable> = {
   temperature: {
     ncssName: "Temperature_isobaric",
+    pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.temperatureC = value - 273.15; },
   },
   relative_humidity: {
     ncssName: "Relative_humidity_isobaric",
+    pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.relativeHumidityPct = value; },
   },
   u_wind: {
     ncssName: "u-component_of_wind_isobaric",
+    pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.uWindMs = value; },
   },
   v_wind: {
     ncssName: "v-component_of_wind_isobaric",
+    pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.vWindMs = value; },
   },
   geopotential_height: {
     ncssName: "Geopotential_height_isobaric",
+    pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.geopotentialHeightGpm = value; },
   },
   vertical_velocity: {
     ncssName: "Vertical_velocity_pressure_isobaric",
+    pressureAxisGroup: "vertical_velocity",
     apply: (level, value) => { level.verticalVelocityPaS = value; },
   },
   absolute_vorticity: {
     ncssName: "Absolute_vorticity_isobaric",
+    pressureAxisGroup: "absolute_vorticity",
     apply: (level, value) => { level.absoluteVorticityS1 = value; },
   },
 };
@@ -102,39 +113,56 @@ export class HistoricalProfileService {
     }
 
     const rawVariables = expandHistoricalVariables(query.variables);
-    const response = await this.source.fetch({
-      analysisTime,
-      latitude: query.latitude,
-      longitude: query.longitude,
-      variables: rawVariables.map((id) => RAW_HISTORY_VARIABLES[id].ncssName),
-    });
-    const parsed = parseHistoricalProfileCsv(
-      response.csv,
-      rawVariables,
-      query.pressureLevelsHpa,
-      { latitude: query.latitude, longitude: query.longitude },
-    );
+    const groups = groupHistoricalVariablesByPressureAxis(rawVariables);
+    const responses: HistoricalAnalysisResponse[] = [];
+    const mergedLevels = new Map<number, ProfileLevel>();
+    for (const pressureHpa of query.pressureLevelsHpa) {
+      mergedLevels.set(levelKey(pressureHpa), { pressureHpa });
+    }
+    let gridPoint = { latitude: query.latitude, longitude: query.longitude };
 
-    for (const level of parsed.levels) {
+    for (const group of groups) {
+      const response = await this.source.fetch({
+        analysisTime,
+        latitude: query.latitude,
+        longitude: query.longitude,
+        variables: group.map((id) => RAW_HISTORY_VARIABLES[id].ncssName),
+      });
+      responses.push(response);
+      const parsed = parseHistoricalProfileCsv(
+        response.csv,
+        group,
+        query.pressureLevelsHpa,
+        { latitude: query.latitude, longitude: query.longitude },
+      );
+      gridPoint = parsed.gridPoint;
+      mergeHistoricalLevels(mergedLevels, parsed.levels);
+    }
+
+    const levels = [...mergedLevels.values()].sort((a, b) => b.pressureHpa - a.pressureHpa);
+    for (const level of levels) {
       applyHistoricalDerivedValues(level, query.variables);
     }
-    assertRequestedVariablesComplete(parsed.levels, query.variables);
+    assertRequestedVariablesComplete(levels, query.variables);
+
+    const firstResponse = responses[0];
+    if (!firstResponse) throw new Error("Historical GFS query resolved no source variables");
 
     return {
       model: "gfs_grid4_analysis_0p5",
       analysisTime: analysisTime.toISOString(),
       requestedPoint: { latitude: query.latitude, longitude: query.longitude },
-      gridPoint: parsed.gridPoint,
+      gridPoint,
       selection: {
         variables: query.variables,
         pressureLevelsHpa: query.pressureLevelsHpa,
       },
-      levels: parsed.levels,
+      levels,
       source: {
         provider: "NOAA NCEI",
         access: "ncei_thredds_ncss",
-        dataset: response.dataset,
-        cacheHit: response.cacheHit,
+        dataset: firstResponse.dataset,
+        cacheHit: responses.every((response) => response.cacheHit),
       },
       caveat: CAVEAT,
     };
@@ -151,6 +179,31 @@ function expandHistoricalVariables(ids: readonly HistoricalGfsVariableId[]): His
     for (const dependency of DERIVED_DEPENDENCIES[id] ?? []) result.add(dependency);
   }
   return [...result];
+}
+
+function groupHistoricalVariablesByPressureAxis(
+  ids: readonly HistoricalRawVariableId[],
+): HistoricalRawVariableId[][] {
+  const groups = new Map<HistoricalPressureAxisGroup, HistoricalRawVariableId[]>();
+  for (const id of ids) {
+    const key = RAW_HISTORY_VARIABLES[id].pressureAxisGroup;
+    const group = groups.get(key) ?? [];
+    group.push(id);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
+function mergeHistoricalLevels(
+  target: Map<number, ProfileLevel>,
+  incoming: readonly ProfileLevel[],
+): void {
+  for (const level of incoming) {
+    const key = levelKey(level.pressureHpa);
+    const existing = target.get(key);
+    if (!existing) continue;
+    Object.assign(existing, level);
+  }
 }
 
 interface ParsedHistoricalProfile {
