@@ -3,6 +3,7 @@ import {
   deriveEquivalentPotentialTemperatureK,
   derivePotentialTemperatureK,
   deriveSaturationVaporPressureHpa,
+  deriveSpecificHumidityFromRelativeHumidityKgKg,
   deriveVaporPressureHpa,
   deriveWetBulbTemperatureC,
 } from "../src/derived/thermodynamics.js";
@@ -18,6 +19,27 @@ describe("moist thermodynamic derivations", () => {
   it("uses the Bolton saturation-vapor-pressure relation", () => {
     expect(deriveSaturationVaporPressureHpa(20)).toBeCloseTo(23.36947, 5);
     expect(deriveSaturationVaporPressureHpa(0)).toBeCloseTo(6.112, 8);
+  });
+
+  it("derives specific humidity from temperature, RH and pressure", () => {
+    const pressureHpa = 1000;
+    const saturation = deriveSaturationVaporPressureHpa(30);
+    const expected = specificHumidityFromVaporPressure(saturation * 0.67, pressureHpa);
+    expect(deriveSpecificHumidityFromRelativeHumidityKgKg(30, 67, pressureHpa)).toBeCloseTo(expected, 12);
+  });
+
+  it("clamps RH to its physical range when deriving specific humidity", () => {
+    expect(deriveSpecificHumidityFromRelativeHumidityKgKg(20, -5, 1000)).toBe(0);
+    expect(deriveSpecificHumidityFromRelativeHumidityKgKg(20, 120, 1000)).toBeCloseTo(
+      specificHumidityFromVaporPressure(deriveSaturationVaporPressureHpa(20), 1000),
+      12,
+    );
+  });
+
+  it("rejects invalid RH-to-specific-humidity inputs", () => {
+    expect(() => deriveSpecificHumidityFromRelativeHumidityKgKg(20, Number.NaN, 1000)).toThrow(/finite relative humidity/);
+    expect(() => deriveSpecificHumidityFromRelativeHumidityKgKg(20, 50, 0)).toThrow(/pressure/);
+    expect(() => deriveSpecificHumidityFromRelativeHumidityKgKg(100, 100, 100)).toThrow(/not below ambient pressure/);
   });
 
   it("recovers vapor pressure from specific humidity and total pressure", () => {
