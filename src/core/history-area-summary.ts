@@ -78,17 +78,16 @@ export class HistoricalAreaSummaryService {
       ? HISTORICAL_AREA_PRESSURE_CATALOG[query.variable!]
       : HISTORICAL_AREA_FIELD_CATALOG[query.field];
 
+    const verticalCoordinate = definition.verticalCoordinate?.({
+      pressureLevelHpa: query.pressureLevelHpa,
+    });
     const response = await this.source.fetchArea({
       analysisTime,
       ...bbox,
       variables: [definition.ncssName],
-      ...(definition.verticalCoordinate === undefined ? {} : {
-        verticalCoordinate: definition.verticalCoordinate({
-          pressureLevelHpa: query.pressureLevelHpa,
-        }),
-      }),
+      ...(verticalCoordinate === undefined ? {} : { verticalCoordinate }),
     });
-    const points = parseHistoricalAreaCsv(response.csv, definition);
+    const points = parseHistoricalAreaCsv(response.csv, definition, verticalCoordinate);
     const computed = computeAreaDistribution(points, {
       percentiles: query.percentiles,
       thresholds: query.thresholds,
@@ -157,6 +156,7 @@ export function estimateHistoricalGridPoints(box: {
 export function parseHistoricalAreaCsv(
   csv: string,
   definition: HistoricalAreaSourceDefinition,
+  expectedVerticalCoordinate?: number,
 ): GridValuePoint[] {
   const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
   if (lines.length < 2) throw new Error("NCEI historical GFS area response contains no data rows");
@@ -172,9 +172,21 @@ export function parseHistoricalAreaCsv(
     headers,
     historicalAreaVariableAliases(definition.ncssName),
   );
+  const verticalIndex = expectedVerticalCoordinate === undefined
+    ? -1
+    : headers.findIndex((header) =>
+        header.startsWith("isobaric")
+        || header.startsWith("height_above_ground")
+        || header === "vertCoord"
+      );
   if (variableIndex < 0) {
     throw new Error(
       `NCEI historical GFS area response is missing variable ${definition.ncssName}`,
+    );
+  }
+  if (expectedVerticalCoordinate !== undefined && verticalIndex < 0) {
+    throw new Error(
+      `NCEI historical GFS area response is missing the vertical coordinate needed to verify ${definition.id}`,
     );
   }
 
@@ -184,6 +196,17 @@ export function parseHistoricalAreaCsv(
     const latitude = numericCell(cells[latitudeIndex]);
     const longitude = numericCell(cells[longitudeIndex]);
     const rawValue = numericCell(cells[variableIndex]);
+    if (expectedVerticalCoordinate !== undefined) {
+      const returnedVerticalCoordinate = numericCell(cells[verticalIndex]);
+      if (
+        returnedVerticalCoordinate !== undefined
+        && Math.abs(returnedVerticalCoordinate - expectedVerticalCoordinate) > 1e-6
+      ) {
+        throw new Error(
+          `NCEI historical GFS area returned vertical coordinate ${returnedVerticalCoordinate} instead of requested ${expectedVerticalCoordinate} for ${definition.id}`,
+        );
+      }
+    }
     if (latitude === undefined || longitude === undefined || rawValue === undefined) continue;
     points.push({
       latitude,
