@@ -277,10 +277,14 @@ function findTargetRecord(
     record.analysisTime === new Date(targetTime).toISOString()
     && canonicalSelection(record.selection.variables, record.selection.pressureLevelsHpa) === selectionKey
   );
-  return sameSelectionAndTime.find((record) =>
+  const exactRequestedPoint = sameSelectionAndTime.find((record) =>
     Math.abs(record.requestedPoint.latitude - latitude) < 1e-9
     && circularLongitudeDifference(record.requestedPoint.longitude, longitude) < 1e-9
   );
+  if (exactRequestedPoint) return exactRequestedPoint;
+
+  const expectedGridPoint = nearestGrid4Point(latitude, longitude);
+  return sameSelectionAndTime.find((record) => sameGridPoint(record.gridPoint, expectedGridPoint));
 }
 
 function recordFromProfile(
@@ -312,8 +316,18 @@ function normalizeLevels(levels: readonly number[]): number[] {
   return [...new Set(levels)].sort((a, b) => b - a);
 }
 
+function nearestGrid4Point(latitude: number, longitude: number) {
+  return {
+    latitude: Math.max(-90, Math.min(90, Math.round(latitude * 2) / 2)),
+    longitude: Math.round(normalizeLongitude(longitude) * 2) / 2,
+  };
+}
+
 function circularLongitudeDifference(a: number, b: number): number {
-  const normalize = (longitude: number) => ((longitude + 180) % 360 + 360) % 360 - 180;
-  const delta = Math.abs(normalize(a) - normalize(b));
+  const delta = Math.abs(normalizeLongitude(a) - normalizeLongitude(b));
   return Math.min(delta, 360 - delta);
+}
+
+function normalizeLongitude(longitude: number): number {
+  return ((longitude + 180) % 360 + 360) % 360 - 180;
 }
