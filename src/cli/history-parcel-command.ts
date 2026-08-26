@@ -2,7 +2,6 @@ import type { Command } from "commander";
 import { PARCEL_DEFINITION_IDS, type ParcelDefinitionId } from "../catalog/parcel-diagnostics.js";
 import { HistoricalParcelTimeSeriesService } from "../core/history-parcel-timeseries.js";
 import { HistoricalParcelService } from "../core/history-parcel.js";
-import type { ParcelComputation } from "../derived/parcel-diagnostics.js";
 import {
   DEFAULT_HISTORICAL_TIME_SERIES_MAX_STEPS,
   HISTORICAL_GFS_CYCLE_HOURS_UTC,
@@ -10,6 +9,7 @@ import {
 import {
   historicalParcelResultSchema,
   historicalParcelTimeSeriesResultSchema,
+  type HistoricalParcelResult,
 } from "../schema/history-parcel.js";
 import { parseHistoryCycles } from "./history-command.js";
 import { parseLevels } from "./shared.js";
@@ -83,7 +83,7 @@ function parseParcel(value: unknown): ParcelDefinitionId {
   return id;
 }
 
-function printParcel(analysisTime: string, parcel: ParcelComputation): void {
+function printParcel(analysisTime: string, parcel: HistoricalParcelResult["parcel"]): void {
   console.log(`${analysisTime}  ${parcel.startingState.definition}`);
   console.log(`start ${parcel.startingState.pressureHpa.toFixed(1)} hPa / ${parcel.startingState.temperatureC.toFixed(2)} °C; LCL ${parcel.lcl.pressureHpa.toFixed(1)} hPa`);
   console.log(`LFC ${parcel.lfc ? `${parcel.lfc.pressureHpa.toFixed(1)} hPa` : "none"}; EL ${parcel.el ? `${parcel.el.pressureHpa.toFixed(1)} hPa` : "none"}; CAPE ${parcel.capeJkg.toFixed(1)} J/kg; CIN ${parcel.cinJkg.toFixed(1)} J/kg`);
