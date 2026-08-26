@@ -4,6 +4,7 @@ import { GefsMemberBundleService } from "./core/gefs-member-bundle.js";
 import { GefsPointsBundleTimeSeriesService } from "./core/gefs-points-bundle-timeseries.js";
 import { GefsPointsBundleService } from "./core/gefs-points-bundle.js";
 import { GefsTransectService } from "./core/gefs-transect.js";
+import { HistoricalTimeSeriesService } from "./core/history-time-series.js";
 import { handleGetGefsAreaSummary } from "./mcp-gefs-area-tool.js";
 import {
   handleGetGefsFields,
@@ -12,6 +13,7 @@ import {
 import { handleGetGefsFieldsPointsTimeSeries } from "./mcp-gefs-points-bundle-timeseries-tool.js";
 import { handleGetGefsFieldsPoints } from "./mcp-gefs-points-bundle-tool.js";
 import { handleGetGefsTransect } from "./mcp-gefs-transect-tool.js";
+import { handleGetGfsHistoricalTimeSeries } from "./mcp-history-tool.js";
 import { createMcpServer as createBaseMcpServer } from "./mcp-server.js";
 import {
   gefsAreaSummaryQuerySchema,
@@ -34,20 +36,30 @@ import {
   gefsPointsBundleResultSchema,
 } from "./schema/gefs-points-bundle.js";
 import { gefsTransectQuerySchema, gefsTransectResultSchema } from "./schema/gefs-transect.js";
+import { historicalTimeSeriesQuerySchema } from "./schema/history.js";
+import { historicalTimeSeriesResultSchema } from "./schema/history-result.js";
 
 /**
- * Extend the shared MCP server with GEFS model-native operations without
+ * Extend the shared MCP server with model-native and archive operations without
  * duplicating the existing registry. Both stdio and Streamable HTTP entrypoints
  * use this factory, so the public MCP tool catalog remains transport-identical.
  */
 export function createMcpServer() {
   const server = createBaseMcpServer();
+  const historicalTimeSeriesService = new HistoricalTimeSeriesService();
   const bundleService = new GefsMemberBundleService();
   const timeSeriesService = new GefsBundleTimeSeriesService({ bundleGetter: bundleService });
   const pointsService = new GefsPointsBundleService();
   const pointsTimeSeriesService = new GefsPointsBundleTimeSeriesService({ pointsGetter: pointsService });
   const transectService = new GefsTransectService({ pointsGetter: pointsService });
   const areaService = new GefsAreaSummaryService();
+
+  server.registerTool("get_gfs_historical_timeseries", {
+    title: "Get historical GFS analysis time series",
+    description: "Fetch a bounded series of NOAA NCEI GFS Grid 4 0.5° historical analysis profiles at one point. Select any subset of the native 00/06/12/18 UTC cycles, for example only 12 UTC for sparse daily sampling. Requests are bounded by maxSteps and archive accesses are performed serially under WFG's NOAA courtesy limiter. This is GFS model analysis, not direct observations or a homogeneous climatological reanalysis.",
+    inputSchema: historicalTimeSeriesQuerySchema,
+    outputSchema: historicalTimeSeriesResultSchema,
+  }, async (query) => handleGetGfsHistoricalTimeSeries(historicalTimeSeriesService, query));
 
   server.registerTool("get_gefs_fields", {
     title: "Get mixed GEFS field distributions",
