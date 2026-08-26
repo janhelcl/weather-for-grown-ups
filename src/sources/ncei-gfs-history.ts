@@ -14,6 +14,17 @@ export interface HistoricalAnalysisRequest {
   variables: readonly string[];
 }
 
+export interface HistoricalAnalysisAreaRequest {
+  analysisTime: Date;
+  westLongitude: number;
+  eastLongitude: number;
+  southLatitude: number;
+  northLatitude: number;
+  variables: readonly string[];
+  verticalCoordinate?: number;
+  horizontalStride?: number;
+}
+
 export interface HistoricalAnalysisResponse {
   csv: string;
   dataset: string;
@@ -24,13 +35,17 @@ export interface HistoricalAnalysisDataSource {
   fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisResponse>;
 }
 
+export interface HistoricalAnalysisAreaDataSource {
+  fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisResponse>;
+}
+
 export interface NceiGfsHistorySourceOptions {
   cacheDir: string;
   limiter: Pick<FileRateLimiter, "run">;
   fetchFn?: typeof fetch;
 }
 
-export class NceiGfsHistorySource implements HistoricalAnalysisDataSource {
+export class NceiGfsHistorySource implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
   private readonly fetchFn: typeof fetch;
 
   constructor(private readonly options: NceiGfsHistorySourceOptions) {
@@ -40,6 +55,20 @@ export class NceiGfsHistorySource implements HistoricalAnalysisDataSource {
   async fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisResponse> {
     const dataset = buildNceiGfsAnalysisDatasetPath(request.analysisTime);
     const url = buildNceiGfsAnalysisPointUrl(request);
+    return this.fetchCsv(url, dataset, request.analysisTime);
+  }
+
+  async fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisResponse> {
+    const dataset = buildNceiGfsAnalysisDatasetPath(request.analysisTime);
+    const url = buildNceiGfsAnalysisAreaUrl(request);
+    return this.fetchCsv(url, dataset, request.analysisTime);
+  }
+
+  private async fetchCsv(
+    url: string,
+    dataset: string,
+    analysisTime: Date,
+  ): Promise<HistoricalAnalysisResponse> {
     await mkdir(this.options.cacheDir, { recursive: true });
     const cachePath = join(
       this.options.cacheDir,
@@ -60,7 +89,7 @@ export class NceiGfsHistorySource implements HistoricalAnalysisDataSource {
       });
       if (response.status === 404) {
         throw new Error(
-          `NCEI historical GFS analysis is not available for ${request.analysisTime.toISOString()} (${dataset})`,
+          `NCEI historical GFS analysis is not available for ${analysisTime.toISOString()} (${dataset})`,
         );
       }
       if (!response.ok) {
@@ -91,6 +120,26 @@ export function buildNceiGfsAnalysisPointUrl(request: HistoricalAnalysisRequest)
     time: "all",
     accept: "csv",
   });
+  return `${NCEI_GFS_HISTORY_BASE_URL}/${dataset}?${query.toString()}`;
+}
+
+export function buildNceiGfsAnalysisAreaUrl(request: HistoricalAnalysisAreaRequest): string {
+  const dataset = buildNceiGfsAnalysisDatasetPath(request.analysisTime);
+  const query = new URLSearchParams({
+    var: request.variables.join(","),
+    north: String(request.northLatitude),
+    south: String(request.southLatitude),
+    east: String(request.eastLongitude),
+    west: String(request.westLongitude),
+    time: "all",
+    accept: "csv",
+  });
+  if (request.verticalCoordinate !== undefined) {
+    query.set("vertCoord", String(request.verticalCoordinate));
+  }
+  if (request.horizontalStride !== undefined) {
+    query.set("horizStride", String(request.horizontalStride));
+  }
   return `${NCEI_GFS_HISTORY_BASE_URL}/${dataset}?${query.toString()}`;
 }
 
