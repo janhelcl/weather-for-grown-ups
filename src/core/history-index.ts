@@ -197,11 +197,19 @@ const FEATURE_PROPERTIES: Record<HistoricalVariableId, readonly (keyof Historica
   u_wind: ["uWindMs"],
   v_wind: ["vWindMs"],
   geopotential_height: ["geopotentialHeightGpm"],
+  specific_humidity: ["specificHumidityKgKg"],
   vertical_velocity: ["verticalVelocityPaS"],
   absolute_vorticity: ["absoluteVorticityS1"],
+  cloud_water_mixing_ratio: ["cloudWaterMixingRatioKgKg"],
+  ozone_mixing_ratio: ["ozoneMixingRatioKgKg"],
   wind: ["uWindMs", "vWindMs"],
   dew_point: ["dewPointC"],
   potential_temperature: ["potentialTemperatureK"],
+  mixing_ratio: ["mixingRatioKgKg"],
+  virtual_temperature: ["virtualTemperatureC"],
+  air_density: ["airDensityKgM3"],
+  wet_bulb_temperature: ["wetBulbTemperatureC"],
+  equivalent_potential_temperature: ["equivalentPotentialTemperatureK"],
 };
 
 export function buildFeatureSpec(
