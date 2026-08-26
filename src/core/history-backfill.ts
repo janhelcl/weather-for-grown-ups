@@ -56,13 +56,14 @@ export class HistoricalIndexBackfillService {
         `Requested backfill contains ${chronological.length} selected analyses, exceeding the planning limit ${MAX_HISTORICAL_BACKFILL_SELECTED_CYCLES}. Narrow the range or select fewer UTC cycles.`,
       );
     }
+
     const ordered = query.order === "newest_first" ? [...chronological].reverse() : chronological;
     const selectionKey = canonicalSelection(variables, pressureLevelsHpa);
     const existingRecords = await this.store.readAll();
     let gridPoint = inferGridPoint(existingRecords, query.latitude, query.longitude, selectionKey)
       ?? nearestGfsGrid4Point(query.latitude, query.longitude);
     let knownTimes = materializedTimes(existingRecords, gridPoint, selectionKey);
-    const initialKnown = new Set(knownTimes);
+    let initialKnown = new Set(knownTimes);
     const initiallyMissing = ordered.filter((time) => !knownTimes.has(time.toISOString()));
 
     if (query.dryRun) {
@@ -111,6 +112,7 @@ export class HistoricalIndexBackfillService {
           }
           gridPoint = profile.gridPoint;
           knownTimes = materializedTimes(existingRecords, gridPoint, selectionKey);
+          initialKnown = new Set(knownTimes);
         }
 
         if (!knownTimes.has(profile.analysisTime)) {
