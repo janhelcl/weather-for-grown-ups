@@ -105,7 +105,7 @@ export const historicalIndexBackfillResultSchema = z.object({
   failures: z.array(z.object({ analysisTime: historicalAnalysisTimeSchema, message: z.string().min(1) })),
   remaining: z.number().int().nonnegative(),
   nextAnalysisTime: historicalAnalysisTimeSchema.nullable(),
-  status: z.enum(["complete", "budget_exhausted", "stopped_on_error", "dry_run"]),
+  status: z.enum(["complete", "budget_exhausted", "stopped_on_error", "errors_remaining", "dry_run"]),
   note: z.literal("resumable backfill skips materialized Grid 4 analyses before fetch; archive access remains serial and NOAA-paced"),
 });
 
