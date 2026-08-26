@@ -31,6 +31,8 @@ The first history surface intentionally uses a stable subset of the long archive
 
 A requested pressure level must actually exist for every requested variable in that historical file. Older GFS analyses do not expose every modern pressure level for every field; WFG reports missing fields explicitly instead of silently interpolating them.
 
+Older Grid 4 files also use different pressure axes for some variables. WFG groups compatible variables into one NCSS request and fetches incompatible axes separately before merging them by pressure level. For example, temperature, humidity, wind and geopotential height can share the full pressure profile while vertical velocity and absolute vorticity may require their own archive requests.
+
 ## CLI
 
 ```bash
@@ -65,9 +67,9 @@ The result includes the requested point, sampled 0.5° grid point, normalized pr
 
 ## Data access and caching
 
-WFG uses NCEI's THREDDS NetCDF Subset Service (NCSS) in grid-as-point mode. One history query requests the selected variables as a pressure profile at one point, rather than downloading the full historical GRIB file.
+WFG uses NCEI's THREDDS NetCDF Subset Service (NCSS) in grid-as-point mode. A history query requests pressure profiles at one point rather than downloading the full historical GRIB file. Compatible variables are bundled together; variables that use different historical pressure axes are fetched separately and merged locally.
 
-Responses are cached locally because historical analyses are immutable. Cache misses use the same file-based NOAA request throttle as the existing NOMADS path; the default cooldown remains 11 seconds.
+Responses are cached locally because historical analyses are immutable. Cache misses use the same file-based NOAA request throttle as the existing NOMADS path; the default cooldown remains 11 seconds. Multi-axis requests therefore also preserve the required delay between successive NOAA calls.
 
 The NCEI archive has two filename conventions. WFG handles the historical `gfsanl_4_...` layout before June 2020 and the later `gfs_4_...` layout from June 2020 onward.
 
