@@ -28,6 +28,7 @@ const EXPECTED_COMMANDS = [
   "history",
   "history-timeseries",
   "history-index",
+  "history-backfill",
   "history-analogs",
   "history-verify",
   "ensemble",
