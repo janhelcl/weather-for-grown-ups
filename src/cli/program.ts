@@ -8,6 +8,7 @@ import { registerGefsParcelCommand } from "./gefs-parcel-command.js";
 import { registerGefsParcelTimeSeriesCommand } from "./gefs-parcel-timeseries-command.js";
 import { registerGefsPointsBundleCommand } from "./gefs-points-bundle-command.js";
 import { registerHistoryDiagnosticCommands } from "./history-diagnostic-commands.js";
+import { registerHistoryFieldsCommand } from "./history-fields-command.js";
 import { registerHistoryCommand } from "./history-command.js";
 import { registerModelComparisonCommand } from "./model-comparison-command.js";
 import { registerPointCommands } from "./point-commands.js";
@@ -22,6 +23,7 @@ export function createCliProgram(): Command {
   registerCatalogCommand(program);
   registerPointCommands(program);
   registerHistoryCommand(program);
+  registerHistoryFieldsCommand(program);
   registerHistoryDiagnosticCommands(program);
   registerEnsembleCommand(program);
   registerGefsBundleCommands(program);

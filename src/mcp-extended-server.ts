@@ -6,6 +6,8 @@ import { GefsPointsBundleService } from "./core/gefs-points-bundle.js";
 import { GefsTransectService } from "./core/gefs-transect.js";
 import { HistoricalIndexBackfillService } from "./core/history-backfill.js";
 import { HistoricalDiagnosticsService } from "./core/history-diagnostics.js";
+import { HistoricalFieldsTimeSeriesService } from "./core/history-fields-timeseries.js";
+import { HistoricalFieldsService } from "./core/history-fields.js";
 import { HistoricalIndexService } from "./core/history-index.js";
 import { HistoricalTimeSeriesService } from "./core/history-time-series.js";
 import { HistoricalForecastVerificationService } from "./core/history-verification.js";
@@ -21,6 +23,10 @@ import {
   handleGetGfsHistoricalLayerDiagnostics,
   handleGetGfsHistoricalProfileDiagnostics,
 } from "./mcp-history-diagnostics-tool.js";
+import {
+  handleGetGfsHistoricalFields,
+  handleGetGfsHistoricalFieldsTimeSeries,
+} from "./mcp-history-fields-tool.js";
 import {
   handleBackfillGfsHistoryIndex,
   handleFindGfsHistoricalAnalogs,
@@ -57,6 +63,14 @@ import {
   historicalProfileDiagnosticsQuerySchema,
   historicalProfileDiagnosticsResultSchema,
 } from "./schema/history-diagnostics.js";
+import {
+  historicalFieldsTimeSeriesQuerySchema,
+  historicalFieldsTimeSeriesResultSchema,
+} from "./schema/history-fields-timeseries.js";
+import {
+  historicalFieldsQuerySchema,
+  historicalFieldsResultSchema,
+} from "./schema/history-fields.js";
 import { historicalTimeSeriesResultSchema } from "./schema/history-result.js";
 import {
   historicalAnalogQuerySchema,
@@ -77,6 +91,10 @@ import { historicalForecastVerificationResultSchema } from "./schema/history-ver
 export function createMcpServer() {
   const server = createBaseMcpServer();
   const historicalTimeSeriesService = new HistoricalTimeSeriesService();
+  const historicalFieldsService = new HistoricalFieldsService();
+  const historicalFieldsTimeSeriesService = new HistoricalFieldsTimeSeriesService({
+    fieldsGetter: historicalFieldsService,
+  });
   const historicalDiagnosticsService = new HistoricalDiagnosticsService();
   const historicalIndexService = new HistoricalIndexService();
   const historicalBackfillService = new HistoricalIndexBackfillService();
@@ -94,6 +112,20 @@ export function createMcpServer() {
     inputSchema: historicalTimeSeriesQuerySchema,
     outputSchema: historicalTimeSeriesResultSchema,
   }, async (query) => handleGetGfsHistoricalTimeSeries(historicalTimeSeriesService, query));
+
+  server.registerTool("get_gfs_historical_fields", {
+    title: "Get historical GFS mixed fields",
+    description: "Fetch archived GFS Grid 4 analysis fields using the same WFG field IDs as operational GFS where the historical product is genuinely comparable. Supports surface pressure/HGT/temperature, surface CAPE/CIN, 2 m thermodynamics, 10/80/100 m winds, 80/100 m temperatures where archived, 80 m pressure/specific humidity, and column PWAT/cloud water/RH/ozone. Optional pressure variables can be requested in the same operation. Historical fields are instantaneous analysis values; forecast accumulations such as total precipitation are deliberately excluded.",
+    inputSchema: historicalFieldsQuerySchema,
+    outputSchema: historicalFieldsResultSchema,
+  }, async (query) => handleGetGfsHistoricalFields(historicalFieldsService, query));
+
+  server.registerTool("get_gfs_historical_fields_timeseries", {
+    title: "Get historical GFS mixed-field time series",
+    description: "Track the historical mixed pressure/non-isobaric selection across a bounded series of native 00/06/12/18 UTC GFS Grid 4 analysis cycles. Uses the same historical field subset and instantaneous semantics as get_gfs_historical_fields, with default maxSteps 8 and hard maximum 16. Archive reads are serial under WFG's NOAA courtesy limiter.",
+    inputSchema: historicalFieldsTimeSeriesQuerySchema,
+    outputSchema: historicalFieldsTimeSeriesResultSchema,
+  }, async (query) => handleGetGfsHistoricalFieldsTimeSeries(historicalFieldsTimeSeriesService, query));
 
   server.registerTool("get_gfs_historical_layer_diagnostics", {
     title: "Get historical GFS layer diagnostics",
@@ -139,7 +171,7 @@ export function createMcpServer() {
 
   server.registerTool("get_gefs_fields", {
     title: "Get mixed GEFS field distributions",
-    description: "Fetch one mixed GEFS 0.5° pgrb2a selection at one point/time: multiple pressure variables/levels plus non-isobaric fields such as 2 m temperature/RH, 10 m wind, precipitation, PWAT, cloud cover, CAPE/CIN, or MSLP. WFG merges all raw dependencies into one selected GRIB slice and one wgrib2 decode per member, derives supported thermodynamics member-by-member, then summarizes across members. Accumulation/average intervals are explicit; wind direction uses circular aggregation. Member arrays are optional. Ensemble summaries are raw member evidence, not calibrated probability or uncertainty.",
+    description: "Fetch one mixed GEFS 0.5° pgrb2a selection at one point/time: multiple pressure variables/levels plus non-isobaric fields such as 2 m temperature/RH, 10 m wind, precipitation, PWAT, cloud cover, CAPE/CIN, or MSLP. WFG merges all raw dependencies into one selected GRIB slice and one wgrib2 decode per member, derives supported thermodynamics member-by-member, then aggregates across members. Accumulation/average intervals are explicit; wind direction uses circular aggregation. Member arrays are optional. Ensemble summaries are raw member evidence, not calibrated probability or uncertainty.",
     inputSchema: gefsMemberBundleQuerySchema,
     outputSchema: gefsMemberBundleResultSchema,
   }, async (query) => handleGetGefsFields(bundleService, query));
