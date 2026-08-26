@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { HistoricalTimeSeriesService } from "../core/history-time-series.js";
+import { HistoricalForecastVerificationService } from "../core/history-verification.js";
 import { HistoricalProfileService } from "../core/history.js";
 import {
   DEFAULT_HISTORICAL_TIME_SERIES_MAX_STEPS,
@@ -11,6 +12,7 @@ import {
   historicalProfileResultSchema,
   historicalTimeSeriesResultSchema,
 } from "../schema/history-result.js";
+import { historicalForecastVerificationResultSchema } from "../schema/history-verification-result.js";
 import { DEFAULT_LEVELS, parseLevels } from "./shared.js";
 
 const DEFAULT_HISTORY_VARIABLES = "temperature,relative_humidity,wind,geopotential_height";
@@ -23,11 +25,7 @@ export function registerHistoryCommand(program: Command): void {
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--at <iso>", "Exact historical GFS analysis cycle at 00, 06, 12, or 18 UTC")
-    .option(
-      "--vars <list>",
-      "Comma-separated historical pressure variables",
-      DEFAULT_HISTORY_VARIABLES,
-    )
+    .option("--vars <list>", "Comma-separated historical pressure variables", DEFAULT_HISTORY_VARIABLES)
     .option("--levels <list>", "Comma-separated pressure levels in hPa", DEFAULT_LEVELS)
     .option("--json", "Output JSON")
     .action(async (options) => {
@@ -55,23 +53,10 @@ export function registerHistoryCommand(program: Command): void {
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--from <iso>", "Inclusive start of historical range")
     .requiredOption("--to <iso>", "Inclusive end of historical range")
-    .option(
-      "--cycles <list>",
-      "Comma-separated UTC analysis hours to sample: 0,6,12,18",
-      DEFAULT_HISTORY_CYCLES,
-    )
-    .option(
-      "--vars <list>",
-      "Comma-separated historical pressure variables",
-      DEFAULT_HISTORY_VARIABLES,
-    )
+    .option("--cycles <list>", "Comma-separated UTC analysis hours to sample: 0,6,12,18", DEFAULT_HISTORY_CYCLES)
+    .option("--vars <list>", "Comma-separated historical pressure variables", DEFAULT_HISTORY_VARIABLES)
     .option("--levels <list>", "Comma-separated pressure levels in hPa", DEFAULT_LEVELS)
-    .option(
-      "--max-steps <number>",
-      "Maximum selected analysis cycles allowed in one query",
-      Number,
-      DEFAULT_HISTORICAL_TIME_SERIES_MAX_STEPS,
-    )
+    .option("--max-steps <number>", "Maximum selected analysis cycles allowed in one query", Number, DEFAULT_HISTORICAL_TIME_SERIES_MAX_STEPS)
     .option("--json", "Output JSON")
     .action(async (options) => {
       const service = new HistoricalTimeSeriesService();
@@ -94,6 +79,39 @@ export function registerHistoryCommand(program: Command): void {
       for (const step of result.series) {
         console.log(`\n${step.analysisTime} (${step.cacheHit ? "cache" : "upstream"})`);
         console.table(step.levels);
+      }
+      console.log(result.caveat);
+    });
+
+  program
+    .command("history-verify")
+    .description("Compare one archived GFS Grid 4 forecast with the later GFS analysis at the same valid time")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--valid <iso>", "Historical verification time at 00, 06, 12, or 18 UTC")
+    .requiredOption("--lead-hours <number>", "Forecast lead in hours; multiple of 6, up to 192", Number)
+    .option("--vars <list>", "Comma-separated historical pressure variables", DEFAULT_HISTORY_VARIABLES)
+    .option("--levels <list>", "Comma-separated pressure levels in hPa", DEFAULT_LEVELS)
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const service = new HistoricalForecastVerificationService();
+      const result = historicalForecastVerificationResultSchema.parse(await service.verify({
+        latitude: options.lat,
+        longitude: options.lon,
+        validTime: options.valid,
+        leadHours: options.leadHours,
+        variables: parseHistoryVariables(options.vars),
+        pressureLevelsHpa: parseLevels(options.levels),
+      }));
+
+      if (options.json) return console.log(JSON.stringify(result, null, 2));
+      console.log(`Archived GFS verification at ${result.validTime}`);
+      console.log(`Forecast run ${result.forecastRun} +${result.leadHours}h → analysis ${result.analysis.analysisTime}`);
+      console.log(`Comparison: ${result.comparison}`);
+      console.log(`Requested ${result.requestedPoint.latitude},${result.requestedPoint.longitude} → grid ${result.gridPoint.latitude},${result.gridPoint.longitude}`);
+      for (const level of result.pressureLevels) {
+        console.log(`\n${level.pressureHpa} hPa`);
+        console.table(level.changes);
       }
       console.log(result.caveat);
     });
