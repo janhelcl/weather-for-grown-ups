@@ -4,6 +4,7 @@ import { GefsMemberBundleService } from "./core/gefs-member-bundle.js";
 import { GefsPointsBundleTimeSeriesService } from "./core/gefs-points-bundle-timeseries.js";
 import { GefsPointsBundleService } from "./core/gefs-points-bundle.js";
 import { GefsTransectService } from "./core/gefs-transect.js";
+import { HistoricalIndexService } from "./core/history-index.js";
 import { HistoricalTimeSeriesService } from "./core/history-time-series.js";
 import { HistoricalForecastVerificationService } from "./core/history-verification.js";
 import { handleGetGefsAreaSummary } from "./mcp-gefs-area-tool.js";
@@ -15,7 +16,9 @@ import { handleGetGefsFieldsPointsTimeSeries } from "./mcp-gefs-points-bundle-ti
 import { handleGetGefsFieldsPoints } from "./mcp-gefs-points-bundle-tool.js";
 import { handleGetGefsTransect } from "./mcp-gefs-transect-tool.js";
 import {
+  handleFindGfsHistoricalAnalogs,
   handleGetGfsHistoricalTimeSeries,
+  handleMaterializeGfsHistoryIndex,
   handleVerifyGfsHistoricalForecast,
 } from "./mcp-history-tool.js";
 import { createMcpServer as createBaseMcpServer } from "./mcp-server.js";
@@ -42,6 +45,12 @@ import {
 import { gefsTransectQuerySchema, gefsTransectResultSchema } from "./schema/gefs-transect.js";
 import { historicalTimeSeriesQuerySchema } from "./schema/history.js";
 import { historicalTimeSeriesResultSchema } from "./schema/history-result.js";
+import {
+  historicalAnalogQuerySchema,
+  historicalAnalogResultSchema,
+  historicalIndexBuildQuerySchema,
+  historicalIndexBuildResultSchema,
+} from "./schema/history-index.js";
 import { historicalForecastVerificationQuerySchema } from "./schema/history-verification.js";
 import { historicalForecastVerificationResultSchema } from "./schema/history-verification-result.js";
 
@@ -53,6 +62,7 @@ import { historicalForecastVerificationResultSchema } from "./schema/history-ver
 export function createMcpServer() {
   const server = createBaseMcpServer();
   const historicalTimeSeriesService = new HistoricalTimeSeriesService();
+  const historicalIndexService = new HistoricalIndexService();
   const historicalVerificationService = new HistoricalForecastVerificationService();
   const bundleService = new GefsMemberBundleService();
   const timeSeriesService = new GefsBundleTimeSeriesService({ bundleGetter: bundleService });
@@ -67,6 +77,20 @@ export function createMcpServer() {
     inputSchema: historicalTimeSeriesQuerySchema,
     outputSchema: historicalTimeSeriesResultSchema,
   }, async (query) => handleGetGfsHistoricalTimeSeries(historicalTimeSeriesService, query));
+
+  server.registerTool("materialize_gfs_history_index", {
+    title: "Materialize GFS history for local analog search",
+    description: "Fetch a bounded historical NOAA NCEI GFS Grid 4 analysis range and append normalized profiles to WFG's local JSONL history index. The same maxSteps guard as historical time series applies, so one call cannot trigger an unbounded archive scan. Repeated materialization of an existing semantic record is deduplicated. This mutates only the local WFG history index; it does not modify upstream data.",
+    inputSchema: historicalIndexBuildQuerySchema,
+    outputSchema: historicalIndexBuildResultSchema,
+  }, async (query) => handleMaterializeGfsHistoryIndex(historicalIndexService, query));
+
+  server.registerTool("find_gfs_historical_analogs", {
+    title: "Find historical GFS analog analyses",
+    description: "Find locally materialized GFS Grid 4 analysis profiles most similar to one target analysis at the same sampled 0.5° grid point and exact variable/pressure selection. Similarity uses standardized Euclidean distance; vector wind is represented by U/V components so direction wrap-around is not treated as a large discontinuity. Candidate search is local. If fetchTargetIfMissing is true, WFG may fetch only the single target analysis when it is absent from the index. The score is model-state similarity, not climatological rarity or impact-specific similarity.",
+    inputSchema: historicalAnalogQuerySchema,
+    outputSchema: historicalAnalogResultSchema,
+  }, async (query) => handleFindGfsHistoricalAnalogs(historicalIndexService, query));
 
   server.registerTool("verify_gfs_historical_forecast", {
     title: "Verify archived GFS forecast",
