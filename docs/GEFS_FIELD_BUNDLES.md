@@ -1,27 +1,24 @@
 # GEFS mixed field bundles
 
-WFG can query a heterogeneous set of NOAA GEFS 0.5° `pgrb2a` fields in one ensemble operation. This surface exists for agent workflows that need a coherent weather state rather than one scalar field at a time.
+WFG can query a heterogeneous set of NOAA GEFS 0.5° `pgrb2a` fields in one ensemble operation. This surface is intended for agent workflows that need a coherent weather state rather than one scalar at a time.
 
 ## Why this is a separate primitive
 
-A request such as:
+A request can combine, for example:
 
-- 850 hPa temperature and dew point;
+- pressure-level temperature, humidity, wind or geopotential height;
+- member-first derived pressure thermodynamics;
 - 2 m temperature and relative humidity;
 - 10 m wind;
 - precipitation;
 - precipitable water;
-- total cloud cover;
-- CAPE/CIN;
-- mean sea-level pressure;
+- total atmospheric cloud cover;
+- published 180–0 hPa AGL CAPE/CIN;
+- mean sea-level pressure.
 
-should not require one NOAA selected-message request per logical output. WFG expands raw dependencies, builds one canonical mixed selection, fetches one selected GRIB slice per ensemble member, derives supported quantities member-by-member, and only then aggregates across the ensemble.
+WFG expands raw dependencies, creates one canonical mixed selection, fetches one selected GRIB slice per ensemble member, derives supported quantities **inside each member**, then aggregates across members.
 
-For one point and one forecast step, upstream/decode work therefore scales approximately with **members**, not **members × requested fields**.
-
-For multiple points, WFG reuses each member's selected file across all coordinates. Upstream fetches still scale with **members**, while the current point-oriented `wgrib2` adapter performs local decodes at **members × points**.
-
-For multiple points over time, one GEFS cycle is fixed for the full range and the multi-point primitive is called once per native three-hour step. Upstream selected-file work scales with **steps × members**; local point extraction scales with **steps × members × points**.
+For one point/time, upstream selected-file work therefore scales with members rather than `members × requested outputs`. Multi-point operations reuse the same selected member files across coordinates; time-series operations repeat that pattern across native three-hour steps from one fixed cycle.
 
 ## Public surfaces
 
@@ -47,7 +44,7 @@ wfg ensemble-fields-timeseries \
   --lat 50.08 --lon 14.43 \
   --from 2026-08-24T15:00:00Z \
   --to 2026-08-25T15:00:00Z \
-  --vars temperature,dew_point \
+  --vars temperature,equivalent_potential_temperature \
   --levels 850,700 \
   --fields temperature_2m,wind_10m,total_precipitation,precipitable_water,total_atmosphere_cloud_cover \
   --quantiles 0.1,0.5,0.9 \
@@ -84,78 +81,73 @@ wfg ensemble-fields-points-timeseries \
   --json
 ```
 
-`--include-members` is optional. Time and point×time surfaces are protected by response guardrails before run resolution or upstream access. The point×time operation bounds both `points × steps` and, when member payloads are requested, `points × steps × members × scalar outputs`.
+`--include-members` is optional. Time and point×time surfaces enforce response guardrails before run resolution or upstream access.
 
 ### MCP
 
 - `get_gefs_fields` — one mixed selection at one point/time.
-- `get_gefs_fields_timeseries` — one mixed selection across native three-hour valid times from one fixed model cycle.
+- `get_gefs_fields_timeseries` — one mixed selection across native three-hour valid times from one fixed cycle.
 - `get_gefs_fields_points` — one mixed selection across up to 20 points with one selected file per member.
-- `get_gefs_fields_points_timeseries` — one mixed selection across up to 20 points and native three-hour valid times from one fixed model cycle.
+- `get_gefs_fields_points_timeseries` — one mixed selection across up to 20 points and native three-hour valid times from one fixed cycle.
 
-Both MCP transports use the same extended server factory, so stdio and Streamable HTTP expose identical bundle tools.
+Both MCP transports expose the same tools.
 
-## Supported selection types
+## Pressure-level variables
 
-### Pressure-level variables
+Native pressure variables are model/product-specific and include temperature, relative humidity, U/V wind, geopotential height, and explicitly supported vertical velocity.
 
-The bundle accepts the GEFS profile-variable contract, currently including raw `pgrb2a` pressure variables and member-first derived:
+The current member-first derived pressure variables are:
 
-- `dew_point`;
-- `potential_temperature`.
+- `dew_point`
+- `potential_temperature`
+- `specific_humidity`
+- `mixing_ratio`
+- `virtual_temperature`
+- `air_density`
+- `wet_bulb_temperature`
+- `equivalent_potential_temperature`
 
-Derived quantities are evaluated **inside each member** before ensemble aggregation. WFG does not derive nonlinear quantities from the ensemble mean state.
+Every derived quantity expands to its raw GEFS dependencies and is calculated independently for each member before ensemble aggregation. Availability is still checked at each requested pressure level.
 
-### Non-isobaric fields
+## Non-isobaric fields
 
-The current verified `pgrb2a` field catalog includes:
+The v0.1.0 GEFS field catalog includes:
 
-- surface pressure;
-- 2 m temperature and relative humidity;
-- 10 m U/V wind and derived vector wind;
-- total precipitation;
-- precipitable water;
-- total-atmosphere cloud cover;
-- 180–0 hPa AGL CAPE and CIN;
-- mean sea-level pressure.
+- `surface_pressure`
+- `temperature_2m`
+- `relative_humidity_2m`
+- `u_wind_10m`
+- `v_wind_10m`
+- derived `wind_10m`
+- `total_precipitation`
+- `precipitable_water`
+- `total_atmosphere_cloud_cover`
+- `cape_180mb`
+- `cin_180mb`
+- `mean_sea_level_pressure`
 
-The catalog remains product-specific. It does not imply support for unimplemented `pgrb2b`, 0.25° select products, or fields not present in the WFG GEFS catalog.
+The catalog is intentionally tied to the supported `pgrb2a` product. It does not imply support for another GEFS product or for fields not declared in the catalog.
 
 ## Temporal semantics
 
-Field temporal semantics are not flattened away:
+Field time semantics remain explicit:
 
-- instantaneous fields remain instantaneous;
-- precipitation carries its decoded accumulation forecast-hour window and absolute start/end times;
-- total cloud cover carries its decoded average interval and absolute start/end times.
+- instantaneous fields stay instantaneous;
+- precipitation carries its decoded accumulation forecast-hour window and absolute interval;
+- total cloud cover carries its decoded average interval and absolute interval.
 
-A time-series result can therefore contain fields with different time semantics at the same forecast step. Consumers should use each field's `temporal` metadata rather than treating every value as a point observation.
+A bundle at one valid time can therefore contain values representing different temporal intervals. Consumers should use each field's `temporal` metadata rather than treating everything as an instantaneous observation.
 
 ## Wind direction
 
-Wind speed is summarized as an ordinary numeric ensemble distribution. Direction is circular data: averaging `350°` and `10°` as scalar numbers would incorrectly produce `180°`.
+Wind speed is summarized numerically. Direction is circular data, so WFG returns a circular mean direction and resultant length instead of applying ordinary scalar averaging/quantiles to degrees.
 
-WFG therefore returns for wind direction:
+## Composition and caching
 
-- circular mean direction in degrees;
-- resultant length from 0 to 1 as a measure of directional concentration.
+Mixed selections merge raw dependencies into one selected member file. Multi-point operations reuse that file across every requested coordinate, while time-series operations fix one cycle and repeat the single-time primitive across native forecast steps.
 
-It deliberately does not return ordinary scalar direction quantiles.
+Local extraction/decoding still has point-level work, but the upstream object transfer is deliberately reused rather than multiplied by point count. The normal npm decoder is bundled; native `wgrib2` is an optional backend and is not part of the bundle semantics.
 
 ## Ensemble semantics
 
-Bundle summaries contain model-member distributions. They are not calibrated real-world probability or uncertainty. When individual members are omitted, the summary still reflects member-first computation; omission is only a response-size choice.
-
-## Composition invariants
-
-The time-series composers:
-
-1. validate the complete range and response guardrails before upstream calls;
-2. resolve `latest` once to a GEFS cycle that can satisfy the whole range;
-3. use native three-hour valid times;
-4. call the relevant single-time primitive with that explicit cycle for every step;
-5. reject run, valid-time, forecast-hour, selection, point-order, or sampled-grid drift;
-6. preserve each field's own decoded temporal interval;
-7. aggregate cache state over the complete series.
-
-This keeps temporal composition separate from meteorological decoding and makes the single-time mixed bundle decoder reusable across point, multi-point, and time-series operations.
+Bundle summaries contain raw model-member distributions. They are not calibrated real-world probabilities or generic uncertainty scores. Omitting member arrays changes response size, not the member-first computation that produced the summaries.

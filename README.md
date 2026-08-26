@@ -138,7 +138,7 @@ The [architecture guide](docs/ARCHITECTURE.md) goes deeper into the shared core,
 
 ## CLI
 
-The CLI is operation-oriented. Shared operations use `--model gfs|gefs`; GFS remains the default where backward compatibility requires it.
+The CLI is operation-oriented. Where an operation has a unified command, it uses `--model gfs|gefs`; model-native aliases remain explicit where they make the contract clearer.
 
 A deterministic profile:
 
@@ -155,12 +155,11 @@ wfg profile \
 An ensemble parcel diagnostic:
 
 ```bash
-wfg parcel \
-  --model gefs \
+wfg ensemble-parcel \
   --lat 45.80 --lon 11.77 \
   --valid 2026-08-24T12:00:00Z \
   --parcel surface_2m \
-  --levels 1000,925,850,700,500,400,300 \
+  --levels 1000,925,850,700,500,250,200 \
   --json
 ```
 
@@ -172,7 +171,7 @@ wfg ensemble-fields-points-timeseries \
   --point 55.67,8.15 \
   --from 2026-08-24T06:00:00Z \
   --to 2026-08-25T18:00:00Z \
-  --field wind_10m \
+  --fields wind_10m \
   --quantiles 0.1,0.5,0.9 \
   --json
 ```

@@ -1,165 +1,108 @@
 # Live NOAA integration tests
 
-WFG's normal test suite is deterministic and offline. Real NOAA integration checks are deliberately separate because upstream availability, forecast publication timing, network latency, and the NOMADS courtesy delay make them unsuitable as ordinary PR gates.
+WFG keeps real-NOAA checks separate from normal deterministic CI. Upstream publication timing, network availability and NOAA request pacing make live data valuable as a compatibility signal but a poor merge gate.
 
-## Automated schedule
+## Schedule
 
-`.github/workflows/live-noaa.yml` runs the expanded suite:
+`.github/workflows/live-noaa.yml` runs the live suite:
 
 - every Monday at **05:17 UTC**;
-- on explicit `workflow_dispatch`.
+- on manual `workflow_dispatch`.
 
-It does **not** run on normal pushes or pull requests.
+It does not run on ordinary pushes or pull requests. A non-cancelling concurrency group prevents overlapping live suites.
 
-The workflow builds the dedicated Docker `live-test` target, which pins Node.js 24 and `wgrib2 3.8.0`, then runs `npm run test:live:all`. Live jobs share one non-cancelling concurrency group so upstream checks never overlap or replace one another.
+The workflow builds the Docker `live-test` target and runs its default command, `npm run test:live:all`.
 
-## Upstream pacing
+## What `test:live:all` covers
 
-All physical NOMADS downloads use WFG's normal file-backed limiter. The default is an **11-second post-request cooldown**, deliberately conservative relative to NOAA's 10-second scripted-request guidance. The live suite has no bypass.
+The current aggregate script runs:
 
-AWS Open Data access does not use the NOMADS limiter.
-
-## Expanded deterministic GFS S3 integration
-
-```bash
-npm run test:live:s3
+```text
+test:live:bundled
+test:live:s3
+test:live:gefs
+test:live:gefs-runs
+test:live:area
 ```
 
-This exercises NOAA AWS Open Data through the deterministic GFS core:
+### Bundled decoder
 
-- three-location batched pressure/non-isobaric query;
-- four native forecast steps (`f006` through `f009`);
-- five-sample pressure-level great-circle transect;
-- surface-parcel LCL/CAPE/CIN calculation.
+`npm run test:live:bundled` explicitly refuses `WFG_DECODER=wgrib2` and `WGRIB2_PATH`. It verifies the default bundled decoder against real NOAA data for:
 
-Assertions validate contracts, provenance, dimensions, and physical-result finiteness rather than pinning specific weather values.
+- GFS AWS pressure/non-isobaric profile data;
+- GFS NOMADS area data with temporal semantics;
+- GEFS AWS ensemble data.
 
-## GEFS ensemble, multi-point, profile, shared diagnostics, diagnostic series, and aligned GFS comparison integration
+This is the live proof that the normal npm path does not require native `wgrib2`.
 
-```bash
-npm run test:live:gefs
-```
+### GFS AWS
 
-This is deliberately small. It selects `c00`, `p01`, and `p02`, resolves one current GEFS cycle covering two adjacent native three-hour valid times, and samples NOAA AWS `pgrb2a` 0.5° data over Central Europe.
+`npm run test:live:s3` exercises deterministic GFS selected-message access and higher-level composition against NOAA AWS Open Data.
 
-The smoke exercises:
+### GEFS
 
-- the one-time `GefsEnsembleService` 850-hPa temperature distribution over Prague at the final valid time;
-- `GefsBatchPointsService` for the **same** 850-hPa temperature/member/run selection over Prague, Brno, and Salzburg, reusing the member slices already fetched by the scalar query;
-- `GefsEnsembleProfileService` over temperature + geopotential height at 850 and 500 hPa, using one multi-message slice per member;
-- `GefsLayerDiagnosticsService` for the 850→500-hPa environmental temperature lapse rate using the **same shared pressure diagnostic kernel as GFS**;
-- `GefsProfileDiagnosticsService` for freezing-level crossings and sampled inversion layers over 1000/925/850/700/500 hPa, using the **same shared whole-profile diagnostic kernel as GFS** independently for each member;
-- a two-step `GefsDiagnosticTimeSeriesService` whole-profile series over those same five pressure levels, proving fixed-cycle temporal composition of member-first structural diagnostics;
-- a two-step `GefsEnsembleTimeSeriesService` raw-field distribution using the same explicit model run;
-- `GfsGefsComparisonService` at the final valid time, with deterministic GFS and GEFS forced to the same initialization cycle.
+`npm run test:live:gefs` currently chains bounded live checks for:
 
-It verifies the parts offline fixtures cannot prove:
+- core GEFS ensemble/profile/diagnostic behavior;
+- raw GEFS multi-point time series;
+- mixed-field GEFS multi-point time series;
+- ensemble-native GEFS transects.
 
-- current NOAA GFS/GEFS AWS bucket, path, and member naming;
-- `.idx` availability and range-aware run discovery;
-- single-field and multi-message selected GRIB byte-range download;
-- `wgrib2` point decoding of real deterministic GFS and GEFS subsets;
-- **member-first multi-point reuse: one selected field slice per member can be sampled at several locations without point × member upstream downloads**;
-- shared-grid consistency across members at each GEFS multi-point location;
-- shared-grid consistency across every field and member inside a GEFS profile while preserving separate GFS/GEFS sampled grid points;
-- normalized member values and finite ensemble/profile/multi-point summaries;
-- summary-only profile and multi-point output by default;
-- real member profiles feeding the model-independent layer and whole-profile diagnostic kernels;
-- member-specific positive layer depths and finite lapse-rate distribution summaries;
-- raw member fractions/count distributions for real freezing/inversion structures;
-- conditional structural distributions appearing only when at least one member contains the relevant structure;
-- one explicit GEFS cycle/member/diagnostic selection held fixed across adjacent diagnostic time-series steps;
-- compact structural summaries changing through time without repeating full member profiles or structures;
-- fixed-cycle native three-hour raw-field temporal composition;
-- compact summary-only raw-field time-series output by default;
-- aligned deterministic-minus-ensemble comparison metrics;
-- explicit raw-member / raw-model interpretation semantics rather than calibrated probability or uncertainty.
+The live cases intentionally use small member/point/time selections. Their purpose is to catch source-path, inventory, byte-range, decoding, grid-consistency and composition regressions without treating a tiny member subset as a forecast product.
 
-The live smoke intentionally uses only three GEFS members. The layer check uses two pressure levels; the single-time and two-step whole-profile structural checks use five pressure levels and only temperature/geopotential height. Byte ranges are sequential inside each member while members remain bounded-concurrent. The diagnostic series adds bounded step concurrency around those existing single-time services. The comparison reuses the final scalar GEFS member slices and adds only the matching deterministic GFS field slice.
+### GEFS run comparison
 
-The **2026-08-24** multi-point validation used the **2026-08-24 00Z** cycle at `f006`, valid **06Z**, with `c00/p01/p02` and 850-hPa temperature. The scalar Prague query fetched the three selected member slices first. The subsequent Prague/Brno/Salzburg multi-point query reported `cacheHit=true` for **all three member files**, proving that the new spatial operation reused those exact local GRIB slices instead of issuing additional selected-field downloads. The three-location means were about **5.716 °C** over Prague, **8.716 °C** over Brno, and **10.516 °C** over Salzburg, with sampled grid points `50,14.5`, `49,16.5`, and `48,13` respectively. These three-member values are compatibility evidence only, not calibrated ensemble uncertainty.
+`npm run test:live:gefs-runs` verifies distribution evolution across consecutive model initializations while preserving the rule that repeated perturbation labels are not member trajectories across cycles.
 
-The 2026-08-23 validation provided a useful sanity check of the temporal semantics. At `f003`, all three selected members contained one freezing-level crossing; the mean lowest-crossing height was about **2943.7 gpm** with population spread about **75.9 gpm**. At `f006`, all three still contained exactly one crossing, but the mean was about **2942.1 gpm** with population spread only **0.94 gpm**. The series therefore preserved both a stable event fraction and a materially changing ensemble structural spread from one fixed initialization cycle.
+### Area summaries
 
-## GEFS run-comparison integration
+`npm run test:live:area` exercises the bounded NOAA area path and rich spatial statistics.
 
-```bash
-npm run test:live:gefs-runs
-```
+## NOAA pacing
 
-This deliberately small check compares 850-hPa temperature over Prague for `c00`, `p01`, and `p02` across two consecutive GEFS initialization cycles at one common valid time.
+Physical NOMADS downloads use WFG's shared file-backed courtesy limiter. The default is an **11-second post-request cooldown**, deliberately conservative relative to NOAA's 10-second scripted-request guidance.
 
-It verifies:
+NOAA AWS Open Data byte-range access does not use the NOMADS scripted-filter limiter.
 
-- query-aware resolution of the newest usable anchor cycle;
-- an older comparison cycle exactly six hours behind the anchor;
-- explicit fixed run selection for both underlying ensemble queries;
-- the same requested field, member set, valid time, and sampled GEFS grid point across both cycles;
-- finite per-cycle mean, population spread, extrema and quantiles;
-- raw threshold member fractions retaining their non-calibrated interpretation;
-- newer-minus-older distribution shifts rather than member-ID trajectory deltas;
-- the explicit interpretation `distribution_shift_between_model_cycles_not_member_trajectory`.
+## Running locally
 
-The first 2026-08-24 validation used valid time **06Z**, comparing the **2026-08-23 18Z** run at `f012` with the **2026-08-24 00Z** run at `f006`. Across the three smoke-test members, 850-hPa temperature mean moved from about **5.646 °C** to **5.716 °C** (`+0.071 °C`), population spread widened from about **0.198 °C** to **0.238 °C** (`+0.040 °C`), and the median moved from about **5.685 °C** to **5.880 °C** (`+0.195 °C`). All three members remained at or above the deliberately low 0 °C threshold, so that raw member fraction stayed at 1.0. These values are compatibility evidence from only three members, not a calibrated ensemble forecast claim.
-
-## Rich NOMADS area integration
-
-```bash
-npm run test:live:area
-```
-
-This performs one small Central-European `temperature_2m` area request at `f006` and requests:
-
-- p10 / p50 / p90;
-- fraction of defined grid cells at or above 0 °C;
-- representative min/max grid coordinates and tie counts.
-
-It exercises the real NOMADS geographic-subset path, exact field selection, unit normalization, `wgrib2` spread decoding, rich area statistics, and the shared courtesy limiter.
-
-## Run the expanded suite locally
-
-Requirements:
-
-- internet access;
-- Node.js supported by WFG;
-- `wgrib2` on `PATH`, or `WGRIB2_PATH` set.
-
-Run all expanded integrations:
+With Node.js supported by WFG and internet access:
 
 ```bash
 npm run test:live:all
 ```
 
-The Docker target avoids host dependency setup:
+The normal decoder is bundled with npm, so native `wgrib2` is not required.
+
+To exercise the pinned Docker environment instead:
 
 ```bash
 docker build --target live-test -t weather-for-grown-ups:live-test .
 docker run --rm weather-for-grown-ups:live-test
 ```
 
-## Compact legacy profile smoke
+The Docker live-test image contains native `wgrib2 3.8.0` as an available compatibility/debug backend, but the bundled-decoder smoke explicitly verifies the non-native path.
 
-The original deterministic one-profile smoke remains available for targeted debugging:
+## What live tests assert
 
-```bash
-npm run test:live
-WFG_LIVE_SOURCE=s3 npm run test:live
-```
+Live tests should assert contracts and invariants rather than pinning today's weather. High-value checks include:
 
-Without `WFG_LIVE_SOURCE` it uses NOMADS; setting `s3` switches the source.
-
-## First scheduled-suite verification
-
-Before the schedule was merged, the expanded deterministic workflow was deliberately executed against current NOAA data on 2026-08-23. The first attempt caught a real test defect: the parcel smoke requested unsupported 875/825/775 hPa levels. The smoke data was corrected to the canonical published GFS pressure-level set, and the rerun passed both AWS and NOMADS paths.
-
-The GEFS point, multi-point, time-series, profile, and cross-model comparison capabilities were likewise exercised against current NOAA AWS data before merge. Multi-point validation additionally proves that one cached raw member slice can support several coordinates without multiplying source downloads by point count. The unified-core change extended that same low-cost compatibility check to member-by-member layer diagnostics. GEFS whole-profile diagnostics extended the proof to variable-length structural meteorology: real GEFS multi-message profiles cross the normalized-profile boundary, feed the shared freezing/inversion kernel independently per member, and produce ensemble structural summaries without inventing an ensemble-mean structure. GEFS diagnostic time series additionally prove that those already-validated single-time summaries can be composed across native forecast times while holding the model cycle, member set, sampling, and diagnostic selection fixed. GEFS run comparison extends the proof across model initializations while intentionally comparing ensemble distributions rather than pretending equal perturbation labels form trajectories. This layer exists to catch assumptions that deterministic mocks and fixed fixtures cannot reveal without turning upstream availability into a permanent merge dependency.
+- current NOAA paths and inventory formats;
+- selected GRIB byte-range access;
+- decoder compatibility with real GFS/GEFS messages;
+- requested grid/sample consistency;
+- finite normalized physical values;
+- fixed-cycle semantics across time;
+- upstream slice reuse across coordinates;
+- explicit temporal semantics for accumulation/average fields;
+- member-first GEFS computation and raw-member interpretation labels.
 
 ## Failure triage
 
-A live failure should be classified as one of:
+A live failure should first be classified as:
 
 1. upstream publication/network availability;
-2. `wgrib2` / runtime environment;
+2. decoder/runtime compatibility;
 3. WFG integration regression.
 
-Normal deterministic CI remains the merge authority. Live NOAA integration is a low-frequency compatibility signal.
+Normal offline CI remains the merge authority; the weekly live suite is the upstream-compatibility alarm.

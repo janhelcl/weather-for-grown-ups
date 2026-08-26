@@ -1,6 +1,6 @@
 # Testing
 
-The default WFG test suite is intentionally deterministic and offline. Unit/integration tests do not contact NOAA unless they explicitly opt into the separate live-test scripts.
+WFG's default verification is deterministic and offline. Tests do not contact NOAA unless they are one of the explicit live scripts.
 
 ## Normal verification
 
@@ -13,30 +13,7 @@ npm run test:smoke
 npm run pack:check
 ```
 
-CI runs the main verification matrix on Node.js 20 and 24, enforces coverage gates, dry-runs the npm package, and builds/smokes the production Docker image including bundled `wgrib2` and the Streamable HTTP MCP entrypoint.
-
-## Layers covered
-
-- Query schema boundaries, timezone handling, `latest`/`latest_complete`/explicit run selectors, source defaults, authoritative GFS pressure-level validation, point/batch/transect/area bounds, diagnostic-time-series family validation, and response-size guards.
-- Variable/field/diagnostic catalog metadata, source-vs-output units, raw dependencies, vertical/temporal semantics, compact search and agent-facing serialization.
-- Full configured GFS pressure-level list, including fractional upper-atmosphere levels.
-- Forecast-hour validation, native GFS cadence, time-range intersection, and 384-hour horizon.
-- Bounded asynchronous mapping, stable output ordering, and failure propagation.
-- Latest-complete and query-aware newest-available run discovery, caching, eligible-cycle bounds, exact field availability, range coverage, and diagnostic dependency expansion.
-- NOAA AWS `.idx` parsing, exact GRIB message selection, byte-range planning, slice caching, concurrent in-flight deduplication, and coordinate-independent reuse.
-- NOMADS URL planning, geographic subset behavior, exact pressure/non-isobaric selection, cross-process 11-second pacing, caching, and failure paths.
-- `wgrib2` point and area decoding, missing-data behavior, longitude normalization, command-runner failures, and exact-message checks.
-- Single-point profiles across NOMADS and S3, derived pressure-level variables, exact non-isobaric field semantics, and completeness rejection.
-- Pressure-layer, whole-profile, and parcel diagnostics, including deterministic meteorology mechanics and independent golden-reference cases.
-- Diagnostic time-series composition across all three diagnostic families: native cadence around `f120`, one-cycle resolution for the complete range, exact query-aware dependencies, S3/NOMADS provenance, bounded concurrency, duplicate-selection normalization, compact parcel projection, and run/time/grid/source invariants.
-- Batched points, one shared S3 slice, input-order preservation, bounded local decoding concurrency, and shared cache semantics.
-- Great-circle transects composed over the batch primitive, sample geometry, distance ordering, and response contracts.
-- Native point time series and multi-point time series, one-cycle resolution, cadence around `f120`, bounded forecast concurrency, and step/sample guards.
-- Run-to-run comparison, newest-minus-older deltas, circular wind-direction deltas, and interval comparability rules.
-- Bounded area summaries, exact raw-field selection, grid-size rejection, unit normalization, min/max/unweighted mean, percentiles, threshold fractions, extrema locations, and provenance.
-- Shared CLI/MCP schemas and handler mappings across catalog, point, single-time diagnostic, diagnostic-time-series, batch, transect, field-time-series, comparison, and area tools.
-- Streamable HTTP MCP negotiation with the official MCP client while external network access remains blocked.
-- The CLI root/registry is unit-tested for the complete, duplicate-free public command set; every compiled CLI command is additionally exercised through the smoke suite on both supported Node versions.
+Normal CI runs the supported Node matrix, enforces coverage gates, builds the package, exercises CLI/package entrypoints, and verifies the production Docker/MCP paths without depending on NOAA availability.
 
 ## Coverage gates
 
@@ -47,13 +24,56 @@ CI fails below:
 - Functions: 90%
 - Branches: 85%
 
-The thin CLI command-registration/presentation modules are excluded from V8 percentage accounting, matching the policy previously used for the monolithic CLI adapters they replaced. Their command wiring is covered by the registry test and compiled `--help`/catalog smoke suite. `src/cli/program.ts`, CLI parsing helpers, schemas, handlers, diagnostic time-series composition, and all shared core behavior remain inside the coverage gate.
+Thin command-registration/presentation adapters are excluded from percentage accounting where appropriate; their wiring has separate registry/smoke coverage. Core services, schemas, parsing helpers, handlers and meteorological calculations remain inside the coverage policy.
+
+## What the offline suite covers
+
+The deterministic suite covers the important boundaries across both model families, including:
+
+- query schemas, run selectors, valid-time/cadence rules, pressure levels and response-size guardrails;
+- GFS and GEFS catalogs, raw/derived variables, dependencies and vertical/temporal semantics;
+- latest/query-aware run resolution and fixed-cycle range semantics;
+- NOAA AWS `.idx` parsing, exact message selection, byte-range planning, caching and in-flight deduplication;
+- NOMADS query planning, bounded geographic subsets and the shared courtesy limiter;
+- bundled/native decoder abstraction, normalized point/area decoding and failure paths;
+- deterministic and member-first pressure-profile thermodynamics;
+- layer, whole-profile and parcel diagnostics;
+- GEFS member-first parcel/LCL/LFC/EL/CAPE/CIN distributions;
+- layer/profile/parcel diagnostic time-series composition;
+- raw and mixed-field point/time/multi-point operations;
+- great-circle GFS and ensemble-native GEFS transects;
+- deterministic and member-first area statistics;
+- deterministic run deltas and GEFS distribution shifts;
+- aligned GFS-vs-GEFS comparison semantics;
+- CLI/MCP handler mappings and Streamable HTTP MCP negotiation with external network access blocked.
+
+The test suite also checks the scientific semantics that are easy to accidentally flatten: accumulation/average intervals, circular wind direction, stable sampled grids, member-first nonlinear calculations and raw-member-fraction interpretation.
+
+## Smoke tests
+
+`npm run test:smoke` runs the compiled CLI/package surface without contacting NOAA. It is intended to catch broken command registration, packaging, imports and executable wiring.
+
+It is not the authoritative inventory of every public command. Unit/registry tests cover command registration more broadly, including model-native aliases such as the GEFS parcel commands.
+
+## Package verification
+
+`npm run pack:check` builds and dry-runs the npm tarball. The package ships:
+
+- `dist/`
+- root `README.md`
+- `docs/`
+- `LICENSE`
+
+This matters after the documentation cleanup: detailed Markdown lives under `docs/` rather than being accidentally dropped from the published package.
 
 ## Network isolation
 
-Normal tests install a global network guard so accidental external `fetch` calls fail immediately. The HTTP MCP transport test narrowly permits loopback access only; it still cannot contact NOAA.
+Normal tests install a network guard so accidental external requests fail immediately. The Streamable HTTP MCP test permits loopback communication only; it cannot contact NOAA.
 
-This separation is deliberate: deterministic CI answers whether WFG itself is correct, while the live suite answers whether current upstream data/access assumptions still hold.
+This separation is deliberate:
+
+- deterministic CI answers whether WFG itself behaves correctly;
+- live integration answers whether today's NOAA products and access assumptions still match those contracts.
 
 ## Live NOAA integration
 
@@ -61,8 +81,12 @@ This separation is deliberate: deterministic CI answers whether WFG itself is co
 npm run test:live:all
 ```
 
-The expanded suite covers AWS batch/time-series/transect/parcel behavior and a rich NOMADS area query. The diagnostic time-series layer is deterministic composition over those already-live-tested profile/parcel/S3 primitives and is covered in normal offline CI; it does not add extra scheduled NOAA calls in this change.
+The live suite covers the bundled decoder against real GFS/GEFS data, deterministic GFS AWS composition, GEFS ensemble/spatial/temporal surfaces, GEFS run comparison and bounded area behavior.
 
-The live suite runs weekly on Monday at 05:17 UTC plus manual dispatch, never as a normal PR/main gate.
+It runs weekly on Monday at 05:17 UTC plus manual dispatch, never as a normal PR/main gate.
 
-See [LIVE_SMOKE.md](LIVE_SMOKE.md) for the exact live coverage, Docker test environment, pacing, and failure-triage policy.
+See [LIVE_SMOKE.md](LIVE_SMOKE.md) for exact current scripts, pacing and failure triage.
+
+## Meteorology reference validation
+
+Implementation tests are complemented by independent golden meteorology cases for the physical kernels. See [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md) for reference sources, formulas and tolerances.

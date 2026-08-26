@@ -1,93 +1,42 @@
 # GEFS diagnostic time series
 
-WFG composes the existing single-time GEFS diagnostic services across native three-hour forecast outputs from one fixed GEFS initialization cycle.
+WFG composes member-first GEFS diagnostic services across native three-hour forecast outputs from one fixed initialization cycle.
 
-The core rule remains:
+The rule is:
 
 > derive meteorology per member first, summarize across members second, compose those summaries through time third.
 
-No new meteorological formulas live in the time-series service.
+No new meteorological formulas live in the time-series composer.
 
-## Supported diagnostic families
+## Supported diagnostic families in v0.1.0
 
-The current GEFS diagnostic time-series surface supports:
+The GEFS core supports all three diagnostic families:
 
 - `layer`
-  - `temperature_lapse_rate`
-  - `wind_shear`
-  - `potential_temperature_gradient`
+  - environmental temperature lapse rate
+  - vector wind shear
+  - potential-temperature gradient
 - `profile`
-  - `freezing_level_crossings`
-  - `temperature_inversion_layers`
+  - freezing-level crossings
+  - sampled temperature-inversion layers
+- `parcel`
+  - explicit `surface_2m`, `mixed_layer_100hpa`, or `most_unstable_300hpa` parcel
+  - LCL / LFC / EL
+  - CAPE / CIN
 
-GEFS parcel/CAPE/CIN diagnostics are not supported because the current GEFS contract does not expose the complete surface/non-isobaric parcel inputs required for parity with deterministic GFS. Requests do not silently substitute a different parcel definition.
+Parcel diagnostics were added before v0.1.0; older documentation that described them as unavailable is obsolete.
 
-## Fixed-run semantics
+## CLI surface
 
-One query fixes:
+The CLI currently exposes the same core through two command shapes.
 
-- geographic point;
-- GEFS initialization cycle;
-- member selection;
-- quantile selection;
-- diagnostic family and IDs;
-- pressure layer or explicit pressure-profile levels;
-- inclusive valid-time range.
-
-`run="latest"` resolves the newest GEFS cycle that can cover the **complete requested range** for all selected members. The resolved run is then passed explicitly to every single-time diagnostic step, so a series cannot drift between model cycles while it is being evaluated.
-
-Both range bounds must be exact native three-hour valid times. The current hard horizon remains `f000` through `f384`.
-
-## Compact output by design
-
-Diagnostic time series deliberately return **ensemble summaries only** at each step.
-
-They do not repeat full member profiles, memberwise layer endpoints, freezing crossings, or inversion structures across every time step. Those payloads scale as `members × steps × variable-length structures` and are a poor default for an agent context.
-
-Use the single-time tools when an interesting forecast step needs audit detail:
-
-- `get_gefs_layer_diagnostics`
-- `get_gefs_profile_diagnostics`
-
-This makes the time series a discovery/comparison surface and the single-time tools the detailed audit path.
-
-## Layer-series step
-
-Every layer step contains:
-
-- valid time and forecast hour;
-- fixed pressure-layer identity;
-- member-specific layer-depth distribution;
-- one distribution summary per requested diagnostic output;
-- whether every underlying member slice for that step was a cache hit.
-
-Each diagnostic at each step was computed independently for every member before mean/spread/quantiles were calculated.
-
-## Profile-series step
-
-Every whole-profile step contains:
-
-- valid time and forecast hour;
-- sampled pressure levels;
-- the same structural ensemble summaries as the single-time profile-diagnostic service;
-- whether every underlying member slice for that step was a cache hit.
-
-For freezing levels this includes raw member event fraction, crossing-count distribution, and conditional crossing-height/pressure summaries where crossings exist.
-
-For inversions this includes raw member event fraction, layer-count and total-depth distributions, plus conditional strongest/deepest-layer summaries where inversions exist.
-
-No absent structure is converted into a fake height, pressure, or layer strength.
-
-## CLI
-
-The canonical command is model-selectable:
+Layer and profile series use the shared model-selectable command:
 
 ```bash
 wfg diagnostic-timeseries \
   --model gefs \
   --kind profile \
-  --lat 50.08 \
-  --lon 14.43 \
+  --lat 50.08 --lon 14.43 \
   --start 2026-08-24T06:00:00Z \
   --end 2026-08-25T18:00:00Z \
   --levels 1000,925,850,700,500 \
@@ -102,38 +51,83 @@ Layer example:
 wfg diagnostic-timeseries \
   --model gefs \
   --kind layer \
-  --lat 50.08 \
-  --lon 14.43 \
+  --lat 50.08 --lon 14.43 \
   --start 2026-08-24T06:00:00Z \
   --end 2026-08-25T18:00:00Z \
-  --lower 850 \
-  --upper 500 \
+  --lower 850 --upper 500 \
   --diagnostics temperature_lapse_rate,wind_shear \
   --json
 ```
 
-GFS remains the default when `--model` is omitted and retains support for `layer`, `profile`, and `parcel` diagnostic time series.
+Parcel series use the explicit model-native command:
 
-GEFS defaults to a `maxSteps` guard of 40. Callers can raise it up to the native hard maximum when a larger response is intentional.
+```bash
+wfg ensemble-parcel-timeseries \
+  --lat 45.80 --lon 11.77 \
+  --start 2026-08-24T06:00:00Z \
+  --end 2026-08-25T18:00:00Z \
+  --levels 1000,925,850,700,500,250,200 \
+  --parcel surface_2m \
+  --quantiles 0.1,0.5,0.9 \
+  --json
+```
 
-## MCP
+This is a CLI registration distinction, not a different meteorological implementation. `diagnostic-timeseries --model gefs --kind parcel` is not accepted in v0.1.0; use `ensemble-parcel-timeseries`.
 
-Use:
+## MCP surface
+
+MCP exposes one GEFS-specific tool:
 
 - `get_gefs_diagnostic_timeseries`
 
-The MCP schema is explicit to GEFS rather than exposing a very large cross-model polymorphic tool. The underlying CLI and MCP still share the same core service and result schema.
+Its schema supports `layer`, `profile`, and `parcel`. MCP therefore does not share the CLI's parcel command split.
 
-## Upstream concurrency and caching
+## Fixed-run semantics
 
-Forecast steps are processed with bounded concurrency. Each step delegates to a single-time GEFS diagnostic service, which in turn uses bounded member concurrency. Within one member, selected byte ranges are downloaded sequentially and stitched into one immutable cached multi-message GRIB slice.
+One request fixes:
 
-The series-level `source.allCacheHit` is true only when every underlying step reports all member slices as cache hits.
+- geographic point;
+- GEFS initialization cycle;
+- member selection;
+- quantile selection;
+- diagnostic family and parameters;
+- explicit pressure layer/profile sampling;
+- inclusive valid-time range.
+
+`run="latest"` resolves one cycle capable of covering the **complete requested range** for all selected members. Every step then receives that explicit run, so a series cannot drift to a newer model cycle while it is being evaluated.
+
+Bounds must lie on native three-hour valid times and remain inside the current `f000`–`f384` WFG contract.
+
+## Member-first computation
+
+At each valid step, WFG calls the corresponding single-time member-first service:
+
+```text
+fixed GEFS step
+    ↓
+selected members
+    ↓
+member atmospheric state / parcel dependencies
+    ↓
+shared diagnostic physics per member
+    ↓
+ensemble summary for the step
+```
+
+Layer depth is member-specific. Freezing/inversion structures are found independently inside every member. Parcel paths and buoyancy are calculated independently for every member before CAPE/CIN and boundary distributions are summarized.
+
+## Compact output by design
+
+Time series return compact ensemble summaries at each forecast step rather than repeating every member's full sounding, parcel path, freezing crossings, or inversion layers.
+
+Use the corresponding single-time tools for audit detail:
+
+- `get_gefs_layer_diagnostics`
+- `get_gefs_profile_diagnostics`
+- `get_gefs_parcel_diagnostics`
+
+This keeps a series useful in an agent context without throwing away member-first physical semantics.
 
 ## Probability semantics
 
-Any member fractions contained inside profile diagnostic summaries remain explicitly tagged:
-
-`raw_member_fraction_not_calibrated_probability`
-
-The time dimension does not change their interpretation. WFG does not convert member fractions into calibrated event probabilities or infer temporal event probability from adjacent steps.
+Any member event/boundary fractions remain raw ensemble evidence. For example, the fraction of members with an LFC or a freezing crossing is **not** promoted to a calibrated real-world probability merely because it is plotted through time.

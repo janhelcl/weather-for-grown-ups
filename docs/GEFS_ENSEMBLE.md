@@ -39,6 +39,30 @@ v0.1.0 includes:
 
 The older limitations around GEFS parcel diagnostics, multi-point time series, transects and area statistics no longer apply to v0.1.0.
 
+## Pressure-profile variables
+
+Native GEFS `pgrb2a` pressure variables currently include:
+
+- `temperature`
+- `relative_humidity`
+- `u_wind`
+- `v_wind`
+- `geopotential_height`
+- `vertical_velocity` at its explicitly supported pressure surface
+
+Member-first derived profile variables include:
+
+- `dew_point`
+- `potential_temperature`
+- `specific_humidity`
+- `mixing_ratio`
+- `virtual_temperature`
+- `air_density`
+- `wet_bulb_temperature`
+- `equivalent_potential_temperature`
+
+Availability remains product-specific and is validated against the WFG GEFS catalog. Derived values are available only where every raw dependency exists at the requested pressure level.
+
 ## Member-first semantics
 
 For nonlinear meteorology, WFG never derives a quantity from an ensemble-mean atmospheric profile unless an operation explicitly defines that quantity.
@@ -59,7 +83,7 @@ repeat for selected members
 summarize member results
 ```
 
-That pattern applies to lapse rate, shear, stability gradients, inversion/freezing structures and parcel diagnostics.
+That pattern applies to thermodynamic derivations, lapse rate, shear, stability gradients, inversion/freezing structures and parcel diagnostics.
 
 All numeric ensemble distribution surfaces share arithmetic mean, population standard deviation, extrema and caller-selected quantiles. Threshold/event fractions are explicitly raw member evidence, **not calibrated probability**.
 
@@ -111,9 +135,9 @@ GEFS mixed bundles combine pressure variables/levels with supported non-isobaric
 wfg ensemble-fields \
   --lat 50.08 --lon 14.43 \
   --valid 2026-08-24T12:00:00Z \
-  --var temperature --level 850 \
-  --field temperature_2m \
-  --field wind_10m \
+  --vars temperature,dew_point \
+  --levels 850 \
+  --fields temperature_2m,wind_10m,total_atmosphere_cloud_cover \
   --quantiles 0.1,0.5,0.9 \
   --json
 ```
@@ -186,13 +210,15 @@ GEFS v0.1.0 supports the same explicit parcel definitions as GFS, evaluated memb
 - `mixed_layer_100hpa`
 - `most_unstable_300hpa`
 
+The current GEFS CLI uses the model-native command `ensemble-parcel`:
+
 ```bash
-wfg parcel \
-  --model gefs \
+wfg ensemble-parcel \
   --lat 45.80 --lon 11.77 \
   --valid 2026-08-24T12:00:00Z \
   --parcel surface_2m \
-  --levels 1000,925,850,700,500,400,300 \
+  --levels 1000,925,850,700,500,250,200 \
+  --quantiles 0.1,0.5,0.9 \
   --json
 ```
 
@@ -200,18 +226,33 @@ MCP: `get_gefs_parcel_diagnostics`.
 
 ### Diagnostic time series
 
-`diagnostic-timeseries --model gefs` supports layer, profile and parcel series from one fixed model cycle and member set. The series returns compact ensemble summaries; use single-time operations for member-level drill-down.
+Layer/profile GEFS series use the shared command:
 
-MCP: `get_gefs_diagnostic_timeseries`. See [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md).
+```text
+diagnostic-timeseries --model gefs --kind layer|profile
+```
+
+Parcel series use the explicit CLI command:
+
+```text
+ensemble-parcel-timeseries
+```
+
+All three families share the same member-first GEFS diagnostic time-series core. MCP exposes all three through `get_gefs_diagnostic_timeseries`.
+
+See [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md).
 
 ### Transect
 
 ```bash
 wfg transect \
   --model gefs \
-  --from 45.80,11.77 \
-  --to 46.50,12.50 \
+  --start 45.80,11.77 \
+  --end 46.50,12.50 \
   --valid 2026-08-24T12:00:00Z \
+  --vars temperature \
+  --levels 850 \
+  --fields wind_10m \
   --samples 10 \
   --json
 ```
@@ -229,6 +270,7 @@ wfg area \
   --west 7 --east 9 \
   --valid 2026-08-24T12:00:00Z \
   --var u_wind --level 850 \
+  --quantiles 0.1,0.5,0.9 \
   --json
 ```
 

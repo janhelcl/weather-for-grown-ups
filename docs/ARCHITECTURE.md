@@ -50,7 +50,9 @@ Nonlinear diagnostics are evaluated on each GEFS member before aggregation. WFG 
 | scalar ensemble distribution | — | ✅ |
 | aligned GFS-vs-GEFS comparison | ✅ | ✅ |
 
-The capability registry prevents two failure modes: mechanically copying deterministic behavior into an ensemble namespace, and claiming a model supports an operation whose required source fields or semantics are not actually implemented.
+The capability registry describes the shared **core operation**, not necessarily identical CLI command names. That distinction lets each public surface stay ergonomic without duplicating physics.
+
+It also prevents two failure modes: mechanically copying deterministic behavior into an ensemble namespace, and claiming a model supports an operation whose required source fields or semantics are not actually implemented.
 
 ## Normalized atmospheric boundary
 
@@ -177,13 +179,15 @@ The rest of the codebase is isolated from decoder choice behind a narrow decodin
 
 ### CLI
 
-The CLI is operation-oriented. Shared operations use `--model gfs|gefs`; GFS remains the default where needed for backward compatibility.
+The CLI is operation-oriented. Where registration is unified, operations use `--model gfs|gefs` and preserve model-specific result schemas.
 
-GEFS also exposes explicit compatibility/model-native commands for scalar ensembles and mixed field bundles, including `ensemble`, `ensemble-fields`, `ensemble-fields-timeseries`, `ensemble-fields-points`, and `ensemble-fields-points-timeseries`.
+GEFS also keeps explicit model-native commands where they are clearer or predate the shared dispatcher. In v0.1.0 these include scalar ensemble access, mixed-field bundles, `ensemble-parcel`, and `ensemble-parcel-timeseries`. The shared `diagnostic-timeseries --model gefs` command currently handles layer/profile series, while the explicit parcel-series command exposes the same core parcel time-series capability.
 
 ### MCP
 
 MCP intentionally keeps explicit model-named wrappers. This gives agents smaller, less ambiguous schemas while delegating to the same core used by CLI.
+
+`get_gefs_diagnostic_timeseries` supports layer, profile and parcel diagnostic series even though the CLI currently splits parcel series into `ensemble-parcel-timeseries`.
 
 Both MCP transports instantiate the same tool catalog:
 
