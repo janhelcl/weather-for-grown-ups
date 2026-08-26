@@ -1,6 +1,6 @@
 import * as z from "zod/v4";
-import { nonIsobaricFieldResultSchema, gridPointSchema, profileLevelResultSchema } from "./result.js";
 import { historicalAnalysisTimeSchema, historicalGfsVariableIdSchema } from "./history.js";
+import { nonIsobaricFieldResultSchema, gridPointSchema, profileLevelResultSchema } from "./result.js";
 import { pointCoordinateSchema, pressureLevelSchema } from "./query.js";
 
 export const HISTORICAL_GFS_FIELD_IDS = [
@@ -16,11 +16,13 @@ export const HISTORICAL_GFS_FIELD_IDS = [
   "u_wind_10m",
   "v_wind_10m",
   "wind_10m",
+  "temperature_80m",
   "specific_humidity_80m",
   "pressure_80m",
   "u_wind_80m",
   "v_wind_80m",
   "wind_80m",
+  "temperature_100m",
   "u_wind_100m",
   "v_wind_100m",
   "wind_100m",
