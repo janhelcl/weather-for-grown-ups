@@ -27,6 +27,8 @@ const EXPECTED_COMMANDS = [
   "compare-runs",
   "history",
   "history-timeseries",
+  "history-index",
+  "history-analogs",
   "history-verify",
   "ensemble",
   "ensemble-profile",
