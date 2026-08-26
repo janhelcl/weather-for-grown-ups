@@ -77,7 +77,10 @@ describe("HistoricalFieldsTimeSeriesService", () => {
     expect(result.series[0]).toMatchObject({
       analysisTime: "2017-05-09T12:00:00.000Z",
       levels: [{ pressureHpa: 850, temperatureC: 12 }],
-      fields: [{ id: "surface_pressure" }],
+      fields: [
+        { id: "surface_pressure", values: { pressurePa: 100100 } },
+        { id: "wind_10m", values: { windSpeedMs: 5 } },
+      ],
       cacheHit: true,
     });
   });
