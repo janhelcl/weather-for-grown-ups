@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AtmosphericPointsTimeSeriesService } from "../src/core/atmospheric-points-timeseries-service.js";
 import { HistoricalPointsTimeSeriesService } from "../src/core/history-points-timeseries.js";
 import type { HistoricalPointsResult } from "../src/schema/history-points.js";
+import { historicalPointsTimeSeriesQuerySchema } from "../src/schema/history-points-timeseries.js";
 
 const points = [
   { latitude: 50.08, longitude: 14.43 },
@@ -88,6 +89,183 @@ describe("HistoricalPointsTimeSeriesService", () => {
     })).rejects.toThrow(/6 point-steps, exceeding maxPointSteps=5/);
 
     expect(getPoints).not.toHaveBeenCalled();
+  });
+
+  it("supports fields-only matrices and forwards de-duplicated fields", async () => {
+    const getPoints = vi.fn(async (query: { analysisTime: string; fields?: string[] }) => ({
+      ...batch(new Date(query.analysisTime).toISOString()),
+      selection: { fields: ["wind_10m" as const] },
+      points: batch(new Date(query.analysisTime).toISOString()).points.map((point) => ({
+        requestedPoint: point.requestedPoint,
+        gridPoint: point.gridPoint,
+        fields: [{
+          id: "wind_10m" as const,
+          level: { type: "height_above_ground_m" as const, heightM: 10 },
+          temporal: { type: "instantaneous" as const },
+          values: { windSpeedMs: 5, windDirectionDeg: 220 },
+        }],
+        dataset: point.dataset,
+        cacheHit: point.cacheHit,
+      })),
+    }));
+    const service = new HistoricalPointsTimeSeriesService({
+      pointsGetter: { getPoints } as never,
+      now: () => new Date("2017-05-10T00:00:00Z"),
+    });
+
+    const result = await service.getPointsTimeSeries({
+      points: [points[0]!],
+      startTime: "2017-05-09T12:00:00Z",
+      endTime: "2017-05-09T12:00:00Z",
+      cycleHoursUtc: [12],
+      fields: ["wind_10m", "wind_10m"],
+      maxSteps: 1,
+      maxPointSteps: 1,
+    });
+
+    expect(getPoints).toHaveBeenCalledWith(expect.objectContaining({ fields: ["wind_10m"] }));
+    expect(result.selection).toEqual({ fields: ["wind_10m"], cycleHoursUtc: [12] });
+    expect(result.series[0]?.points[0]?.fields?.[0]).toMatchObject({ id: "wind_10m" });
+  });
+
+  it("validates ranges, selections, and duplicate cycles at the schema boundary", () => {
+    const base = {
+      points: [points[0]],
+      startTime: "2017-05-09T12:00:00Z",
+      endTime: "2017-05-09T12:00:00Z",
+      cycleHoursUtc: [12],
+      maxSteps: 1,
+      maxPointSteps: 1,
+    };
+    expect(historicalPointsTimeSeriesQuerySchema.safeParse({
+      ...base,
+      fields: ["wind_10m"],
+    }).success).toBe(true);
+    for (const invalid of [
+      { ...base },
+      { ...base, variables: ["temperature"] },
+      { ...base, pressureLevelsHpa: [850] },
+      { ...base, fields: ["wind_10m"], startTime: "2017-05-10T00:00:00Z", endTime: "2017-05-09T00:00:00Z" },
+      { ...base, fields: ["wind_10m"], cycleHoursUtc: [12, 12] },
+    ]) {
+      expect(historicalPointsTimeSeriesQuerySchema.safeParse(invalid).success).toBe(false);
+    }
+  });
+
+  it("rejects archive-range errors and maxSteps before point work", async () => {
+    const getPoints = vi.fn();
+    const service = new HistoricalPointsTimeSeriesService({
+      pointsGetter: { getPoints } as never,
+      now: () => new Date("2017-05-10T00:00:00Z"),
+    });
+    const selection = { variables: ["temperature" as const], pressureLevelsHpa: [850] };
+
+    await expect(service.getPointsTimeSeries({
+      points,
+      startTime: "2006-12-31T18:00:00Z",
+      endTime: "2006-12-31T18:00:00Z",
+      cycleHoursUtc: [18],
+      ...selection,
+      maxSteps: 1,
+      maxPointSteps: 2,
+    })).rejects.toThrow(/history begins/);
+
+    await expect(service.getPointsTimeSeries({
+      points,
+      startTime: "2017-05-10T06:00:00Z",
+      endTime: "2017-05-10T06:00:00Z",
+      cycleHoursUtc: [6],
+      ...selection,
+      maxSteps: 1,
+      maxPointSteps: 2,
+    })).rejects.toThrow(/must not be in the future/);
+
+    await expect(service.getPointsTimeSeries({
+      points,
+      startTime: "2017-05-09T01:00:00Z",
+      endTime: "2017-05-09T02:00:00Z",
+      cycleHoursUtc: [12],
+      ...selection,
+      maxSteps: 1,
+      maxPointSteps: 2,
+    })).rejects.toThrow(/contains no selected GFS analysis cycles/);
+
+    await expect(service.getPointsTimeSeries({
+      points,
+      startTime: "2017-05-09T00:00:00Z",
+      endTime: "2017-05-09T12:00:00Z",
+      cycleHoursUtc: [0, 6, 12],
+      ...selection,
+      maxSteps: 2,
+      maxPointSteps: 6,
+    })).rejects.toThrow(/exceeding maxSteps=2/);
+
+    expect(getPoints).not.toHaveBeenCalled();
+  });
+
+  it("rejects time, point-count, order, and grid drift from point batches", async () => {
+    const query = {
+      points,
+      startTime: "2017-05-09T00:00:00Z",
+      endTime: "2017-05-09T06:00:00Z",
+      cycleHoursUtc: [0, 6] as const,
+      variables: ["temperature" as const],
+      pressureLevelsHpa: [850],
+      maxSteps: 2,
+      maxPointSteps: 4,
+    };
+
+    let call = 0;
+    await expect(new HistoricalPointsTimeSeriesService({
+      pointsGetter: {
+        getPoints: async ({ analysisTime }) => {
+          call += 1;
+          const value = batch(new Date(analysisTime).toISOString());
+          return call === 2 ? { ...value, analysisTime: "2017-05-09T12:00:00.000Z" } : value;
+        },
+      },
+      now: () => new Date("2017-05-10T00:00:00Z"),
+    }).getPointsTimeSeries(query)).rejects.toThrow(/result time changed/);
+
+    call = 0;
+    await expect(new HistoricalPointsTimeSeriesService({
+      pointsGetter: {
+        getPoints: async ({ analysisTime }) => {
+          call += 1;
+          const value = batch(new Date(analysisTime).toISOString());
+          return call === 2 ? { ...value, points: value.points.slice(0, 1) } : value;
+        },
+      },
+      now: () => new Date("2017-05-10T00:00:00Z"),
+    }).getPointsTimeSeries(query)).rejects.toThrow(/changed point count/);
+
+    call = 0;
+    await expect(new HistoricalPointsTimeSeriesService({
+      pointsGetter: {
+        getPoints: async ({ analysisTime }) => {
+          call += 1;
+          const value = batch(new Date(analysisTime).toISOString());
+          return call === 2
+            ? { ...value, points: value.points.map((point, index) => index === 0 ? { ...point, requestedPoint: { latitude: 1, longitude: 2 } } : point) }
+            : value;
+        },
+      },
+      now: () => new Date("2017-05-10T00:00:00Z"),
+    }).getPointsTimeSeries(query)).rejects.toThrow(/changed input ordering/);
+
+    call = 0;
+    await expect(new HistoricalPointsTimeSeriesService({
+      pointsGetter: {
+        getPoints: async ({ analysisTime }) => {
+          call += 1;
+          const value = batch(new Date(analysisTime).toISOString());
+          return call === 2
+            ? { ...value, points: value.points.map((point, index) => index === 0 ? { ...point, gridPoint: { latitude: 40, longitude: 14.5 } } : point) }
+            : value;
+        },
+      },
+      now: () => new Date("2017-05-10T00:00:00Z"),
+    }).getPointsTimeSeries(query)).rejects.toThrow(/grid point changed/);
   });
 
   it("participates in the shared atmospheric points-time-series dispatcher", async () => {
