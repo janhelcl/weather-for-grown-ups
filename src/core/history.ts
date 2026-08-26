@@ -7,6 +7,8 @@ import {
   deriveEquivalentPotentialTemperatureK,
   deriveMixingRatioKgKg,
   derivePotentialTemperatureK,
+  deriveSaturationVaporPressureHpa,
+  deriveSpecificHumidityFromMixingRatioKgKg,
   deriveVirtualTemperatureC,
   deriveWetBulbTemperatureC,
 } from "../derived/thermodynamics.js";
@@ -26,9 +28,11 @@ import {
 import type { ProfileLevel } from "./types.js";
 
 const CAVEAT = "GFS model analysis; not a direct observation or homogeneous climatological reanalysis" as const;
+const WATER_VAPOR_TO_DRY_AIR_GAS_CONSTANT_RATIO = 0.622;
 
 type HistoricalRawVariableId = Exclude<
   HistoricalGfsVariableId,
+  | "specific_humidity"
   | "wind"
   | "dew_point"
   | "potential_temperature"
@@ -41,7 +45,6 @@ type HistoricalRawVariableId = Exclude<
 
 type HistoricalPressureAxisGroup =
   | "full_profile"
-  | "specific_humidity"
   | "vertical_velocity"
   | "absolute_vorticity"
   | "cloud_mixing_ratio"
@@ -79,11 +82,6 @@ const RAW_HISTORY_VARIABLES: Record<HistoricalRawVariableId, RawHistoryVariable>
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.geopotentialHeightGpm = value; },
   },
-  specific_humidity: {
-    ncssName: "Specific_humidity_isobaric",
-    pressureAxisGroup: "specific_humidity",
-    apply: (level, value) => { level.specificHumidityKgKg = value; },
-  },
   vertical_velocity: {
     ncssName: "Vertical_velocity_pressure_isobaric",
     pressureAxisGroup: "vertical_velocity",
@@ -107,14 +105,15 @@ const RAW_HISTORY_VARIABLES: Record<HistoricalRawVariableId, RawHistoryVariable>
 };
 
 const DERIVED_DEPENDENCIES: Partial<Record<HistoricalGfsVariableId, readonly HistoricalRawVariableId[]>> = {
+  specific_humidity: ["temperature", "relative_humidity"],
   wind: ["u_wind", "v_wind"],
   dew_point: ["temperature", "relative_humidity"],
   potential_temperature: ["temperature"],
-  mixing_ratio: ["specific_humidity"],
-  virtual_temperature: ["temperature", "specific_humidity"],
-  air_density: ["temperature", "specific_humidity"],
-  wet_bulb_temperature: ["temperature", "specific_humidity"],
-  equivalent_potential_temperature: ["temperature", "specific_humidity"],
+  mixing_ratio: ["temperature", "relative_humidity"],
+  virtual_temperature: ["temperature", "relative_humidity"],
+  air_density: ["temperature", "relative_humidity"],
+  wet_bulb_temperature: ["temperature", "relative_humidity"],
+  equivalent_potential_temperature: ["temperature", "relative_humidity"],
 };
 
 export interface HistoricalProfileServiceOptions {
@@ -328,6 +327,27 @@ export function parseHistoricalProfileCsv(
 
 function applyHistoricalDerivedValues(level: ProfileLevel, requestedVariables: readonly HistoricalGfsVariableId[]): void {
   const requested = new Set(requestedVariables);
+  const moistureDerivedRequested = [
+    "specific_humidity",
+    "mixing_ratio",
+    "virtual_temperature",
+    "air_density",
+    "wet_bulb_temperature",
+    "equivalent_potential_temperature",
+  ].some((id) => requested.has(id as HistoricalGfsVariableId));
+
+  if (
+    moistureDerivedRequested
+    && level.specificHumidityKgKg === undefined
+    && level.temperatureC !== undefined
+    && level.relativeHumidityPct !== undefined
+  ) {
+    level.specificHumidityKgKg = deriveSpecificHumidityFromRelativeHumidity(
+      level.temperatureC,
+      level.relativeHumidityPct,
+      level.pressureHpa,
+    );
+  }
   if (requested.has("wind") && level.uWindMs !== undefined && level.vWindMs !== undefined) {
     const wind = deriveWind(level.uWindMs, level.vWindMs);
     level.windSpeedMs = wind.speedMs;
@@ -358,6 +378,21 @@ function applyHistoricalDerivedValues(level: ProfileLevel, requestedVariables: r
       level.pressureHpa,
     );
   }
+}
+
+function deriveSpecificHumidityFromRelativeHumidity(
+  temperatureC: number,
+  relativeHumidityPct: number,
+  pressureHpa: number,
+): number {
+  const saturationVaporPressureHpa = deriveSaturationVaporPressureHpa(temperatureC);
+  const vaporPressureHpa = saturationVaporPressureHpa * Math.max(0, Math.min(100, relativeHumidityPct)) / 100;
+  if (!(vaporPressureHpa < pressureHpa)) {
+    throw new Error(`Historical vapor pressure ${vaporPressureHpa} hPa is not below ambient pressure ${pressureHpa} hPa`);
+  }
+  const mixingRatioKgKg = WATER_VAPOR_TO_DRY_AIR_GAS_CONSTANT_RATIO
+    * vaporPressureHpa / (pressureHpa - vaporPressureHpa);
+  return deriveSpecificHumidityFromMixingRatioKgKg(mixingRatioKgKg);
 }
 
 function assertRequestedVariablesComplete(
