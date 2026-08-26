@@ -26,31 +26,33 @@ The core is the product. CLI and MCP are adapters over it, not independent imple
 
 > **Unify operations and physics; preserve model semantics.**
 
-A common operation does not imply a common source inventory or a flattened result shape. Deterministic GFS returns deterministic atmospheric states. GEFS returns member-derived distributions and structural ensemble summaries.
+A common operation does not imply a common source inventory or a flattened result shape. Deterministic GFS forecasts return deterministic forecast states. Historical Grid 4 returns deterministic analyzed states. GEFS returns member-derived forecast distributions and structural ensemble summaries.
+
+The engine is organized around **operation × dataset**. Point profiles, time series and meteorological diagnostics are operations; operational GFS, GEFS and historical GFS analysis are datasets with explicit role, grid, source and temporal semantics. Public CLI/MCP wrappers may remain dataset-specific when that gives agents a clearer schema, but they should delegate into the shared operation layer rather than grow independent implementations.
 
 Nonlinear diagnostics are evaluated on each GEFS member before aggregation. WFG does not calculate CAPE, lapse rate, inversion structure or another nonlinear quantity from an ensemble-mean profile and pretend it represents the members.
 
-## v0.1.0 model capability boundary
+## Atmospheric dataset capability boundary
 
-`src/catalog/models.ts` is the explicit model capability registry.
+`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The filename and model-named exports remain as backward-compatible aliases while engine code moves to dataset vocabulary.
 
-| Operation | GFS 0.25° | GEFS 0.5° |
-| --- | --- | --- |
-| profile | ✅ | ✅ |
-| timeseries | ✅ | ✅ |
-| layer diagnostics | ✅ | ✅ |
-| profile diagnostics | ✅ | ✅ |
-| parcel diagnostics | ✅ | ✅ |
-| diagnostic time series | ✅ | ✅ |
-| points | ✅ | ✅ |
-| points time series | ✅ | ✅ |
-| transect | ✅ | ✅ |
-| area summary | ✅ | ✅ |
-| run comparison | ✅ | ✅ |
-| scalar ensemble distribution | — | ✅ |
-| aligned GFS-vs-GEFS comparison | ✅ | ✅ |
+| Operation | GFS 0.25° forecast | GEFS 0.5° forecast | GFS Grid 4 0.5° analysis |
+| --- | --- | --- | --- |
+| profile | ✅ deterministic | ✅ member distributions | ✅ analyzed state |
+| timeseries | ✅ forecast evolution | ✅ ensemble evolution | ✅ selected analysis cycles |
+| layer diagnostics | ✅ | ✅ member-first | ✅ same deterministic kernel |
+| profile diagnostics | ✅ | ✅ member-first | ✅ same deterministic kernel |
+| parcel diagnostics | ✅ | ✅ member-first | ✅ same parcel engine |
+| diagnostic time series | ✅ | ✅ | ⏳ parcel series exists; unified layer/profile series pending |
+| points | ✅ | ✅ | ⏳ |
+| points time series | ✅ | ✅ | ⏳ |
+| transect | ✅ | ✅ | ⏳ |
+| area summary | ✅ | ✅ | ⏳ |
+| run comparison | ✅ | ✅ | — |
+| scalar ensemble distribution | — | ✅ | — |
+| aligned model comparison | ✅ GFS-vs-GEFS | ✅ GFS-vs-GEFS | ⏳ forecast/analysis comparison remains a history-native verification primitive |
 
-The capability registry describes the shared **core operation**, not necessarily identical CLI command names. That distinction lets each public surface stay ergonomic without duplicating physics.
+The capability registry describes the shared **core operation**, not necessarily identical CLI command names. That distinction lets each public surface stay ergonomic without duplicating physics. History-native analog search, index/backfill and archived forecast verification remain specialized composition primitives; they do not need to masquerade as forecast operations.
 
 It also prevents two failure modes: mechanically copying deterministic behavior into an ensemble namespace, and claiming a model supports an operation whose required source fields or semantics are not actually implemented.
 
@@ -59,9 +61,11 @@ It also prevents two failure modes: mechanically copying deterministic behavior 
 Pressure-profile meteorology consumes normalized typed states rather than GRIB records directly.
 
 ```text
-GFS profile --------------------┐
-                                ├─> normalized pressure states ─> shared physics
-GEFS member profile ─> member --┘
+GFS forecast profile --------------------┐
+                                          │
+historical GFS analysis profile ----------├─> normalized pressure states ─> shared physics
+                                          │
+GEFS member profile ─> member ------------┘
 ```
 
 This keeps physical formulas model-independent while leaving model identity, source inventory, cycle semantics and result shape explicit.
@@ -114,6 +118,10 @@ WFG builds larger queries by composing smaller atmospheric primitives while pres
 - bounded area queries decode a geographic subset locally and return statistics rather than raw grids;
 - run comparison holds valid time constant across consecutive initialization cycles.
 
+### Historical GFS analysis
+
+Historical Grid 4 currently participates in the same profile, time-series, layer-diagnostic, profile-diagnostic and parcel-operation boundaries as operational data. Its source adapter preserves exact 00/06/12/18 UTC analysis semantics, 0.5° sampling, NCEI provenance and bounded serial archive access. Spatial parity (points, transects and area statistics) is intentionally represented as missing capability in the registry rather than hidden behind a separate history architecture.
+
 ### GEFS
 
 GEFS composition is **member-first**.
@@ -129,7 +137,7 @@ This preserves separate **space**, **time**, and **ensemble-member** axes instea
 
 ## Catalogs and source contracts
 
-GFS and GEFS keep model-specific catalogs because their upstream products are not identical.
+Operational GFS, GEFS and historical GFS analysis keep dataset-specific source inventories because their upstream products are not identical. Canonical field IDs and shared physical derivations should converge where the archived quantity is genuinely comparable; unavailable historical fields remain explicit capability differences.
 
 Catalogs define:
 
@@ -151,6 +159,8 @@ GFS and GEFS use explicit 00/06/12/18Z initialization cycles. Multi-time operati
 
 GEFS v0.1.0 uses the operational atmospheric `pgrb2a` 0.5° product, control `c00` plus `p01`–`p30`, native three-hour output and a WFG contract through `f384`.
 
+Historical Grid 4 analysis has no forecast initialization/lead axis: its native time coordinate is the exact 00/06/12/18 UTC analysis cycle. Shared operation dispatch preserves that distinction instead of synthesizing run or forecast-hour fields.
+
 Aligned GFS-vs-GEFS comparison resolves one initialization cycle that can satisfy both models at the requested valid time, while preserving their distinct sampled grids.
 
 ## Data access and caching
@@ -160,6 +170,10 @@ Aligned GFS-vs-GEFS comparison resolves one initialization cycle that can satisf
 WFG uses NOAA NOMADS where geographic subsetting materially reduces transfer and NOAA AWS Open Data `.idx` inventories plus byte ranges where selected messages can be reused across locations or forecast steps.
 
 Physical NOMADS requests pass through the shared cross-process courtesy limiter. AWS Open Data paths do not use the NOMADS scripted-access limiter.
+
+### Historical GFS analysis
+
+Historical analysis uses NOAA NCEI Grid 4 through THREDDS/NCSS grid-as-point requests. Archive reads are immutable and cached; cache misses remain serial under the NOAA courtesy limiter. Source and analysis provenance stay attached to every result.
 
 ### GEFS
 

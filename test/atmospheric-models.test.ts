@@ -1,39 +1,54 @@
 import { describe, expect, it } from "vitest";
 import {
+  ATMOSPHERIC_DATASET_CATALOG,
   ATMOSPHERIC_MODEL_CATALOG,
+  datasetSupportsOperation,
   modelSupportsOperation,
 } from "../src/catalog/models.js";
 
-describe("atmospheric model capability catalog", () => {
-  it("declares shared operations without pretending model semantics are identical", () => {
-    expect(ATMOSPHERIC_MODEL_CATALOG.gfs_0p25.kind).toBe("deterministic");
-    expect(ATMOSPHERIC_MODEL_CATALOG.gefs_0p50.kind).toBe("ensemble");
-    expect(modelSupportsOperation("gfs_0p25", "profile")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "profile")).toBe(true);
-    expect(modelSupportsOperation("gfs_0p25", "points")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "points")).toBe(true);
-    expect(modelSupportsOperation("gfs_0p25", "timeseries")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "timeseries")).toBe(true);
-    expect(modelSupportsOperation("gfs_0p25", "layer_diagnostics")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "layer_diagnostics")).toBe(true);
-    expect(modelSupportsOperation("gfs_0p25", "profile_diagnostics")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "profile_diagnostics")).toBe(true);
-    expect(modelSupportsOperation("gfs_0p25", "parcel_diagnostics")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "parcel_diagnostics")).toBe(true);
-    expect(modelSupportsOperation("gfs_0p25", "diagnostic_timeseries")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "diagnostic_timeseries")).toBe(true);
-    expect(modelSupportsOperation("gfs_0p25", "points_timeseries")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "points_timeseries")).toBe(true);
-    expect(modelSupportsOperation("gfs_0p25", "transect")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "transect")).toBe(true);
-    expect(modelSupportsOperation("gfs_0p25", "area_summary")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "area_summary")).toBe(true);
-    expect(modelSupportsOperation("gfs_0p25", "run_comparison")).toBe(true);
-    expect(modelSupportsOperation("gefs_0p50", "run_comparison")).toBe(true);
+describe("atmospheric dataset capability catalog", () => {
+  it("declares forecast and analysis datasets without flattening semantics", () => {
+    expect(ATMOSPHERIC_DATASET_CATALOG.gfs_0p25).toMatchObject({
+      kind: "deterministic",
+      role: "forecast",
+      horizontalGridDegrees: 0.25,
+      maxForecastHour: 384,
+    });
+    expect(ATMOSPHERIC_DATASET_CATALOG.gefs_0p50).toMatchObject({
+      kind: "ensemble",
+      role: "forecast",
+      horizontalGridDegrees: 0.5,
+      maxForecastHour: 384,
+      members: 31,
+    });
+    expect(ATMOSPHERIC_DATASET_CATALOG.gfs_grid4_analysis_0p5).toMatchObject({
+      kind: "deterministic",
+      role: "analysis",
+      horizontalGridDegrees: 0.5,
+    });
+    expect(ATMOSPHERIC_DATASET_CATALOG.gfs_grid4_analysis_0p5.maxForecastHour).toBeUndefined();
   });
 
-  it("keeps ensemble-only operations explicit", () => {
-    expect(modelSupportsOperation("gfs_0p25", "ensemble_distribution")).toBe(false);
+  it("advertises only operations actually implemented for each dataset", () => {
+    expect(datasetSupportsOperation("gfs_0p25", "profile")).toBe(true);
+    expect(datasetSupportsOperation("gefs_0p50", "profile")).toBe(true);
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "profile")).toBe(true);
+
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "timeseries")).toBe(true);
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "layer_diagnostics")).toBe(true);
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "profile_diagnostics")).toBe(true);
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "parcel_diagnostics")).toBe(true);
+
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "points")).toBe(false);
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "transect")).toBe(false);
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "area_summary")).toBe(false);
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "run_comparison")).toBe(false);
+    expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "ensemble_distribution")).toBe(false);
+  });
+
+  it("keeps the old model registry vocabulary limited to operational forecast models", () => {
+    expect(Object.keys(ATMOSPHERIC_MODEL_CATALOG)).toEqual(["gfs_0p25", "gefs_0p50"]);
+    expect(modelSupportsOperation("gfs_0p25", "points")).toBe(true);
     expect(modelSupportsOperation("gefs_0p50", "ensemble_distribution")).toBe(true);
   });
 });

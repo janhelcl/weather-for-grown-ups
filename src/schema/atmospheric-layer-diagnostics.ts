@@ -3,6 +3,10 @@ import {
   gefsLayerDiagnosticsQuerySchema,
   gefsLayerDiagnosticsResultSchema,
 } from "./gefs-layer-diagnostics.js";
+import {
+  historicalLayerDiagnosticsQuerySchema,
+  historicalLayerDiagnosticsResultSchema,
+} from "./history-diagnostics.js";
 import { layerDiagnosticsQuerySchema } from "./query.js";
 import { layerDiagnosticsResultSchema } from "./result.js";
 
@@ -15,11 +19,16 @@ export const atmosphericLayerDiagnosticsRequestSchema = z.union([
     model: z.literal("gefs_0p50"),
     query: gefsLayerDiagnosticsQuerySchema,
   }),
+  z.object({
+    model: z.literal("gfs_grid4_analysis_0p5"),
+    query: historicalLayerDiagnosticsQuerySchema,
+  }),
 ]);
 
 export const atmosphericLayerDiagnosticsResultSchema = z.union([
   layerDiagnosticsResultSchema,
   gefsLayerDiagnosticsResultSchema,
+  historicalLayerDiagnosticsResultSchema,
 ]);
 
 export type AtmosphericLayerDiagnosticsRequestInput = z.input<typeof atmosphericLayerDiagnosticsRequestSchema>;
