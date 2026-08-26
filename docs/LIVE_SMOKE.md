@@ -20,6 +20,7 @@ The current aggregate script runs:
 ```text
 test:live:bundled
 test:live:s3
+test:live:history
 test:live:gefs
 test:live:gefs-runs
 test:live:area
@@ -38,6 +39,10 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 ### GFS AWS
 
 `npm run test:live:s3` exercises deterministic GFS selected-message access and higher-level composition against NOAA AWS Open Data.
+
+### Historical GFS analysis
+
+`npm run test:live:history` exercises a fixed 2017 NOAA NCEI Grid 4 analysis profile through THREDDS NCSS. It verifies the historical archive path, point/profile response parsing, 0.5° grid provenance, normalized temperature/humidity/wind/height fields, and the historical-analysis result contract without depending on current GFS publication timing.
 
 ### GEFS
 
@@ -60,9 +65,9 @@ The live cases intentionally use small member/point/time selections. Their purpo
 
 ## NOAA pacing
 
-Physical NOMADS downloads use WFG's shared file-backed courtesy limiter. The default is an **11-second post-request cooldown**, deliberately conservative relative to NOAA's 10-second scripted-request guidance.
+Physical NOMADS downloads and NCEI historical NCSS cache misses use WFG's shared file-backed courtesy limiter. The default is an **11-second post-request cooldown**, deliberately conservative relative to NOAA's 10-second scripted-request guidance.
 
-NOAA AWS Open Data byte-range access does not use the NOMADS scripted-filter limiter.
+NOAA AWS Open Data byte-range access does not use the scripted-request limiter.
 
 ## Running locally
 
@@ -88,6 +93,7 @@ The Docker live-test image contains native `wgrib2 3.8.0` as an available compat
 Live tests should assert contracts and invariants rather than pinning today's weather. High-value checks include:
 
 - current NOAA paths and inventory formats;
+- historical NCEI archive paths and NCSS response formats;
 - selected GRIB byte-range access;
 - decoder compatibility with real GFS/GEFS messages;
 - requested grid/sample consistency;

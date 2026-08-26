@@ -13,6 +13,7 @@ Detailed documentation for **Weather for Grown Ups v0.1.0** lives here so the re
 ## Discovery and shared operations
 
 - [CATALOG_SEARCH.md](CATALOG_SEARCH.md) — model-selectable GFS/GEFS catalog discovery.
+- [HISTORY.md](HISTORY.md) — historical GFS Grid 4 analysis profiles from the NOAA NCEI archive.
 - [DIAGNOSTIC_TIME_SERIES.md](DIAGNOSTIC_TIME_SERIES.md) — deterministic GFS diagnostic series semantics.
 - [RUN_COMPARISON.md](RUN_COMPARISON.md) — deterministic GFS run-to-run comparison.
 - [TRANSECT.md](TRANSECT.md) — deterministic GFS transects.
