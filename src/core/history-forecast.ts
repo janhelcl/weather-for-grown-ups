@@ -5,6 +5,7 @@ import {
   historicalAnalysisTimeSchema,
   type HistoricalGfsVariableId,
 } from "../schema/history.js";
+import type { HistoricalProfileResult } from "../schema/history-result.js";
 import {
   historicalVerificationLeadHoursSchema,
 } from "../schema/history-verification.js";
@@ -15,7 +16,7 @@ import {
 } from "../sources/ncei-gfs-forecast-history.js";
 import type { HistoricalAnalysisDataSource } from "../sources/ncei-gfs-history.js";
 import { HistoricalProfileService } from "./history.js";
-import type { GridPoint, ProfileLevel } from "./types.js";
+import type { GridPoint } from "./types.js";
 
 export interface ArchivedGfsForecastProfileQuery {
   runTime: Date;
@@ -33,7 +34,7 @@ export interface ArchivedGfsForecastProfileResult {
   validTime: string;
   requestedPoint: GridPoint;
   gridPoint: GridPoint;
-  levels: ProfileLevel[];
+  levels: HistoricalProfileResult["levels"];
   source: {
     provider: "NOAA NCEI";
     access: "ncei_thredds_ncss";
