@@ -1,0 +1,155 @@
+import { describe, expect, it, vi } from "vitest";
+import { HistoricalProfileService, parseHistoricalProfileCsv } from "../src/core/history.js";
+import {
+  buildNceiGfsAnalysisDatasetPath,
+  buildNceiGfsAnalysisPointUrl,
+  type HistoricalAnalysisDataSource,
+} from "../src/sources/ncei-gfs-history.js";
+
+const csv = [
+  'station_name,station_description,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,vertCoord[unit="Pa"],Temperature_isobaric[unit="K"],Relative_humidity_isobaric[unit="%"],u-component_of_wind_isobaric[unit="m/s"],v-component_of_wind_isobaric[unit="m/s"],Geopotential_height_isobaric[unit="gpm"]',
+  'point,point,50,14.5,2017-05-09T00:00:00Z,85000,285.15,65,3,4,1500',
+  'point,point,50,14.5,2017-05-09T00:00:00Z,70000,273.15,40,-10,0,3100',
+].join("\n");
+
+function mockSource(): HistoricalAnalysisDataSource {
+  return {
+    fetch: vi.fn(async () => ({
+      csv,
+      dataset: "model-gfs-g4-anl-files-old/201705/20170509/gfsanl_4_20170509_0000_000.grb2",
+      cacheHit: false,
+    })),
+  };
+}
+
+describe("HistoricalProfileService", () => {
+  it("returns normalized archived analysis fields and deterministic derived diagnostics", async () => {
+    const source = mockSource();
+    const service = new HistoricalProfileService({
+      source,
+      now: () => new Date("2026-08-26T12:00:00Z"),
+    });
+    const result = await service.getHistoricalProfile({
+      latitude: 50.08,
+      longitude: 14.43,
+      analysisTime: "2017-05-09T00:00:00Z",
+      variables: [
+        "temperature",
+        "relative_humidity",
+        "wind",
+        "geopotential_height",
+        "dew_point",
+        "potential_temperature",
+      ],
+      pressureLevelsHpa: [850, 700],
+    });
+
+    expect(result).toMatchObject({
+      model: "gfs_grid4_analysis_0p5",
+      analysisTime: "2017-05-09T00:00:00.000Z",
+      requestedPoint: { latitude: 50.08, longitude: 14.43 },
+      gridPoint: { latitude: 50, longitude: 14.5 },
+      source: {
+        provider: "NOAA NCEI",
+        access: "ncei_thredds_ncss",
+        cacheHit: false,
+      },
+    });
+    expect(result.levels.map((level) => level.pressureHpa)).toEqual([850, 700]);
+    expect(result.levels[0]).toMatchObject({
+      temperatureC: 12,
+      relativeHumidityPct: 65,
+      uWindMs: 3,
+      vWindMs: 4,
+      windSpeedMs: 5,
+      geopotentialHeightGpm: 1500,
+    });
+    expect(result.levels[0]?.windDirectionDeg).toBeCloseTo(216.87, 1);
+    expect(result.levels[0]?.dewPointC).toBeCloseTo(5.6222, 4);
+    expect(result.levels[0]?.potentialTemperatureK).toBeCloseTo(298.6876, 4);
+
+    expect(source.fetch).toHaveBeenCalledWith(expect.objectContaining({
+      variables: [
+        "Temperature_isobaric",
+        "Relative_humidity_isobaric",
+        "u-component_of_wind_isobaric",
+        "v-component_of_wind_isobaric",
+        "Geopotential_height_isobaric",
+      ],
+    }));
+  });
+
+  it("rejects non-cycle times, pre-archive dates, and future analyses", async () => {
+    const service = new HistoricalProfileService({
+      source: mockSource(),
+      now: () => new Date("2026-08-26T12:00:00Z"),
+    });
+    const base = {
+      latitude: 50,
+      longitude: 14,
+      variables: ["temperature" as const],
+      pressureLevelsHpa: [850],
+    };
+
+    await expect(service.getHistoricalProfile({
+      ...base,
+      analysisTime: "2017-05-09T01:00:00Z",
+    })).rejects.toThrow(/00, 06, 12, or 18 UTC/);
+    await expect(service.getHistoricalProfile({
+      ...base,
+      analysisTime: "2006-12-31T18:00:00Z",
+    })).rejects.toThrow(/begins at 2007-01-01/);
+    await expect(service.getHistoricalProfile({
+      ...base,
+      analysisTime: "2026-08-26T18:00:00Z",
+    })).rejects.toThrow(/must not be in the future/);
+  });
+
+  it("fails explicitly when a requested level is absent from the archive variable", async () => {
+    const service = new HistoricalProfileService({ source: mockSource() });
+    await expect(service.getHistoricalProfile({
+      latitude: 50,
+      longitude: 14,
+      analysisTime: "2017-05-09T00:00:00Z",
+      variables: ["temperature"],
+      pressureLevelsHpa: [925],
+    })).rejects.toThrow("temperature@925mb");
+  });
+});
+
+describe("NCEI historical GFS access", () => {
+  it("uses the historical gfsanl naming before June 2020 and gfs naming afterwards", () => {
+    expect(buildNceiGfsAnalysisDatasetPath(new Date("2017-05-09T12:00:00Z"))).toBe(
+      "model-gfs-g4-anl-files-old/201705/20170509/gfsanl_4_20170509_1200_000.grb2",
+    );
+    expect(buildNceiGfsAnalysisDatasetPath(new Date("2020-06-01T00:00:00Z"))).toBe(
+      "model-gfs-g4-anl-files/202006/20200601/gfs_4_20200601_0000_000.grb2",
+    );
+  });
+
+  it("builds one NCSS grid-as-point request for the complete pressure profile", () => {
+    const url = new URL(buildNceiGfsAnalysisPointUrl({
+      analysisTime: new Date("2017-05-09T00:00:00Z"),
+      latitude: 50.08,
+      longitude: 14.43,
+      variables: ["Temperature_isobaric", "Relative_humidity_isobaric"],
+    }));
+    expect(url.pathname).toContain("/thredds/ncss/grid/model-gfs-g4-anl-files-old/201705/20170509/");
+    expect(url.searchParams.get("var")).toBe("Temperature_isobaric,Relative_humidity_isobaric");
+    expect(url.searchParams.get("latitude")).toBe("50.08");
+    expect(url.searchParams.get("longitude")).toBe("14.43");
+    expect(url.searchParams.get("time")).toBe("all");
+    expect(url.searchParams.get("accept")).toBe("csv");
+  });
+
+  it("parses Pa pressure coordinates and normalizes 0-360 longitudes", () => {
+    const parsed = parseHistoricalProfileCsv(
+      csv.replaceAll("14.5", "350"),
+      ["temperature"],
+      [850],
+      { latitude: 50.08, longitude: -10 },
+    );
+    expect(parsed.gridPoint).toEqual({ latitude: 50, longitude: -10 });
+    expect(parsed.levels[0]).toMatchObject({ pressureHpa: 850, temperatureC: 12 });
+  });
+});
