@@ -52,10 +52,18 @@ export class HistoricalProfileIndexStore {
         parsedJson = JSON.parse(line);
       } catch (error) {
         throw new Error(
-          `Invalid historical index JSON at ${this.path}:${index + 1}: ${error instanceof Error ? error.message : String(error)}`,
+          `Invalid historical index JSON at ${this.path}:${index + 1}: ${errorMessage(error)}`,
         );
       }
-      const record = historicalIndexRecordSchema.parse(parsedJson);
+
+      let record: HistoricalIndexRecord;
+      try {
+        record = historicalIndexRecordSchema.parse(parsedJson);
+      } catch (error) {
+        throw new Error(
+          `Invalid historical index record at ${this.path}:${index + 1}: ${errorMessage(error)}`,
+        );
+      }
       deduped.set(historicalIndexRecordKey(record), record);
     }
     return [...deduped.values()].sort((a, b) => a.analysisTime.localeCompare(b.analysisTime));
@@ -123,4 +131,8 @@ function isNotFound(error: unknown): boolean {
     && error !== null
     && "code" in error
     && (error as { code?: unknown }).code === "ENOENT";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
