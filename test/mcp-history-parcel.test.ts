@@ -55,6 +55,17 @@ async function singleParcel() {
     });
 }
 
+const timeSeriesQuery = {
+  latitude: 50.08,
+  longitude: 14.43,
+  startTime: "2017-05-09T00:00:00Z",
+  endTime: "2017-05-09T23:59:59Z",
+  pressureLevelsHpa,
+  parcel: "surface_2m" as const,
+  cycleHoursUtc: [12 as const],
+  maxSteps: 1,
+};
+
 describe("historical parcel MCP handlers", () => {
   it("returns structured single-time parcel diagnostics", async () => {
     const parcel = await singleParcel();
@@ -95,16 +106,7 @@ describe("historical parcel MCP handlers", () => {
         }],
         caveat: parcel.caveat,
       })),
-    } as never, {
-      latitude: 50.08,
-      longitude: 14.43,
-      startTime: "2017-05-09T00:00:00Z",
-      endTime: "2017-05-09T23:59:59Z",
-      pressureLevelsHpa,
-      parcel: "surface_2m",
-      cycleHoursUtc: [12],
-      maxSteps: 1,
-    });
+    } as never, timeSeriesQuery);
     expect(result).toMatchObject({
       structuredContent: {
         series: [{ parcel: { startingState: { definition: "surface_2m" } } }],
@@ -112,7 +114,7 @@ describe("historical parcel MCP handlers", () => {
     });
   });
 
-  it("returns service errors", async () => {
+  it("returns single-time service errors", async () => {
     const result = await handleGetGfsHistoricalParcel({
       getHistoricalParcel: vi.fn(async () => { throw new Error("historical parcel unavailable"); }),
     } as never, {
@@ -123,5 +125,15 @@ describe("historical parcel MCP handlers", () => {
       parcel: "surface_2m",
     });
     expect(result).toMatchObject({ isError: true, content: [{ text: "historical parcel unavailable" }] });
+  });
+
+  it("returns parcel time-series service errors", async () => {
+    const result = await handleGetGfsHistoricalParcelTimeSeries({
+      getHistoricalParcelTimeSeries: vi.fn(async () => { throw new Error("historical parcel series unavailable"); }),
+    } as never, timeSeriesQuery);
+    expect(result).toMatchObject({
+      isError: true,
+      content: [{ text: "historical parcel series unavailable" }],
+    });
   });
 });
