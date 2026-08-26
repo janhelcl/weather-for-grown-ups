@@ -4,6 +4,7 @@ import { GefsMemberBundleService } from "./core/gefs-member-bundle.js";
 import { GefsPointsBundleTimeSeriesService } from "./core/gefs-points-bundle-timeseries.js";
 import { GefsPointsBundleService } from "./core/gefs-points-bundle.js";
 import { GefsTransectService } from "./core/gefs-transect.js";
+import { HistoricalIndexBackfillService } from "./core/history-backfill.js";
 import { HistoricalIndexService } from "./core/history-index.js";
 import { HistoricalTimeSeriesService } from "./core/history-time-series.js";
 import { HistoricalForecastVerificationService } from "./core/history-verification.js";
@@ -16,6 +17,7 @@ import { handleGetGefsFieldsPointsTimeSeries } from "./mcp-gefs-points-bundle-ti
 import { handleGetGefsFieldsPoints } from "./mcp-gefs-points-bundle-tool.js";
 import { handleGetGefsTransect } from "./mcp-gefs-transect-tool.js";
 import {
+  handleBackfillGfsHistoryIndex,
   handleFindGfsHistoricalAnalogs,
   handleGetGfsHistoricalTimeSeries,
   handleMaterializeGfsHistoryIndex,
@@ -48,6 +50,8 @@ import { historicalTimeSeriesResultSchema } from "./schema/history-result.js";
 import {
   historicalAnalogQuerySchema,
   historicalAnalogResultSchema,
+  historicalIndexBackfillQuerySchema,
+  historicalIndexBackfillResultSchema,
   historicalIndexBuildQuerySchema,
   historicalIndexBuildResultSchema,
 } from "./schema/history-index.js";
@@ -63,6 +67,7 @@ export function createMcpServer() {
   const server = createBaseMcpServer();
   const historicalTimeSeriesService = new HistoricalTimeSeriesService();
   const historicalIndexService = new HistoricalIndexService();
+  const historicalBackfillService = new HistoricalIndexBackfillService();
   const historicalVerificationService = new HistoricalForecastVerificationService();
   const bundleService = new GefsMemberBundleService();
   const timeSeriesService = new GefsBundleTimeSeriesService({ bundleGetter: bundleService });
@@ -84,6 +89,13 @@ export function createMcpServer() {
     inputSchema: historicalIndexBuildQuerySchema,
     outputSchema: historicalIndexBuildResultSchema,
   }, async (query) => handleMaterializeGfsHistoryIndex(historicalIndexService, query));
+
+  server.registerTool("backfill_gfs_history_index", {
+    title: "Backfill a large GFS analysis history range",
+    description: "Resumably populate WFG's local GFS Grid 4 analysis index across a large historical range. Existing profiles are skipped before any fetch. Each invocation has an explicit maxFetches budget (default 16, max 256), returns the next missing cycle, and may run oldest-first or newest-first, dry-run, or continue across isolated errors. Archive reads remain serial under WFG's NOAA courtesy limiter. This deliberately uses exact NCEI GFS analyses; NOAA ARL's quarter-degree archive is short-term forecast data and is not substituted for analysis history.",
+    inputSchema: historicalIndexBackfillQuerySchema,
+    outputSchema: historicalIndexBackfillResultSchema,
+  }, async (query) => handleBackfillGfsHistoryIndex(historicalBackfillService, query));
 
   server.registerTool("find_gfs_historical_analogs", {
     title: "Find historical GFS analog analyses",
