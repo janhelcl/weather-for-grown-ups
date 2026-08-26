@@ -10,8 +10,9 @@ import {
   type HistoricalProfileDiagnosticsQueryInput,
   type HistoricalProfileDiagnosticsResult,
 } from "../schema/history-diagnostics.js";
-import { deriveLayerDiagnosticsFromLevels, deriveProfileDiagnosticsFromLevels } from "./pressure-diagnostics.js";
 import { HistoricalProfileService } from "./history.js";
+import { deriveLayerDiagnosticsFromLevels, deriveProfileDiagnosticsFromLevels } from "./pressure-diagnostics.js";
+import type { ProfileLevel } from "./types.js";
 
 const CAVEAT = "Diagnostics are derived from GFS model analysis; not direct observations or homogeneous climatological reanalysis" as const;
 
@@ -43,8 +44,9 @@ export class HistoricalDiagnosticsService {
       variables,
       pressureLevelsHpa: [query.lowerPressureHpa, query.upperPressureHpa],
     });
+    const levels = profile.levels as ProfileLevel[];
     const derived = deriveLayerDiagnosticsFromLevels(
-      profile.levels,
+      levels,
       query.lowerPressureHpa,
       query.upperPressureHpa,
       diagnostics,
@@ -75,6 +77,7 @@ export class HistoricalDiagnosticsService {
       variables,
       pressureLevelsHpa,
     });
+    const levels = profile.levels as ProfileLevel[];
 
     return {
       model: "gfs_grid4_analysis_0p5",
@@ -83,7 +86,7 @@ export class HistoricalDiagnosticsService {
       gridPoint: profile.gridPoint,
       sampledPressureLevelsHpa: pressureLevelsHpa,
       levels: profile.levels,
-      diagnostics: deriveProfileDiagnosticsFromLevels(profile.levels, diagnostics),
+      diagnostics: deriveProfileDiagnosticsFromLevels(levels, diagnostics),
       source: profile.source,
       caveat: CAVEAT,
     };
