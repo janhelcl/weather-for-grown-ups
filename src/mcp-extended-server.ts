@@ -15,6 +15,7 @@ import { HistoricalParcelService } from "./core/history-parcel.js";
 import { HistoricalPointsTimeSeriesService } from "./core/history-points-timeseries.js";
 import { HistoricalPointsService } from "./core/history-points.js";
 import { HistoricalTimeSeriesService } from "./core/history-time-series.js";
+import { HistoricalTransectService } from "./core/history-transect.js";
 import { HistoricalForecastVerificationService } from "./core/history-verification.js";
 import { handleGetGefsAreaSummary } from "./mcp-gefs-area-tool.js";
 import {
@@ -41,6 +42,7 @@ import {
   handleGetGfsHistoricalPoints,
   handleGetGfsHistoricalPointsTimeSeries,
 } from "./mcp-history-points-tool.js";
+import { handleGetGfsHistoricalTransect } from "./mcp-history-transect-tool.js";
 import {
   handleBackfillGfsHistoryIndex,
   handleFindGfsHistoricalAnalogs,
@@ -105,6 +107,10 @@ import {
 } from "./schema/history-parcel.js";
 import { historicalTimeSeriesResultSchema } from "./schema/history-result.js";
 import {
+  historicalTransectQuerySchema,
+  historicalTransectResultSchema,
+} from "./schema/history-transect.js";
+import {
   historicalAnalogQuerySchema,
   historicalAnalogResultSchema,
   historicalIndexBackfillQuerySchema,
@@ -136,6 +142,9 @@ export function createMcpServer() {
     fieldsGetter: historicalFieldsService,
   });
   const historicalPointsTimeSeriesService = new HistoricalPointsTimeSeriesService({
+    pointsGetter: historicalPointsService,
+  });
+  const historicalTransectService = new HistoricalTransectService({
     pointsGetter: historicalPointsService,
   });
   const historicalDiagnosticTimeSeriesService = new HistoricalDiagnosticTimeSeriesService({
@@ -180,6 +189,13 @@ export function createMcpServer() {
     inputSchema: historicalPointsTimeSeriesQuerySchema,
     outputSchema: historicalPointsTimeSeriesResultSchema,
   }, async (query) => handleGetGfsHistoricalPointsTimeSeries(historicalPointsTimeSeriesService, query));
+
+  server.registerTool("get_gfs_historical_transect", {
+    title: "Get historical GFS transect",
+    description: "Sample a great-circle cross-section from one historical GFS Grid 4 analysis using 2-10 points. Geometry is shared with operational GFS/GEFS transects; atmospheric sampling delegates to the bounded historical multi-point primitive, so NCEI access remains serial and every sample preserves its 0.5° grid point, dataset path and cache state.",
+    inputSchema: historicalTransectQuerySchema,
+    outputSchema: historicalTransectResultSchema,
+  }, async (query) => handleGetGfsHistoricalTransect(historicalTransectService, query));
 
   server.registerTool("get_gfs_historical_fields_timeseries", {
     title: "Get historical GFS mixed-field time series",
