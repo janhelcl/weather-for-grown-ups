@@ -111,7 +111,7 @@ Tool: `get_gfs_historical_timeseries`
 
 ## Materialized history and analog search
 
-Analog search does **not** scan years of NCEI files during one agent call. Historical profiles are first materialized into a deliberately simple local JSONL index. Each build call uses the same bounded archive access as `history-timeseries`, so the caller grows the index incrementally rather than triggering an accidental long-running archive crawl.
+Analog search does **not** scan years of NCEI files during one agent call. Historical profiles are first materialized into a deliberately simple local JSONL index.
 
 By default the index lives at:
 
@@ -123,9 +123,9 @@ By default the index lives at:
 
 A semantic record key consists of the analysis time, sampled Grid 4 point and normalized variable/pressure selection. Analog candidates must match the target's **same sampled grid point and same selection**. This prevents apparently similar profiles from different locations or different feature sets from being mixed silently.
 
-### Build the index
+### Build a small index range
 
-CLI:
+`history-index` is the bounded interactive primitive. It uses the same 16-analysis maximum as `history-timeseries`.
 
 ```bash
 wfg history-index \
@@ -140,26 +140,41 @@ wfg history-index \
   --json
 ```
 
-MCP tool: `materialize_gfs_history_index`
+MCP tool: `materialize_gfs_history_index`.
 
-```json
-{
-  "latitude": 50.08,
-  "longitude": 14.43,
-  "startTime": "2017-05-01T00:00:00Z",
-  "endTime": "2017-05-08T23:59:59Z",
-  "cycleHoursUtc": [12],
-  "variables": ["temperature", "relative_humidity", "wind", "geopotential_height"],
-  "pressureLevelsHpa": [850, 700, 500],
-  "maxSteps": 8
-}
+### Backfill a large range
+
+`history-backfill` is the resumable corpus-building primitive. It can plan up to **50,000 selected cycles**, but each invocation has a separate fetch budget: **16 missing profiles by default, 256 maximum**. Profiles that already exist for the sampled Grid 4 cell and normalized selection are removed from the plan before any archive call.
+
+```bash
+wfg history-backfill \
+  --lat 50.08 \
+  --lon 14.43 \
+  --from 2007-01-01T00:00:00Z \
+  --to 2026-08-01T23:59:59Z \
+  --cycles 12 \
+  --vars temperature,relative_humidity,wind,geopotential_height \
+  --levels 850,700,500 \
+  --max-fetches 32 \
+  --json
 ```
 
-Repeated calls can materialize adjacent ranges. Archive access remains serial and subject to WFG's NOAA courtesy limiter; already cached NCEI responses remain cheap to reuse.
+MCP tool: `backfill_gfs_history_index`.
+
+The result reports `selectedCycleCount`, `alreadyMaterialized`, fetch attempts, cache hits versus upstream reads, newly materialized profiles, failures, `remaining`, and `nextAnalysisTime`. Repeating the same request therefore resumes from the local index without the caller maintaining a cursor.
+
+Useful controls:
+
+- `dryRun=true` / `--dry-run` plans the corpus without archive access or writes;
+- `order="newest_first"` / `--newest-first` fills recent history first;
+- `continueOnError=true` / `--continue-on-error` records isolated archive gaps and keeps using the current fetch budget;
+- a default run stops on the first profile/archive error so a schema or field-regime problem does not silently burn through hundreds of requests.
+
+This is **resumable bulk orchestration, not parallel archive scraping**. NCEI Grid 4 analysis is file-oriented, so a missing daily 12 UTC profile still requires an exact archive profile request. WFG keeps those reads serial and under the existing NOAA courtesy limiter. Raw NCEI responses are immutable and cached, so an interrupted run can reuse already downloaded responses even if the final JSONL append did not happen.
+
+NOAA ARL also publishes a quarter-degree GFS archive from June 2019, but that dataset is constructed from short-term forecasts rather than GFS analyses. WFG deliberately does not substitute it into the `gfs_grid4_analysis_0p5` index. Preserving provenance and analysis semantics is more important than making a backfill look faster.
 
 ### Find analogs
-
-CLI:
 
 ```bash
 wfg history-analogs \
@@ -173,20 +188,7 @@ wfg history-analogs \
   --json
 ```
 
-MCP tool: `find_gfs_historical_analogs`
-
-```json
-{
-  "latitude": 50.08,
-  "longitude": 14.43,
-  "targetTime": "2017-05-09T12:00:00Z",
-  "variables": ["temperature", "relative_humidity", "wind", "geopotential_height"],
-  "pressureLevelsHpa": [850, 700, 500],
-  "count": 5,
-  "excludeWithinHours": 24,
-  "fetchTargetIfMissing": true
-}
-```
+MCP tool: `find_gfs_historical_analogs`.
 
 Candidate search is local. If the target analysis itself is not materialized and `fetchTargetIfMissing=true`, WFG fetches only that one target profile, stores it, then searches the local candidate set. Set `fetchTargetIfMissing=false` (CLI: `--no-fetch-target`) for a strictly offline lookup.
 
@@ -240,9 +242,9 @@ Verification is against **GFS analysis, not observations**. It answers how a for
 
 WFG uses NCEI's THREDDS NetCDF Subset Service (NCSS) in grid-as-point mode. Queries request selected pressure profiles at one point rather than downloading full historical GRIB files. Compatible variables are bundled together; variables using different historical pressure axes are fetched separately and merged locally.
 
-Historical responses are cached because archive files are immutable. Cache misses use WFG's file-based NOAA request throttle; the default cooldown remains 11 seconds. Analysis time series, history materialization and forecast verification are therefore serial rather than bursty.
+Historical responses are cached because archive files are immutable. Cache misses use WFG's file-based NOAA request throttle; the default cooldown remains 11 seconds. Analysis time series, history materialization/backfill and forecast verification are therefore serial rather than bursty.
 
-The analog index is intentionally source-agnostic. Today it is populated through the NCEI profile surface; a future bulk historical source can write the same normalized records without changing analog-search semantics.
+The analog index remains source-format agnostic at the storage boundary: normalized records are JSONL. A future official bulk **analysis** source could feed the same records without changing analog-search semantics. It must not silently mix forecast, analysis and reanalysis products.
 
 Analysis archive naming changes around June 2020: WFG handles historical `gfsanl_4_...` files and later `gfs_4_...` analysis files. Forecast history similarly handles `model-gfs-004-files-old` before June 2020 and `model-gfs-004-files` afterward.
 
@@ -250,7 +252,7 @@ Analysis archive naming changes around June 2020: WFG handles historical `gfsanl
 
 The history surface deliberately separates model history from climatology. Natural follow-ons are:
 
-1. faster/bulk index ingestion so years of candidate history can be built efficiently without interactive NCSS calls;
-2. anomaly and percentile calculations against a deliberately chosen homogeneous reanalysis/climatology source;
-3. optional seasonal or impact-specific analog filters built on top of the generic model-state metric;
-4. multi-lead verification summaries once archive caching/indexing makes them efficient.
+1. anomaly and percentile calculations against a deliberately chosen homogeneous reanalysis/climatology source;
+2. optional seasonal or impact-specific analog filters built on top of the generic model-state metric;
+3. multi-lead verification summaries once archive caching/indexing makes them efficient;
+4. an alternative official bulk analysis transport if NOAA exposes one that preserves the same Grid 4 analysis semantics.
