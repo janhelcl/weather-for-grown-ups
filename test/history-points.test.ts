@@ -3,6 +3,7 @@ import { AtmosphericBatchPointsService } from "../src/core/atmospheric-batch-poi
 import { HistoricalPointsService } from "../src/core/history-points.js";
 import type { HistoricalFieldsResult } from "../src/schema/history-fields.js";
 import type { HistoricalProfileResult } from "../src/schema/history-result.js";
+import { historicalPointsQuerySchema } from "../src/schema/history-points.js";
 
 const analysisTime = "2017-05-09T12:00:00.000Z";
 const requested = [
@@ -31,6 +32,32 @@ function profileFor(point: { latitude: number; longitude: number }): HistoricalP
       cacheHit: true,
     },
     caveat: "GFS model analysis; not a direct observation or homogeneous climatological reanalysis",
+  };
+}
+
+function fieldsOnlyFor(point: { latitude: number; longitude: number }): HistoricalFieldsResult {
+  return {
+    model: "gfs_grid4_analysis_0p5",
+    analysisTime,
+    requestedPoint: point,
+    gridPoint: {
+      latitude: Math.round(point.latitude * 2) / 2,
+      longitude: Math.round(point.longitude * 2) / 2,
+    },
+    selection: { fields: ["wind_10m"] },
+    fields: [{
+      id: "wind_10m",
+      level: { type: "height_above_ground_m", heightM: 10 },
+      temporal: { type: "instantaneous" },
+      values: { windSpeedMs: 5, windDirectionDeg: 220 },
+    }],
+    source: {
+      provider: "NOAA NCEI",
+      access: "ncei_thredds_ncss",
+      dataset: "archive.grb2",
+      cacheHit: false,
+    },
+    caveat: "GFS model analysis fields; not direct observations or homogeneous climatological reanalysis",
   };
 }
 
@@ -114,6 +141,44 @@ describe("HistoricalPointsService", () => {
     expect(getHistoricalProfile).not.toHaveBeenCalled();
     expect(result.points[0]?.fields?.[0]).toMatchObject({ id: "wind_10m" });
     expect(result.points[0]?.levels?.[0]).toMatchObject({ pressureHpa: 850 });
+  });
+
+  it("supports a fields-only selection without adding a pressure profile", async () => {
+    const getHistoricalFields = vi.fn(async (query: { latitude: number; longitude: number }) =>
+      fieldsOnlyFor({ latitude: query.latitude, longitude: query.longitude }));
+    const service = new HistoricalPointsService({
+      fieldsGetter: { getHistoricalFields } as never,
+      profileGetter: { getHistoricalProfile: vi.fn() } as never,
+    });
+
+    const result = await service.getPoints({
+      points: [requested[0]!],
+      analysisTime,
+      fields: ["wind_10m", "wind_10m"],
+    });
+
+    expect(getHistoricalFields).toHaveBeenCalledWith(expect.objectContaining({
+      fields: ["wind_10m"],
+    }));
+    expect(result.selection).toEqual({ fields: ["wind_10m"] });
+    expect(result.points[0]?.levels).toBeUndefined();
+    expect(result.points[0]?.cacheHit).toBe(false);
+  });
+
+  it("validates pressure-selection pairs and requires at least one selection", () => {
+    expect(historicalPointsQuerySchema.safeParse({
+      points: [requested[0]],
+      analysisTime,
+      fields: ["wind_10m"],
+    }).success).toBe(true);
+
+    for (const invalid of [
+      { points: [requested[0]], analysisTime },
+      { points: [requested[0]], analysisTime, variables: ["temperature"] },
+      { points: [requested[0]], analysisTime, pressureLevelsHpa: [850] },
+    ]) {
+      expect(historicalPointsQuerySchema.safeParse(invalid).success).toBe(false);
+    }
   });
 
   it("participates in shared atmospheric points dispatch", async () => {
