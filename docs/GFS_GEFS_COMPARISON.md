@@ -31,26 +31,23 @@ Supported variables are the same raw GEFS pressure variables:
 1. deterministic GFS publishes the selected field/pressure surface at the required forecast hour; and
 2. every requested GEFS member exists at that same forecast hour.
 
-The resulting GFS value and GEFS member values therefore come from one shared initialization timestamp. WFG does not independently select a newer GFS cycle and an older GEFS cycle and then compare them as though they were aligned.
+The GFS value and GEFS member values therefore come from one shared initialization timestamp. WFG does not independently select a newer GFS cycle and an older GEFS cycle and compare them as though they were aligned.
 
-An explicit shared cycle is available for reproducible comparisons.
+An explicit shared cycle is available for reproducibility.
 
 ## Different model grids are preserved
 
-Deterministic GFS is sampled from its 0.25° grid and GEFS from its 0.5° grid. A single requested coordinate may therefore resolve to different model grid points.
+Deterministic GFS is sampled from its 0.25° grid and GEFS from its 0.5° grid. One requested coordinate may therefore resolve to different model grid points.
 
-The result preserves both sampled grid coordinates separately. WFG does not pretend the underlying grids are identical or silently resample one model onto the other for this point comparison.
+The result preserves both sampled grid coordinates separately. WFG does not pretend the grids are identical or silently resample one model onto the other for this point comparison.
 
 ## Returned comparison metrics
 
-The result contains the raw deterministic GFS value, all requested GEFS member values, the GEFS distribution summary, and:
+The result contains the deterministic GFS value, requested GEFS member values, the GEFS distribution summary, and:
 
-- `deterministicMinusEnsembleMean` — deterministic GFS minus the arithmetic mean of requested GEFS members;
-- `standardizedDifference` — `(GFS - GEFS mean) / GEFS population standard deviation`;
-- `membersBelowDeterministic`;
-- `membersAtOrBelowDeterministic`;
-- `fractionMembersBelowDeterministic`;
-- `fractionMembersAtOrBelowDeterministic`;
+- `deterministicMinusEnsembleMean`;
+- `standardizedDifference` = `(GFS - GEFS mean) / GEFS population standard deviation`;
+- member counts/fractions below and at-or-below deterministic GFS;
 - `rangePosition` — `below_member_min`, `within_member_range`, or `above_member_max`;
 - `outsideMemberRange`.
 
@@ -58,20 +55,15 @@ If the selected members have zero spread, `standardizedDifference` is `null` rat
 
 ## Why there is no `isOutlier` boolean
 
-An “outlier” threshold is a decision rule, not a raw model fact. A caller might care about:
+An “outlier” threshold is a decision rule, not a raw model fact. A caller may care about the full member range, a chosen standardized difference, selected quantiles, or domain-specific materiality in physical units.
 
-- outside the full member range;
-- more than 1.5 or 2 ensemble standard deviations from the mean;
-- beyond a selected quantile;
-- domain-specific materiality in physical units.
-
-WFG returns the evidence needed for those judgments and leaves the rule explicit in the consuming layer.
+WFG returns the evidence and leaves that rule explicit in the consuming layer.
 
 The interpretation marker is:
 
 `raw_model_vs_raw_ensemble_distribution_not_calibrated_uncertainty`
 
-Neither the empirical member rank nor the standardized difference is presented as a calibrated probability that the deterministic forecast is “wrong”.
+Neither empirical member rank nor standardized difference is presented as a calibrated probability that the deterministic forecast is wrong.
 
 ## CLI
 
@@ -86,19 +78,19 @@ wfg compare-gfs-gefs \
   --json
 ```
 
-By default all 31 GEFS members are used. A smaller explicit member selection is supported with `--members`.
+All 31 GEFS members are used by default; `--members` can select a smaller explicit subset.
 
 ## MCP
 
 The equivalent MCP tool is `compare_gfs_to_gefs`.
 
-CLI and MCP use the same `GfsGefsComparisonService`, aligned-run resolver, schema, and raw model data paths.
+CLI and MCP use the same aligned-run/core comparison semantics.
 
 ## Data paths
 
-Both sides use NOAA AWS Open Data for this comparison:
+Both sides use NOAA AWS Open Data:
 
-- deterministic GFS: selected `.idx` GRIB byte range from the 0.25° product;
-- GEFS: selected member-specific `.idx` GRIB byte ranges from the 0.5° `pgrb2a` product.
+- deterministic GFS: selected `.idx` byte ranges from the 0.25° product;
+- GEFS: member-specific selected `.idx` byte ranges from the 0.5° `pgrb2a` product.
 
-Immutable slices are cached through the existing model-specific caches and sampled locally with `wgrib2`.
+Immutable slices are cached through the model-specific caches and sampled locally through WFG's decoder abstraction. The npm default decoder is bundled; native `wgrib2` remains an optional compatibility/debug backend.

@@ -16,19 +16,13 @@ The default result contains one ensemble distribution per requested output at ea
 
 ## Geometry and efficiency
 
-Great-circle interpolation and distance calculations are model-independent and are shared directly with the deterministic GFS transect implementation.
+Great-circle interpolation and distance calculations are model-independent and shared with deterministic GFS.
 
-A GEFS transect is then executed as **one multi-point mixed-bundle query** for the complete path. WFG therefore fetches one immutable selected-message file per member and reuses it across all transect samples.
+A GEFS transect is executed as **one multi-point mixed-bundle query** for the complete path. WFG fetches one immutable selected-message file per member and reuses it across all transect samples.
 
-Upstream selected-file work scales with:
+Upstream selected-file work therefore scales with members rather than `members × transect samples`. Local point extraction remains sample-oriented and goes through WFG's decoder abstraction. GEFS transects currently allow 2–20 samples; GFS keeps its independent 2–50 sample contract.
 
-`members`
-
-rather than:
-
-`members × transect samples`
-
-Local `wgrib2` point extraction remains sample-oriented. GEFS transects currently allow 2–20 samples, matching the proven GEFS mixed multi-point batch bound. GFS keeps its independent 2–50 sample contract.
+The npm default decoder is bundled. Native `wgrib2` remains an optional compatibility/debug backend and does not alter transect semantics.
 
 ## CLI
 
@@ -47,7 +41,7 @@ wfg transect \
   --json
 ```
 
-GFS remains the default model. Its existing pressure-level transect behavior and 21-sample default are preserved.
+GFS remains the default model. Its pressure-level transect behavior and 21-sample default are preserved.
 
 ## MCP
 
@@ -61,4 +55,4 @@ Member fractions and spread are raw model-member evidence. WFG does not label th
 
 ## Live smoke
 
-`npm run test:live:gefs` includes a compact live transect smoke using two members, three path samples, one pressure level and two non-isobaric fields. Normal CI remains offline/deterministic and does not depend on NOAA availability.
+`npm run test:live:gefs` includes a compact real-NOAA transect compatibility check. Normal CI remains offline/deterministic and does not depend on NOAA availability.
