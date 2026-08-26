@@ -43,18 +43,24 @@ const historicalState: HistoricalFieldsResult = {
   caveat: "GFS model analysis fields; not direct observations or homogeneous climatological reanalysis",
 };
 
+const query = {
+  latitude: 50.08,
+  longitude: 14.43,
+  analysisTime: "2017-05-09T12:00:00Z",
+  pressureLevelsHpa,
+  parcel: "surface_2m" as const,
+};
+
 describe("HistoricalParcelService", () => {
+  it("constructs with the default historical fields service", () => {
+    expect(new HistoricalParcelService()).toBeInstanceOf(HistoricalParcelService);
+  });
+
   it("uses one mixed historical state request and derives 2 m q from T/RH/surface pressure", async () => {
     const getHistoricalFields = vi.fn(async () => historicalState);
     const service = new HistoricalParcelService({ fieldsGetter: { getHistoricalFields } });
 
-    const result = await service.getHistoricalParcel({
-      latitude: 50.08,
-      longitude: 14.43,
-      analysisTime: "2017-05-09T12:00:00Z",
-      pressureLevelsHpa,
-      parcel: "surface_2m",
-    });
+    const result = await service.getHistoricalParcel(query);
 
     expect(getHistoricalFields).toHaveBeenCalledTimes(1);
     expect(getHistoricalFields).toHaveBeenCalledWith({
@@ -81,18 +87,20 @@ describe("HistoricalParcelService", () => {
       const service = new HistoricalParcelService({
         fieldsGetter: { getHistoricalFields: async () => historicalState },
       });
-      const result = await service.getHistoricalParcel({
-        latitude: 50.08,
-        longitude: 14.43,
-        analysisTime: "2017-05-09T12:00:00Z",
-        pressureLevelsHpa,
-        parcel,
-      });
+      const result = await service.getHistoricalParcel({ ...query, parcel });
       expect(result.parcel.startingState.definition).toBe(parcel);
       expect(Number.isFinite(result.parcel.capeJkg)).toBe(true);
       expect(Number.isFinite(result.parcel.cinJkg)).toBe(true);
     },
   );
+
+  it("fails loudly when the mixed historical state has no pressure profile", async () => {
+    const state = { ...historicalState, levels: undefined } as unknown as HistoricalFieldsResult;
+    const service = new HistoricalParcelService({
+      fieldsGetter: { getHistoricalFields: async () => state },
+    });
+    await expect(service.getHistoricalParcel(query)).rejects.toThrow(/missing the pressure profile/);
+  });
 
   it("fails loudly when a required historical surface field is absent", async () => {
     const state = {
@@ -102,12 +110,32 @@ describe("HistoricalParcelService", () => {
     const service = new HistoricalParcelService({
       fieldsGetter: { getHistoricalFields: async () => state },
     });
-    await expect(service.getHistoricalParcel({
-      latitude: 50.08,
-      longitude: 14.43,
-      analysisTime: "2017-05-09T12:00:00Z",
-      pressureLevelsHpa,
-      parcel: "surface_2m",
-    })).rejects.toThrow(/relative_humidity_2m\.relativeHumidityPct/);
+    await expect(service.getHistoricalParcel(query)).rejects.toThrow(/relative_humidity_2m\.relativeHumidityPct/);
+  });
+
+  it("fails loudly when a required historical surface field has no numeric value", async () => {
+    const state = {
+      ...historicalState,
+      fields: historicalState.fields.map((field) => field.id === "relative_humidity_2m"
+        ? { ...field, values: {} }
+        : field),
+    } as HistoricalFieldsResult;
+    const service = new HistoricalParcelService({
+      fieldsGetter: { getHistoricalFields: async () => state },
+    });
+    await expect(service.getHistoricalParcel(query)).rejects.toThrow(/relative_humidity_2m\.relativeHumidityPct/);
+  });
+
+  it("fails loudly when a required pressure-level parcel value is absent", async () => {
+    const state = {
+      ...historicalState,
+      levels: historicalState.levels?.map((level, index) => index === 0
+        ? { ...level, specificHumidityKgKg: undefined }
+        : level),
+    } as unknown as HistoricalFieldsResult;
+    const service = new HistoricalParcelService({
+      fieldsGetter: { getHistoricalFields: async () => state },
+    });
+    await expect(service.getHistoricalParcel(query)).rejects.toThrow(/specific_humidity@950mb/);
   });
 });
