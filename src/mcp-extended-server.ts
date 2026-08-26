@@ -5,6 +5,7 @@ import { GefsPointsBundleTimeSeriesService } from "./core/gefs-points-bundle-tim
 import { GefsPointsBundleService } from "./core/gefs-points-bundle.js";
 import { GefsTransectService } from "./core/gefs-transect.js";
 import { HistoricalIndexBackfillService } from "./core/history-backfill.js";
+import { HistoricalDiagnosticsService } from "./core/history-diagnostics.js";
 import { HistoricalIndexService } from "./core/history-index.js";
 import { HistoricalTimeSeriesService } from "./core/history-time-series.js";
 import { HistoricalForecastVerificationService } from "./core/history-verification.js";
@@ -16,6 +17,10 @@ import {
 import { handleGetGefsFieldsPointsTimeSeries } from "./mcp-gefs-points-bundle-timeseries-tool.js";
 import { handleGetGefsFieldsPoints } from "./mcp-gefs-points-bundle-tool.js";
 import { handleGetGefsTransect } from "./mcp-gefs-transect-tool.js";
+import {
+  handleGetGfsHistoricalLayerDiagnostics,
+  handleGetGfsHistoricalProfileDiagnostics,
+} from "./mcp-history-diagnostics-tool.js";
 import {
   handleBackfillGfsHistoryIndex,
   handleFindGfsHistoricalAnalogs,
@@ -46,6 +51,12 @@ import {
 } from "./schema/gefs-points-bundle.js";
 import { gefsTransectQuerySchema, gefsTransectResultSchema } from "./schema/gefs-transect.js";
 import { historicalTimeSeriesQuerySchema } from "./schema/history.js";
+import {
+  historicalLayerDiagnosticsQuerySchema,
+  historicalLayerDiagnosticsResultSchema,
+  historicalProfileDiagnosticsQuerySchema,
+  historicalProfileDiagnosticsResultSchema,
+} from "./schema/history-diagnostics.js";
 import { historicalTimeSeriesResultSchema } from "./schema/history-result.js";
 import {
   historicalAnalogQuerySchema,
@@ -66,6 +77,7 @@ import { historicalForecastVerificationResultSchema } from "./schema/history-ver
 export function createMcpServer() {
   const server = createBaseMcpServer();
   const historicalTimeSeriesService = new HistoricalTimeSeriesService();
+  const historicalDiagnosticsService = new HistoricalDiagnosticsService();
   const historicalIndexService = new HistoricalIndexService();
   const historicalBackfillService = new HistoricalIndexBackfillService();
   const historicalVerificationService = new HistoricalForecastVerificationService();
@@ -82,6 +94,20 @@ export function createMcpServer() {
     inputSchema: historicalTimeSeriesQuerySchema,
     outputSchema: historicalTimeSeriesResultSchema,
   }, async (query) => handleGetGfsHistoricalTimeSeries(historicalTimeSeriesService, query));
+
+  server.registerTool("get_gfs_historical_layer_diagnostics", {
+    title: "Get historical GFS layer diagnostics",
+    description: "Derive the same pressure-layer lapse-rate, vector-shear and potential-temperature-gradient diagnostics used by operational GFS/GEFS from one archived GFS Grid 4 analysis. The source is model analysis, not direct observations or homogeneous climatological reanalysis.",
+    inputSchema: historicalLayerDiagnosticsQuerySchema,
+    outputSchema: historicalLayerDiagnosticsResultSchema,
+  }, async (query) => handleGetGfsHistoricalLayerDiagnostics(historicalDiagnosticsService, query));
+
+  server.registerTool("get_gfs_historical_profile_diagnostics", {
+    title: "Get historical GFS profile diagnostics",
+    description: "Derive the same freezing-level-crossing and temperature-inversion diagnostics used by operational GFS/GEFS from one archived GFS Grid 4 pressure profile. The source is model analysis, not direct observations or homogeneous climatological reanalysis.",
+    inputSchema: historicalProfileDiagnosticsQuerySchema,
+    outputSchema: historicalProfileDiagnosticsResultSchema,
+  }, async (query) => handleGetGfsHistoricalProfileDiagnostics(historicalDiagnosticsService, query));
 
   server.registerTool("materialize_gfs_history_index", {
     title: "Materialize GFS history for local analog search",

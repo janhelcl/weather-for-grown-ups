@@ -31,6 +31,8 @@ const EXPECTED_COMMANDS = [
   "history-backfill",
   "history-analogs",
   "history-verify",
+  "history-layer-diagnostics",
+  "history-profile-diagnostics",
   "ensemble",
   "ensemble-profile",
   "ensemble-timeseries",

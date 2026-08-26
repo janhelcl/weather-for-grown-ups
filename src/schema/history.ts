@@ -7,11 +7,19 @@ export const HISTORICAL_GFS_VARIABLE_IDS = [
   "u_wind",
   "v_wind",
   "geopotential_height",
+  "specific_humidity",
   "vertical_velocity",
   "absolute_vorticity",
+  "cloud_water_mixing_ratio",
+  "ozone_mixing_ratio",
   "wind",
   "dew_point",
   "potential_temperature",
+  "mixing_ratio",
+  "virtual_temperature",
+  "air_density",
+  "wet_bulb_temperature",
+  "equivalent_potential_temperature",
 ] as const;
 
 export const historicalGfsVariableIdSchema = z.enum(HISTORICAL_GFS_VARIABLE_IDS);
