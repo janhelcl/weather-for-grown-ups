@@ -252,7 +252,7 @@ export function nearestGfsGrid4Point(latitude: number, longitude: number) {
   const roundedLatitude = Math.max(-90, Math.min(90, Math.round(latitude * 2) / 2));
   const lon360 = ((longitude % 360) + 360) % 360;
   const rounded360 = (Math.round(lon360 * 2) / 2) % 360;
-  const normalizedLongitude = rounded360 > 180 ? rounded360 - 360 : rounded360;
+  const normalizedLongitude = rounded360 >= 180 ? rounded360 - 360 : rounded360;
   return { latitude: roundedLatitude, longitude: normalizedLongitude };
 }
 
