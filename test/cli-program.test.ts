@@ -26,6 +26,7 @@ const EXPECTED_COMMANDS = [
   "points-timeseries",
   "compare-runs",
   "history",
+  "history-timeseries",
   "ensemble",
   "ensemble-profile",
   "ensemble-timeseries",
