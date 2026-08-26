@@ -24,7 +24,8 @@
   ],
   "files": [
     "dist",
-    "*.md",
+    "README.md",
+    "docs",
     "LICENSE"
   ],
   "engines": { "node": ">=20" },
