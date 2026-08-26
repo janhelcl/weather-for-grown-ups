@@ -10,6 +10,8 @@ import { registerGefsPointsBundleCommand } from "./gefs-points-bundle-command.js
 import { registerHistoryDiagnosticCommands } from "./history-diagnostic-commands.js";
 import { registerHistoryFieldsCommand } from "./history-fields-command.js";
 import { registerHistoryParcelCommands } from "./history-parcel-command.js";
+import { registerHistoryPointsCommand } from "./history-points-command.js";
+import { registerHistoryTransectCommand } from "./history-transect-command.js";
 import { registerHistoryCommand } from "./history-command.js";
 import { registerModelComparisonCommand } from "./model-comparison-command.js";
 import { registerPointCommands } from "./point-commands.js";
@@ -26,6 +28,8 @@ export function createCliProgram(): Command {
   registerHistoryCommand(program);
   registerHistoryFieldsCommand(program);
   registerHistoryParcelCommands(program);
+  registerHistoryPointsCommand(program);
+  registerHistoryTransectCommand(program);
   registerHistoryDiagnosticCommands(program);
   registerEnsembleCommand(program);
   registerGefsBundleCommands(program);

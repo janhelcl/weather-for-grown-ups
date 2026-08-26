@@ -5,13 +5,17 @@ import { GefsPointsBundleTimeSeriesService } from "./core/gefs-points-bundle-tim
 import { GefsPointsBundleService } from "./core/gefs-points-bundle.js";
 import { GefsTransectService } from "./core/gefs-transect.js";
 import { HistoricalIndexBackfillService } from "./core/history-backfill.js";
+import { HistoricalDiagnosticTimeSeriesService } from "./core/history-diagnostic-timeseries.js";
 import { HistoricalDiagnosticsService } from "./core/history-diagnostics.js";
 import { HistoricalFieldsTimeSeriesService } from "./core/history-fields-timeseries.js";
 import { HistoricalFieldsService } from "./core/history-fields.js";
 import { HistoricalIndexService } from "./core/history-index.js";
 import { HistoricalParcelTimeSeriesService } from "./core/history-parcel-timeseries.js";
 import { HistoricalParcelService } from "./core/history-parcel.js";
+import { HistoricalPointsTimeSeriesService } from "./core/history-points-timeseries.js";
+import { HistoricalPointsService } from "./core/history-points.js";
 import { HistoricalTimeSeriesService } from "./core/history-time-series.js";
+import { HistoricalTransectService } from "./core/history-transect.js";
 import { HistoricalForecastVerificationService } from "./core/history-verification.js";
 import { handleGetGefsAreaSummary } from "./mcp-gefs-area-tool.js";
 import {
@@ -22,6 +26,7 @@ import { handleGetGefsFieldsPointsTimeSeries } from "./mcp-gefs-points-bundle-ti
 import { handleGetGefsFieldsPoints } from "./mcp-gefs-points-bundle-tool.js";
 import { handleGetGefsTransect } from "./mcp-gefs-transect-tool.js";
 import {
+  handleGetGfsHistoricalDiagnosticTimeSeries,
   handleGetGfsHistoricalLayerDiagnostics,
   handleGetGfsHistoricalProfileDiagnostics,
 } from "./mcp-history-diagnostics-tool.js";
@@ -33,6 +38,11 @@ import {
   handleGetGfsHistoricalParcel,
   handleGetGfsHistoricalParcelTimeSeries,
 } from "./mcp-history-parcel-tool.js";
+import {
+  handleGetGfsHistoricalPoints,
+  handleGetGfsHistoricalPointsTimeSeries,
+} from "./mcp-history-points-tool.js";
+import { handleGetGfsHistoricalTransect } from "./mcp-history-transect-tool.js";
 import {
   handleBackfillGfsHistoryIndex,
   handleFindGfsHistoricalAnalogs,
@@ -64,6 +74,10 @@ import {
 import { gefsTransectQuerySchema, gefsTransectResultSchema } from "./schema/gefs-transect.js";
 import { historicalTimeSeriesQuerySchema } from "./schema/history.js";
 import {
+  historicalDiagnosticTimeSeriesQuerySchema,
+  historicalDiagnosticTimeSeriesResultSchema,
+} from "./schema/history-diagnostic-timeseries.js";
+import {
   historicalLayerDiagnosticsQuerySchema,
   historicalLayerDiagnosticsResultSchema,
   historicalProfileDiagnosticsQuerySchema,
@@ -78,12 +92,24 @@ import {
   historicalFieldsResultSchema,
 } from "./schema/history-fields.js";
 import {
+  historicalPointsTimeSeriesQuerySchema,
+  historicalPointsTimeSeriesResultSchema,
+} from "./schema/history-points-timeseries.js";
+import {
+  historicalPointsQuerySchema,
+  historicalPointsResultSchema,
+} from "./schema/history-points.js";
+import {
   historicalParcelQuerySchema,
   historicalParcelResultSchema,
   historicalParcelTimeSeriesQuerySchema,
   historicalParcelTimeSeriesResultSchema,
 } from "./schema/history-parcel.js";
 import { historicalTimeSeriesResultSchema } from "./schema/history-result.js";
+import {
+  historicalTransectQuerySchema,
+  historicalTransectResultSchema,
+} from "./schema/history-transect.js";
 import {
   historicalAnalogQuerySchema,
   historicalAnalogResultSchema,
@@ -112,6 +138,20 @@ export function createMcpServer() {
     parcelGetter: historicalParcelService,
   });
   const historicalDiagnosticsService = new HistoricalDiagnosticsService();
+  const historicalPointsService = new HistoricalPointsService({
+    fieldsGetter: historicalFieldsService,
+  });
+  const historicalPointsTimeSeriesService = new HistoricalPointsTimeSeriesService({
+    pointsGetter: historicalPointsService,
+  });
+  const historicalTransectService = new HistoricalTransectService({
+    pointsGetter: historicalPointsService,
+  });
+  const historicalDiagnosticTimeSeriesService = new HistoricalDiagnosticTimeSeriesService({
+    layerDiagnosticsGetter: historicalDiagnosticsService,
+    profileDiagnosticsGetter: historicalDiagnosticsService,
+    parcelDiagnosticsGetter: historicalParcelService,
+  });
   const historicalIndexService = new HistoricalIndexService();
   const historicalBackfillService = new HistoricalIndexBackfillService();
   const historicalVerificationService = new HistoricalForecastVerificationService();
@@ -135,6 +175,27 @@ export function createMcpServer() {
     inputSchema: historicalFieldsQuerySchema,
     outputSchema: historicalFieldsResultSchema,
   }, async (query) => handleGetGfsHistoricalFields(historicalFieldsService, query));
+
+  server.registerTool("get_gfs_historical_points", {
+    title: "Get historical GFS fields for multiple points",
+    description: "Evaluate one historical GFS Grid 4 analysis selection across up to 10 coordinates. Supports the historical pressure-variable and non-isobaric field subsets, preserving each requested coordinate, sampled 0.5° grid point, archive dataset path and cache status. NCEI access is composed as serial point queries under WFG's NOAA courtesy limiter; unlike operational AWS-backed multi-point queries, this does not claim shared-slice reuse.",
+    inputSchema: historicalPointsQuerySchema,
+    outputSchema: historicalPointsResultSchema,
+  }, async (query) => handleGetGfsHistoricalPoints(historicalPointsService, query));
+
+  server.registerTool("get_gfs_historical_points_timeseries", {
+    title: "Get historical GFS time series for multiple points",
+    description: "Track one historical GFS Grid 4 pressure/non-isobaric selection across up to 10 coordinates and selected 00/06/12/18 UTC analysis cycles. The matrix is explicitly bounded by maxSteps and maxPointSteps. NCEI archive access is serial across cycles and points under WFG's NOAA courtesy limiter; each point-step preserves sampled grid, dataset path and cache status.",
+    inputSchema: historicalPointsTimeSeriesQuerySchema,
+    outputSchema: historicalPointsTimeSeriesResultSchema,
+  }, async (query) => handleGetGfsHistoricalPointsTimeSeries(historicalPointsTimeSeriesService, query));
+
+  server.registerTool("get_gfs_historical_transect", {
+    title: "Get historical GFS transect",
+    description: "Sample a great-circle cross-section from one historical GFS Grid 4 analysis using 2-10 points. Geometry is shared with operational GFS/GEFS transects; atmospheric sampling delegates to the bounded historical multi-point primitive, so NCEI access remains serial and every sample preserves its 0.5° grid point, dataset path and cache state.",
+    inputSchema: historicalTransectQuerySchema,
+    outputSchema: historicalTransectResultSchema,
+  }, async (query) => handleGetGfsHistoricalTransect(historicalTransectService, query));
 
   server.registerTool("get_gfs_historical_fields_timeseries", {
     title: "Get historical GFS mixed-field time series",
@@ -163,6 +224,13 @@ export function createMcpServer() {
     inputSchema: historicalLayerDiagnosticsQuerySchema,
     outputSchema: historicalLayerDiagnosticsResultSchema,
   }, async (query) => handleGetGfsHistoricalLayerDiagnostics(historicalDiagnosticsService, query));
+
+  server.registerTool("get_gfs_historical_diagnostic_timeseries", {
+    title: "Get historical GFS diagnostic time series",
+    description: "Evaluate one layer, whole-profile, or parcel diagnostic selection across a bounded series of native 00/06/12/18 UTC GFS Grid 4 analysis cycles. This is the historical-analysis counterpart of the operational diagnostic time-series operation: analysisTime replaces forecast run/lead semantics, archive reads remain serial under WFG's NOAA courtesy limiter, and parcel paths are compacted per step.",
+    inputSchema: historicalDiagnosticTimeSeriesQuerySchema,
+    outputSchema: historicalDiagnosticTimeSeriesResultSchema,
+  }, async (query) => handleGetGfsHistoricalDiagnosticTimeSeries(historicalDiagnosticTimeSeriesService, query));
 
   server.registerTool("get_gfs_historical_profile_diagnostics", {
     title: "Get historical GFS profile diagnostics",

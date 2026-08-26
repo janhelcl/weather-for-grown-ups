@@ -3,9 +3,9 @@
 Weather for Grown Ups is primarily a **numerical-weather-model access and meteorology product**, not a forecast interpretation layer.
 
 ```text
-NOAA GFS / GEFS
+NOAA GFS / GEFS / NCEI historical GFS
       ↓
-model-specific catalogs, run semantics and source adapters
+dataset-specific catalogs, time semantics and source adapters
       ↓
 normalized atmospheric states and mixed-field bundles
       ↓
@@ -43,11 +43,11 @@ Nonlinear diagnostics are evaluated on each GEFS member before aggregation. WFG 
 | layer diagnostics | ✅ | ✅ member-first | ✅ same deterministic kernel |
 | profile diagnostics | ✅ | ✅ member-first | ✅ same deterministic kernel |
 | parcel diagnostics | ✅ | ✅ member-first | ✅ same parcel engine |
-| diagnostic time series | ✅ | ✅ | ⏳ parcel series exists; unified layer/profile series pending |
-| points | ✅ | ✅ | ⏳ |
-| points time series | ✅ | ✅ | ⏳ |
-| transect | ✅ | ✅ | ⏳ |
-| area summary | ✅ | ✅ | ⏳ |
+| diagnostic time series | ✅ | ✅ | ✅ selected analysis cycles |
+| points | ✅ shared S3 slice | ✅ member slices reused | ✅ bounded serial NCSS points |
+| points time series | ✅ | ✅ | ✅ bounded cycle × point matrix |
+| transect | ✅ shared great-circle geometry | ✅ shared great-circle geometry | ✅ shared great-circle geometry |
+| area summary | ✅ | ✅ | ⏳ requires native NCEI bbox/grid subset |
 | run comparison | ✅ | ✅ | — |
 | scalar ensemble distribution | — | ✅ | — |
 | aligned model comparison | ✅ GFS-vs-GEFS | ✅ GFS-vs-GEFS | ⏳ forecast/analysis comparison remains a history-native verification primitive |
@@ -120,7 +120,13 @@ WFG builds larger queries by composing smaller atmospheric primitives while pres
 
 ### Historical GFS analysis
 
-Historical Grid 4 currently participates in the same profile, time-series, layer-diagnostic, profile-diagnostic and parcel-operation boundaries as operational data. Its source adapter preserves exact 00/06/12/18 UTC analysis semantics, 0.5° sampling, NCEI provenance and bounded serial archive access. Spatial parity (points, transects and area statistics) is intentionally represented as missing capability in the registry rather than hidden behind a separate history architecture.
+Historical Grid 4 participates in the same profile, time-series, layer-diagnostic, profile-diagnostic, parcel, multi-point, multi-point-time-series and transect operation boundaries as operational data. Its source adapter preserves exact 00/06/12/18 UTC analysis semantics, 0.5° sampling, NCEI provenance and bounded serial archive access.
+
+- diagnostic time series compose the same layer/profile/parcel kernels over selected analysis cycles;
+- multi-point requests are bounded to 10 coordinates and intentionally serialize NCEI point access under the NOAA courtesy limiter;
+- multi-point time series bound both analysis steps and the point × step matrix;
+- transects reuse the same great-circle interpolation as GFS/GEFS and delegate samples to the historical multi-point primitive;
+- area statistics remain explicitly unsupported until WFG has a proper NCEI bbox/grid-subset path. It must not simulate an area by issuing thousands of throttled point requests.
 
 ### GEFS
 
@@ -193,7 +199,7 @@ The rest of the codebase is isolated from decoder choice behind a narrow decodin
 
 ### CLI
 
-The CLI is operation-oriented. Where registration is unified, operations use `--model gfs|gefs` and preserve model-specific result schemas.
+The CLI is operation-oriented. Where registration is unified, forecast operations use `--model gfs|gefs` and preserve model-specific result schemas. Historical analysis currently keeps explicit `history-*` commands while delegating into the same core operation layer.
 
 GEFS also keeps explicit model-native commands where they are clearer or predate the shared dispatcher. In v0.1.0 these include scalar ensemble access, mixed-field bundles, `ensemble-parcel`, and `ensemble-parcel-timeseries`. The shared `diagnostic-timeseries --model gefs` command currently handles layer/profile series, while the explicit parcel-series command exposes the same core parcel time-series capability.
 

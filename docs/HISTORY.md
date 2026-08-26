@@ -1,6 +1,6 @@
 # Historical GFS analysis and verification
 
-WFG can query historical NOAA GFS model analyses from the NCEI Grid 4 archive, materialize selected profiles for local analog search, and compare archived Grid 4 forecasts with the later analysis at the same valid time. This is separate from the current operational GFS 0.25° forecast surface.
+WFG treats historical NOAA GFS Grid 4 analysis as another dataset in the same atmospheric query engine used by operational GFS and GEFS. Shared operations and meteorological kernels are reused where the archived quantity is physically comparable, while analysis time, 0.5° sampling, NCEI provenance and archive-access constraints remain explicit. History also adds analysis-native composition such as analog search and archived forecast verification.
 
 ## What this is
 
@@ -19,16 +19,9 @@ It is **not** a direct observation, and the long GFS record is **not a homogeneo
 
 The history surface intentionally uses a stable subset of the long archive:
 
-- `temperature`
-- `relative_humidity`
-- `u_wind`
-- `v_wind`
-- `geopotential_height`
-- `vertical_velocity`
-- `absolute_vorticity`
-- `wind` — derived from U/V
-- `dew_point` — derived from temperature/RH
-- `potential_temperature` — derived from temperature and pressure
+- raw/stable archive quantities: `temperature`, `relative_humidity`, `u_wind`, `v_wind`, `geopotential_height`, `vertical_velocity`, `absolute_vorticity`, `cloud_water_mixing_ratio`, `ozone_mixing_ratio`;
+- moisture reconstructed where needed: `specific_humidity`;
+- shared deterministic derivations: `wind`, `dew_point`, `potential_temperature`, `mixing_ratio`, `virtual_temperature`, `air_density`, `wet_bulb_temperature`, and `equivalent_potential_temperature`.
 
 A requested pressure level must actually exist for every requested variable in that historical file. Older GFS files do not expose every modern pressure level for every field; WFG reports missing fields explicitly instead of silently interpolating them.
 
@@ -108,6 +101,44 @@ Tool: `get_gfs_historical_timeseries`
   "maxSteps": 7
 }
 ```
+
+## Shared diagnostic and spatial operations
+
+Historical analysis now participates in the same core operation vocabulary as operational data for diagnostic series and bounded spatial composition.
+
+### Diagnostic time series
+
+CLI: `history-diagnostic-timeseries`  
+MCP: `get_gfs_historical_diagnostic_timeseries`
+
+One selection may be a pressure-layer diagnostic, whole-profile diagnostic, or parcel diagnostic. The same physical kernels are evaluated at each selected 00/06/12/18 UTC analysis cycle. Results use `analysisTime`; WFG does not synthesize forecast initialization or lead-hour fields for analysis data.
+
+### Multiple points
+
+CLI: `history-points`  
+MCP: `get_gfs_historical_points`
+
+Up to **10 points** may be queried at one analysis time. Pressure variables and the supported historical non-isobaric fields can be combined in the same request. Each result preserves requested coordinates, sampled 0.5° grid coordinates, dataset path and cache status.
+
+NCEI Grid 4 access is currently point-oriented. Historical multi-point queries therefore compose **serial NCSS point reads** under the NOAA courtesy limiter. They deliberately do not claim the shared-file reuse semantics available to operational GFS/GEFS on AWS.
+
+### Multiple points over time
+
+CLI: `history-points-timeseries`  
+MCP: `get_gfs_historical_points_timeseries`
+
+This composes the same multi-point selection across selected analysis cycles. Both the number of cycles and the total **point × analysis-step** matrix are bounded before archive access begins.
+
+### Transects
+
+CLI: `history-transect`  
+MCP: `get_gfs_historical_transect`
+
+Historical transects use the **same great-circle interpolation** as operational GFS and GEFS, then delegate all samples to the historical multi-point primitive. Because the NCEI path is point-oriented, historical transects are bounded to **10 samples**.
+
+### Remaining spatial gap
+
+Historical `area_summary` is intentionally still unsupported. A proper implementation should use an NCEI geographic/grid subset and aggregate the returned cells locally. WFG will not emulate an area query by issuing hundreds or thousands of courtesy-limited point requests.
 
 ## Materialized history and analog search
 
@@ -250,9 +281,10 @@ Analysis archive naming changes around June 2020: WFG handles historical `gfsanl
 
 ## What comes next
 
-The history surface deliberately separates model history from climatology. Natural follow-ons are:
+Historical analysis is now substantially integrated into the common engine. Natural follow-ons are:
 
-1. anomaly and percentile calculations against a deliberately chosen homogeneous reanalysis/climatology source;
-2. optional seasonal or impact-specific analog filters built on top of the generic model-state metric;
-3. multi-lead verification summaries once archive caching/indexing makes them efficient;
-4. an alternative official bulk analysis transport if NOAA exposes one that preserves the same Grid 4 analysis semantics.
+1. native historical area statistics through a bounded NCEI bbox/grid-subset path;
+2. anomaly and percentile calculations against a deliberately chosen homogeneous reanalysis/climatology source;
+3. optional seasonal or impact-specific analog filters built on top of the generic model-state metric;
+4. multi-lead verification summaries once archive caching/indexing makes them efficient;
+5. an alternative official bulk analysis transport if NOAA exposes one that preserves the same Grid 4 analysis semantics.
