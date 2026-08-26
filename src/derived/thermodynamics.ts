@@ -69,6 +69,33 @@ export function deriveSpecificHumidityFromMixingRatioKgKg(mixingRatioKgKg: numbe
   return mixingRatioKgKg / (1 + mixingRatioKgKg);
 }
 
+/**
+ * Specific humidity from temperature, relative humidity and ambient pressure.
+ *
+ * Relative humidity is clamped to the physical 0-100% range, vapor pressure is
+ * obtained from the Bolton saturation-vapor-pressure expression, and q is then
+ * recovered through the exact mixing-ratio relation.
+ */
+export function deriveSpecificHumidityFromRelativeHumidityKgKg(
+  temperatureC: number,
+  relativeHumidityPct: number,
+  pressureHpa: number,
+): number {
+  assertPressure(pressureHpa);
+  if (!Number.isFinite(relativeHumidityPct)) {
+    throw new Error(`Expected finite relative humidity, received ${relativeHumidityPct}%`);
+  }
+  const saturationVaporPressureHpa = deriveSaturationVaporPressureHpa(temperatureC);
+  const vaporPressureHpa = saturationVaporPressureHpa
+    * Math.max(0, Math.min(100, relativeHumidityPct)) / 100;
+  if (!(vaporPressureHpa < pressureHpa)) {
+    throw new Error(`Vapor pressure ${vaporPressureHpa} hPa is not below ambient pressure ${pressureHpa} hPa`);
+  }
+  const mixingRatioKgKg = WATER_VAPOR_TO_DRY_AIR_GAS_CONSTANT_RATIO
+    * vaporPressureHpa / (pressureHpa - vaporPressureHpa);
+  return deriveSpecificHumidityFromMixingRatioKgKg(mixingRatioKgKg);
+}
+
 /** Virtual temperature for moist air, returned in Kelvin. */
 export function deriveVirtualTemperatureK(
   temperatureC: number,
