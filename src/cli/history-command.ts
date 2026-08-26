@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { HistoricalIndexService } from "../core/history-index.js";
 import { HistoricalTimeSeriesService } from "../core/history-time-series.js";
 import { HistoricalForecastVerificationService } from "../core/history-verification.js";
 import { HistoricalProfileService } from "../core/history.js";
@@ -12,6 +13,10 @@ import {
   historicalProfileResultSchema,
   historicalTimeSeriesResultSchema,
 } from "../schema/history-result.js";
+import {
+  historicalAnalogResultSchema,
+  historicalIndexBuildResultSchema,
+} from "../schema/history-index.js";
 import { historicalForecastVerificationResultSchema } from "../schema/history-verification-result.js";
 import { DEFAULT_LEVELS, parseLevels } from "./shared.js";
 
@@ -80,6 +85,74 @@ export function registerHistoryCommand(program: Command): void {
         console.log(`\n${step.analysisTime} (${step.cacheHit ? "cache" : "upstream"})`);
         console.table(step.levels);
       }
+      console.log(result.caveat);
+    });
+
+  program
+    .command("history-index")
+    .description("Materialize a bounded historical GFS analysis range into the local analog index")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--from <iso>", "Inclusive start of historical range")
+    .requiredOption("--to <iso>", "Inclusive end of historical range")
+    .option("--cycles <list>", "Comma-separated UTC analysis hours to materialize: 0,6,12,18", DEFAULT_HISTORY_CYCLES)
+    .option("--vars <list>", "Comma-separated historical pressure variables", DEFAULT_HISTORY_VARIABLES)
+    .option("--levels <list>", "Comma-separated pressure levels in hPa", DEFAULT_LEVELS)
+    .option("--max-steps <number>", "Maximum selected analysis cycles materialized by this call", Number, DEFAULT_HISTORICAL_TIME_SERIES_MAX_STEPS)
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const service = new HistoricalIndexService();
+      const result = historicalIndexBuildResultSchema.parse(await service.materialize({
+        latitude: options.lat,
+        longitude: options.lon,
+        startTime: options.from,
+        endTime: options.to,
+        cycleHoursUtc: parseHistoryCycles(options.cycles),
+        variables: parseHistoryVariables(options.vars),
+        pressureLevelsHpa: parseLevels(options.levels),
+        maxSteps: options.maxSteps,
+      }));
+
+      if (options.json) return console.log(JSON.stringify(result, null, 2));
+      console.log(`Historical index: ${result.indexPath}`);
+      console.log(`Materialized ${result.materialized} new profiles; ${result.totalMatchingRecords} matching profiles now available.`);
+      console.log(`Range ${result.requestedStartTime} → ${result.requestedEndTime}`);
+    });
+
+  program
+    .command("history-analogs")
+    .description("Find locally materialized historical GFS analyses most similar to one target analysis")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--target <iso>", "Target GFS analysis cycle at 00, 06, 12, or 18 UTC")
+    .option("--vars <list>", "Comma-separated historical pressure variables", DEFAULT_HISTORY_VARIABLES)
+    .option("--levels <list>", "Comma-separated pressure levels in hPa", DEFAULT_LEVELS)
+    .option("--count <number>", "Number of analogs to return, up to 20", Number, 5)
+    .option("--exclude-within-hours <number>", "Exclude candidates this close in time to the target", Number, 24)
+    .option("--no-fetch-target", "Require the target itself to already exist in the local index")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const service = new HistoricalIndexService();
+      const result = historicalAnalogResultSchema.parse(await service.findAnalogs({
+        latitude: options.lat,
+        longitude: options.lon,
+        targetTime: options.target,
+        variables: parseHistoryVariables(options.vars),
+        pressureLevelsHpa: parseLevels(options.levels),
+        count: options.count,
+        excludeWithinHours: options.excludeWithinHours,
+        fetchTargetIfMissing: options.fetchTarget,
+      }));
+
+      if (options.json) return console.log(JSON.stringify(result, null, 2));
+      console.log(`Historical GFS analogs for ${result.targetTime}`);
+      console.log(`Index ${result.indexPath}; ${result.candidateCount} eligible candidates`);
+      console.log(`Metric ${result.metric.name} using ${result.metric.features.length} features (${result.metric.windRepresentation})`);
+      console.table(result.analogs.map((analog) => ({
+        rank: analog.rank,
+        analysisTime: analog.analysisTime,
+        distance: analog.distance,
+      })));
       console.log(result.caveat);
     });
 
