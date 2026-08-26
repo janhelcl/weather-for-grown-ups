@@ -108,12 +108,22 @@ export function datasetSupportsOperation(
 }
 
 /**
- * Backward-compatible model vocabulary for callers that still use the original
- * forecast-only registry name. New engine code should prefer dataset terminology.
+ * Backward-compatible forecast-model vocabulary. Keep this list limited to the
+ * original operational models so callers that truly mean "forecast models" do
+ * not silently start iterating historical analysis datasets.
  */
-export const ATMOSPHERIC_MODEL_IDS = ATMOSPHERIC_DATASET_IDS;
-export type AtmosphericModelId = AtmosphericDatasetId;
+export const ATMOSPHERIC_MODEL_IDS = ["gfs_0p25", "gefs_0p50"] as const;
+export type AtmosphericModelId = (typeof ATMOSPHERIC_MODEL_IDS)[number];
 export type AtmosphericModelKind = AtmosphericDatasetKind;
 export type AtmosphericModelDefinition = AtmosphericDatasetDefinition;
-export const ATMOSPHERIC_MODEL_CATALOG = ATMOSPHERIC_DATASET_CATALOG;
-export const modelSupportsOperation = datasetSupportsOperation;
+export const ATMOSPHERIC_MODEL_CATALOG: Record<AtmosphericModelId, AtmosphericDatasetDefinition> = {
+  gfs_0p25: ATMOSPHERIC_DATASET_CATALOG.gfs_0p25,
+  gefs_0p50: ATMOSPHERIC_DATASET_CATALOG.gefs_0p50,
+};
+
+export function modelSupportsOperation(
+  model: AtmosphericModelId,
+  operation: AtmosphericOperationId,
+): boolean {
+  return ATMOSPHERIC_MODEL_CATALOG[model].operations.includes(operation);
+}
