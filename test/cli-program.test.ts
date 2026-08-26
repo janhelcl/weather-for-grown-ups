@@ -32,6 +32,7 @@ const EXPECTED_COMMANDS = [
   "history-analogs",
   "history-verify",
   "history-fields",
+  "history-fields-timeseries",
   "history-layer-diagnostics",
   "history-profile-diagnostics",
   "ensemble",
