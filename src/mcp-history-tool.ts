@@ -1,4 +1,5 @@
 import type { HistoricalTimeSeriesService } from "./core/history-time-series.js";
+import type { HistoricalForecastVerificationService } from "./core/history-verification.js";
 import type { HistoricalProfileService } from "./core/history.js";
 import type {
   HistoricalProfileQueryInput,
@@ -8,6 +9,8 @@ import {
   historicalProfileResultSchema,
   historicalTimeSeriesResultSchema,
 } from "./schema/history-result.js";
+import type { HistoricalForecastVerificationQueryInput } from "./schema/history-verification.js";
+import { historicalForecastVerificationResultSchema } from "./schema/history-verification-result.js";
 
 export async function handleGetGfsHistoricalProfile(
   historyService: Pick<HistoricalProfileService, "getHistoricalProfile">,
@@ -33,6 +36,23 @@ export async function handleGetGfsHistoricalTimeSeries(
   try {
     const output = historicalTimeSeriesResultSchema.parse(
       await historyTimeSeriesService.getHistoricalTimeSeries(query),
+    );
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(output) }],
+      structuredContent: { ...output },
+    };
+  } catch (error) {
+    return errorResult(error);
+  }
+}
+
+export async function handleVerifyGfsHistoricalForecast(
+  verificationService: Pick<HistoricalForecastVerificationService, "verify">,
+  query: HistoricalForecastVerificationQueryInput,
+) {
+  try {
+    const output = historicalForecastVerificationResultSchema.parse(
+      await verificationService.verify(query),
     );
     return {
       content: [{ type: "text" as const, text: JSON.stringify(output) }],

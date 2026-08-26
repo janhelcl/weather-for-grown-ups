@@ -5,6 +5,7 @@ import { GefsPointsBundleTimeSeriesService } from "./core/gefs-points-bundle-tim
 import { GefsPointsBundleService } from "./core/gefs-points-bundle.js";
 import { GefsTransectService } from "./core/gefs-transect.js";
 import { HistoricalTimeSeriesService } from "./core/history-time-series.js";
+import { HistoricalForecastVerificationService } from "./core/history-verification.js";
 import { handleGetGefsAreaSummary } from "./mcp-gefs-area-tool.js";
 import {
   handleGetGefsFields,
@@ -13,7 +14,10 @@ import {
 import { handleGetGefsFieldsPointsTimeSeries } from "./mcp-gefs-points-bundle-timeseries-tool.js";
 import { handleGetGefsFieldsPoints } from "./mcp-gefs-points-bundle-tool.js";
 import { handleGetGefsTransect } from "./mcp-gefs-transect-tool.js";
-import { handleGetGfsHistoricalTimeSeries } from "./mcp-history-tool.js";
+import {
+  handleGetGfsHistoricalTimeSeries,
+  handleVerifyGfsHistoricalForecast,
+} from "./mcp-history-tool.js";
 import { createMcpServer as createBaseMcpServer } from "./mcp-server.js";
 import {
   gefsAreaSummaryQuerySchema,
@@ -38,6 +42,8 @@ import {
 import { gefsTransectQuerySchema, gefsTransectResultSchema } from "./schema/gefs-transect.js";
 import { historicalTimeSeriesQuerySchema } from "./schema/history.js";
 import { historicalTimeSeriesResultSchema } from "./schema/history-result.js";
+import { historicalForecastVerificationQuerySchema } from "./schema/history-verification.js";
+import { historicalForecastVerificationResultSchema } from "./schema/history-verification-result.js";
 
 /**
  * Extend the shared MCP server with model-native and archive operations without
@@ -47,6 +53,7 @@ import { historicalTimeSeriesResultSchema } from "./schema/history-result.js";
 export function createMcpServer() {
   const server = createBaseMcpServer();
   const historicalTimeSeriesService = new HistoricalTimeSeriesService();
+  const historicalVerificationService = new HistoricalForecastVerificationService();
   const bundleService = new GefsMemberBundleService();
   const timeSeriesService = new GefsBundleTimeSeriesService({ bundleGetter: bundleService });
   const pointsService = new GefsPointsBundleService();
@@ -60,6 +67,13 @@ export function createMcpServer() {
     inputSchema: historicalTimeSeriesQuerySchema,
     outputSchema: historicalTimeSeriesResultSchema,
   }, async (query) => handleGetGfsHistoricalTimeSeries(historicalTimeSeriesService, query));
+
+  server.registerTool("verify_gfs_historical_forecast", {
+    title: "Verify archived GFS forecast",
+    description: "Compare one archived NOAA NCEI GFS Grid 4 0.5° forecast with the later GFS analysis at the same valid time and grid point. Provide a native 00/06/12/18 UTC valid time and one leadHours value (0-192, multiple of 6); WFG derives the forecast run, fetches forecast then analysis serially under NOAA courtesy pacing, and reports analysis-minus-forecast changes with circular wind-direction deltas. Verification is against model analysis, not direct observations, and older forecast files may require NCEI HAS when they are not available online through THREDDS.",
+    inputSchema: historicalForecastVerificationQuerySchema,
+    outputSchema: historicalForecastVerificationResultSchema,
+  }, async (query) => handleVerifyGfsHistoricalForecast(historicalVerificationService, query));
 
   server.registerTool("get_gefs_fields", {
     title: "Get mixed GEFS field distributions",
