@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { HistoricalTimeSeriesService } from "../src/core/history-time-series.js";
+import { HistoricalForecastVerificationService } from "../src/core/history-verification.js";
 import { HistoricalProfileService } from "../src/core/history.js";
 
 const service = new HistoricalProfileService();
@@ -58,6 +59,30 @@ for (const step of timeSeries.series) {
   }
 }
 
+// NCEI's THREDDS catalog exposes this exact 2019 Grid 4 forecast file:
+// gfs_4_20191224_1200_054.grb2. It verifies at 2019-12-26 18 UTC.
+const verificationService = new HistoricalForecastVerificationService({ analysisGetter: service });
+const verification = await verificationService.verify({
+  latitude: 50.08,
+  longitude: 14.43,
+  validTime: "2019-12-26T18:00:00Z",
+  leadHours: 54,
+  variables: ["temperature", "relative_humidity", "wind", "geopotential_height"],
+  pressureLevelsHpa: [850, 700],
+});
+
+assert.equal(verification.model, "gfs_grid4_archive_verification_0p5");
+assert.equal(verification.forecastRun, "2019-12-24T12:00:00.000Z");
+assert.equal(verification.forecast.forecastHour, 54);
+assert.equal(verification.validTime, "2019-12-26T18:00:00.000Z");
+assert.match(verification.forecast.dataset, /gfs_4_20191224_1200_054\.grb2$/);
+assert.match(verification.analysis.dataset, /gfsanl_4_20191226_1800_000\.grb2$/);
+assert.equal(verification.comparison, "analysis_minus_forecast");
+for (const level of verification.pressureLevels) {
+  assert(level.changes.length > 0);
+  for (const change of level.changes) assert(Number.isFinite(change.delta));
+}
+
 console.log(JSON.stringify({
   profile: {
     analysisTime: result.analysisTime,
@@ -72,6 +97,14 @@ console.log(JSON.stringify({
     selection: timeSeries.selection,
     series: timeSeries.series,
     source: timeSeries.source,
+  },
+  verification: {
+    validTime: verification.validTime,
+    forecastRun: verification.forecastRun,
+    leadHours: verification.leadHours,
+    pressureLevels: verification.pressureLevels,
+    forecastDataset: verification.forecast.dataset,
+    analysisDataset: verification.analysis.dataset,
   },
   caveat: result.caveat,
 }, null, 2));
