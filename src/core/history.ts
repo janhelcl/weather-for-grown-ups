@@ -1,7 +1,15 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_NOMADS_COOLDOWN_MS, FileRateLimiter } from "../cache/file-rate-limiter.js";
-import { deriveDewPointC, derivePotentialTemperatureK } from "../derived/thermodynamics.js";
+import {
+  deriveAirDensityKgM3,
+  deriveDewPointC,
+  deriveEquivalentPotentialTemperatureK,
+  deriveMixingRatioKgKg,
+  derivePotentialTemperatureK,
+  deriveVirtualTemperatureC,
+  deriveWetBulbTemperatureC,
+} from "../derived/thermodynamics.js";
 import { deriveWind } from "../derived/wind.js";
 import {
   historicalProfileQuerySchema,
@@ -21,10 +29,23 @@ const CAVEAT = "GFS model analysis; not a direct observation or homogeneous clim
 
 type HistoricalRawVariableId = Exclude<
   HistoricalGfsVariableId,
-  "wind" | "dew_point" | "potential_temperature"
+  | "wind"
+  | "dew_point"
+  | "potential_temperature"
+  | "mixing_ratio"
+  | "virtual_temperature"
+  | "air_density"
+  | "wet_bulb_temperature"
+  | "equivalent_potential_temperature"
 >;
 
-type HistoricalPressureAxisGroup = "full_profile" | "vertical_velocity" | "absolute_vorticity";
+type HistoricalPressureAxisGroup =
+  | "full_profile"
+  | "specific_humidity"
+  | "vertical_velocity"
+  | "absolute_vorticity"
+  | "cloud_mixing_ratio"
+  | "ozone_mixing_ratio";
 
 interface RawHistoryVariable {
   ncssName: string;
@@ -58,6 +79,11 @@ const RAW_HISTORY_VARIABLES: Record<HistoricalRawVariableId, RawHistoryVariable>
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.geopotentialHeightGpm = value; },
   },
+  specific_humidity: {
+    ncssName: "Specific_humidity_isobaric",
+    pressureAxisGroup: "specific_humidity",
+    apply: (level, value) => { level.specificHumidityKgKg = value; },
+  },
   vertical_velocity: {
     ncssName: "Vertical_velocity_pressure_isobaric",
     pressureAxisGroup: "vertical_velocity",
@@ -68,12 +94,27 @@ const RAW_HISTORY_VARIABLES: Record<HistoricalRawVariableId, RawHistoryVariable>
     pressureAxisGroup: "absolute_vorticity",
     apply: (level, value) => { level.absoluteVorticityS1 = value; },
   },
+  cloud_water_mixing_ratio: {
+    ncssName: "Cloud_mixing_ratio_isobaric",
+    pressureAxisGroup: "cloud_mixing_ratio",
+    apply: (level, value) => { level.cloudWaterMixingRatioKgKg = value; },
+  },
+  ozone_mixing_ratio: {
+    ncssName: "Ozone_Mixing_Ratio_isobaric",
+    pressureAxisGroup: "ozone_mixing_ratio",
+    apply: (level, value) => { level.ozoneMixingRatioKgKg = value; },
+  },
 };
 
 const DERIVED_DEPENDENCIES: Partial<Record<HistoricalGfsVariableId, readonly HistoricalRawVariableId[]>> = {
   wind: ["u_wind", "v_wind"],
   dew_point: ["temperature", "relative_humidity"],
   potential_temperature: ["temperature"],
+  mixing_ratio: ["specific_humidity"],
+  virtual_temperature: ["temperature", "specific_humidity"],
+  air_density: ["temperature", "specific_humidity"],
+  wet_bulb_temperature: ["temperature", "specific_humidity"],
+  equivalent_potential_temperature: ["temperature", "specific_humidity"],
 };
 
 export interface HistoricalProfileServiceOptions {
@@ -221,7 +262,17 @@ export function parseHistoricalProfileCsv(
   if (lines.length < 2) throw new Error("NCEI historical GFS response contains no data rows");
 
   const headers = parseCsvLine(lines[0]!).map(normalizeHeader);
-  const pressureIndex = findHeaderIndex(headers, ["vertCoord", "isobaric", "isobaric1", "isobaric2", "isobaric3", "isobaric4", "isobaric5"]);
+  const pressureIndex = findHeaderIndex(headers, [
+    "vertCoord",
+    "isobaric",
+    "isobaric1",
+    "isobaric2",
+    "isobaric3",
+    "isobaric4",
+    "isobaric5",
+    "isobaric6",
+    "isobaric7",
+  ]);
   if (pressureIndex < 0) throw new Error("NCEI historical GFS response is missing a pressure coordinate");
 
   const latitudeIndex = findHeaderIndex(headers, ["latitude", "lat"]);
@@ -288,6 +339,25 @@ function applyHistoricalDerivedValues(level: ProfileLevel, requestedVariables: r
   if (requested.has("potential_temperature") && level.temperatureC !== undefined) {
     level.potentialTemperatureK = derivePotentialTemperatureK(level.temperatureC, level.pressureHpa);
   }
+  if (requested.has("mixing_ratio") && level.specificHumidityKgKg !== undefined) {
+    level.mixingRatioKgKg = deriveMixingRatioKgKg(level.specificHumidityKgKg);
+  }
+  if (requested.has("virtual_temperature") && level.temperatureC !== undefined && level.specificHumidityKgKg !== undefined) {
+    level.virtualTemperatureC = deriveVirtualTemperatureC(level.temperatureC, level.specificHumidityKgKg);
+  }
+  if (requested.has("air_density") && level.temperatureC !== undefined && level.specificHumidityKgKg !== undefined) {
+    level.airDensityKgM3 = deriveAirDensityKgM3(level.temperatureC, level.specificHumidityKgKg, level.pressureHpa);
+  }
+  if (requested.has("wet_bulb_temperature") && level.temperatureC !== undefined && level.specificHumidityKgKg !== undefined) {
+    level.wetBulbTemperatureC = deriveWetBulbTemperatureC(level.temperatureC, level.specificHumidityKgKg, level.pressureHpa);
+  }
+  if (requested.has("equivalent_potential_temperature") && level.temperatureC !== undefined && level.specificHumidityKgKg !== undefined) {
+    level.equivalentPotentialTemperatureK = deriveEquivalentPotentialTemperatureK(
+      level.temperatureC,
+      level.specificHumidityKgKg,
+      level.pressureHpa,
+    );
+  }
 }
 
 function assertRequestedVariablesComplete(
@@ -312,11 +382,19 @@ function hasHistoricalValue(level: ProfileLevel, id: HistoricalGfsVariableId): b
     case "u_wind": return level.uWindMs !== undefined;
     case "v_wind": return level.vWindMs !== undefined;
     case "geopotential_height": return level.geopotentialHeightGpm !== undefined;
+    case "specific_humidity": return level.specificHumidityKgKg !== undefined;
     case "vertical_velocity": return level.verticalVelocityPaS !== undefined;
     case "absolute_vorticity": return level.absoluteVorticityS1 !== undefined;
+    case "cloud_water_mixing_ratio": return level.cloudWaterMixingRatioKgKg !== undefined;
+    case "ozone_mixing_ratio": return level.ozoneMixingRatioKgKg !== undefined;
     case "wind": return level.windSpeedMs !== undefined && level.windDirectionDeg !== undefined;
     case "dew_point": return level.dewPointC !== undefined;
     case "potential_temperature": return level.potentialTemperatureK !== undefined;
+    case "mixing_ratio": return level.mixingRatioKgKg !== undefined;
+    case "virtual_temperature": return level.virtualTemperatureC !== undefined;
+    case "air_density": return level.airDensityKgM3 !== undefined;
+    case "wet_bulb_temperature": return level.wetBulbTemperatureC !== undefined;
+    case "equivalent_potential_temperature": return level.equivalentPotentialTemperatureK !== undefined;
   }
 }
 
