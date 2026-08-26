@@ -124,7 +124,7 @@ export function registerHistoryCommand(program: Command): void {
 
   program
     .command("history-backfill")
-    .description("Resumably backfill a large historical GFS analysis range into the local analog index")
+    .description("Backfill a large historical GFS analysis range into the local analog index with resumable progress")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--from <iso>", "Inclusive start of historical range")
