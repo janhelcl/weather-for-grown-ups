@@ -1,4 +1,9 @@
+import type { HistoricalPointsTimeSeriesService } from "./core/history-points-timeseries.js";
 import type { HistoricalPointsService } from "./core/history-points.js";
+import {
+  historicalPointsTimeSeriesResultSchema,
+  type HistoricalPointsTimeSeriesQueryInput,
+} from "./schema/history-points-timeseries.js";
 import {
   historicalPointsResultSchema,
   type HistoricalPointsQueryInput,
@@ -10,6 +15,26 @@ export async function handleGetGfsHistoricalPoints(
 ) {
   try {
     const output = historicalPointsResultSchema.parse(await service.getPoints(query));
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(output) }],
+      structuredContent: { ...output },
+    };
+  } catch (error) {
+    return {
+      content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }],
+      isError: true as const,
+    };
+  }
+}
+
+export async function handleGetGfsHistoricalPointsTimeSeries(
+  service: Pick<HistoricalPointsTimeSeriesService, "getPointsTimeSeries">,
+  query: HistoricalPointsTimeSeriesQueryInput,
+) {
+  try {
+    const output = historicalPointsTimeSeriesResultSchema.parse(
+      await service.getPointsTimeSeries(query),
+    );
     return {
       content: [{ type: "text" as const, text: JSON.stringify(output) }],
       structuredContent: { ...output },
