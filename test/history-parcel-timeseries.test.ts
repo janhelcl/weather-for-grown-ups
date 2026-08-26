@@ -72,6 +72,13 @@ function parcelResult(analysisTime: string): HistoricalParcelResult {
   };
 }
 
+const baseQuery = {
+  latitude: 50.08,
+  longitude: 14.43,
+  pressureLevelsHpa: [950, 850, 700, 500, 300],
+  parcel: "surface_2m" as const,
+};
+
 describe("HistoricalParcelTimeSeriesService", () => {
   it("evaluates selected cycles serially with one stable parcel selection", async () => {
     const getHistoricalParcel = vi.fn(async (query: { analysisTime: string }) =>
@@ -83,12 +90,9 @@ describe("HistoricalParcelTimeSeriesService", () => {
     });
 
     const result = await service.getHistoricalParcelTimeSeries({
-      latitude: 50.08,
-      longitude: 14.43,
+      ...baseQuery,
       startTime: "2017-05-09T00:00:00Z",
       endTime: "2017-05-10T23:59:59Z",
-      pressureLevelsHpa: [950, 850, 700, 500, 300],
-      parcel: "surface_2m",
       cycleHoursUtc: [12],
       maxSteps: 2,
     });
@@ -115,15 +119,44 @@ describe("HistoricalParcelTimeSeriesService", () => {
       now: () => new Date("2026-08-26T12:00:00Z"),
     });
     await expect(service.getHistoricalParcelTimeSeries({
-      latitude: 50.08,
-      longitude: 14.43,
+      ...baseQuery,
       startTime: "2017-05-09T00:00:00Z",
       endTime: "2017-05-11T23:59:59Z",
-      pressureLevelsHpa: [950, 850, 700],
-      parcel: "surface_2m",
       cycleHoursUtc: [12],
       maxSteps: 2,
     })).rejects.toThrow(/exceeding maxSteps=2/);
+    expect(getHistoricalParcel).not.toHaveBeenCalled();
+  });
+
+  it("rejects ranges before the Grid 4 analysis archive", async () => {
+    const getHistoricalParcel = vi.fn();
+    const service = new HistoricalParcelTimeSeriesService({
+      parcelGetter: { getHistoricalParcel } as never,
+      now: () => new Date("2026-08-26T12:00:00Z"),
+    });
+    await expect(service.getHistoricalParcelTimeSeries({
+      ...baseQuery,
+      startTime: "2006-12-31T12:00:00Z",
+      endTime: "2007-01-01T12:00:00Z",
+      cycleHoursUtc: [12],
+      maxSteps: 2,
+    })).rejects.toThrow(/begins at 2007-01-01/);
+    expect(getHistoricalParcel).not.toHaveBeenCalled();
+  });
+
+  it("rejects future historical parcel ranges", async () => {
+    const getHistoricalParcel = vi.fn();
+    const service = new HistoricalParcelTimeSeriesService({
+      parcelGetter: { getHistoricalParcel } as never,
+      now: () => new Date("2026-08-26T12:00:00Z"),
+    });
+    await expect(service.getHistoricalParcelTimeSeries({
+      ...baseQuery,
+      startTime: "2026-08-26T12:00:00Z",
+      endTime: "2026-08-26T18:00:00Z",
+      cycleHoursUtc: [12, 18],
+      maxSteps: 2,
+    })).rejects.toThrow(/must not be in the future/);
     expect(getHistoricalParcel).not.toHaveBeenCalled();
   });
 });
