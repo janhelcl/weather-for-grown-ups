@@ -6,17 +6,30 @@ import {
   type HistoricalAnalysisDataSource,
 } from "../src/sources/ncei-gfs-history.js";
 
+const dataset = "model-gfs-g4-anl-files-old/201705/20170509/gfsanl_4_20170509_0000_000.grb2";
 const csv = [
   'station_name,station_description,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,vertCoord[unit="Pa"],Temperature_isobaric[unit="K"],Relative_humidity_isobaric[unit="%"],u-component_of_wind_isobaric[unit="m/s"],v-component_of_wind_isobaric[unit="m/s"],Geopotential_height_isobaric[unit="gpm"]',
   'point,point,50,14.5,2017-05-09T00:00:00Z,85000,285.15,65,3,4,1500',
   'point,point,50,14.5,2017-05-09T00:00:00Z,70000,273.15,40,-10,0,3100',
 ].join("\n");
 
+const verticalVelocityCsv = [
+  'station_name,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,isobaric3[unit="Pa"],Vertical_velocity_pressure_isobaric[unit="Pa/s"]',
+  'point,50,14.5,2017-05-09T00:00:00Z,85000,-0.12',
+  'point,50,14.5,2017-05-09T00:00:00Z,70000,-0.08',
+].join("\n");
+
+const vorticityCsv = [
+  'station_name,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,isobaric2[unit="Pa"],Absolute_vorticity_isobaric[unit="1/s"]',
+  'point,50,14.5,2017-05-09T00:00:00Z,85000,0.00008',
+  'point,50,14.5,2017-05-09T00:00:00Z,70000,0.00010',
+].join("\n");
+
 function mockSource(): HistoricalAnalysisDataSource {
   return {
     fetch: vi.fn(async () => ({
       csv,
-      dataset: "model-gfs-g4-anl-files-old/201705/20170509/gfsanl_4_20170509_0000_000.grb2",
+      dataset,
       cacheHit: false,
     })),
   };
@@ -79,6 +92,41 @@ describe("HistoricalProfileService", () => {
     }));
   });
 
+  it("splits variables with incompatible historical pressure axes and merges their levels", async () => {
+    const fetch = vi.fn(async (request: { variables: readonly string[] }) => {
+      if (request.variables.includes("Vertical_velocity_pressure_isobaric")) {
+        return { csv: verticalVelocityCsv, dataset, cacheHit: true };
+      }
+      if (request.variables.includes("Absolute_vorticity_isobaric")) {
+        return { csv: vorticityCsv, dataset, cacheHit: true };
+      }
+      return { csv, dataset, cacheHit: true };
+    });
+    const service = new HistoricalProfileService({ source: { fetch } });
+
+    const result = await service.getHistoricalProfile({
+      latitude: 50.08,
+      longitude: 14.43,
+      analysisTime: "2017-05-09T00:00:00Z",
+      variables: ["temperature", "vertical_velocity", "absolute_vorticity"],
+      pressureLevelsHpa: [850, 700],
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch.mock.calls.map(([request]) => request.variables)).toEqual([
+      ["Temperature_isobaric"],
+      ["Vertical_velocity_pressure_isobaric"],
+      ["Absolute_vorticity_isobaric"],
+    ]);
+    expect(result.levels[0]).toMatchObject({
+      pressureHpa: 850,
+      temperatureC: 12,
+      verticalVelocityPaS: -0.12,
+      absoluteVorticityS1: 0.00008,
+    });
+    expect(result.source.cacheHit).toBe(true);
+  });
+
   it("rejects non-cycle times, pre-archive dates, and future analyses", async () => {
     const service = new HistoricalProfileService({
       source: mockSource(),
@@ -127,7 +175,7 @@ describe("NCEI historical GFS access", () => {
     );
   });
 
-  it("builds one NCSS grid-as-point request for the complete pressure profile", () => {
+  it("builds one NCSS grid-as-point request for variables sharing a pressure axis", () => {
     const url = new URL(buildNceiGfsAnalysisPointUrl({
       analysisTime: new Date("2017-05-09T00:00:00Z"),
       latitude: 50.08,
