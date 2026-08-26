@@ -6,6 +6,7 @@ import { GefsPointsBundleService } from "./core/gefs-points-bundle.js";
 import { GefsTransectService } from "./core/gefs-transect.js";
 import { HistoricalIndexBackfillService } from "./core/history-backfill.js";
 import { HistoricalDiagnosticsService } from "./core/history-diagnostics.js";
+import { HistoricalFieldsTimeSeriesService } from "./core/history-fields-timeseries.js";
 import { HistoricalFieldsService } from "./core/history-fields.js";
 import { HistoricalIndexService } from "./core/history-index.js";
 import { HistoricalTimeSeriesService } from "./core/history-time-series.js";
@@ -22,7 +23,10 @@ import {
   handleGetGfsHistoricalLayerDiagnostics,
   handleGetGfsHistoricalProfileDiagnostics,
 } from "./mcp-history-diagnostics-tool.js";
-import { handleGetGfsHistoricalFields } from "./mcp-history-fields-tool.js";
+import {
+  handleGetGfsHistoricalFields,
+  handleGetGfsHistoricalFieldsTimeSeries,
+} from "./mcp-history-fields-tool.js";
 import {
   handleBackfillGfsHistoryIndex,
   handleFindGfsHistoricalAnalogs,
@@ -60,6 +64,10 @@ import {
   historicalProfileDiagnosticsResultSchema,
 } from "./schema/history-diagnostics.js";
 import {
+  historicalFieldsTimeSeriesQuerySchema,
+  historicalFieldsTimeSeriesResultSchema,
+} from "./schema/history-fields-timeseries.js";
+import {
   historicalFieldsQuerySchema,
   historicalFieldsResultSchema,
 } from "./schema/history-fields.js";
@@ -84,6 +92,9 @@ export function createMcpServer() {
   const server = createBaseMcpServer();
   const historicalTimeSeriesService = new HistoricalTimeSeriesService();
   const historicalFieldsService = new HistoricalFieldsService();
+  const historicalFieldsTimeSeriesService = new HistoricalFieldsTimeSeriesService({
+    fieldsGetter: historicalFieldsService,
+  });
   const historicalDiagnosticsService = new HistoricalDiagnosticsService();
   const historicalIndexService = new HistoricalIndexService();
   const historicalBackfillService = new HistoricalIndexBackfillService();
@@ -108,6 +119,13 @@ export function createMcpServer() {
     inputSchema: historicalFieldsQuerySchema,
     outputSchema: historicalFieldsResultSchema,
   }, async (query) => handleGetGfsHistoricalFields(historicalFieldsService, query));
+
+  server.registerTool("get_gfs_historical_fields_timeseries", {
+    title: "Get historical GFS mixed-field time series",
+    description: "Track the historical mixed pressure/non-isobaric selection across a bounded series of native 00/06/12/18 UTC GFS Grid 4 analysis cycles. Uses the same historical field subset and instantaneous semantics as get_gfs_historical_fields, with default maxSteps 8 and hard maximum 16. Archive reads are serial under WFG's NOAA courtesy limiter.",
+    inputSchema: historicalFieldsTimeSeriesQuerySchema,
+    outputSchema: historicalFieldsTimeSeriesResultSchema,
+  }, async (query) => handleGetGfsHistoricalFieldsTimeSeries(historicalFieldsTimeSeriesService, query));
 
   server.registerTool("get_gfs_historical_layer_diagnostics", {
     title: "Get historical GFS layer diagnostics",
