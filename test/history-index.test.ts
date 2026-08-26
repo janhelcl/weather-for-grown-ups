@@ -155,6 +155,28 @@ describe("HistoricalIndexService.findAnalogs", () => {
     expect(result.analogs[0]!.distance).toBeLessThan(result.analogs[1]!.distance);
   });
 
+  it("reuses a materialized target requested elsewhere inside the same Grid 4 cell", async () => {
+    const store = await tempStore();
+    await store.append([
+      record("2017-05-09T12:00:00.000Z", 10, { requestedLongitude: 14.43 }),
+      record("2017-05-01T12:00:00.000Z", 11),
+    ]);
+    const getHistoricalProfile = vi.fn();
+    const service = new HistoricalIndexService({ store, profileGetter: { getHistoricalProfile } });
+    const result = await service.findAnalogs({
+      latitude: 50.12,
+      longitude: 14.49,
+      targetTime: "2017-05-09T12:00:00Z",
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+      fetchTargetIfMissing: false,
+    });
+
+    expect(result.target.fromIndex).toBe(true);
+    expect(result.gridPoint).toEqual({ latitude: 50, longitude: 14.5 });
+    expect(getHistoricalProfile).not.toHaveBeenCalled();
+  });
+
   it("can fetch and persist only the missing target before searching local candidates", async () => {
     const store = await tempStore();
     await store.append([
