@@ -262,7 +262,7 @@ export function publicDatasetMetadata(dataset: PublicAtmosphericDataset) {
 }
 
 function validateCommonAtmosphericRequest(
-  request: z.infer<typeof queryAtmosphereSchema> | any,
+  request: any,
   context: z.RefinementCtx,
 ): void {
   validateDatasetModifiers(request, context);
