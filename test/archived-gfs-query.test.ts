@@ -169,6 +169,52 @@ describe("ArchivedGfsForecastQueryService", () => {
     }));
   });
 
+  it("preserves 0.25 archive identity, provenance and caveat", async () => {
+    const getArchivedForecastProfile = vi.fn(async (query: any) => ({
+      model: "gfs_0p25_forecast_archive" as const,
+      runTime: query.runTime.toISOString(),
+      forecastHour: query.forecastHour,
+      validTime: new Date(query.runTime.getTime() + query.forecastHour * 3_600_000).toISOString(),
+      requestedPoint: { latitude: query.latitude, longitude: query.longitude },
+      gridPoint: { latitude: 50, longitude: 14 },
+      selection: {
+        variables: query.variables,
+        pressureLevelsHpa: query.pressureLevelsHpa,
+      },
+      levels: [{ pressureHpa: 850, temperatureC: 10 }],
+      source: {
+        provider: "NCAR GDEX" as const,
+        access: "gdex_thredds_ncss" as const,
+        dataset: "d084001",
+        cacheHit: true,
+      },
+    }));
+    const service = new ArchivedGfsForecastQueryService({
+      profile: { getArchivedForecastProfile },
+      now: () => new Date("2026-08-27T12:00:00Z"),
+    });
+    const result = await service.query(queryAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-24T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      forecast: { run: "2026-08-24T00:00:00Z", grid: "0p25" },
+      source: "archive",
+    })) as any;
+
+    expect(result).toMatchObject({
+      model: "gfs_0p25_forecast_archive",
+      source: {
+        provider: "NCAR GDEX",
+        access: "gdex_thredds_ncss",
+      },
+    });
+    expect(result.caveat).toContain("NCAR GDEX 0.25-degree");
+    expect(getArchivedForecastProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ grid: "0p25", forecastHour: 6 }),
+    );
+  });
+
   it("builds range, multi-point and transect products from the same archive point primitive", async () => {
     const profile = profileMock();
     const service = new ArchivedGfsForecastQueryService({

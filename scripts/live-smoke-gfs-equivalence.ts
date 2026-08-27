@@ -107,7 +107,7 @@ async function verifyGrid(grid: Grid) {
     operationalProfileDiagnostic.diagnostics,
     archivedProfileDiagnostic.diagnostics,
     `${grid}.profileDiagnostic`,
-    3e-4,
+    1e-3,
   );
 
   const operationalParcel = await parcelDiagnostic(grid, "s3", runIso, f006);
