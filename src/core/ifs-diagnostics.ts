@@ -13,6 +13,7 @@ import {
 } from "../schema/ifs-diagnostics.js";
 import type { IfsPointQueryInput, IfsProfileResult } from "../schema/ifs.js";
 import { IfsProfileService } from "./ifs-profile.js";
+import type { ProfileLevel } from "./types.js";
 import {
   deriveLayerDiagnosticsFromLevels,
   deriveProfileDiagnosticsFromLevels,
@@ -48,8 +49,9 @@ export class IfsDiagnosticsService {
       variables,
       pressureLevelsHpa: [query.lowerPressureHpa, query.upperPressureHpa],
     });
+    const levels = profile.levels as ProfileLevel[];
     const derived = deriveLayerDiagnosticsFromLevels(
-      profile.levels,
+      levels,
       query.lowerPressureHpa,
       query.upperPressureHpa,
       diagnostics,
@@ -93,7 +95,7 @@ export class IfsDiagnosticsService {
       gridPoint: profile.gridPoint,
       sampledPressureLevelsHpa: pressureLevelsHpa,
       levels: profile.levels,
-      diagnostics: deriveProfileDiagnosticsFromLevels(profile.levels, diagnostics),
+      diagnostics: deriveProfileDiagnosticsFromLevels(profile.levels as ProfileLevel[], diagnostics),
       source: profile.source,
     });
   }
