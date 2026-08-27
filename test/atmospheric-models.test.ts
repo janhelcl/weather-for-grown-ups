@@ -21,6 +21,13 @@ describe("atmospheric dataset capability catalog", () => {
       maxForecastHour: 384,
       members: 31,
     });
+    expect(ATMOSPHERIC_DATASET_CATALOG.ifs_0p25).toMatchObject({
+      family: "ifs",
+      kind: "deterministic",
+      role: "forecast",
+      horizontalGridDegrees: 0.25,
+      maxForecastHour: 360,
+    });
     expect(ATMOSPHERIC_DATASET_CATALOG.gfs_grid4_analysis_0p5).toMatchObject({
       kind: "deterministic",
       role: "analysis",
@@ -32,6 +39,8 @@ describe("atmospheric dataset capability catalog", () => {
   it("advertises only operations actually implemented for each dataset", () => {
     expect(datasetSupportsOperation("gfs_0p25", "profile")).toBe(true);
     expect(datasetSupportsOperation("gefs_0p50", "profile")).toBe(true);
+    expect(datasetSupportsOperation("ifs_0p25", "profile")).toBe(true);
+    expect(datasetSupportsOperation("ifs_0p25", "timeseries")).toBe(false);
     expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "profile")).toBe(true);
 
     expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "timeseries")).toBe(true);
@@ -48,10 +57,11 @@ describe("atmospheric dataset capability catalog", () => {
   });
 
   it("keeps the model registry vocabulary limited to operational forecast models", () => {
-    expect(Object.keys(ATMOSPHERIC_MODEL_CATALOG)).toEqual(["gfs_0p25", "gfs_0p50", "gefs_0p50"]);
+    expect(Object.keys(ATMOSPHERIC_MODEL_CATALOG)).toEqual(["gfs_0p25", "gfs_0p50", "gefs_0p50", "ifs_0p25"]);
     expect(modelSupportsOperation("gfs_0p25", "points")).toBe(true);
     expect(modelSupportsOperation("gfs_0p50", "run_comparison")).toBe(true);
     expect(modelSupportsOperation("gfs_0p50", "aligned_model_comparison")).toBe(true);
     expect(modelSupportsOperation("gefs_0p50", "ensemble_distribution")).toBe(true);
+    expect(modelSupportsOperation("ifs_0p25", "profile")).toBe(true);
   });
 });
