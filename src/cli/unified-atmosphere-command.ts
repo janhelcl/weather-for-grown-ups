@@ -263,7 +263,7 @@ function registerVerifyCommand(program: Command): void {
             leadHours: leads,
           };
 
-      const result = await new UnifiedForecastVerificationService().verify(request);
+      const result = await new UnifiedForecastVerificationService().verify(request as any);
       printResult(result, Boolean(options.json));
     });
 }
