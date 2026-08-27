@@ -95,6 +95,27 @@ describe("IFS composed spatiotemporal operations", () => {
     expect(resolveLatestRun).not.toHaveBeenCalled();
   });
 
+  it("rejects source-provenance drift inside one composed IFS query", async () => {
+    const getProfile = vi.fn(async (input: IfsPointQueryInput) => {
+      const profile = profileFor(input);
+      if (profile.forecastHour === 3) {
+        profile.source.decoder = "wgrib2";
+      }
+      return profile;
+    });
+    const service = new IfsTimeSeriesService({ profileGetter: { getProfile } });
+
+    await expect(service.getTimeSeries({
+      latitude: 50.08,
+      longitude: 14.43,
+      run: run.toISOString(),
+      startTime: "2026-08-27T12:00:00Z",
+      endTime: "2026-08-27T15:00:00Z",
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    })).rejects.toThrow("source provenance changed");
+  });
+
   it("resolves one run for many points and preserves per-point samples", async () => {
     let calls = 0;
     const getProfile = vi.fn(async (input: IfsPointQueryInput) => {
