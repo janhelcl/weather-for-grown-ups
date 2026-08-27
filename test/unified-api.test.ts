@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
 import {
+  UnifiedAtmosphereDiagnosticService,
   UnifiedAtmosphereQueryService,
 } from "../src/core/unified-atmosphere-api.js";
 import {
@@ -276,5 +277,276 @@ describe("unified specialized operation aliases", () => {
     expect(analog.findAnalogs).toHaveBeenCalledWith(expect.objectContaining({
       targetTime: "2017-05-09T12:00:00Z",
     }));
+  });
+});
+
+
+describe("unified geometry routing coverage", () => {
+  it("routes multi-point instant and range queries across all datasets", async () => {
+    const gfsPoints = { getPoints: vi.fn(async () => ({ route: "gfs-points" })) };
+    const gefsPoints = { getPoints: vi.fn(async () => ({ route: "gefs-points" })) };
+    const historyPoints = { getPoints: vi.fn(async () => ({ route: "history-points" })) };
+    const gfsPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "gfs-points-series" })) };
+    const gefsPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "gefs-points-series" })) };
+    const historyPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "history-points-series" })) };
+    const service = new UnifiedAtmosphereQueryService({
+      gfsPoints: gfsPoints as any,
+      gefsPoints: gefsPoints as any,
+      historyPoints: historyPoints as any,
+      gfsPointsTimeSeries: gfsPointsTimeSeries as any,
+      gefsPointsTimeSeries: gefsPointsTimeSeries as any,
+      historyPointsTimeSeries: historyPointsTimeSeries as any,
+    });
+
+    const geometry = {
+      type: "points" as const,
+      points: [
+        { latitude: 50.08, longitude: 14.43 },
+        { latitude: 49.20, longitude: 16.61 },
+      ],
+    };
+    const instant = { at: "2026-08-28T12:00:00Z" };
+
+    expect((await service.query({ dataset: "gfs", geometry, time: instant, selection })).result)
+      .toEqual({ route: "gfs-points" });
+    expect((await service.query({ dataset: "gefs", geometry, time: instant, selection })).result)
+      .toEqual({ route: "gefs-points" });
+    expect((await service.query({
+      dataset: "gfs-analysis",
+      geometry,
+      time: { at: "2017-05-09T12:00:00Z" },
+      selection,
+    })).result).toEqual({ route: "history-points" });
+
+    const range = {
+      from: "2026-08-28T00:00:00Z",
+      to: "2026-08-28T12:00:00Z",
+      maxSteps: 5,
+    };
+    expect((await service.query({
+      dataset: "gfs",
+      geometry,
+      time: range,
+      selection,
+      limits: { maxSamples: 10 },
+    })).result).toEqual({ route: "gfs-points-series" });
+    expect((await service.query({
+      dataset: "gefs",
+      geometry,
+      time: range,
+      selection,
+      ensemble: { quantiles: [0.1, 0.5, 0.9], maxMemberSamples: 100 },
+      limits: { maxPointSteps: 10 },
+    })).result).toEqual({ route: "gefs-points-series" });
+    expect((await service.query({
+      dataset: "gfs-analysis",
+      geometry,
+      time: {
+        from: "2017-05-09T00:00:00Z",
+        to: "2017-05-09T18:00:00Z",
+        hoursUtc: [0, 12],
+        maxSteps: 2,
+      },
+      selection,
+      limits: { maxPointSteps: 10 },
+    })).result).toEqual({ route: "history-points-series" });
+  });
+
+  it("routes transects through dataset-native implementations", async () => {
+    const gfsTransect = { getTransect: vi.fn(async () => ({ route: "gfs-transect" })) };
+    const gefsTransect = { getTransect: vi.fn(async () => ({ route: "gefs-transect" })) };
+    const historyTransect = { getTransect: vi.fn(async () => ({ route: "history-transect" })) };
+    const service = new UnifiedAtmosphereQueryService({
+      gfsTransect: gfsTransect as any,
+      gefsTransect: gefsTransect as any,
+      historyTransect: historyTransect as any,
+    });
+    const geometry = {
+      type: "transect" as const,
+      start: { latitude: 49.5, longitude: 14.0 },
+      end: { latitude: 50.0, longitude: 15.0 },
+      samples: 5,
+    };
+
+    expect((await service.query({
+      dataset: "gfs",
+      geometry,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+    })).result).toEqual({ route: "gfs-transect" });
+
+    expect((await service.query({
+      dataset: "gefs",
+      geometry,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { fields: ["wind_10m"] },
+      ensemble: { quantiles: [0.1, 0.5, 0.9], includeMembers: false, maxMemberSamples: 100 },
+    })).result).toEqual({ route: "gefs-transect" });
+
+    expect((await service.query({
+      dataset: "gfs-analysis",
+      geometry,
+      time: { at: "2017-05-09T12:00:00Z" },
+      selection: { fields: ["wind_10m"] },
+    })).result).toEqual({ route: "history-transect" });
+  });
+
+  it("routes scalar area summaries with shared aggregation controls", async () => {
+    const gfsArea = { summarize: vi.fn(async () => ({ route: "gfs-area" })) };
+    const gefsArea = { summarize: vi.fn(async () => ({ route: "gefs-area" })) };
+    const historyArea = { summarize: vi.fn(async () => ({ route: "history-area" })) };
+    const service = new UnifiedAtmosphereQueryService({
+      gfsArea: gfsArea as any,
+      gefsArea: gefsArea as any,
+      historyArea: historyArea as any,
+    });
+    const geometry = {
+      type: "area" as const,
+      westLongitude: 14,
+      eastLongitude: 14.5,
+      southLatitude: 49.75,
+      northLatitude: 50.25,
+    };
+    const aggregate = {
+      percentiles: [10, 50, 90],
+      thresholds: [{ operator: "gte" as const, value: 0 }],
+      includeExtremaLocations: true,
+    };
+
+    expect((await service.query({
+      dataset: "gfs",
+      geometry,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      aggregate,
+      limits: { maxGridPoints: 1000 },
+    })).result).toEqual({ route: "gfs-area" });
+
+    expect((await service.query({
+      dataset: "gefs",
+      geometry,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      aggregate,
+      ensemble: { quantiles: [0.1, 0.5, 0.9] },
+      limits: { maxGridPoints: 1000, maxMemberGridPoints: 30000 },
+    })).result).toEqual({ route: "gefs-area" });
+
+    expect((await service.query({
+      dataset: "gfs-analysis",
+      geometry,
+      time: { at: "2017-05-09T12:00:00Z" },
+      selection,
+      aggregate,
+      limits: { maxGridPoints: 1000 },
+    })).result).toEqual({ route: "history-area" });
+  });
+});
+
+describe("unified diagnostic routing coverage", () => {
+  it("routes instant layer, profile and parcel diagnostics", async () => {
+    const layer = { getLayerDiagnostics: vi.fn(async () => ({ route: "layer" })) };
+    const profile = { getProfileDiagnostics: vi.fn(async () => ({ route: "profile" })) };
+    const parcel = { getParcelDiagnostics: vi.fn(async () => ({ route: "parcel" })) };
+    const timeSeries = { getDiagnosticTimeSeries: vi.fn(async () => ({ route: "series" })) };
+    const service = new UnifiedAtmosphereDiagnosticService({
+      layer: layer as any,
+      profile: profile as any,
+      parcel: parcel as any,
+      timeSeries: timeSeries as any,
+    });
+
+    expect((await service.diagnose({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+      forecast: { run: "latest" },
+      source: "s3",
+    })).result).toEqual({ route: "layer" });
+
+    expect((await service.diagnose({
+      dataset: "gefs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [1000, 850, 700, 500],
+        diagnostics: ["freezing_level_crossings"],
+      },
+      ensemble: { quantiles: [0.1, 0.5, 0.9], includeMembers: true },
+    })).result).toEqual({ route: "profile" });
+
+    expect((await service.diagnose({
+      dataset: "gfs-analysis",
+      geometry: point,
+      time: { at: "2017-05-09T12:00:00Z" },
+      diagnostic: {
+        kind: "parcel",
+        pressureLevelsHpa: [1000, 925, 850, 700, 500, 300],
+        parcel: "surface_2m",
+      },
+    })).result).toEqual({ route: "parcel" });
+
+    expect(layer.getLayerDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ model: "gfs_0p25" }));
+    expect(profile.getProfileDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ model: "gefs_0p50" }));
+    expect(parcel.getParcelDiagnostics).toHaveBeenCalledWith(expect.objectContaining({
+      model: "gfs_grid4_analysis_0p5",
+    }));
+  });
+
+  it("routes diagnostic ranges while preserving dataset time semantics", async () => {
+    const timeSeries = { getDiagnosticTimeSeries: vi.fn(async (input) => ({ route: input.model })) };
+    const service = new UnifiedAtmosphereDiagnosticService({ timeSeries: timeSeries as any });
+    const diagnostic = {
+      kind: "layer" as const,
+      lowerPressureHpa: 850,
+      upperPressureHpa: 500,
+      diagnostics: ["wind_shear" as const],
+    };
+
+    expect((await service.diagnose({
+      dataset: "gfs",
+      geometry: point,
+      time: {
+        from: "2026-08-28T00:00:00Z",
+        to: "2026-08-28T12:00:00Z",
+        maxSteps: 5,
+      },
+      diagnostic,
+      forecast: { run: "latest" },
+      source: "s3",
+    })).result).toEqual({ route: "gfs_0p25" });
+
+    expect((await service.diagnose({
+      dataset: "gefs",
+      geometry: point,
+      time: {
+        from: "2026-08-28T00:00:00Z",
+        to: "2026-08-28T12:00:00Z",
+        maxSteps: 5,
+      },
+      diagnostic,
+      ensemble: { members: ["c00", "p01"], quantiles: [0.1, 0.9] },
+    })).result).toEqual({ route: "gefs_0p50" });
+
+    expect((await service.diagnose({
+      dataset: "gfs-analysis",
+      geometry: point,
+      time: {
+        from: "2017-05-09T00:00:00Z",
+        to: "2017-05-09T18:00:00Z",
+        hoursUtc: [0, 12],
+        maxSteps: 2,
+      },
+      diagnostic,
+    })).result).toEqual({ route: "gfs_grid4_analysis_0p5" });
+
+    expect(timeSeries.getDiagnosticTimeSeries).toHaveBeenCalledTimes(3);
   });
 });
