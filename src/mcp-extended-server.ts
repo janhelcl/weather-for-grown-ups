@@ -52,7 +52,7 @@ import {
   handleMaterializeGfsHistoryIndex,
   handleVerifyGfsHistoricalForecast,
 } from "./mcp-history-tool.js";
-import { createMcpServer as createBaseMcpServer } from "./mcp-server.js";
+import { createMcpServer as createBaseMcpServer } from "./mcp-server.js";\nimport { registerUnifiedAtmosphereTools } from "./mcp-unified-tool.js";
 import {
   gefsAreaSummaryQuerySchema,
   gefsAreaSummaryResultSchema,
