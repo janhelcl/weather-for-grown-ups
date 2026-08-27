@@ -1,20 +1,22 @@
-name: PR GFS equivalence
+name: PR GFS parity
 
 on:
   pull_request:
     branches: [main]
 
 concurrency:
-  group: pr-gfs-equivalence-${{ github.event.pull_request.number }}
+  group: pr-gfs-parity-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  equivalence:
+  parity:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Build pinned live-test environment
         run: docker build --target live-test -t weather-for-grown-ups:live-test .
-      - name: Compare operational and archived GFS grids
-        run: docker run --rm weather-for-grown-ups:live-test npm run test:live:gfs-equivalence
+      - name: Compare NOMADS and NOAA AWS operational transports
+        run: docker run --rm weather-for-grown-ups:live-test npm run test:live:gfs-operational-parity
+      - name: Check operational/archive same-run equivalence
+        run: docker run --rm weather-for-grown-ups:live-test npm run test:live:gfs-archive-equivalence
