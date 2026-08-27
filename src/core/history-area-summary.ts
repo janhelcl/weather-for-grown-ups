@@ -32,12 +32,14 @@ export interface HistoricalAreaSummaryServiceOptions {
   source?: HistoricalAnalysisAreaDataSource;
   now?: () => Date;
   allowNonAnalysisCycle?: boolean;
+  minimumTime?: Date;
 }
 
 export class HistoricalAreaSummaryService {
   private readonly source: HistoricalAnalysisAreaDataSource;
   private readonly now: () => Date;
   private readonly allowNonAnalysisCycle: boolean;
+  private readonly minimumTime: Date;
 
   constructor(options: HistoricalAreaSummaryServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
@@ -51,6 +53,7 @@ export class HistoricalAreaSummaryService {
     });
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
+    this.minimumTime = options.minimumTime ?? NCEI_GFS_GRID4_ANALYSIS_START;
   }
 
   async summarize(input: HistoricalAreaSummaryQueryInput): Promise<HistoricalAreaSummaryResult> {
@@ -58,9 +61,9 @@ export class HistoricalAreaSummaryService {
       ? historicalAreaSummaryQuerySchema.safeExtend({ analysisTime: isoDateTimeSchema }).parse(input)
       : historicalAreaSummaryQuerySchema.parse(input);
     const analysisTime = new Date(query.analysisTime);
-    if (analysisTime < NCEI_GFS_GRID4_ANALYSIS_START) {
+    if (analysisTime < this.minimumTime) {
       throw new Error(
-        `NCEI GFS Grid 4 analysis history begins at ${NCEI_GFS_GRID4_ANALYSIS_START.toISOString()}`,
+        `NCEI GFS Grid 4 history begins at ${this.minimumTime.toISOString()} for this data source`,
       );
     }
     if (analysisTime > this.now()) {
