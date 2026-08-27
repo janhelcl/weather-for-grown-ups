@@ -57,7 +57,7 @@ describe("AreaSummaryService", () => {
     expect(result.model).toBe("gfs_0p50");
     const url = new URL(fetch.mock.calls[0]?.[0] ?? "");
     expect(url.pathname).toBe("/cgi-bin/filter_gfs_0p50.pl");
-    expect(url.searchParams.get("file")).toBe("gfs.t06z.pgrb2.0p50.f006");
+    expect(url.searchParams.get("file")).toBe("gfs.t06z.pgrb2full.0p50.f006");
   });
 
   it("passes 0.5 through query-aware and complete latest-run discovery", async () => {
