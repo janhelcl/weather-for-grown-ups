@@ -37,7 +37,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("search_catalog", {
     title: "Search atmospheric datasets and capabilities",
-    description: "Search one canonical catalog across operational GFS, GEFS, and historical GFS analysis. Results use shared variable/field/diagnostic IDs and explicitly list which datasets support each match. This is the preferred discovery tool for the unified WFG API.",
+    description: "Search one canonical catalog across operational GFS, GEFS, ECMWF IFS, and historical GFS analysis. Results use shared variable/field/diagnostic IDs and explicitly list which datasets support each match. This is the preferred discovery tool for the unified WFG API.",
     inputSchema: searchAtmosphereCatalogSchema,
     outputSchema: unifiedCatalogResultSchema,
   }, async (query) => {
@@ -50,7 +50,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("query_atmosphere", {
     title: "Query atmospheric state",
-    description: "Query GFS, GEFS, or historical GFS analysis through one dataset × geometry × time × selection contract. Geometry may be one point, multiple points, a transect, or an area; point geometries also accept time ranges. The result preserves dataset-native semantics: deterministic forecasts remain deterministic, GEFS remains member-first ensemble distributions, and historical analysis keeps analysis-time/NCEI provenance without invented forecast metadata.",
+    description: "Query GFS, GEFS, ECMWF IFS, or historical GFS analysis through one dataset × geometry × time × selection contract. The first IFS slice supports deterministic 0.25° point queries at one valid time with pressure-level variables and selected surface fields. Geometry may be one point, multiple points, a transect, or an area; point geometries also accept time ranges. The result preserves dataset-native semantics: deterministic forecasts remain deterministic, GEFS remains member-first ensemble distributions, and historical analysis keeps analysis-time/NCEI provenance without invented forecast metadata.",
     inputSchema: queryAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {
