@@ -38,6 +38,28 @@ describe("ECMWF IFS Open Data source", () => {
     ])).toThrow("missing requested fields");
   });
 
+  it("retries transient throttling before resolving availability", async () => {
+    let call = 0;
+    const fetchFn = vi.fn(async () => {
+      call += 1;
+      if (call === 1) {
+        return new Response("Slow Down", {
+          status: 503,
+          headers: { "retry-after": "0" },
+        });
+      }
+      return new Response(
+        '{"date":"20260827","time":"1200","step":"6","levtype":"pl","levelist":"850","param":"t","_offset":0,"_length":10}',
+        { status: 200 },
+      );
+    }) as typeof fetch;
+    const probe = new IfsOpenDataRunProbe(fetchFn);
+    await expect(probe.isForecastAvailable(run, 6, [
+      { key: "t@850", param: "t", levtype: "pl", levelist: 850 },
+    ])).resolves.toBe(true);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
   it("treats missing objects and missing selected inventory as unavailable", async () => {
     const notFound = new IfsOpenDataRunProbe(vi.fn(async () => new Response("", { status: 404 })) as typeof fetch);
     await expect(notFound.isForecastAvailable(run, 6, [
