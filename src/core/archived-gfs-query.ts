@@ -112,9 +112,12 @@ export class ArchivedGfsForecastQueryService {
   }
 
   private async pointInstant(
-    request: QueryAtmosphereRequest & { geometry: { type: "point" }; time: { at: string } },
+    request: QueryAtmosphereRequest,
     run: Date,
   ): Promise<ArchivedPointResult> {
+    if (request.geometry.type !== "point" || !("at" in request.time)) {
+      throw new Error("Internal archive routing error: expected point + instant");
+    }
     return this.getPoint(
       { latitude: request.geometry.latitude, longitude: request.geometry.longitude },
       run,
@@ -124,9 +127,12 @@ export class ArchivedGfsForecastQueryService {
   }
 
   private async pointRange(
-    request: QueryAtmosphereRequest & { geometry: { type: "point" }; time: { from: string; to: string; maxSteps?: number } },
+    request: QueryAtmosphereRequest,
     run: Date,
   ): Promise<unknown> {
+    if (request.geometry.type !== "point" || !("from" in request.time)) {
+      throw new Error("Internal archive routing error: expected point + range");
+    }
     const startTime = new Date(request.time.from);
     const endTime = new Date(request.time.to);
     const forecastHours = archivedGfsForecastHoursInRange(run, startTime, endTime);
@@ -171,9 +177,12 @@ export class ArchivedGfsForecastQueryService {
   }
 
   private async pointsInstant(
-    request: QueryAtmosphereRequest & { geometry: { type: "points"; points: Point[] }; time: { at: string } },
+    request: QueryAtmosphereRequest,
     run: Date,
   ): Promise<unknown> {
+    if (request.geometry.type !== "points" || !("at" in request.time)) {
+      throw new Error("Internal archive routing error: expected points + instant");
+    }
     const validTime = new Date(request.time.at);
     const points: ArchivedPointResult[] = [];
     for (const point of request.geometry.points) {
@@ -204,12 +213,12 @@ export class ArchivedGfsForecastQueryService {
   }
 
   private async pointsRange(
-    request: QueryAtmosphereRequest & {
-      geometry: { type: "points"; points: Point[] };
-      time: { from: string; to: string; maxSteps?: number };
-    },
+    request: QueryAtmosphereRequest,
     run: Date,
   ): Promise<unknown> {
+    if (request.geometry.type !== "points" || !("from" in request.time)) {
+      throw new Error("Internal archive routing error: expected points + range");
+    }
     const startTime = new Date(request.time.from);
     const endTime = new Date(request.time.to);
     const forecastHours = archivedGfsForecastHoursInRange(run, startTime, endTime);
@@ -267,9 +276,12 @@ export class ArchivedGfsForecastQueryService {
   }
 
   private async transect(
-    request: QueryAtmosphereRequest & { geometry: { type: "transect"; start: Point; end: Point; samples?: number }; time: { at: string } },
+    request: QueryAtmosphereRequest,
     run: Date,
   ): Promise<unknown> {
+    if (request.geometry.type !== "transect" || !("at" in request.time)) {
+      throw new Error("Internal archive routing error: expected transect + instant");
+    }
     const validTime = new Date(request.time.at);
     const samples = request.geometry.samples ?? 10;
     const requestedPoints = interpolateGreatCircle(request.geometry.start, request.geometry.end, samples);
@@ -313,18 +325,12 @@ export class ArchivedGfsForecastQueryService {
   }
 
   private async area(
-    request: QueryAtmosphereRequest & {
-      geometry: {
-        type: "area";
-        westLongitude: number;
-        eastLongitude: number;
-        southLatitude: number;
-        northLatitude: number;
-      };
-      time: { at: string };
-    },
+    request: QueryAtmosphereRequest,
     run: Date,
   ): Promise<unknown> {
+    if (request.geometry.type !== "area" || !("at" in request.time)) {
+      throw new Error("Internal archive routing error: expected area + instant");
+    }
     const validTime = new Date(request.time.at);
     const fh = archivedForecastHour(run, validTime);
     const areaSource: HistoricalAnalysisAreaDataSource = {
@@ -383,7 +389,7 @@ export class ArchivedGfsForecastQueryService {
     const pressureLevelsHpa = request.selection.pressureLevelsHpa;
     const fields = request.selection.fields as HistoricalGfsFieldId[] | undefined;
 
-    if ((fields?.length ?? 0) > 0) {
+    if (fields !== undefined && fields.length > 0) {
       const adapter: HistoricalAnalysisDataSource = {
         fetch: async (input) => this.source.fetch({
           runTime: run,
@@ -413,7 +419,13 @@ export class ArchivedGfsForecastQueryService {
         forecastHour: fh,
         requestedPoint: result.requestedPoint,
         gridPoint: result.gridPoint,
-        selection: result.selection,
+        selection: {
+          ...(result.selection.variables === undefined ? {} : { variables: result.selection.variables }),
+          ...(result.selection.pressureLevelsHpa === undefined
+            ? {}
+            : { pressureLevelsHpa: result.selection.pressureLevelsHpa }),
+          fields: result.selection.fields,
+        },
         ...(result.levels === undefined ? {} : { levels: result.levels }),
         fields: result.fields,
         source: result.source,
