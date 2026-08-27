@@ -5,6 +5,12 @@ import {
   UnifiedAtmosphereQueryService,
 } from "./core/unified-atmosphere-api.js";
 import {
+  UnifiedAnalogService,
+  UnifiedDatasetComparisonService,
+  UnifiedForecastVerificationService,
+  UnifiedRunComparisonService,
+} from "./core/unified-specialized-api.js";
+import {
   diagnoseAtmosphereSchema,
   queryAtmosphereSchema,
   unifiedAtmosphereResultSchema,
@@ -13,10 +19,21 @@ import {
   searchAtmosphereCatalogSchema,
   unifiedCatalogResultSchema,
 } from "./schema/unified-catalog.js";
+import {
+  compareAtmosphericDatasetsSchema,
+  compareAtmosphericRunsSchema,
+  findAtmosphericAnalogsSchema,
+  unifiedSpecializedResultSchema,
+  verifyAtmosphericForecastSchema,
+} from "./schema/unified-specialized.js";
 
 export function registerUnifiedAtmosphereTools(server: McpServer): void {
   const queryService = new UnifiedAtmosphereQueryService();
   const diagnosticService = new UnifiedAtmosphereDiagnosticService();
+  const runComparisonService = new UnifiedRunComparisonService();
+  const datasetComparisonService = new UnifiedDatasetComparisonService();
+  const verificationService = new UnifiedForecastVerificationService();
+  const analogService = new UnifiedAnalogService();
 
   server.registerTool("search_catalog", {
     title: "Search atmospheric datasets and capabilities",
@@ -52,6 +69,58 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
   }, async (query) => {
     try {
       return toolResult(await diagnosticService.diagnose(query));
+    } catch (error) {
+      return toolError(error);
+    }
+  });
+
+  server.registerTool("compare_runs", {
+    title: "Compare forecast runs",
+    description: "Compare consecutive forecast initialization cycles for GFS or GEFS through one dataset-aware contract. Deterministic GFS returns raw newer-minus-older changes; GEFS returns shifts between independently summarized member distributions and never treats member labels as trajectories.",
+    inputSchema: compareAtmosphericRunsSchema,
+    outputSchema: unifiedSpecializedResultSchema,
+  }, async (query) => {
+    try {
+      return toolResult(await runComparisonService.compare(query));
+    } catch (error) {
+      return toolError(error);
+    }
+  });
+
+  server.registerTool("compare_datasets", {
+    title: "Compare atmospheric datasets",
+    description: "Compare aligned operational GFS and GEFS at one point, valid time, raw pressure variable, and pressure level. The current implementation places deterministic GFS inside the aligned GEFS member distribution; the generic name leaves room for future dataset pairs without changing the operation vocabulary.",
+    inputSchema: compareAtmosphericDatasetsSchema,
+    outputSchema: unifiedSpecializedResultSchema,
+  }, async (query) => {
+    try {
+      return toolResult(await datasetComparisonService.compare(query));
+    } catch (error) {
+      return toolError(error);
+    }
+  });
+
+  server.registerTool("verify_forecast", {
+    title: "Verify an archived forecast",
+    description: "Compare an archived GFS forecast with the later historical GFS analysis at the same valid time and Grid 4 point. Verification currently uses gfs as the forecast dataset and gfs-analysis as the reference; results are analysis-minus-forecast and are verification against model analysis, not observations.",
+    inputSchema: verifyAtmosphericForecastSchema,
+    outputSchema: unifiedSpecializedResultSchema,
+  }, async (query) => {
+    try {
+      return toolResult(await verificationService.verify(query));
+    } catch (error) {
+      return toolError(error);
+    }
+  });
+
+  server.registerTool("find_analogs", {
+    title: "Find historical atmospheric analogs",
+    description: "Find locally materialized historical analyses similar to one target atmospheric profile. The current dataset is gfs-analysis; similarity uses the existing standardized profile metric and U/V wind representation. This is model-state similarity, not climatological rarity or impact-specific similarity.",
+    inputSchema: findAtmosphericAnalogsSchema,
+    outputSchema: unifiedSpecializedResultSchema,
+  }, async (query) => {
+    try {
+      return toolResult(await analogService.find(query));
     } catch (error) {
       return toolError(error);
     }
