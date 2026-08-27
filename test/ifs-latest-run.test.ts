@@ -36,4 +36,41 @@ describe("IFS latest run resolution", () => {
     expect([0, 12]).toContain(run.getUTCHours());
     expect(isForecastAvailable).toHaveBeenCalled();
   });
+
+  it("pins the newest run that starts no later than the requested range", async () => {
+    const isForecastAvailable = vi.fn(async () => true);
+    const resolver = new IfsLatestRunResolver({
+      probe: { isForecastAvailable },
+      now: () => new Date("2026-08-27T19:00:00Z"),
+    });
+
+    const run = await resolver.resolveLatestRunForRange(
+      new Date("2026-08-27T12:00:00Z"),
+      new Date("2026-08-27T21:00:00Z"),
+      selectors,
+    );
+
+    expect(run.toISOString()).toBe("2026-08-27T12:00:00.000Z");
+    expect(isForecastAvailable).toHaveBeenCalledTimes(1);
+    expect(isForecastAvailable).toHaveBeenCalledWith(run, 9, selectors);
+  });
+
+  it("skips short 06/18Z runs that cannot cover the complete range", async () => {
+    const isForecastAvailable = vi.fn(async () => true);
+    const resolver = new IfsLatestRunResolver({
+      probe: { isForecastAvailable },
+      now: () => new Date("2026-08-27T18:00:00Z"),
+    });
+
+    const run = await resolver.resolveLatestRunForRange(
+      new Date("2026-08-27T18:00:00Z"),
+      new Date("2026-09-03T00:00:00Z"),
+      selectors,
+    );
+
+    expect(run.toISOString()).toBe("2026-08-27T12:00:00.000Z");
+    expect(isForecastAvailable).toHaveBeenCalledTimes(1);
+    expect(isForecastAvailable).toHaveBeenCalledWith(run, 156, selectors);
+  });
+
 });
