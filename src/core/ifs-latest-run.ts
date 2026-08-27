@@ -6,7 +6,7 @@ import {
 import {
   ifsForecastHour,
   ifsForecastHoursInRange,
-  ifsValidTimeForForecastHour,
+  ifsMaxForecastHour,
   isNativeIfsForecastHour,
   latestIfsCycleAtOrBefore,
   previousIfsCycle,
@@ -59,6 +59,10 @@ export class IfsLatestRunResolver implements IfsLatestRunProvider {
 
     for (let index = 0; index < this.maxCandidates; index += 1) {
       const run = previousIfsCycle(anchor, index);
+      if (run.getTime() > startTime.getTime()) continue;
+      const maxValidTime = run.getTime() + ifsMaxForecastHour(run) * HOUR_MS;
+      if (maxValidTime < endTime.getTime()) continue;
+
       let forecastHours: number[];
       try {
         forecastHours = ifsForecastHoursInRange(run, startTime, endTime);
@@ -67,10 +71,6 @@ export class IfsLatestRunResolver implements IfsLatestRunProvider {
       }
       const lastForecastHour = forecastHours[forecastHours.length - 1];
       if (lastForecastHour === undefined) continue;
-      const lastValidTime = ifsValidTimeForForecastHour(run, lastForecastHour);
-      if (lastValidTime.getTime() > this.now().getTime()) {
-        // Forecast publication may legitimately extend beyond now; this is not a reason to skip.
-      }
       if (await this.probe.isForecastAvailable(run, lastForecastHour, selectors)) return run;
     }
 
