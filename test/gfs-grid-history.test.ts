@@ -43,7 +43,7 @@ describe("resolution-aware operational GFS paths", () => {
       new Date("2026-08-27T06:00:00Z"),
       24,
       "0p50",
-    )).toContain("/gfs.20260827/06/atmos/gfs.t06z.pgrb2full.0p50.f024");
+    )).toContain("/gfs.20260827/06/atmos/gfs.t06z.pgrb2.0p50.f024");
   });
 
   it("preserves hourly 0.25 cadence but enforces 3-hour 0.5 cadence", () => {
