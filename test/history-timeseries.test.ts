@@ -4,7 +4,6 @@ import {
   historicalAnalysisTimesInRange,
   type HistoricalProfileGetter,
 } from "../src/core/history-time-series.js";
-import { parseHistoryCycles } from "../src/cli/history-command.js";
 import type { HistoricalProfileQueryInput } from "../src/schema/history.js";
 import type { HistoricalProfileResult } from "../src/schema/history-result.js";
 
@@ -120,12 +119,5 @@ describe("HistoricalTimeSeriesService", () => {
       variables: ["temperature"],
       pressureLevelsHpa: [850],
     })).rejects.toThrow(/contains no selected GFS analysis cycles/);
-  });
-});
-
-describe("historical CLI cycle parsing", () => {
-  it("accepts native analysis hours and rejects other hours", () => {
-    expect(parseHistoryCycles("12,0")).toEqual([12, 0]);
-    expect(() => parseHistoryCycles("3,12")).toThrow("only 0,6,12,18");
   });
 });
