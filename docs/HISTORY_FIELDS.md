@@ -38,7 +38,8 @@ The modern operational GFS 20/30/40/50 m wind ladder is also not advertised for 
 CLI:
 
 ```bash
-wfg history-fields \
+wfg query \
+  --dataset gfs-analysis \
   --lat 50.08 \
   --lon 14.43 \
   --at 2017-05-09T12:00:00Z \
@@ -48,7 +49,7 @@ wfg history-fields \
   --json
 ```
 
-MCP tool: `get_gfs_historical_fields`.
+MCP tool: `query_atmosphere`.
 
 Pressure variables are optional. If supplied, `variables` and `pressureLevelsHpa` must be supplied together. This allows one operation to return, for example, an 850/700/500 hPa profile together with 2 m temperature, 10 m wind and PWAT.
 
@@ -59,7 +60,8 @@ NCEI variables that use compatible vertical axes are grouped into the same NCSS 
 CLI:
 
 ```bash
-wfg history-fields-timeseries \
+wfg query \
+  --dataset gfs-analysis \
   --lat 50.08 \
   --lon 14.43 \
   --from 2017-05-09T00:00:00Z \
@@ -72,7 +74,7 @@ wfg history-fields-timeseries \
   --json
 ```
 
-MCP tool: `get_gfs_historical_fields_timeseries`.
+MCP tool: `query_atmosphere`.
 
 The time series uses the same bounds as historical pressure-profile time series: default `maxSteps=8`, hard maximum `16`. Only native 00/06/12/18 UTC analysis cycles are sampled, selected cycles are fetched serially, and each result step retains its exact NCEI dataset path and cache-hit flag.
 
@@ -82,4 +84,4 @@ This surface is intended for questions such as:
 - How did PWAT and surface CAPE differ across comparable 12 UTC historical days?
 - What was the near-surface wind environment during a historical pressure-profile setup?
 
-For large multi-year corpus construction, use the history index/backfill primitives instead of turning the bounded time-series operation into an archive scan.
+For large multi-year corpus construction, use `wfg index build` / `wfg index backfill` instead of turning the bounded time-series operation into an archive scan.
