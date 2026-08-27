@@ -36,7 +36,7 @@ Nonlinear diagnostics are evaluated on each GEFS member before aggregation. WFG 
 
 `src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `gefs`, and `gfs-analysis`.
 
-| Operation | GFS 0.25° forecast | GEFS 0.5° forecast | GFS Grid 4 0.5° analysis |
+| Operation | GFS 0.25° / 0.5° forecast | GEFS 0.5° forecast | GFS Grid 4 0.5° analysis |
 | --- | --- | --- | --- |
 | profile | ✅ deterministic | ✅ member distributions | ✅ analyzed state |
 | timeseries | ✅ forecast evolution | ✅ ensemble evolution | ✅ selected analysis cycles |
@@ -161,7 +161,7 @@ Both catalogs are searchable locally from CLI and MCP. Search itself performs no
 
 Run selection is query-aware.
 
-GFS and GEFS use explicit 00/06/12/18Z initialization cycles. Multi-time operations resolve one cycle capable of satisfying the complete requested range and then keep that cycle fixed.
+GFS and GEFS use explicit 00/06/12/18Z initialization cycles. Multi-time operations resolve one cycle capable of satisfying the complete requested range and then keep that cycle fixed. GFS grid selection is orthogonal to run selection: `0p25` is the default and `0p50` is explicit. An old explicit run keeps the public `gfs` identity and routes to the matching historical forecast archive rather than changing datasets.
 
 GEFS v0.1.0 uses the operational atmospheric `pgrb2a` 0.5° product, control `c00` plus `p01`–`p30`, native three-hour output and a WFG contract through `f384`.
 
@@ -173,9 +173,11 @@ Aligned GFS-vs-GEFS comparison resolves one initialization cycle that can satisf
 
 ### GFS
 
-WFG uses NOAA NOMADS where geographic subsetting materially reduces transfer and NOAA AWS Open Data `.idx` inventories plus byte ranges where selected messages can be reused across locations or forecast steps.
+WFG supports operational GFS at both 0.25° and 0.5°. It uses NOAA NOMADS where geographic subsetting materially reduces transfer and NOAA AWS Open Data `.idx` inventories plus byte ranges where selected messages can be reused across locations or forecast steps.
 
-Physical NOMADS requests pass through the shared cross-process courtesy limiter. AWS Open Data paths do not use the NOMADS scripted-access limiter.
+Explicit historical GFS runs route by the selected grid: 0.25° uses NCAR/GDEX d084001 through THREDDS/NCSS (archive start 2015-01-15), while 0.5° uses NOAA NCEI Grid 4 through THREDDS/NCSS (archive start 2006-10-10). Both preserve forecast run, lead, valid time, grid and source provenance. Archive availability is not silently substituted across grids.
+
+Physical NOMADS and paced archive requests use their respective shared cross-process courtesy limits. AWS Open Data paths do not use the NOMADS scripted-access limiter.
 
 ### Historical GFS analysis
 
