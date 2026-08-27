@@ -8,11 +8,11 @@ WFG's public API is organized around a small operation vocabulary and three atmo
 
 | Public ID | Internal dataset | Role | Result semantics |
 | --- | --- | --- | --- |
-| `gfs` | `gfs_0p25` | forecast | deterministic |
+| `gfs` | `gfs_0p25` operational; `gfs_grid4_forecast_0p5_archive` for old explicit runs | forecast | deterministic |
 | `gefs` | `gefs_0p50` | forecast | member-first ensemble |
 | `gfs-analysis` | `gfs_grid4_analysis_0p5` | historical analysis | deterministic analyzed state |
 
-The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance.
+The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a fourth public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently.
 
 ## The four orthogonal query dimensions
 
@@ -133,8 +133,11 @@ For `gfs-analysis`, a range may select native analysis cycles:
 The caller always asks for an atmospheric state valid at a time. Dataset-native time semantics stay in the result:
 
 - forecasts retain initialization/run and lead;
+- an old explicit GFS run transparently resolves to the NCEI Grid 4 forecast archive when it is outside the operational rolling window;
 - historical analysis retains analysis time;
 - WFG never invents a forecast run/lead for analysis data.
+
+Archived Grid 4 forecasts use their native historical semantics: 0.5° resolution, 3-hourly output from f000 through f192, with the archive record beginning 2006-10-10. Direct NCEI online availability varies; a requested old file can require NCEI HAS retrieval and therefore fail clearly rather than being substituted with another product.
 
 ### Selection
 
@@ -199,6 +202,31 @@ A deterministic GFS profile:
 }
 ```
 
+What GFS predicted in the past uses the same `gfs` dataset with an explicit old run:
+
+```json
+{
+  "dataset": "gfs",
+  "geometry": {
+    "type": "point",
+    "latitude": 50.08,
+    "longitude": 14.43
+  },
+  "forecast": {
+    "run": "2017-05-07T12:00:00Z"
+  },
+  "time": {
+    "at": "2017-05-09T12:00:00Z"
+  },
+  "selection": {
+    "variables": ["temperature", "relative_humidity", "wind"],
+    "pressureLevelsHpa": [850, 700, 500]
+  }
+}
+```
+
+This means “what did the 2017-05-07 12Z GFS run predict for 2017-05-09 12Z?” The result keeps `dataset: "gfs"` but exposes `internalDatasetId: "gfs_grid4_forecast_0p5_archive"` and NCEI provenance.
+
 The same atmospheric question against historical analysis:
 
 ```json
@@ -262,9 +290,9 @@ Unified state/diagnostic operations return a common envelope:
 
 `result` remains dataset-native.
 
-- GFS carries deterministic values and forecast metadata.
+- GFS carries deterministic values and forecast metadata; old explicit runs may resolve to the 0.5° NCEI Grid 4 forecast archive while retaining the public `gfs` ID.
 - GEFS carries member-derived distributions and optional members.
-- historical GFS carries deterministic analyzed values and NCEI provenance.
+- historical GFS analysis carries deterministic analyzed values and NCEI provenance.
 
 This is deliberate: the API unifies **how the question is expressed**, not the physical meaning of the answer.
 
@@ -336,6 +364,21 @@ wfg query \
   --json
 ```
 
+Historical forecast: keep the dataset as GFS and select the old initialization.
+
+```bash
+wfg query \
+  --dataset gfs \
+  --run 2017-05-07T12:00:00Z \
+  --lat 50.08 --lon 14.43 \
+  --at 2017-05-09T12:00:00Z \
+  --vars temperature,relative_humidity,wind \
+  --levels 850,700,500 \
+  --json
+```
+
+The same routing applies to `wfg diagnose`: an old explicit `--run` derives layer, profile, parcel, or diagnostic time-series products from archived forecast state.
+
 Historical analysis: change the dataset and time.
 
 ```bash
@@ -390,6 +433,7 @@ Examples:
 
 - current operational GFS transects expose pressure-level selection but not the full mixed-field selection available to GEFS/history transects;
 - historical NCEI operations have tighter point/sample/time bounds because archive access is file/NCSS oriented and NOAA-paced;
+- archived GFS forecasts use native Grid 4 3-hour steps through +192 h and only the variables/fields available in that historical product;
 - historical analysis does not expose forecast accumulation products as if they were instantaneous analysis state;
 - ensemble-only controls are rejected for deterministic datasets;
 - forecast run controls are rejected for `gfs-analysis`.
