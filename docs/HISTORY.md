@@ -136,9 +136,33 @@ MCP: `get_gfs_historical_transect`
 
 Historical transects use the **same great-circle interpolation** as operational GFS and GEFS, then delegate all samples to the historical multi-point primitive. Because the NCEI path is point-oriented, historical transects are bounded to **10 samples**.
 
-### Remaining spatial gap
+### Area statistics
 
-Historical `area_summary` is intentionally still unsupported. A proper implementation should use an NCEI geographic/grid subset and aggregate the returned cells locally. WFG will not emulate an area query by issuing hundreds or thousands of courtesy-limited point requests.
+CLI: `history-area`  
+MCP: `get_gfs_historical_area_summary`
+
+Historical area summaries use **one native NCEI NCSS bbox/grid subset** over the 0.5° Grid 4 analysis. WFG returns the unweighted defined-grid-point mean, minimum and maximum, with optional spatial percentiles, threshold fractions and representative extrema locations using the same distribution kernel as operational deterministic GFS.
+
+Pressure-level selections are raw archive variables at one explicit pressure surface. Height-above-ground fields use the corresponding NCSS vertical coordinate. NCSS may otherwise choose the nearest vertical level, so WFG verifies the coordinate returned in the CSV and fails if it differs from the requested pressure/height instead of silently substituting a neighboring level.
+
+Derived vector/thermodynamic fields are deliberately excluded from this first area surface. Historical area queries therefore make one archive request rather than joining several full grids or fanning out into point requests.
+
+Example:
+
+```bash
+wfg history-area \
+  --west 12 --east 18 \
+  --south 48 --north 51 \
+  --at 2017-05-09T12:00:00Z \
+  --var temperature \
+  --level 850 \
+  --percentiles 10,50,90 \
+  --gte 15 \
+  --extrema-locations \
+  --json
+```
+
+The MCP operation accepts the same bbox, `analysisTime`, raw pressure-variable or raw field selection, and optional distribution controls.
 
 ## Materialized history and analog search
 
@@ -271,7 +295,7 @@ Verification is against **GFS analysis, not observations**. It answers how a for
 
 ## Data access and caching
 
-WFG uses NCEI's THREDDS NetCDF Subset Service (NCSS) in grid-as-point mode. Queries request selected pressure profiles at one point rather than downloading full historical GRIB files. Compatible variables are bundled together; variables using different historical pressure axes are fetched separately and merged locally.
+WFG uses NCEI's THREDDS NetCDF Subset Service (NCSS). Point/profile queries use grid-as-point mode, requesting selected pressure profiles without downloading full historical GRIB files. Area summaries use NCSS geographic bbox/grid subsets and aggregate the returned cells locally. Compatible point-profile variables are bundled together; variables using different historical pressure axes are fetched separately and merged locally.
 
 Historical responses are cached because archive files are immutable. Cache misses use WFG's file-based NOAA request throttle; the default cooldown remains 11 seconds. Analysis time series, history materialization/backfill and forecast verification are therefore serial rather than bursty.
 
@@ -283,8 +307,7 @@ Analysis archive naming changes around June 2020: WFG handles historical `gfsanl
 
 Historical analysis is now substantially integrated into the common engine. Natural follow-ons are:
 
-1. native historical area statistics through a bounded NCEI bbox/grid-subset path;
-2. anomaly and percentile calculations against a deliberately chosen homogeneous reanalysis/climatology source;
-3. optional seasonal or impact-specific analog filters built on top of the generic model-state metric;
-4. multi-lead verification summaries once archive caching/indexing makes them efficient;
-5. an alternative official bulk analysis transport if NOAA exposes one that preserves the same Grid 4 analysis semantics.
+1. anomaly and percentile calculations against a deliberately chosen homogeneous reanalysis/climatology source;
+2. optional seasonal or impact-specific analog filters built on top of the generic model-state metric;
+3. multi-lead verification summaries once archive caching/indexing makes them efficient;
+4. an alternative official bulk analysis transport if NOAA exposes one that preserves the same Grid 4 analysis semantics.
