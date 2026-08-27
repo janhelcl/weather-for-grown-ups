@@ -196,7 +196,7 @@ function historyEntries(): CatalogEntry[] {
       kind: definition.kind,
       description: definition.description,
       verticalSemantics: definition.levelType,
-      outputs: definition.outputs.map((output) => ({ ...output })),
+      outputs: definition.outputs.map((output: { field: string; unit: string; description?: string }) => ({ ...output })),
     };
   });
 
