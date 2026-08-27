@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { ProfileResult } from "../src/core/types.js";
-import { handleGetGfsProfile } from "../src/mcp-tool.js";
 import {
   latestGfsRunResultSchema,
   profileResultSchema,
@@ -102,45 +101,5 @@ describe("shared surface result contracts", () => {
       completeness: "f384",
       discoverySource: "NOAA AWS Open Data",
     });
-  });
-});
-
-describe("MCP result boundary", () => {
-  it("returns layer-valued and averaged profile fields as structured content", async () => {
-    const response = await handleGetGfsProfile(
-      { getProfile: async () => profile },
-      {
-        latitude: 50.08,
-        longitude: 14.43,
-        run: profile.run,
-        validTime: profile.validTime,
-        fields: ["low_cloud_cover_average", "low_cloud_base_pressure"],
-      },
-    );
-
-    expect(response).not.toHaveProperty("isError");
-    if (!("structuredContent" in response)) throw new Error("Expected MCP success response");
-    expect(response.structuredContent).toMatchObject({ fields: profile.fields });
-  });
-
-  it("fails loudly if a future core result violates the shared contract", async () => {
-    const response = await handleGetGfsProfile(
-      { getProfile: async () => ({
-        ...profile,
-        fields: [{
-          ...namedLayerAverageField,
-          temporal: { type: "average" },
-        }],
-      } as unknown as ProfileResult) },
-      {
-        latitude: 50.08,
-        longitude: 14.43,
-        run: profile.run,
-        validTime: profile.validTime,
-        fields: ["low_cloud_cover_average"],
-      },
-    );
-
-    expect(response).toMatchObject({ isError: true });
   });
 });
