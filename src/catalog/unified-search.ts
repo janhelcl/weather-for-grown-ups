@@ -224,7 +224,7 @@ function historyEntries(): CatalogEntry[] {
       description: definition.description,
       verticalSemantics: definition.level.gribLevel,
       temporalSemantics: "instantaneous" as const,
-      outputs: definition.outputs.map((output) => ({ ...output })),
+      outputs: definition.outputs.map((output: { field: string; unit: string; description?: string }) => ({ ...output })),
     };
   });
 
