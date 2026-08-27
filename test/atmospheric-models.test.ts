@@ -40,7 +40,11 @@ describe("atmospheric dataset capability catalog", () => {
     expect(datasetSupportsOperation("gfs_0p25", "profile")).toBe(true);
     expect(datasetSupportsOperation("gefs_0p50", "profile")).toBe(true);
     expect(datasetSupportsOperation("ifs_0p25", "profile")).toBe(true);
-    expect(datasetSupportsOperation("ifs_0p25", "timeseries")).toBe(false);
+    expect(datasetSupportsOperation("ifs_0p25", "timeseries")).toBe(true);
+    expect(datasetSupportsOperation("ifs_0p25", "points")).toBe(true);
+    expect(datasetSupportsOperation("ifs_0p25", "points_timeseries")).toBe(true);
+    expect(datasetSupportsOperation("ifs_0p25", "transect")).toBe(true);
+    expect(datasetSupportsOperation("ifs_0p25", "area_summary")).toBe(false);
     expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "profile")).toBe(true);
 
     expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "timeseries")).toBe(true);
@@ -63,5 +67,6 @@ describe("atmospheric dataset capability catalog", () => {
     expect(modelSupportsOperation("gfs_0p50", "aligned_model_comparison")).toBe(true);
     expect(modelSupportsOperation("gefs_0p50", "ensemble_distribution")).toBe(true);
     expect(modelSupportsOperation("ifs_0p25", "profile")).toBe(true);
+    expect(modelSupportsOperation("ifs_0p25", "timeseries")).toBe(true);
   });
 });
