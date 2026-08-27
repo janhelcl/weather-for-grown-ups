@@ -85,8 +85,8 @@ export function verificationRequestKey(record: VerificationIndexRecord): string 
     pressureLevelsHpa: record.request.pressureLevelsHpa,
     ...(record.referenceDataset === "igra"
       ? {
-          gfsGrid: record.request.gfsGrid,
-          stationId: record.request.stationId,
+          ...(record.request.gfsGrid === undefined ? {} : { gfsGrid: record.request.gfsGrid }),
+          ...(record.request.stationId === undefined ? {} : { stationId: record.request.stationId }),
           maxStationDistanceKm: record.request.maxStationDistanceKm,
         }
       : {}),
