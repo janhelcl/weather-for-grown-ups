@@ -85,6 +85,7 @@ export interface HistoricalFieldsServiceOptions {
   profileGetter?: HistoricalFieldsProfileGetter;
   now?: () => Date;
   allowNonAnalysisCycle?: boolean;
+  minimumTime?: Date;
 }
 
 export class HistoricalFieldsService {
@@ -92,6 +93,7 @@ export class HistoricalFieldsService {
   private readonly profileGetter: HistoricalFieldsProfileGetter;
   private readonly now: () => Date;
   private readonly allowNonAnalysisCycle: boolean;
+  private readonly minimumTime: Date;
 
   constructor(options: HistoricalFieldsServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
@@ -102,10 +104,12 @@ export class HistoricalFieldsService {
     });
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
+    this.minimumTime = options.minimumTime ?? NCEI_GFS_GRID4_ANALYSIS_START;
     this.profileGetter = options.profileGetter ?? new HistoricalProfileService({
       source: this.source,
       now: this.now,
       allowNonAnalysisCycle: this.allowNonAnalysisCycle,
+      minimumTime: this.minimumTime,
     });
   }
 
@@ -114,8 +118,8 @@ export class HistoricalFieldsService {
       ? historicalFieldsQuerySchema.safeExtend({ analysisTime: isoDateTimeSchema }).parse(input)
       : historicalFieldsQuerySchema.parse(input);
     const analysisTime = new Date(query.analysisTime);
-    if (analysisTime < NCEI_GFS_GRID4_ANALYSIS_START) {
-      throw new Error(`NCEI GFS Grid 4 analysis history begins at ${NCEI_GFS_GRID4_ANALYSIS_START.toISOString()}`);
+    if (analysisTime < this.minimumTime) {
+      throw new Error(`NCEI GFS Grid 4 history begins at ${this.minimumTime.toISOString()} for this data source`);
     }
     if (analysisTime > this.now()) throw new Error("Historical GFS analysisTime must not be in the future");
 
