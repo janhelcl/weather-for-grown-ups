@@ -25,6 +25,8 @@ import {
 
 const DEFAULT_UNIFIED_VARIABLES =
   "temperature,relative_humidity,u_wind,v_wind,geopotential_height";
+const DEFAULT_IGRA_VERIFICATION_VARIABLES =
+  "temperature,relative_humidity,wind,geopotential_height";
 
 export function registerUnifiedAtmosphereCommands(program: Command): void {
   registerQueryCommand(program);
@@ -192,23 +194,36 @@ function registerCompareDatasetsCommand(program: Command): void {
 function registerVerifyCommand(program: Command): void {
   program
     .command("verify")
-    .description("Verify an archived GFS forecast against later historical GFS analysis")
+    .description("Verify an archived GFS forecast against GFS analysis or an IGRA radiosonde")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--at <iso>", "Historical valid time")
     .requiredOption("--lead-hours <number>", "Forecast lead in hours (0-192, multiple of 6)", Number)
-    .option("--vars <list>", "Pressure-level variables", DEFAULT_UNIFIED_VARIABLES)
+    .option("--reference <gfs-analysis|igra>", "Verification reference", "gfs-analysis")
+    .option("--grid <0p25|0p50>", "GFS forecast grid; IGRA reference only")
+    .option("--station <id>", "Explicit 11-character IGRA station ID")
+    .option("--max-station-distance-km <number>", "Maximum IGRA station distance", Number)
+    .option("--vars <list>", "Pressure-level variables")
     .option("--levels <list>", "Pressure levels in hPa", DEFAULT_LEVELS)
     .option("--json", "Output JSON")
     .action(async (options) => {
+      const referenceDataset = String(options.reference);
+      const defaultVariables = referenceDataset === "igra"
+        ? DEFAULT_IGRA_VERIFICATION_VARIABLES
+        : DEFAULT_UNIFIED_VARIABLES;
       const result = await new UnifiedForecastVerificationService().verify({
         forecastDataset: "gfs",
-        referenceDataset: "gfs-analysis",
+        referenceDataset: referenceDataset as "gfs-analysis" | "igra",
         geometry: { type: "point", latitude: options.lat, longitude: options.lon },
         time: { at: options.at },
         leadHours: options.leadHours,
-        variables: parseStrings(options.vars),
+        variables: parseStrings(options.vars ?? defaultVariables),
         pressureLevelsHpa: parseLevels(options.levels),
+        ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
+        ...(options.station === undefined ? {} : { stationId: options.station }),
+        ...(options.maxStationDistanceKm === undefined
+          ? {}
+          : { maxStationDistanceKm: options.maxStationDistanceKm }),
       });
       printResult(result, Boolean(options.json));
     });
