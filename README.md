@@ -128,6 +128,8 @@ Forecast verification can use either the later `gfs-analysis` model state or a r
 
 The same `verify_forecast` operation also supports **bounded forecast-skill summaries** against either reference. Use a time range plus up to three lead times; WFG samples at most eight nominal verification times (24 forecast evaluations maximum), keeps failed cases explicit, and returns count, signed bias, MAE and RMSE by lead × pressure × field. `gfs-analysis` summaries remain same-grid 0.5° analysis-minus-forecast comparisons; IGRA summaries remain observation-minus-forecast and report the radiosonde stations used. Wind-direction errors use shortest signed angular differences.
 
+For larger verification studies, `wfg index verification-backfill` materializes atomic cases into a local JSONL corpus and `wfg index verification-summary` aggregates multi-year or month-filtered seasonal skill with **zero NOAA requests**. Coverage is reported explicitly, so partially materialized periods stay distinguishable from complete samples. This remains CLI-side administration; it does not expand the seven-tool MCP surface.
+
 ## The design rule
 
 > **Unify operations and physics; preserve model semantics.**
