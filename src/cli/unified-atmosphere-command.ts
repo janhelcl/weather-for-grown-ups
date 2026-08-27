@@ -190,7 +190,7 @@ function registerAnalogsCommand(program: Command): void {
     });
 }
 
-function buildUnifiedQuery(options: Record<string, any>): QueryAtmosphereInput {
+export function buildUnifiedQuery(options: Record<string, any>): QueryAtmosphereInput {
   const dataset = parseDataset(options.dataset);
   const geometry = parseGeometry(options);
   const time = parseTime(options);
@@ -211,7 +211,7 @@ function buildUnifiedQuery(options: Record<string, any>): QueryAtmosphereInput {
   };
 }
 
-function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAtmosphereInput {
+export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAtmosphereInput {
   const dataset = parseDataset(options.dataset);
   const time = parseTime(options);
   const kind = String(options.kind).toLowerCase();
