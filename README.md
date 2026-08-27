@@ -166,7 +166,7 @@ Existing model-native GFS/GEFS/history commands and MCP tools remain available a
 
 ## CLI
 
-The CLI is operation-oriented. Where an operation has a unified command, it uses `--model gfs|gefs`; model-native aliases remain explicit where they make the contract clearer.
+The preferred CLI uses `--dataset gfs|gefs|gfs-analysis` through `query` and `diagnose`. Existing forecast-oriented commands keep `--model gfs|gefs` as backward-compatible aliases, and model-native commands remain available where they expose narrower specialist controls.
 
 A deterministic profile:
 
@@ -208,7 +208,7 @@ Run `wfg --help` or `npx weather-for-grown-ups --help` for the complete command 
 
 ## MCP
 
-MCP keeps explicit model-named tools instead of one giant polymorphic schema. That makes tool choice and input validation clearer for agents while both wrappers still delegate to the same core.
+MCP now offers a compact preferred vocabulary (`search_catalog`, `query_atmosphere`, `diagnose_atmosphere`, comparisons, verification and analogs) over the same core. Existing model-named tools remain registered as backward-compatible specialist aliases.
 
 The v0.1.0 MCP surface includes model catalogs, profiles, raw and mixed fields, multi-point and time-series queries, layer/profile/parcel diagnostics, transects, area statistics, run comparison, GEFS ensemble distributions, and aligned GFS-vs-GEFS comparison.
 
