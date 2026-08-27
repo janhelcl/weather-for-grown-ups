@@ -81,7 +81,7 @@ This separation is deliberate:
 npm run test:live:all
 ```
 
-The live suite covers the bundled decoder against real GFS/GEFS data, deterministic GFS AWS composition, GEFS ensemble/spatial/temporal surfaces, GEFS run comparison, bounded area behavior, and a recent archived GFS 0.25° forecast verified against the Praha-Libuš IGRA radiosonde. GFS parity is deliberately split into two different contracts: `test:live:gfs-operational-parity` compares current NOMADS and NOAA AWS transports, while `test:live:gfs-archive-equivalence` compares the current operational state with the matching historical archive only when the exact same run exists on both sides (AWS where the operation exposes a source selector; the bounded operational area path remains NOMADS-backed).
+The live suite covers the bundled decoder against real GFS/GEFS data, deterministic GFS AWS composition, GEFS ensemble/spatial/temporal surfaces, GEFS run comparison, bounded area behavior, fixed Grid 4 analysis/forecast verification and skill aggregation, and a recent archived GFS 0.25° forecast verified against the Praha-Libuš IGRA radiosonde. GFS parity is deliberately split into two different contracts: `test:live:gfs-operational-parity` compares current NOMADS and NOAA AWS transports, while `test:live:gfs-archive-equivalence` compares the current operational state with the matching historical archive only when the exact same run exists on both sides (AWS where the operation exposes a source selector; the bounded operational area path remains NOMADS-backed).
 
 It runs weekly on Monday at 05:17 UTC plus manual dispatch, never as a normal PR/main gate.
 
