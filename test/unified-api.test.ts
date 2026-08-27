@@ -278,13 +278,6 @@ describe("unified atmospheric routing", () => {
     expect((await service.query({ dataset: "gefs", ...range })).result).toEqual({ route: "gefs-series" });
     expect((await service.query({ dataset: "ifs", ...range })).result).toEqual({ route: "ifs-series" });
     expect((await service.query({
-      dataset: "ifs",
-      geometry,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection: { fields: ["wind_10m"] },
-    })).result).toEqual({ route: "ifs-transect" });
-
-    expect((await service.query({
       dataset: "gfs-analysis",
       ...range,
       time: { ...range.time, hoursUtc: [12] },
@@ -734,6 +727,13 @@ describe("unified geometry routing coverage", () => {
       selection: { fields: ["wind_10m"] },
       ensemble: { quantiles: [0.1, 0.5, 0.9], includeMembers: false, maxMemberSamples: 100 },
     })).result).toEqual({ route: "gefs-transect" });
+
+    expect((await service.query({
+      dataset: "ifs",
+      geometry,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { fields: ["wind_10m"] },
+    })).result).toEqual({ route: "ifs-transect" });
 
     expect((await service.query({
       dataset: "gfs-analysis",
