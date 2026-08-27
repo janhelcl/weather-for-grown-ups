@@ -252,7 +252,12 @@ export const diagnoseAtmosphereSchema = z.object({
 
 export const unifiedAtmosphereResultSchema = z.object({
   dataset: publicAtmosphericDatasetSchema,
-  internalDatasetId: z.enum(["gfs_0p25", "gefs_0p50", "gfs_grid4_analysis_0p5"]),
+  internalDatasetId: z.enum([
+    "gfs_0p25",
+    "gefs_0p50",
+    "gfs_grid4_analysis_0p5",
+    "gfs_grid4_forecast_0p5_archive",
+  ]),
   role: z.enum(["forecast", "analysis"]),
   kind: z.enum(["deterministic", "ensemble"]),
   geometryType: z.enum(["point", "points", "transect", "area"]),
