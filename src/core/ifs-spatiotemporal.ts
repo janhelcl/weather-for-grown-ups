@@ -257,9 +257,9 @@ export class IfsTransectService {
 
 function profileInput(
   query: {
-    variables?: readonly any[];
-    pressureLevelsHpa?: readonly number[];
-    fields?: readonly any[];
+    variables?: readonly any[] | undefined;
+    pressureLevelsHpa?: readonly number[] | undefined;
+    fields?: readonly any[] | undefined;
   },
   point: PointCoordinate,
   run: Date,
