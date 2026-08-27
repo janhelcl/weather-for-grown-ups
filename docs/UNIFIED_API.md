@@ -1,10 +1,8 @@
 # Unified atmospheric API
 
-WFG's preferred public API is organized around a small operation vocabulary and three atmospheric datasets.
+WFG's public API is organized around a small operation vocabulary and three atmospheric datasets.
 
 > **One query language for atmospheric state; datasets preserve their semantics.**
-
-The legacy GFS-, GEFS-, and history-named CLI/MCP operations remain available for backward compatibility. New integrations should prefer the unified surface.
 
 ## Datasets
 
@@ -163,7 +161,7 @@ Non-isobaric fields:
 
 Where the dataset supports it, the two may be mixed in one request.
 
-## Preferred MCP tools
+## MCP tools
 
 The compact public vocabulary is:
 
@@ -177,7 +175,7 @@ The compact public vocabulary is:
 | `verify_forecast` | Compare an archived forecast with a later reference state |
 | `find_analogs` | Search materialized historical atmospheric analogs |
 
-Index materialization/backfill remains an administrative/history-management concern and keeps explicit history-native tools.
+Index materialization/backfill is an administrative concern and is intentionally CLI-only through `wfg index build` and `wfg index backfill`; it is not part of the normal MCP weather-tool catalog.
 
 ## `query_atmosphere`
 
@@ -382,7 +380,7 @@ wfg diagnose \
   --json
 ```
 
-Specialized operation aliases are `compare-runs`, `compare-datasets`, `verify`, and `analogs`.
+Specialized CLI operations are `compare-runs`, `compare-datasets`, `verify`, and `analogs`.
 
 ## Capability differences are errors, not fake symmetry
 
@@ -398,18 +396,29 @@ Examples:
 
 The unified dispatcher delegates to the existing dataset-specific schemas after interpreting the common request. Unsupported combinations therefore fail explicitly at the capability boundary.
 
-## Compatibility
+## Administrative indexing
 
-Existing commands/tools remain valid in this release.
+Historical analog search uses a local materialized index. Index construction is deliberately outside the atmospheric MCP catalog:
 
-Examples such as:
+```bash
+wfg index build \
+  --dataset gfs-analysis \
+  --lat 50.08 --lon 14.43 \
+  --from 2017-05-01T00:00:00Z \
+  --to 2017-05-08T23:59:59Z \
+  --cycles 12 \
+  --vars temperature,relative_humidity,wind,geopotential_height \
+  --levels 850,700,500 \
+  --json
 
-- `get_gfs_profile`
-- `get_gefs_fields`
-- `get_gfs_historical_profile`
-- `history-fields-timeseries`
-- `ensemble-fields-points-timeseries`
+wfg index backfill \
+  --dataset gfs-analysis \
+  --lat 50.08 --lon 14.43 \
+  --from 2007-01-01T00:00:00Z \
+  --to 2026-08-01T23:59:59Z \
+  --cycles 12 \
+  --max-fetches 32 \
+  --json
+```
 
-continue to delegate to the same core.
-
-They should be regarded as **model-native compatibility aliases**. New integrations should prefer the compact unified vocabulary so future datasets can be added without multiplying public operation names.
+The normal MCP surface remains exactly the seven atmospheric tools listed above.

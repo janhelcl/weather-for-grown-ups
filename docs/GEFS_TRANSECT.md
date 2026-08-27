@@ -1,37 +1,23 @@
 # GEFS transects
 
-WFG supports ensemble-native atmospheric cross-sections along a great-circle path through the same public `transect` operation used by deterministic GFS.
+A GEFS cross-section is the normal atmospheric query language with `dataset=gefs` and `geometry.type="transect"`.
 
-## Contract
-
-GEFS transects use the operational 0.5° `pgrb2a` product and support the same mixed GEFS bundle selection used by `ensemble-fields` and `ensemble-fields-points`:
-
-- pressure-level variables and supported member-first derived thermodynamics;
-- supported non-isobaric `pgrb2a` fields such as 2 m temperature/RH, 10 m wind, precipitation, PWAT, cloud cover, CAPE/CIN and MSLP;
-- explicit member selection (`c00`, `p01`–`p30`);
-- ensemble quantiles;
-- optional memberwise audit values.
-
-The default result contains one ensemble distribution per requested output at each path sample. Raw member arrays are opt-in and guarded by `maxMemberSamples`.
+GEFS transects support mixed pressure-level and non-isobaric selections, explicit member sets, ensemble quantiles and optional member audit values where allowed by guardrails.
 
 ## Geometry and efficiency
 
-Great-circle interpolation and distance calculations are model-independent and shared with deterministic GFS.
+Great-circle interpolation is model-independent. The GEFS path executes as one multi-point mixed-selection query for the complete transect, fetching one immutable selected-message file per member and reusing it across path samples.
 
-A GEFS transect is executed as **one multi-point mixed-bundle query** for the complete path. WFG fetches one immutable selected-message file per member and reuses it across all transect samples.
-
-Upstream selected-file work therefore scales with members rather than `members × transect samples`. Local point extraction remains sample-oriented and goes through WFG's decoder abstraction. GEFS transects currently allow 2–20 samples; GFS keeps its independent 2–50 sample contract.
-
-The npm default decoder is bundled. Native `wgrib2` remains an optional compatibility/debug backend and does not alter transect semantics.
+Upstream selected-file work therefore scales with members rather than members × samples.
 
 ## CLI
 
 ```bash
-wfg transect \
-  --model gefs \
+wfg query \
+  --dataset gefs \
   --start 50.08,14.43 \
   --end 49.20,16.61 \
-  --valid 2026-08-24T12:00:00Z \
+  --at 2026-08-24T12:00:00Z \
   --vars temperature,dew_point \
   --levels 850 \
   --fields temperature_2m,wind_10m \
@@ -41,18 +27,10 @@ wfg transect \
   --json
 ```
 
-GFS remains the default model. Its pressure-level transect behavior and 21-sample default are preserved.
-
-## MCP
-
-`get_gefs_transect` exposes the same core service through both stdio and Streamable HTTP MCP transports.
+MCP: `query_atmosphere` with transect geometry.
 
 ## Ensemble semantics
 
-All nonlinear derived quantities are evaluated member by member before aggregation. Wind direction uses circular aggregation. Accumulation and average intervals remain explicit for fields with temporal semantics.
+Nonlinear derived quantities are evaluated member by member before aggregation. Wind direction uses circular aggregation. Accumulation and average intervals remain explicit.
 
-Member fractions and spread are raw model-member evidence. WFG does not label them as calibrated real-world probability or uncertainty.
-
-## Live smoke
-
-`npm run test:live:gefs` includes a compact real-NOAA transect compatibility check. Normal CI remains offline/deterministic and does not depend on NOAA availability.
+Member spread and fractions remain raw ensemble evidence, not calibrated uncertainty or probability.

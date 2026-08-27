@@ -7,6 +7,7 @@ import {
   UnifiedAnalogService,
   UnifiedDatasetComparisonService,
   UnifiedForecastVerificationService,
+  UnifiedRunComparisonService,
 } from "../core/unified-specialized-api.js";
 import type {
   DiagnoseAtmosphereInput,
@@ -28,6 +29,7 @@ const DEFAULT_UNIFIED_VARIABLES =
 export function registerUnifiedAtmosphereCommands(program: Command): void {
   registerQueryCommand(program);
   registerDiagnoseCommand(program);
+  registerCompareRunsCommand(program);
   registerCompareDatasetsCommand(program);
   registerVerifyCommand(program);
   registerAnalogsCommand(program);
@@ -105,6 +107,50 @@ function registerDiagnoseCommand(program: Command): void {
     .action(async (options) => {
       const request = buildUnifiedDiagnostic(options);
       const result = await new UnifiedAtmosphereDiagnosticService().diagnose(request);
+      printResult(result, Boolean(options.json));
+    });
+}
+
+function registerCompareRunsCommand(program: Command): void {
+  program
+    .command("compare-runs")
+    .description("Compare consecutive forecast initialization cycles for GFS or GEFS")
+    .option("--dataset <gfs|gefs>", "Forecast dataset", "gfs")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--at <iso>", "Forecast valid time")
+    .option("--vars <list>", "Pressure-level variables", "temperature")
+    .option("--levels <list>", "Pressure levels in hPa", "850")
+    .option("--fields <list>", "GFS-only non-isobaric fields")
+    .option("--anchor-run <iso|latest>", "Newest initialization cycle to compare", "latest")
+    .option("--cycles <number>", "Number of consecutive cycles", Number, 3)
+    .option("--members <list>", "GEFS members (c00,p01..p30)")
+    .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
+    .option("--gte <number>", "GEFS threshold in normalized units", Number)
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const selection = parseSelection({
+        vars: options.vars,
+        levels: options.levels,
+        fields: options.fields,
+      });
+      const result = await new UnifiedRunComparisonService().compare({
+        dataset: parseForecastDataset(options.dataset),
+        geometry: { type: "point", latitude: options.lat, longitude: options.lon },
+        time: { at: options.at },
+        selection,
+        anchorRun: options.anchorRun,
+        cycles: options.cycles,
+        ...(options.members === undefined && options.quantiles === undefined
+          ? {}
+          : {
+              ensemble: {
+                ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+                ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
+              },
+            }),
+        ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
+      });
       printResult(result, Boolean(options.json));
     });
 }
@@ -260,6 +306,12 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
     ...(options.source === undefined ? {} : { source: options.source }),
     ...ensembleInput(options),
   };
+}
+
+function parseForecastDataset(value: unknown): "gfs" | "gefs" {
+  const dataset = String(value).trim().toLowerCase();
+  if (dataset === "gfs" || dataset === "gefs") return dataset;
+  throw new Error(`Expected --dataset gfs|gefs, received: ${value}`);
 }
 
 function parseDataset(value: unknown): PublicAtmosphericDataset {

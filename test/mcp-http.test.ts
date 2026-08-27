@@ -77,20 +77,18 @@ describe("Streamable HTTP MCP", () => {
       await client.connect(new StreamableHTTPClientTransport(url));
       const { tools } = await client.listTools();
       const names = tools.map((tool) => tool.name);
-      expect(names).toContain("get_gfs_catalog");
-      expect(names).toContain("get_gfs_profile");
-      expect(names).toContain("get_gfs_transect");
-      expect(names).toContain("get_gfs_points_timeseries");
-      expect(names).toContain("compare_gfs_runs");
-      expect(names).toContain("summarize_gfs_area");
-      expect(names).toContain("get_gefs_catalog");
-      expect(names).toContain("search_gefs_catalog");
-      expect(names).toContain("get_gefs_parcel_diagnostics");
-      expect(names).toContain("get_gefs_fields");
-      expect(names).toContain("get_gefs_fields_timeseries");
-      expect(names).toContain("get_gefs_fields_points");
-      expect(names).toContain("get_gefs_fields_points_timeseries");
-      expect(names).toContain("get_gefs_transect");
+      expect(names).toEqual([
+        "search_catalog",
+        "query_atmosphere",
+        "diagnose_atmosphere",
+        "compare_runs",
+        "compare_datasets",
+        "verify_forecast",
+        "find_analogs",
+      ]);
+      expect(names.some((name) => name.startsWith("get_gfs_"))).toBe(false);
+      expect(names.some((name) => name.startsWith("get_gefs_"))).toBe(false);
+      expect(names.some((name) => name.includes("historical"))).toBe(false);
     } finally {
       await client.close();
     }

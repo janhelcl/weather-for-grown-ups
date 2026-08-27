@@ -209,7 +209,48 @@ describe("unified catalog", () => {
 });
 
 
-describe("unified specialized operation aliases", () => {
+describe("unified catalog branch coverage", () => {
+  it("supports GEFS-only search without a GFS representative", () => {
+    const result = searchAtmosphereCatalog({
+      datasets: ["gefs"],
+      sections: ["variables"],
+      search: "temp",
+      limit: 5,
+    });
+
+    expect(result.matches.length).toBeGreaterThan(0);
+    expect(result.matches.every((match) =>
+      match.support.every((support) => support.dataset === "gefs"))).toBe(true);
+  });
+
+  it("filters historical instantaneous raw fields and truncates deterministically", () => {
+    const result = searchAtmosphereCatalog({
+      datasets: ["gfs-analysis"],
+      sections: ["fields"],
+      classification: "raw",
+      temporalSemantics: "instantaneous",
+      limit: 1,
+    });
+
+    expect(result.totalMatches).toBeGreaterThan(1);
+    expect(result.truncated).toBe(true);
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0]?.support[0]?.dataset).toBe("gfs-analysis");
+  });
+
+  it("returns zero matches for an impossible unified search", () => {
+    const result = searchAtmosphereCatalog({
+      datasets: ["gfs", "gefs", "gfs-analysis"],
+      search: "definitely impossible atmospheric token",
+    });
+
+    expect(result.totalMatches).toBe(0);
+    expect(result.truncated).toBe(false);
+    expect(result.matches).toEqual([]);
+  });
+});
+
+describe("unified specialized operations", () => {
   it("keeps compare-runs dataset-aware while delegating to native semantics", async () => {
     const gfs = { compareRuns: vi.fn(async (query) => ({ route: "gfs-runs", query })) };
     const gefs = { compareRuns: vi.fn(async (query) => ({ route: "gefs-runs", query })) };
@@ -234,6 +275,95 @@ describe("unified specialized operation aliases", () => {
     });
     expect((gefsResult.result as any).route).toBe("gefs-runs");
     expect(gefs.compareRuns).toHaveBeenCalledOnce();
+  });
+
+  it("passes explicit GEFS comparison controls without member-trajectory semantics", async () => {
+    const gfs = { compareRuns: vi.fn() };
+    const gefs = { compareRuns: vi.fn(async (query) => ({ route: "gefs-runs", query })) };
+    const service = new UnifiedRunComparisonService(gfs as any, gefs as any);
+
+    const result = await service.compare({
+      dataset: "gefs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      anchorRun: "2026-08-27T12:00:00Z",
+      cycles: 4,
+      ensemble: {
+        members: ["c00", "p01"],
+        quantiles: [0.1, 0.9],
+      },
+      thresholdGte: 5,
+    });
+
+    expect((result.result as any).route).toBe("gefs-runs");
+    expect(gefs.compareRuns).toHaveBeenCalledWith(expect.objectContaining({
+      members: ["c00", "p01"],
+      quantiles: [0.1, 0.9],
+      thresholdGte: 5,
+      cycles: 4,
+    }));
+  });
+
+  it("rejects member payload controls on GEFS run comparison", async () => {
+    const service = new UnifiedRunComparisonService(
+      { compareRuns: vi.fn() } as any,
+      { compareRuns: vi.fn() } as any,
+    );
+
+    await expect(service.compare({
+      dataset: "gefs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      ensemble: {
+        quantiles: [0.1, 0.9],
+        includeMembers: true,
+      },
+    })).rejects.toThrow("includeMembers/maxMemberSamples are not applicable");
+
+    await expect(service.compare({
+      dataset: "gefs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      ensemble: {
+        quantiles: [0.1, 0.9],
+        maxMemberSamples: 100,
+      },
+    })).rejects.toThrow("includeMembers/maxMemberSamples are not applicable");
+  });
+
+  it("passes optional GFS fields and cross-dataset member controls", async () => {
+    const gfs = { compareRuns: vi.fn(async (query) => ({ route: "gfs-runs", query })) };
+    const runService = new UnifiedRunComparisonService(gfs as any, { compareRuns: vi.fn() } as any);
+
+    await runService.compare({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { fields: ["temperature_2m"] },
+      cycles: 2,
+    });
+    expect(gfs.compareRuns).toHaveBeenCalledWith(expect.objectContaining({
+      fields: ["temperature_2m"],
+      cycles: 2,
+    }));
+
+    const compare = { compare: vi.fn(async (query) => ({ route: "dataset-compare", query })) };
+    const datasetService = new UnifiedDatasetComparisonService(compare as any);
+    await datasetService.compare({
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["c00", "p01"],
+      quantiles: [0.25, 0.75],
+    });
+    expect(compare.compare).toHaveBeenCalledWith(expect.objectContaining({
+      members: ["c00", "p01"],
+      quantiles: [0.25, 0.75],
+    }));
   });
 
   it("maps generic dataset comparison, verification and analog operations to existing primitives", async () => {

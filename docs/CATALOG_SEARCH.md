@@ -1,86 +1,51 @@
 # Catalog search
 
-WFG keeps complete model-specific atmospheric catalogs available while giving agents a bounded search surface for discovery.
-
-Catalog search is **local and deterministic**. It performs no NOAA request and does not touch the NOMADS courtesy limiter.
+WFG exposes one canonical catalog search across its atmospheric datasets. Catalog search is **local and deterministic**: it performs no NOAA request and does not use the courtesy limiter.
 
 ## CLI
 
-The catalog command is model-selectable:
-
 ```bash
-wfg catalog --model gfs --json
-wfg catalog --model gefs --json
+wfg catalog --dataset all --json
+wfg catalog --dataset gfs --search wind --json
+wfg catalog --dataset gefs --search "low cloud cover" --sections fields --temporal average --limit 10 --json
+wfg catalog --dataset gfs-analysis --search parcel --json
 ```
-
-Supplying search/filter options switches to compact browse mode:
-
-```bash
-wfg catalog \
-  --model gefs \
-  --search "low cloud cover" \
-  --sections fields \
-  --temporal average \
-  --limit 10 \
-  --json
-```
-
-GFS remains the default model where the CLI needs backward-compatible behavior.
 
 Available filters include:
 
-- `--search <text>` — tokenized case-insensitive search across IDs, descriptions, dependencies, outputs/units, source codes and vertical/temporal semantics;
-- `--sections <list>` — restrict to supported catalog sections;
-- `--classification <raw|derived>` — raw NOAA-backed definitions versus locally derived definitions/diagnostics;
-- `--temporal <instantaneous|accumulation|average>` — exact non-isobaric temporal semantics;
-- `--limit <number>` — returned matches, bounded to the command schema.
+- `--dataset gfs|gefs|gfs-analysis|all`;
+- `--search <text>`;
+- `--sections <list>`;
+- `--classification <raw|derived>`;
+- `--temporal <instantaneous|accumulation|average>`;
+- `--limit <number>`.
+
+There is no public `--model` selector.
 
 ## MCP
 
-MCP keeps model-explicit catalog tools:
+MCP exposes one discovery tool: `search_catalog`.
 
-- `get_gfs_catalog`
-- `search_gfs_catalog`
-- `get_gefs_catalog`
-- `search_gefs_catalog`
-
-That separation is intentional: GFS and GEFS do not have identical source inventories, and smaller model-specific schemas are clearer for agents.
-
-Example structured GEFS search input:
+Example:
 
 ```json
 {
   "search": "wet bulb",
+  "datasets": ["gfs", "gefs", "gfs-analysis"],
   "sections": ["variables"],
   "classification": "derived",
   "limit": 10
 }
 ```
 
-## What the catalogs describe
+Each match reports which datasets support the canonical entry, so dataset differences remain explicit without multiplying discovery tools.
 
-Both model catalogs expose canonical normalized semantics rather than requiring callers to understand raw GRIB naming.
+## What the catalog describes
 
-Depending on model and section, entries describe:
+Entries can describe raw pressure variables, derived thermodynamics, non-isobaric fields, layer/profile diagnostics, parcel definitions, dependencies, normalized outputs/units, vertical availability, and temporal semantics.
 
-- raw pressure variables;
-- member-first or deterministic derived thermodynamics;
-- non-isobaric fields;
-- layer diagnostics;
-- whole-profile diagnostics;
-- parcel definitions;
-- dependencies;
-- normalized outputs and units;
-- pressure/vertical availability;
-- instantaneous, accumulation or average temporal meaning;
-- model-specific source codes and source units.
-
-GEFS search reflects the v0.1.0 expanded `pgrb2a` contract, including derived profile thermodynamics and parcel capabilities rather than inheriting the deterministic GFS catalog by assumption.
+Dataset support comes from the source-specific inventories; WFG does not assume that GFS, GEFS, and the historical analysis archive contain identical fields.
 
 ## Ranking and matching
 
-Search normalizes case, whitespace, underscores, hyphens and diacritics. Every search token must occur somewhere in the searchable representation of an entry; WFG does not broaden a zero-result query into a fuzzy meteorological guess.
-
-Ranking is deterministic. Exact IDs receive the strongest score, followed by ID prefixes/substrings and then token matches across IDs, descriptions and structured metadata. Ties use stable catalog ordering.
-
-The result includes the resolved query and filters, match count before limiting, truncation status, and compact structured matches suitable for agent tool selection.
+Search normalizes case, whitespace, underscores, hyphens and diacritics. Every search token must occur in the searchable representation of an entry. Ranking is deterministic: exact IDs rank highest, followed by ID prefix/substring matches and then structured metadata matches.

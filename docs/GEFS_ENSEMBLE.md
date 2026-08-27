@@ -87,43 +87,44 @@ That pattern applies to thermodynamic derivations, lapse rate, shear, stability 
 
 All numeric ensemble distribution surfaces share arithmetic mean, population standard deviation, extrema and caller-selected quantiles. Threshold/event fractions are explicitly raw member evidence, **not calibrated probability**.
 
-## Surface guide
+## Unified surface guide
 
 ### Catalog
 
 ```bash
-wfg catalog --model gefs --search cloud --json
+wfg catalog --dataset gefs --search cloud --json
 ```
 
-MCP: `get_gefs_catalog`, `search_gefs_catalog`.
+MCP: `search_catalog` with `datasets: ["gefs"]`.
 
 ### Scalar ensemble distribution
 
 ```bash
-wfg ensemble \
+wfg query \
+  --dataset gefs \
   --lat 50.08 --lon 14.43 \
-  --valid 2026-08-24T12:00:00Z \
-  --var temperature --level 850 \
+  --at 2026-08-24T12:00:00Z \
+  --vars temperature --levels 850 \
   --quantiles 0.1,0.5,0.9 \
   --json
 ```
 
-MCP: `get_gefs_ensemble`.
+MCP: `query_atmosphere`.
 
 ### Pressure profile
 
 ```bash
-wfg profile \
-  --model gefs \
+wfg query \
+  --dataset gefs \
   --lat 50.08 --lon 14.43 \
-  --valid 2026-08-24T12:00:00Z \
+  --at 2026-08-24T12:00:00Z \
   --vars temperature,relative_humidity,geopotential_height \
   --levels 1000,925,850,700,500 \
   --quantiles 0.1,0.5,0.9 \
   --json
 ```
 
-MCP: `get_gefs_ensemble_profile`.
+MCP: `query_atmosphere`.
 
 Member profiles are omitted by default and can be requested for audit/composition.
 
@@ -132,9 +133,10 @@ Member profiles are omitted by default and can be requested for audit/compositio
 GEFS mixed bundles combine pressure variables/levels with supported non-isobaric fields in one member-first query.
 
 ```bash
-wfg ensemble-fields \
+wfg query \
+  --dataset gefs \
   --lat 50.08 --lon 14.43 \
-  --valid 2026-08-24T12:00:00Z \
+  --at 2026-08-24T12:00:00Z \
   --vars temperature,dew_point \
   --levels 850 \
   --fields temperature_2m,wind_10m,total_atmosphere_cloud_cover \
@@ -142,41 +144,22 @@ wfg ensemble-fields \
   --json
 ```
 
-Related CLI commands:
-
-- `ensemble-fields`
-- `ensemble-fields-timeseries`
-- `ensemble-fields-points`
-- `ensemble-fields-points-timeseries`
-
-MCP equivalents:
-
-- `get_gefs_fields`
-- `get_gefs_fields_timeseries`
-- `get_gefs_fields_points`
-- `get_gefs_fields_points_timeseries`
+The same `query` / `query_atmosphere` operation also handles GEFS time ranges, multiple points, and point × time matrices by changing only `geometry` and `time`.
 
 See [GEFS_FIELD_BUNDLES.md](GEFS_FIELD_BUNDLES.md).
 
-### Raw multi-point and time-series primitives
+### Multi-point and time-series queries
 
-Shared model-selectable operations remain available for compact one-field ensemble queries:
-
-```text
-points             --model gefs
-timeseries         --model gefs
-points-timeseries  --model gefs
-```
-
-These are useful when the caller needs one raw field rather than a mixed bundle. See [GEFS_MULTI_POINT.md](GEFS_MULTI_POINT.md) and [GEFS_MULTI_POINT_TIME_SERIES.md](GEFS_MULTI_POINT_TIME_SERIES.md).
+Use `query --dataset gefs` / `query_atmosphere` with `geometry.type = points` and/or a time range. There are no separate raw-field public commands.
 
 ### Layer diagnostics
 
 ```bash
-wfg layer \
-  --model gefs \
+wfg diagnose \
+  --dataset gefs \
   --lat 50.08 --lon 14.43 \
-  --valid 2026-08-24T12:00:00Z \
+  --at 2026-08-24T12:00:00Z \
+  --kind layer \
   --lower 850 --upper 500 \
   --diagnostics temperature_lapse_rate,wind_shear,potential_temperature_gradient \
   --json
@@ -184,15 +167,16 @@ wfg layer \
 
 Every member gets its own endpoint fields and geopotential layer depth before the diagnostic distribution is summarized.
 
-MCP: `get_gefs_layer_diagnostics`.
+MCP: `diagnose_atmosphere`.
 
 ### Whole-profile diagnostics
 
 ```bash
-wfg profile-diagnostics \
-  --model gefs \
+wfg diagnose \
+  --dataset gefs \
   --lat 50.08 --lon 14.43 \
-  --valid 2026-08-24T12:00:00Z \
+  --at 2026-08-24T12:00:00Z \
+  --kind profile \
   --levels 1000,925,850,700,500 \
   --diagnostics freezing_level_crossings,temperature_inversion_layers \
   --json
@@ -200,7 +184,7 @@ wfg profile-diagnostics \
 
 Variable-length structures are summarized through event/count and conditional descriptor distributions rather than an invented ensemble-mean structure.
 
-MCP: `get_gefs_profile_diagnostics`. See [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md).
+MCP: `diagnose_atmosphere`. See [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md).
 
 ### Parcel diagnostics
 
@@ -210,46 +194,36 @@ GEFS v0.1.0 supports the same explicit parcel definitions as GFS, evaluated memb
 - `mixed_layer_100hpa`
 - `most_unstable_300hpa`
 
-The current GEFS CLI uses the model-native command `ensemble-parcel`:
+Use the same diagnostic operation:
 
 ```bash
-wfg ensemble-parcel \
+wfg diagnose \
+  --dataset gefs \
   --lat 45.80 --lon 11.77 \
-  --valid 2026-08-24T12:00:00Z \
+  --at 2026-08-24T12:00:00Z \
+  --kind parcel \
   --parcel surface_2m \
   --levels 1000,925,850,700,500,250,200 \
   --quantiles 0.1,0.5,0.9 \
   --json
 ```
 
-MCP: `get_gefs_parcel_diagnostics`.
+MCP: `diagnose_atmosphere`.
 
 ### Diagnostic time series
 
-Layer/profile GEFS series use the shared command:
-
-```text
-diagnostic-timeseries --model gefs --kind layer|profile
-```
-
-Parcel series use the explicit CLI command:
-
-```text
-ensemble-parcel-timeseries
-```
-
-All three families share the same member-first GEFS diagnostic time-series core. MCP exposes all three through `get_gefs_diagnostic_timeseries`.
+Use `diagnose --dataset gefs --from ... --to ...` or MCP `diagnose_atmosphere` with a time range. Layer, profile and parcel series share the same member-first diagnostic engine.
 
 See [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md).
 
 ### Transect
 
 ```bash
-wfg transect \
-  --model gefs \
+wfg query \
+  --dataset gefs \
   --start 45.80,11.77 \
   --end 46.50,12.50 \
-  --valid 2026-08-24T12:00:00Z \
+  --at 2026-08-24T12:00:00Z \
   --vars temperature \
   --levels 850 \
   --fields wind_10m \
@@ -259,32 +233,32 @@ wfg transect \
 
 GEFS transects are ensemble-native mixed-field cross-sections. The path delegates to one multi-point bundle request so selected member slices are reused across coordinates.
 
-MCP: `get_gefs_transect`. See [GEFS_TRANSECT.md](GEFS_TRANSECT.md).
+MCP: `query_atmosphere`. See [GEFS_TRANSECT.md](GEFS_TRANSECT.md).
 
 ### Area statistics
 
 ```bash
-wfg area \
-  --model gefs \
+wfg query \
+  --dataset gefs \
   --north 56 --south 55 \
   --west 7 --east 9 \
-  --valid 2026-08-24T12:00:00Z \
-  --var u_wind --level 850 \
+  --at 2026-08-24T12:00:00Z \
+  --vars u_wind --levels 850 \
   --quantiles 0.1,0.5,0.9 \
   --json
 ```
 
 WFG computes the requested spatial statistic independently within every member, then summarizes those member-level statistics across the ensemble. It does not flatten member × grid-cell values into one distribution.
 
-MCP: `get_gefs_area_summary`.
+MCP: `query_atmosphere`.
 
 ### Run comparison
 
 ```bash
 wfg compare-runs \
-  --model gefs \
+  --dataset gefs \
   --lat 50.08 --lon 14.43 \
-  --valid 2026-08-24T18:00:00Z \
+  --at 2026-08-24T18:00:00Z \
   --vars temperature \
   --levels 850 \
   --cycles 3 \
@@ -293,11 +267,11 @@ wfg compare-runs \
 
 Each initialization is summarized independently. WFG compares distribution descriptors across cycles and deliberately does not treat `p01(new) - p01(old)` as a physical member trajectory.
 
-MCP: `compare_gefs_runs`. See [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md).
+MCP: `compare_runs`. See [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md).
 
 ### Aligned GFS-vs-GEFS comparison
 
-`compare-gfs-gefs` / `compare_gfs_to_gefs` resolves one initialization cycle capable of satisfying both models and places deterministic GFS inside the GEFS member distribution without inventing a binary confidence judgment.
+`compare-datasets` / `compare_datasets` resolves one initialization cycle capable of satisfying both datasets and places deterministic GFS inside the GEFS member distribution without inventing a binary confidence judgment.
 
 See [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md).
 

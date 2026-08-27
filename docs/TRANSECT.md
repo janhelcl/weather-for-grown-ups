@@ -2,27 +2,25 @@
 
 WFG exposes a deterministic pressure-level cross-section primitive for agents that need atmospheric structure along a path rather than at one point or over a rectangular area.
 
-GEFS supports ensemble-native mixed-field transects through the same CLI operation with `--model gefs`; see [GEFS_TRANSECT.md](GEFS_TRANSECT.md). This document describes the deterministic GFS path.
+Selecting `dataset=gefs` gives ensemble-native mixed-field transects; selecting `dataset=gfs-analysis` gives historical analysis transects where supported. This document focuses on deterministic GFS.
 
 ## CLI
 
 ```bash
-wfg transect \
-  --model gfs \
+wfg query \
+  --dataset gfs \
   --start 50.08,14.43 \
   --end 47.27,11.40 \
-  --valid 2026-08-24T12:00:00Z \
+  --at 2026-08-24T12:00:00Z \
   --vars temperature,relative_humidity,wind \
   --levels 1000,925,850,700,500 \
   --samples 21 \
   --json
 ```
 
-GFS is the default model if `--model` is omitted.
-
 ## MCP
 
-MCP exposes the deterministic primitive as `get_gfs_transect`.
+MCP uses `query_atmosphere` with `geometry.type="transect"` and `dataset="gfs"`.
 
 The request contains start/end coordinates, one run selector, one valid time, explicit pressure-level variables and levels, and 2–50 samples (default 21).
 
@@ -42,7 +40,7 @@ The deterministic transect composes the existing batched-point primitive:
 4. reuse that immutable selected-message slice across every path coordinate;
 5. sample and normalize each point locally through WFG's decoder abstraction.
 
-A 21-sample path therefore does not perform 21 NOAA downloads. It has the same selected-message reuse and cache provenance as `get_gfs_points`.
+A 21-sample path therefore does not perform 21 NOAA downloads. It has the same selected-message reuse and cache provenance as the shared multi-point implementation.
 
 The npm default decoder is bundled. Native `wgrib2` can be selected as a compatibility/debug backend without changing transect semantics.
 

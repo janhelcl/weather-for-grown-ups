@@ -34,7 +34,7 @@ Nonlinear diagnostics are evaluated on each GEFS member before aggregation. WFG 
 
 ## Atmospheric dataset capability boundary
 
-`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The filename and model-named exports remain as backward-compatible aliases while engine code moves to dataset vocabulary.
+`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `gefs`, and `gfs-analysis`.
 
 | Operation | GFS 0.25° forecast | GEFS 0.5° forecast | GFS Grid 4 0.5° analysis |
 | --- | --- | --- | --- |
@@ -52,7 +52,7 @@ Nonlinear diagnostics are evaluated on each GEFS member before aggregation. WFG 
 | scalar ensemble distribution | — | ✅ | — |
 | aligned model comparison | ✅ GFS-vs-GEFS | ✅ GFS-vs-GEFS | ⏳ forecast/analysis comparison remains a history-native verification primitive |
 
-The capability registry describes the shared **core operation**, not necessarily identical CLI command names. That distinction lets each public surface stay ergonomic without duplicating physics. History-native analog search, index/backfill and archived forecast verification remain specialized composition primitives; they do not need to masquerade as forecast operations.
+The capability registry describes the shared **core operation** behind the compact public vocabulary. Historical analog search and archived forecast verification remain specialized composition primitives, while index build/backfill is CLI-only administration rather than a normal atmospheric query.
 
 It also prevents two failure modes: mechanically copying deterministic behavior into an ensemble namespace, and claiming a model supports an operation whose required source fields or semantics are not actually implemented.
 
@@ -197,7 +197,7 @@ The rest of the codebase is isolated from decoder choice behind a narrow decodin
 
 ## Public surfaces
 
-The preferred public contract now mirrors the core architecture instead of the order in which model-specific features were implemented.
+The public contract mirrors the core architecture instead of the order in which model-specific features were implemented.
 
 > **One query language for atmospheric state; datasets preserve their semantics.**
 
@@ -205,18 +205,17 @@ Normal access is `dataset × geometry × time × selection`. Public dataset IDs 
 
 ### CLI
 
-The preferred CLI surface is compact:
+The CLI surface is compact:
 
 - `catalog --dataset ...` for cross-dataset discovery;
 - `query` for atmospheric state over point(s), time range, transect, or area where supported;
 - `diagnose` for shared layer/profile/parcel physics;
-- `compare-runs`, `compare-datasets`, `verify`, and `analogs` for composition operations.
-
-Legacy `--model`, `history-*`, and `ensemble-*` commands remain backward-compatible aliases. They continue to delegate to the same dataset-specific services and are not independent implementations.
+- `compare-runs`, `compare-datasets`, `verify`, and `analogs` for composition operations;
+- `index build` and `index backfill` for local analog-index administration.
 
 ### MCP
 
-The preferred MCP vocabulary is similarly small:
+The MCP vocabulary is similarly small:
 
 - `search_catalog`;
 - `query_atmosphere`;
@@ -228,7 +227,7 @@ The preferred MCP vocabulary is similarly small:
 
 The first three are the normal atmospheric query language. Comparison, verification and analog search remain separate because they are genuine composition operations rather than another geometry/time shape.
 
-Model-native MCP tools remain registered for compatibility and for callers that intentionally want their narrower schemas. The unified adapters validate the common request and then delegate through existing dataset-specific schemas/services, so unsupported combinations fail explicitly rather than being coerced into fake symmetry.
+The unified adapters validate the common request and then delegate through dataset-specific schemas/services internally, so unsupported combinations fail explicitly rather than being coerced into fake symmetry. Those dataset-native services are implementation details and are not registered as separate public MCP tools.
 
 Both MCP transports instantiate the same tool catalog:
 

@@ -32,7 +32,8 @@ Older Grid 4 files also use different pressure axes for some variables. WFG grou
 ### CLI
 
 ```bash
-wfg history \
+wfg query \
+  --dataset gfs-analysis \
   --lat 50.08 \
   --lon 14.43 \
   --at 2017-05-09T12:00:00Z \
@@ -45,15 +46,21 @@ wfg history \
 
 ### MCP
 
-Tool: `get_gfs_historical_profile`
+Tool: `query_atmosphere`
 
 ```json
 {
-  "latitude": 50.08,
-  "longitude": 14.43,
-  "analysisTime": "2017-05-09T12:00:00Z",
-  "variables": ["temperature", "relative_humidity", "wind", "geopotential_height"],
-  "pressureLevelsHpa": [1000, 925, 850, 700, 500]
+  "dataset": "gfs-analysis",
+  "geometry": {
+    "type": "point",
+    "latitude": 50.08,
+    "longitude": 14.43
+  },
+  "time": { "at": "2017-05-09T12:00:00Z" },
+  "selection": {
+    "variables": ["temperature", "relative_humidity", "wind", "geopotential_height"],
+    "pressureLevelsHpa": [1000, 925, 850, 700, 500]
+  }
 }
 ```
 
@@ -73,7 +80,8 @@ Archive cycles are fetched serially. Each step keeps its own exact archive datas
 ### CLI
 
 ```bash
-wfg history-timeseries \
+wfg query \
+  --dataset gfs-analysis \
   --lat 50.08 \
   --lon 14.43 \
   --from 2017-05-09T00:00:00Z \
@@ -87,18 +95,26 @@ wfg history-timeseries \
 
 ### MCP
 
-Tool: `get_gfs_historical_timeseries`
+Tool: `query_atmosphere`
 
 ```json
 {
-  "latitude": 50.08,
-  "longitude": 14.43,
-  "startTime": "2017-05-09T00:00:00Z",
-  "endTime": "2017-05-15T23:59:59Z",
-  "cycleHoursUtc": [12],
-  "variables": ["temperature", "relative_humidity", "wind", "geopotential_height"],
-  "pressureLevelsHpa": [850, 700, 500],
-  "maxSteps": 7
+  "dataset": "gfs-analysis",
+  "geometry": {
+    "type": "point",
+    "latitude": 50.08,
+    "longitude": 14.43
+  },
+  "time": {
+    "from": "2017-05-09T00:00:00Z",
+    "to": "2017-05-15T23:59:59Z",
+    "hoursUtc": [12],
+    "maxSteps": 7
+  },
+  "selection": {
+    "variables": ["temperature", "relative_humidity", "wind", "geopotential_height"],
+    "pressureLevelsHpa": [850, 700, 500]
+  }
 }
 ```
 
@@ -108,15 +124,15 @@ Historical analysis now participates in the same core operation vocabulary as op
 
 ### Diagnostic time series
 
-CLI: `history-diagnostic-timeseries`  
-MCP: `get_gfs_historical_diagnostic_timeseries`
+CLI: `diagnose --dataset gfs-analysis`  
+MCP: `diagnose_atmosphere`
 
 One selection may be a pressure-layer diagnostic, whole-profile diagnostic, or parcel diagnostic. The same physical kernels are evaluated at each selected 00/06/12/18 UTC analysis cycle. Results use `analysisTime`; WFG does not synthesize forecast initialization or lead-hour fields for analysis data.
 
 ### Multiple points
 
-CLI: `history-points`  
-MCP: `get_gfs_historical_points`
+CLI: `query --dataset gfs-analysis --point ...`  
+MCP: `query_atmosphere`
 
 Up to **10 points** may be queried at one analysis time. Pressure variables and the supported historical non-isobaric fields can be combined in the same request. Each result preserves requested coordinates, sampled 0.5° grid coordinates, dataset path and cache status.
 
@@ -124,22 +140,22 @@ NCEI Grid 4 access is currently point-oriented. Historical multi-point queries t
 
 ### Multiple points over time
 
-CLI: `history-points-timeseries`  
-MCP: `get_gfs_historical_points_timeseries`
+CLI: `query --dataset gfs-analysis --point ... --from ... --to ...`  
+MCP: `query_atmosphere`
 
 This composes the same multi-point selection across selected analysis cycles. Both the number of cycles and the total **point × analysis-step** matrix are bounded before archive access begins.
 
 ### Transects
 
-CLI: `history-transect`  
-MCP: `get_gfs_historical_transect`
+CLI: `query --dataset gfs-analysis --start ... --end ...`  
+MCP: `query_atmosphere`
 
 Historical transects use the **same great-circle interpolation** as operational GFS and GEFS, then delegate all samples to the historical multi-point primitive. Because the NCEI path is point-oriented, historical transects are bounded to **10 samples**.
 
 ### Area statistics
 
-CLI: `history-area`  
-MCP: `get_gfs_historical_area_summary`
+CLI: `query --dataset gfs-analysis --west ... --east ... --south ... --north ...`  
+MCP: `query_atmosphere`
 
 Historical area summaries use **one native NCEI NCSS bbox/grid subset** over the 0.5° Grid 4 analysis. WFG returns the unweighted defined-grid-point mean, minimum and maximum, with optional spatial percentiles, threshold fractions and representative extrema locations using the same distribution kernel as operational deterministic GFS.
 
@@ -150,19 +166,20 @@ Derived vector/thermodynamic fields are deliberately excluded from this first ar
 Example:
 
 ```bash
-wfg history-area \
+wfg query \
+  --dataset gfs-analysis \
   --west 12 --east 18 \
   --south 48 --north 51 \
   --at 2017-05-09T12:00:00Z \
-  --var temperature \
-  --level 850 \
+  --vars temperature \
+  --levels 850 \
   --percentiles 10,50,90 \
   --gte 15 \
-  --extrema-locations \
+  --extrema \
   --json
 ```
 
-The MCP operation accepts the same bbox, `analysisTime`, raw pressure-variable or raw field selection, and optional distribution controls.
+The MCP `query_atmosphere` operation accepts the same area geometry, valid time, scalar pressure-variable or field selection, and optional distribution controls.
 
 ## Materialized history and analog search
 
@@ -180,10 +197,11 @@ A semantic record key consists of the analysis time, sampled Grid 4 point and no
 
 ### Build a small index range
 
-`history-index` is the bounded interactive primitive. It uses the same 16-analysis maximum as `history-timeseries`.
+`wfg index build` is the bounded interactive primitive. It uses the same 16-analysis maximum as interactive historical time-series queries.
 
 ```bash
-wfg history-index \
+wfg index build \
+  --dataset gfs-analysis \
   --lat 50.08 \
   --lon 14.43 \
   --from 2017-05-01T00:00:00Z \
@@ -195,14 +213,15 @@ wfg history-index \
   --json
 ```
 
-MCP tool: `materialize_gfs_history_index`.
+Index construction is CLI-only administration and is not exposed as an MCP weather tool.
 
 ### Backfill a large range
 
-`history-backfill` is the resumable corpus-building primitive. It can plan up to **50,000 selected cycles**, but each invocation has a separate fetch budget: **16 missing profiles by default, 256 maximum**. Profiles that already exist for the sampled Grid 4 cell and normalized selection are removed from the plan before any archive call.
+`wfg index backfill` is the resumable corpus-building primitive. It can plan up to **50,000 selected cycles**, but each invocation has a separate fetch budget: **16 missing profiles by default, 256 maximum**. Profiles that already exist for the sampled Grid 4 cell and normalized selection are removed from the plan before any archive call.
 
 ```bash
-wfg history-backfill \
+wfg index backfill \
+  --dataset gfs-analysis \
   --lat 50.08 \
   --lon 14.43 \
   --from 2007-01-01T00:00:00Z \
@@ -214,7 +233,7 @@ wfg history-backfill \
   --json
 ```
 
-MCP tool: `backfill_gfs_history_index`.
+Backfill is CLI-only administration and is not exposed as an MCP weather tool.
 
 The result reports `selectedCycleCount`, `alreadyMaterialized`, fetch attempts, cache hits versus upstream reads, newly materialized profiles, failures, `remaining`, and `nextAnalysisTime`. Repeating the same request therefore resumes from the local index without the caller maintaining a cursor.
 
@@ -232,10 +251,10 @@ NOAA ARL also publishes a quarter-degree GFS archive from June 2019, but that da
 ### Find analogs
 
 ```bash
-wfg history-analogs \
+wfg analogs \
   --lat 50.08 \
   --lon 14.43 \
-  --target 2017-05-09T12:00:00Z \
+  --at 2017-05-09T12:00:00Z \
   --vars temperature,relative_humidity,wind,geopotential_height \
   --levels 850,700,500 \
   --count 5 \
@@ -243,7 +262,7 @@ wfg history-analogs \
   --json
 ```
 
-MCP tool: `find_gfs_historical_analogs`.
+MCP tool: `find_analogs`.
 
 Candidate search is local. If the target analysis itself is not materialized and `fetchTargetIfMissing=true`, WFG fetches only that one target profile, stores it, then searches the local candidate set. Set `fetchTargetIfMissing=false` (CLI: `--no-fetch-target`) for a strictly offline lookup.
 
@@ -262,10 +281,10 @@ Changes are reported as **analysis − forecast**. Directional quantities such a
 ### CLI
 
 ```bash
-wfg history-verify \
+wfg verify \
   --lat 50.08 \
   --lon 14.43 \
-  --valid 2019-12-26T18:00:00Z \
+  --at 2019-12-26T18:00:00Z \
   --lead-hours 54 \
   --vars temperature,relative_humidity,wind,geopotential_height \
   --levels 850,700,500 \
@@ -274,13 +293,18 @@ wfg history-verify \
 
 ### MCP
 
-Tool: `verify_gfs_historical_forecast`
+Tool: `verify_forecast`
 
 ```json
 {
-  "latitude": 50.08,
-  "longitude": 14.43,
-  "validTime": "2019-12-26T18:00:00Z",
+  "forecastDataset": "gfs",
+  "referenceDataset": "gfs-analysis",
+  "geometry": {
+    "type": "point",
+    "latitude": 50.08,
+    "longitude": 14.43
+  },
+  "time": { "at": "2019-12-26T18:00:00Z" },
   "leadHours": 54,
   "variables": ["temperature", "relative_humidity", "wind", "geopotential_height"],
   "pressureLevelsHpa": [850, 700, 500]
