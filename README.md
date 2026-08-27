@@ -16,7 +16,7 @@ Node.js 20+ is enough. The npm package includes its GRIB2 decoder; native `wgrib
 
 ```bash
 npx weather-for-grown-ups --help
-npx weather-for-grown-ups catalog --model gefs --search wind --json
+npx weather-for-grown-ups catalog --dataset gefs --search wind --json
 ```
 
 Start either MCP transport from the same package:
@@ -42,7 +42,7 @@ The examples below are illustrative agent interpretations, not live forecasts an
 
 **The agent might use WFG**
 
-`get_gfs_diagnostic_timeseries` → `get_gefs_diagnostic_timeseries` → `compare_gefs_runs`
+`diagnose_atmosphere` on `gfs` → `diagnose_atmosphere` on `gefs` → `compare_runs` on `gefs`
 
 **Example agent interpretation**
 
@@ -56,7 +56,7 @@ The examples below are illustrative agent interpretations, not live forecasts an
 
 **The agent might use WFG**
 
-`get_gfs_parcel_diagnostics` → `get_gefs_parcel_diagnostics` → `get_gefs_diagnostic_timeseries` → `get_gefs_fields_timeseries`
+`diagnose_atmosphere` on `gfs` → `diagnose_atmosphere` on `gefs` → `query_atmosphere` time series on `gefs`
 
 **Example agent interpretation**
 
@@ -72,7 +72,7 @@ The examples below are illustrative agent interpretations, not live forecasts an
 
 **The agent might use WFG**
 
-`get_gfs_profile` → `get_gefs_ensemble_profile` → `get_gefs_profile_diagnostics` → `get_gefs_fields_timeseries`
+`query_atmosphere` on `gfs` → `query_atmosphere` on `gefs` → `diagnose_atmosphere` on `gefs`
 
 **Example agent interpretation**
 
@@ -88,7 +88,7 @@ WFG supplies atmospheric model evidence; a consuming agent should still treat mo
 
 **The agent might use WFG**
 
-`get_gefs_fields_points_timeseries` → `get_gefs_transect` → `compare_gefs_runs`
+`query_atmosphere` with GEFS points/time range → `query_atmosphere` with a GEFS transect → `compare_runs`
 
 **Example agent interpretation**
 
@@ -120,7 +120,7 @@ WFG exposes deterministic **GFS 0.25°** and ensemble **GEFS 0.5°** while prese
 
 GEFS also supports control `c00` plus perturbed members `p01`–`p30`, native three-hour output through `f384`, mixed pressure/non-isobaric field bundles, and opt-in member payloads for auditability.
 
-Historical **GFS Grid 4 0.5° analysis** is exposed as a third dataset through the `history-*` CLI and explicit historical MCP tools. It now covers profiles, time series, diagnostics, parcels, multi-point queries, multi-point time series, transects and native bbox area statistics while preserving analysis-time semantics and NCEI provenance.
+Historical **GFS Grid 4 0.5° analysis** is exposed as the third public dataset, `gfs-analysis`, through the same `query` / `diagnose` CLI operations and `query_atmosphere` / `diagnose_atmosphere` MCP tools. It covers profiles, time series, diagnostics, parcels, multi-point queries, multi-point time series, transects and native bbox area statistics while preserving analysis-time semantics and NCEI provenance.
 
 ## The design rule
 
@@ -138,9 +138,9 @@ In particular:
 
 The [architecture guide](docs/ARCHITECTURE.md) goes deeper into the shared core, model adapters, member-first computation, source strategy, caching, and public surfaces.
 
-## Preferred unified API
+## Public API
 
-New integrations should use the dataset-oriented query vocabulary documented in [UNIFIED_API.md](docs/UNIFIED_API.md).
+WFG exposes the dataset-oriented query vocabulary documented in [UNIFIED_API.md](docs/UNIFIED_API.md).
 
 Normal atmospheric access is expressed as:
 
@@ -150,7 +150,7 @@ dataset × geometry × time × selection
 
 with short dataset IDs `gfs`, `gefs`, and `gfs-analysis`. The same query structure therefore works for a deterministic forecast, an ensemble forecast, or an archived analysis while each result preserves its native deterministic/ensemble and forecast/analysis semantics.
 
-The preferred MCP vocabulary is intentionally small:
+The MCP vocabulary is intentionally small:
 
 - `search_catalog`
 - `query_atmosphere`
@@ -162,19 +162,29 @@ The preferred MCP vocabulary is intentionally small:
 
 The CLI mirrors the same concepts with `catalog --dataset ...`, `query`, `diagnose`, `compare-runs`, `compare-datasets`, `verify`, and `analogs`.
 
-Existing model-native GFS/GEFS/history commands and MCP tools remain available as backward-compatible aliases.
-
 ## CLI
 
-The preferred CLI uses `--dataset gfs|gefs|gfs-analysis` through `query` and `diagnose`. Existing forecast-oriented commands keep `--model gfs|gefs` as backward-compatible aliases, and model-native commands remain available where they expose narrower specialist controls.
+The CLI mirrors the same operation vocabulary. Dataset choice is always explicit through `--dataset`.
 
-A deterministic profile:
+A deterministic GFS profile:
 
 ```bash
-wfg profile \
-  --model gfs \
+wfg query \
+  --dataset gfs \
   --lat 50.08 --lon 14.43 \
-  --valid 2026-08-24T12:00:00Z \
+  --at 2026-08-24T12:00:00Z \
+  --vars temperature,relative_humidity,wind \
+  --levels 1000,925,850,700,500 \
+  --json
+```
+
+The same query against historical analysis only changes the dataset and time:
+
+```bash
+wfg query \
+  --dataset gfs-analysis \
+  --lat 50.08 --lon 14.43 \
+  --at 2017-05-09T12:00:00Z \
   --vars temperature,relative_humidity,wind \
   --levels 1000,925,850,700,500 \
   --json
@@ -183,36 +193,39 @@ wfg profile \
 An ensemble parcel diagnostic:
 
 ```bash
-wfg ensemble-parcel \
+wfg diagnose \
+  --dataset gefs \
   --lat 45.80 --lon 11.77 \
-  --valid 2026-08-24T12:00:00Z \
+  --at 2026-08-24T12:00:00Z \
+  --kind parcel \
   --parcel surface_2m \
   --levels 1000,925,850,700,500,250,200 \
+  --quantiles 0.1,0.5,0.9 \
   --json
 ```
 
-A mixed GEFS field bundle across multiple points and times:
+Local analog-index maintenance is intentionally separate from weather queries:
 
 ```bash
-wfg ensemble-fields-points-timeseries \
-  --point 55.47,8.45 \
-  --point 55.67,8.15 \
-  --from 2026-08-24T06:00:00Z \
-  --to 2026-08-25T18:00:00Z \
-  --fields wind_10m \
-  --quantiles 0.1,0.5,0.9 \
-  --json
+wfg index build --dataset gfs-analysis ...
+wfg index backfill --dataset gfs-analysis ...
 ```
 
 Run `wfg --help` or `npx weather-for-grown-ups --help` for the complete command surface.
 
 ## MCP
 
-MCP now offers a compact preferred vocabulary (`search_catalog`, `query_atmosphere`, `diagnose_atmosphere`, comparisons, verification and analogs) over the same core. Existing model-named tools remain registered as backward-compatible specialist aliases.
+MCP exposes exactly seven atmospheric tools:
 
-The v0.1.0 MCP surface includes model catalogs, profiles, raw and mixed fields, multi-point and time-series queries, layer/profile/parcel diagnostics, transects, area statistics, run comparison, GEFS ensemble distributions, and aligned GFS-vs-GEFS comparison.
+- `search_catalog`
+- `query_atmosphere`
+- `diagnose_atmosphere`
+- `compare_runs`
+- `compare_datasets`
+- `verify_forecast`
+- `find_analogs`
 
-Both transports expose the same tool set:
+Both transports expose exactly the same tool set:
 
 - **stdio** — `npx weather-for-grown-ups mcp`
 - **Streamable HTTP** — `npx weather-for-grown-ups mcp-http`
