@@ -26,8 +26,10 @@ function harness(
 }
 
 describe("estimateGridPoints", () => {
-  it("conservatively estimates 0.25-degree grid coverage", () => {
-    expect(estimateGridPoints({ westLongitude: 0, eastLongitude: 1, southLatitude: 0, northLatitude: 1 })).toBe(36);
+  it("conservatively estimates grid coverage at both supported resolutions", () => {
+    const box = { westLongitude: 0, eastLongitude: 1, southLatitude: 0, northLatitude: 1 };
+    expect(estimateGridPoints(box)).toBe(36);
+    expect(estimateGridPoints(box, "0p50")).toBe(16);
   });
 });
 
@@ -47,6 +49,28 @@ describe("AreaSummaryService", () => {
     expect(url.searchParams.get("var_TMP")).toBe("on");
     expect(url.searchParams.get("lev_850_mb")).toBe("on");
     expect(summarizeBox).toHaveBeenCalledWith("/cache/area.grib2", result.bbox);
+  });
+
+  it("uses the 0.5 NOMADS product and model identity when explicitly selected", async () => {
+    const { service, fetch } = harness();
+    const result = await service.summarize({ ...base, grid: "0p50" });
+    expect(result.model).toBe("gfs_0p50");
+    const url = new URL(fetch.mock.calls[0]?.[0] ?? "");
+    expect(url.pathname).toBe("/cgi-bin/filter_gfs_0p50.pl");
+    expect(url.searchParams.get("file")).toBe("gfs.t06z.pgrb2.0p50.f006");
+  });
+
+  it("passes 0.5 through query-aware and complete latest-run discovery", async () => {
+    const first = harness();
+    await first.service.summarize({ ...base, run: "latest", grid: "0p50" });
+    expect(first.resolveLatestRun).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "valid_time" }),
+      "0p50",
+    );
+
+    const second = harness();
+    await second.service.summarize({ ...base, run: "latest_complete", grid: "0p50" });
+    expect(second.resolveLatestRun).toHaveBeenCalledWith(undefined, "0p50");
   });
 
   it("leaves non-temperature pressure units unchanged", async () => {

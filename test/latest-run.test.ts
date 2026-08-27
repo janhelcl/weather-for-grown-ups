@@ -120,6 +120,60 @@ describe("LatestRunResolver complete-run mode", () => {
   });
 });
 
+describe("LatestRunResolver 0.5 grid routing", () => {
+  it("passes 0.5 to complete-run probes", async () => {
+    const isRunComplete = vi.fn(async () => true);
+    const resolver = new LatestRunResolver(
+      probe({ isRunComplete }),
+      () => Date.parse("2026-08-19T14:41:00Z"),
+    );
+    await resolver.resolveLatestRun(undefined, "0p50");
+    expect(isRunComplete).toHaveBeenCalledWith(
+      new Date("2026-08-19T12:00:00Z"),
+      "0p50",
+    );
+  });
+
+  it("passes 0.5 to valid-time availability probes", async () => {
+    const isForecastAvailable = vi.fn(async () => true);
+    const resolver = new LatestRunResolver(
+      probe({ isForecastAvailable }),
+      () => Date.parse("2026-08-19T14:41:00Z"),
+    );
+    await resolver.resolveLatestRun({
+      type: "valid_time",
+      validTime: new Date("2026-08-19T18:00:00Z"),
+      selection: pressureSelection,
+    }, "0p50");
+    expect(isForecastAvailable).toHaveBeenCalledWith(
+      new Date("2026-08-19T12:00:00Z"),
+      6,
+      pressureSelection,
+      "0p50",
+    );
+  });
+
+  it("checks first and last 0.5 native steps for a range", async () => {
+    const isForecastAvailable = vi.fn(async () => true);
+    const resolver = new LatestRunResolver(
+      probe({ isForecastAvailable }),
+      () => Date.parse("2026-08-19T14:41:00Z"),
+    );
+    await resolver.resolveLatestRun({
+      type: "time_range",
+      startTime: new Date("2026-08-19T12:00:00Z"),
+      endTime: new Date("2026-08-19T18:00:00Z"),
+      selection: pressureSelection,
+    }, "0p50");
+    expect(isForecastAvailable.mock.calls.map(([candidate, fh, selection, grid]) => [
+      candidate.toISOString(), fh, selection, grid,
+    ])).toEqual([
+      ["2026-08-19T12:00:00.000Z", 0, pressureSelection, "0p50"],
+      ["2026-08-19T12:00:00.000Z", 6, pressureSelection, "0p50"],
+    ]);
+  });
+});
+
 describe("LatestRunResolver query-aware mode", () => {
   it("selects the newest cycle whose requested forecast is actually published", async () => {
     const isForecastAvailable = vi.fn(async (candidate: Date, fh: number) =>

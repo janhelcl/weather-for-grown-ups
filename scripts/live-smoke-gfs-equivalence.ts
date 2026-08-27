@@ -56,7 +56,7 @@ async function verifyGrid(grid: Grid) {
 
   const operationalRange = await pointRange(grid, "s3", runIso, f006, f012);
   const archivedRange = await pointRange(grid, "archive", runIso, f006, f012);
-  const operationalByHour = new Map(
+  const operationalByHour = new Map<number, any>(
     operationalRange.series.map((step: any) => [step.forecastHour, step]),
   );
   for (const archivedStep of archivedRange.series) {

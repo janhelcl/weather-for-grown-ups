@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { archivedGfsForecastHoursInRange } from "../src/core/archived-gfs-query.js";
+import {
+  archivedGfsModelId,
+  gfsGridSpacingDegrees,
+  operationalGfsModelId,
+} from "../src/schema/gfs-grid.js";
 import { forecastHour, nativeForecastHoursInRange } from "../src/core/forecast-hour.js";
 import { queryAtmosphereSchema } from "../src/schema/unified-api.js";
 import { buildGfsS3ForecastUrl } from "../src/sources/gfs-s3.js";
@@ -107,5 +112,20 @@ describe("unified GFS grid/source vocabulary", () => {
       forecast: { run: "2026-08-24T00:00:00Z", grid: "0p25" },
       source: "archive",
     }).source).toBe("archive");
+  });
+});
+
+
+describe("GFS grid identity helpers", () => {
+  it("maps both operational resolutions to stable model ids and spacing", () => {
+    expect(operationalGfsModelId("0p25")).toBe("gfs_0p25");
+    expect(operationalGfsModelId("0p50")).toBe("gfs_0p50");
+    expect(gfsGridSpacingDegrees("0p25")).toBe(0.25);
+    expect(gfsGridSpacingDegrees("0p50")).toBe(0.5);
+  });
+
+  it("maps both historical forecast resolutions to explicit archive ids", () => {
+    expect(archivedGfsModelId("0p25")).toBe("gfs_0p25_forecast_archive");
+    expect(archivedGfsModelId("0p50")).toBe("gfs_grid4_forecast_0p5_archive");
   });
 });

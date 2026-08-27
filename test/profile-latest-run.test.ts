@@ -57,6 +57,26 @@ describe("ProfileService latest-run selection", () => {
     expect(result.run).toBe("2026-08-19T06:00:00.000Z");
   });
 
+  it("propagates explicit 0.5 grid through latest-run discovery and NOMADS access", async () => {
+    const { service, fetchMock, resolveLatestRun } = harness();
+    const result = await service.getProfile({ ...base, run: "latest", grid: "0p50" });
+
+    expect(resolveLatestRun).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "valid_time" }),
+      "0p50",
+    );
+    expect(result.model).toBe("gfs_0p50");
+    const url = new URL(fetchMock.mock.calls[0]?.[0] ?? "");
+    expect(url.pathname).toBe("/cgi-bin/filter_gfs_0p50.pl");
+    expect(url.searchParams.get("file")).toBe("gfs.t06z.pgrb2.0p50.f006");
+  });
+
+  it("uses grid-aware complete-run discovery for 0.5", async () => {
+    const { service, resolveLatestRun } = harness();
+    await service.getProfile({ ...base, run: "latest_complete", grid: "0p50" });
+    expect(resolveLatestRun).toHaveBeenCalledWith(undefined, "0p50");
+  });
+
   it("uses complete-run discovery when latest_complete is requested", async () => {
     const { service, resolveLatestRun } = harness();
     await service.getProfile({ ...base, run: "latest_complete" });
