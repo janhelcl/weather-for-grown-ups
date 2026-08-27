@@ -94,6 +94,7 @@ export class ArchivedGfsForecastProfileService {
       source: adapter,
       now: this.now,
       allowNonAnalysisCycle: true,
+      minimumTime: NCEI_GFS_GRID4_FORECAST_START,
     });
     const profile = await normalizer.getHistoricalProfile({
       latitude: query.latitude,
