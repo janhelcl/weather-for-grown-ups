@@ -185,9 +185,9 @@ An old forecast keeps `gfs` and selects the historical initialization:
 ```bash
 wfg query \
   --dataset gfs \
-  --run 2017-05-07T12:00:00Z \
+  --run 2019-12-24T12:00:00Z \
   --lat 50.08 --lon 14.43 \
-  --at 2017-05-09T12:00:00Z \
+  --at 2019-12-26T18:00:00Z \
   --vars temperature,relative_humidity,wind \
   --levels 1000,925,850,700,500 \
   --json
@@ -199,7 +199,7 @@ The same query against historical analysis only changes the dataset and time:
 wfg query \
   --dataset gfs-analysis \
   --lat 50.08 --lon 14.43 \
-  --at 2017-05-09T12:00:00Z \
+  --at 2019-12-26T18:00:00Z \
   --vars temperature,relative_humidity,wind \
   --levels 1000,925,850,700,500 \
   --json
