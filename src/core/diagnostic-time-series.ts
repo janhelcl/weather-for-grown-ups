@@ -25,7 +25,12 @@ import {
   validTimeForForecastHour,
 } from "./forecast-hour.js";
 import { LayerDiagnosticsService } from "./layer-diagnostics.js";
-import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
+import {
+  LatestRunResolver,
+  resolveLatestCompleteRunForGrid,
+  resolveLatestRunForGrid,
+  type LatestRunProvider,
+} from "./latest-run.js";
 import { ParcelDiagnosticsService } from "./parcel-diagnostics.js";
 import { ProfileDiagnosticsService } from "./profile-diagnostics.js";
 import type {
@@ -84,14 +89,14 @@ export class DiagnosticTimeSeriesService {
     const startTime = new Date(query.startTime);
     const endTime = new Date(query.endTime);
     const run = query.run === "latest"
-      ? await this.latestRunProvider.resolveLatestRun({
+      ? await resolveLatestRunForGrid(this.latestRunProvider, {
           type: "time_range",
           startTime,
           endTime,
           selection: availabilitySelection(diagnostic),
         }, query.grid)
       : query.run === "latest_complete"
-        ? await this.latestRunProvider.resolveLatestRun(undefined, query.grid)
+        ? await resolveLatestCompleteRunForGrid(this.latestRunProvider, query.grid)
         : parseGfsRun(query.run);
     const forecastHours = nativeForecastHoursInRange(run, startTime, endTime, query.grid);
 
@@ -114,7 +119,7 @@ export class DiagnosticTimeSeriesService {
                 latitude: query.latitude,
                 longitude: query.longitude,
                 run: run.toISOString(),
-                grid: query.grid,
+                ...(query.grid === undefined ? {} : { grid: query.grid }),
                 validTime,
                 lowerPressureHpa: diagnostic.lowerPressureHpa,
                 upperPressureHpa: diagnostic.upperPressureHpa,
@@ -129,7 +134,7 @@ export class DiagnosticTimeSeriesService {
                 latitude: query.latitude,
                 longitude: query.longitude,
                 run: run.toISOString(),
-                grid: query.grid,
+                ...(query.grid === undefined ? {} : { grid: query.grid }),
                 validTime,
                 pressureLevelsHpa: diagnostic.pressureLevelsHpa,
                 diagnostics: diagnostic.diagnostics,
@@ -143,7 +148,7 @@ export class DiagnosticTimeSeriesService {
                 latitude: query.latitude,
                 longitude: query.longitude,
                 run: run.toISOString(),
-                grid: query.grid,
+                ...(query.grid === undefined ? {} : { grid: query.grid }),
                 validTime,
                 pressureLevelsHpa: diagnostic.pressureLevelsHpa,
                 parcel: diagnostic.parcel,

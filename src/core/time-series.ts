@@ -7,7 +7,12 @@ import {
   parseGfsRun,
   validTimeForForecastHour,
 } from "./forecast-hour.js";
-import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
+import {
+  LatestRunResolver,
+  resolveLatestCompleteRunForGrid,
+  resolveLatestRunForGrid,
+  type LatestRunProvider,
+} from "./latest-run.js";
 import { ProfileService } from "./profile.js";
 import type { ProfileResult, TimeSeriesResult } from "./types.js";
 
@@ -42,7 +47,7 @@ export class TimeSeriesService {
     const fields = expandRequestedFields(query.fields ?? []);
     const pressureLevelsHpa = query.pressureLevelsHpa ?? [];
     const run = query.run === "latest"
-      ? await this.latestRunProvider.resolveLatestRun({
+      ? await resolveLatestRunForGrid(this.latestRunProvider, {
           type: "time_range",
           startTime,
           endTime,
@@ -53,7 +58,7 @@ export class TimeSeriesService {
           },
         }, query.grid)
       : query.run === "latest_complete"
-        ? await this.latestRunProvider.resolveLatestRun(undefined, query.grid)
+        ? await resolveLatestCompleteRunForGrid(this.latestRunProvider, query.grid)
         : parseGfsRun(query.run);
     const forecastHours = nativeForecastHoursInRange(run, startTime, endTime, query.grid);
 
@@ -70,7 +75,7 @@ export class TimeSeriesService {
         latitude: query.latitude,
         longitude: query.longitude,
         run: run.toISOString(),
-        grid: query.grid,
+        ...(query.grid === undefined ? {} : { grid: query.grid }),
         validTime: validTimeForForecastHour(run, forecastHourValue).toISOString(),
         ...(query.variables === undefined ? {} : { variables: query.variables }),
         ...(query.pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa: query.pressureLevelsHpa }),
