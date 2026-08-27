@@ -463,7 +463,7 @@ export class ArchivedGfsForecastQueryService {
 }
 
 export function shouldUseArchivedGfsForecast(
-  request: QueryAtmosphereRequest,
+  request: { dataset: string; forecast?: { run: string } },
   now: Date = new Date(),
 ): boolean {
   if (request.dataset !== "gfs") return false;
