@@ -28,7 +28,9 @@
     "docs",
     "LICENSE"
   ],
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
     "weather-for-grown-ups": "./dist/entry.js",
     "wfg": "./dist/cli.js",
@@ -66,7 +68,8 @@
     "@modelcontextprotocol/server": "^2.0.0",
     "commander": "^14.0.0",
     "execa": "^9.0.0",
-    "zod": "^4.0.0"
+    "zod": "^4.0.0",
+    "netcdfjs": "^4.0.0"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "^2.0.0",

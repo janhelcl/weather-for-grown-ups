@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { NetCDFReader } from "netcdfjs";
 import type { FileRateLimiter } from "../cache/file-rate-limiter.js";
 import type {
   ArchivedGfsForecastAreaDataSource,
@@ -14,18 +15,28 @@ export const RDA_GFS_0P25_FORECAST_START = new Date("2015-01-15T00:00:00Z");
 export const RDA_GFS_0P25_NCSS_BASE_URL =
   "https://tds.gdex.ucar.edu/thredds/ncss/grid/files/g/d084001";
 
+export interface RdaAreaNetcdfReader {
+  dimensions: readonly { name: string; size: number }[];
+  dataVariableExists(name: string): boolean;
+  getDataVariable(name: string): unknown;
+}
+
 export interface RdaGfsForecastHistorySourceOptions {
   cacheDir: string;
   limiter: Pick<FileRateLimiter, "run">;
   fetchFn?: typeof fetch;
+  netcdfReaderFactory?: (data: Uint8Array) => RdaAreaNetcdfReader;
 }
 
 export class RdaGfsForecastHistorySource
 implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
   private readonly fetchFn: typeof fetch;
+  private readonly netcdfReaderFactory: (data: Uint8Array) => RdaAreaNetcdfReader;
 
   constructor(private readonly options: RdaGfsForecastHistorySourceOptions) {
     this.fetchFn = options.fetchFn ?? globalThis.fetch;
+    this.netcdfReaderFactory = options.netcdfReaderFactory
+      ?? ((data) => new NetCDFReader(data));
   }
 
   async fetch(request: ArchivedGfsForecastRequest): Promise<ArchivedGfsForecastResponse> {
@@ -35,7 +46,66 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
 
   async fetchArea(request: ArchivedGfsForecastAreaRequest): Promise<ArchivedGfsForecastResponse> {
     const dataset = buildRdaGfs025ForecastDatasetPath(request.runTime, request.forecastHour);
-    return this.fetchCsv(buildRdaGfs025ForecastAreaUrl(request), dataset, request.runTime, request.forecastHour);
+    return this.fetchAreaNetcdf(
+      buildRdaGfs025ForecastAreaUrl(request),
+      dataset,
+      request,
+    );
+  }
+
+  private async fetchAreaNetcdf(
+    url: string,
+    dataset: string,
+    request: ArchivedGfsForecastAreaRequest,
+  ): Promise<ArchivedGfsForecastResponse> {
+    await mkdir(this.options.cacheDir, { recursive: true });
+    const cachePath = join(
+      this.options.cacheDir,
+      `${createHash("sha256").update(url).digest("hex")}.csv`,
+    );
+
+    if (await exists(cachePath)) {
+      return { csv: await readFile(cachePath, "utf8"), dataset, cacheHit: true };
+    }
+
+    return this.options.limiter.run(async () => {
+      if (await exists(cachePath)) {
+        return { csv: await readFile(cachePath, "utf8"), dataset, cacheHit: true };
+      }
+
+      const response = await this.fetchFn(url, {
+        headers: { "user-agent": "weather-for-grown-ups/0.1" },
+      });
+      if (response.status === 404) {
+        throw new Error(
+          `NCAR/GDEX historical GFS 0.25 forecast is not available for run ${request.runTime.toISOString()} f${formatForecastHour(request.forecastHour)} (${dataset})`,
+        );
+      }
+      if (!response.ok) {
+        throw new Error(
+          `NCAR/GDEX historical GFS 0.25 area request failed: HTTP ${response.status} ${response.statusText}`,
+        );
+      }
+
+      let csv: string;
+      try {
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        csv = convertRdaGfs025AreaNetcdfToCsv(
+          this.netcdfReaderFactory(bytes),
+          request,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `NCAR/GDEX historical GFS 0.25 area response could not be decoded: ${message}`,
+        );
+      }
+
+      const tempPath = `${cachePath}.${process.pid}.tmp`;
+      await writeFile(tempPath, csv, "utf8");
+      await rename(tempPath, cachePath);
+      return { csv, dataset, cacheHit: false };
+    });
   }
 
   private async fetchCsv(
@@ -85,6 +155,108 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
   }
 }
 
+export function convertRdaGfs025AreaNetcdfToCsv(
+  reader: RdaAreaNetcdfReader,
+  request: ArchivedGfsForecastAreaRequest,
+): string {
+  const latitudes = numericValues(reader.getDataVariable("latitude"), "latitude");
+  const longitudes = numericValues(reader.getDataVariable("longitude"), "longitude");
+  if (latitudes.length === 0 || longitudes.length === 0) {
+    throw new Error("NetCDF area subset contains an empty latitude/longitude axis");
+  }
+
+  const expectedValueCount = latitudes.length * longitudes.length;
+  const variableValues = request.variables.map((name) => {
+    if (!reader.dataVariableExists(name)) {
+      throw new Error(`NetCDF area subset is missing variable ${name}`);
+    }
+    const values = numericValues(reader.getDataVariable(name), name);
+    if (values.length !== expectedValueCount) {
+      throw new Error(
+        `NetCDF area variable ${name} has ${values.length} values; expected ${expectedValueCount}`,
+      );
+    }
+    return { name, values };
+  });
+
+  let vertical:
+    | { name: string; value: number }
+    | undefined;
+  if (request.verticalCoordinate !== undefined) {
+    const dimension = reader.dimensions.find((candidate) =>
+      candidate.size === 1
+      && candidate.name !== "time"
+      && candidate.name !== "latitude"
+      && candidate.name !== "longitude"
+      && reader.dataVariableExists(candidate.name)
+    );
+    if (dimension === undefined) {
+      throw new Error(
+        "NetCDF area subset is missing the returned vertical coordinate",
+      );
+    }
+    const values = numericValues(
+      reader.getDataVariable(dimension.name),
+      dimension.name,
+    );
+    const value = values[0];
+    if (value === undefined) {
+      throw new Error(
+        `NetCDF area subset has no value for vertical coordinate ${dimension.name}`,
+      );
+    }
+    vertical = { name: dimension.name, value };
+  }
+
+  const header = [
+    "latitude",
+    "longitude",
+    ...(vertical === undefined ? [] : [vertical.name]),
+    ...variableValues.map(({ name }) => name),
+  ].join(",");
+  const rows = [header];
+
+  for (let latitudeIndex = 0; latitudeIndex < latitudes.length; latitudeIndex += 1) {
+    for (let longitudeIndex = 0; longitudeIndex < longitudes.length; longitudeIndex += 1) {
+      const flatIndex = latitudeIndex * longitudes.length + longitudeIndex;
+      rows.push([
+        String(latitudes[latitudeIndex]),
+        String(longitudes[longitudeIndex]),
+        ...(vertical === undefined ? [] : [String(vertical.value)]),
+        ...variableValues.map(({ values }) => {
+          const value = values[flatIndex];
+          return value === undefined || !Number.isFinite(value) ? "NaN" : String(value);
+        }),
+      ].join(","));
+    }
+  }
+  return rows.join("\n");
+}
+
+function numericValues(value: unknown, label: string): number[] {
+  const flattened: number[] = [];
+  const visit = (item: unknown): void => {
+    if (typeof item === "number") {
+      flattened.push(item);
+      return;
+    }
+    if (Array.isArray(item)) {
+      for (const child of item) visit(child);
+      return;
+    }
+    if (ArrayBuffer.isView(item)) {
+      for (const child of Array.from(item as unknown as ArrayLike<number>)) {
+        visit(child);
+      }
+      return;
+    }
+    throw new Error(`NetCDF variable ${label} has an unsupported data shape`);
+  };
+  visit(value);
+  return flattened;
+}
+
+
 export function buildRdaGfs025ForecastPointUrl(request: ArchivedGfsForecastRequest): string {
   const dataset = buildRdaGfs025ForecastDatasetPath(request.runTime, request.forecastHour);
   const query = new URLSearchParams({
@@ -106,7 +278,7 @@ export function buildRdaGfs025ForecastAreaUrl(request: ArchivedGfsForecastAreaRe
     east: String(request.eastLongitude),
     west: String(request.westLongitude),
     time: "all",
-    accept: "csv",
+    accept: "netCDF",
   });
   if (request.verticalCoordinate !== undefined) query.set("vertCoord", String(request.verticalCoordinate));
   if (request.horizontalStride !== undefined) query.set("horizStride", String(request.horizontalStride));
