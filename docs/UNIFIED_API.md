@@ -182,7 +182,7 @@ The compact public vocabulary is:
 
 Atomic verification uses `time: { at }` and one numeric `leadHours`. Bounded skill summaries use `time: { from, to, hoursUtc?, maxValidTimes? }` and an array of up to three `leadHours` for either reference. The summary is bounded to eight sampled nominal times and 24 forecast evaluations. If more eligible times exist, WFG chooses an evenly spaced deterministic sample and reports both eligible and sampled counts. Every evaluation remains visible as success/failure, and statistics include their own sample counts. With `referenceDataset: "gfs-analysis"`, metrics summarize native 0.5° Grid 4 analysis-minus-forecast deltas. With `referenceDataset: "igra"`, they summarize observation-minus-forecast deltas and retain the radiosonde stations used. Both modes report bias, MAE and RMSE independently by lead, pressure and field.
 
-Index materialization/backfill is an administrative concern and is intentionally CLI-only through `wfg index build` and `wfg index backfill`; it is not part of the normal MCP weather-tool catalog.
+Index materialization/backfill is an administrative concern and is intentionally CLI-only. Historical analog profiles use `wfg index build` / `wfg index backfill`; large verification corpora use `wfg index verification-backfill` and are summarized locally with `wfg index verification-summary`. These administrative operations are not added to the normal seven-tool MCP weather catalog.
 
 ## `query_atmosphere`
 
