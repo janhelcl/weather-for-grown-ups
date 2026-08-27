@@ -5,6 +5,7 @@ Detailed documentation for **Weather for Grown Ups v0.1.0** lives here so the re
 ## Start here
 
 - [INSTALL.md](INSTALL.md) — npx, npm, Docker, stdio MCP, Streamable HTTP MCP, hosting and release packaging.
+- [UNIFIED_API.md](UNIFIED_API.md) — preferred dataset × geometry × time × selection query language for CLI and MCP.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — shared core, model adapters, member-first physics, data access and public surfaces.
 - [TESTING.md](TESTING.md) — deterministic unit/integration coverage and test organization.
 - [LIVE_SMOKE.md](LIVE_SMOKE.md) — bounded real-NOAA smoke tests.
