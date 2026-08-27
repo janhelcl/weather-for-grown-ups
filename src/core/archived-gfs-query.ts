@@ -38,8 +38,10 @@ const DAY_MS = 24 * 60 * 60 * 1_000;
 export const GFS_OPERATIONAL_ARCHIVE_WINDOW_DAYS = 28;
 export const ARCHIVED_GFS_FORECAST_MODEL = "gfs_grid4_forecast_0p5_archive" as const;
 export const ARCHIVED_GFS_0P25_FORECAST_MODEL = "gfs_0p25_forecast_archive" as const;
-const ARCHIVE_CAVEAT =
+const ARCHIVE_0P50_CAVEAT =
   "Archived GFS forecast from the historical 0.5-degree Grid 4 product; model versions changed over time and this is not a homogeneous reforecast dataset" as const;
+const ARCHIVE_0P25_CAVEAT =
+  "Archived GFS forecast from the NCAR GDEX 0.25-degree operational GFS archive; model versions changed over time and this is not a homogeneous reforecast dataset" as const;
 
 type Point = { latitude: number; longitude: number };
 
@@ -63,7 +65,7 @@ interface ArchivedPointResult {
     dataset: string;
     cacheHit: boolean;
   };
-  caveat: typeof ARCHIVE_CAVEAT;
+  caveat: typeof ARCHIVE_0P50_CAVEAT | typeof ARCHIVE_0P25_CAVEAT;
 }
 
 export interface ArchivedGfsForecastQueryServiceOptions {
@@ -195,7 +197,7 @@ export class ArchivedGfsForecastQueryService {
         dataset: step.source.dataset,
         cacheHit: step.source.cacheHit,
       })),
-      caveat: ARCHIVE_CAVEAT,
+      caveat: archiveCaveat(request.forecast?.grid ?? "0p25"),
     };
   }
 
@@ -230,7 +232,7 @@ export class ArchivedGfsForecastQueryService {
         ...archiveSourceMetadata(request.forecast?.grid ?? "0p25"),
         composition: "serial_point_queries",
       },
-      caveat: ARCHIVE_CAVEAT,
+      caveat: archiveCaveat(request.forecast?.grid ?? "0p25"),
     };
   }
 
@@ -297,7 +299,7 @@ export class ArchivedGfsForecastQueryService {
         composition: "serial_forecast_step_point_queries",
       },
       series,
-      caveat: ARCHIVE_CAVEAT,
+      caveat: archiveCaveat(request.forecast?.grid ?? "0p25"),
     };
   }
 
@@ -345,7 +347,7 @@ export class ArchivedGfsForecastQueryService {
         ...archiveSourceMetadata(request.forecast?.grid ?? "0p25"),
         composition: "great_circle_to_serial_point_queries",
       },
-      caveat: ARCHIVE_CAVEAT,
+      caveat: archiveCaveat(request.forecast?.grid ?? "0p25"),
     };
   }
 
@@ -415,7 +417,7 @@ export class ArchivedGfsForecastQueryService {
         dataset: historicalSource.dataset,
         cacheHit: historicalSource.cacheHit,
       },
-      caveat: ARCHIVE_CAVEAT,
+      caveat: archiveCaveat(request.forecast?.grid ?? "0p25"),
     };
   }
 
@@ -477,7 +479,7 @@ export class ArchivedGfsForecastQueryService {
           dataset: result.source.dataset,
           cacheHit: result.source.cacheHit,
         },
-        caveat: ARCHIVE_CAVEAT,
+        caveat: archiveCaveat(request.forecast?.grid ?? "0p25"),
       };
     }
 
@@ -503,7 +505,7 @@ export class ArchivedGfsForecastQueryService {
       selection: result.selection,
       levels: result.levels,
       source: result.source,
-      caveat: ARCHIVE_CAVEAT,
+      caveat: archiveCaveat(request.forecast?.grid ?? "0p25"),
     };
   }
 
@@ -570,6 +572,12 @@ function archivedForecastHour(run: Date, validTime: Date, grid: GfsGrid): number
 
 function archiveMinimumTime(grid: GfsGrid): Date {
   return grid === "0p50" ? NCEI_GFS_GRID4_FORECAST_START : RDA_GFS_0P25_FORECAST_START;
+}
+
+function archiveCaveat(
+  grid: GfsGrid,
+): typeof ARCHIVE_0P50_CAVEAT | typeof ARCHIVE_0P25_CAVEAT {
+  return grid === "0p50" ? ARCHIVE_0P50_CAVEAT : ARCHIVE_0P25_CAVEAT;
 }
 
 function archiveSourceMetadata(grid: GfsGrid): {

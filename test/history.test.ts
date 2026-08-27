@@ -128,6 +128,33 @@ describe("HistoricalProfileService", () => {
     expect(result.source.cacheHit).toBe(true);
   });
 
+  it("uses native archive specific humidity when the source advertises it", async () => {
+    const nativeCsv = [
+      'time,alt[unit="Pa"],station,latitude[unit="degrees_north"],longitude[unit="degrees_east"],Specific_humidity_isobaric[unit="kg/kg"],Temperature_isobaric[unit="K"]',
+      '2026-08-24T06:00:00Z,85000,GridPointRequestedAt[50.000N_14.000E],50.000,14.000,0.010,285.15',
+    ].join("\n");
+    const fetch = vi.fn(async () => ({ csv: nativeCsv, dataset: "gdex", cacheHit: true }));
+    const service = new HistoricalProfileService({
+      source: { fetch },
+      now: () => new Date("2026-08-27T12:00:00Z"),
+      allowNonAnalysisCycle: true,
+      minimumTime: new Date("2015-01-15T00:00:00Z"),
+      nativeSpecificHumidity: true,
+    });
+    const result = await service.getHistoricalProfile({
+      latitude: 50,
+      longitude: 14,
+      analysisTime: "2026-08-24T06:00:00Z",
+      variables: ["specific_humidity", "virtual_temperature"],
+      pressureLevelsHpa: [850],
+    });
+    expect(fetch).toHaveBeenCalledWith(expect.objectContaining({
+      variables: ["Specific_humidity_isobaric", "Temperature_isobaric"],
+    }));
+    expect(result.levels[0]?.specificHumidityKgKg).toBe(0.01);
+    expect(result.levels[0]?.virtualTemperatureC).toBeCloseTo(13.728, 2);
+  });
+
   it("rejects non-cycle times, pre-archive dates, and future analyses", async () => {
     const service = new HistoricalProfileService({
       source: mockSource(),
@@ -245,6 +272,22 @@ describe("NCEI historical GFS access", () => {
       { pressureHpa: 850, temperatureC: 12 },
       { pressureHpa: 700, temperatureC: 0 },
     ]);
+  });
+
+  it("rejects malformed profile CSVs without a pressure coordinate or requested variable", () => {
+    expect(() => parseHistoricalProfileCsv(
+      'time,latitude,longitude,Temperature_isobaric\n2026-08-24T06:00:00Z,50,14,285',
+      ["temperature"],
+      [850],
+      { latitude: 50, longitude: 14 },
+    )).toThrow("missing a pressure coordinate");
+
+    expect(() => parseHistoricalProfileCsv(
+      'time,alt[unit="Pa"],latitude,longitude\n2026-08-24T06:00:00Z,85000,50,14',
+      ["temperature"],
+      [850],
+      { latitude: 50, longitude: 14 },
+    )).toThrow("missing variable Temperature_isobaric");
   });
 
   it("parses Pa pressure coordinates and normalizes 0-360 longitudes", () => {

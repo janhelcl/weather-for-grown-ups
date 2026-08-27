@@ -121,6 +121,7 @@ export class ArchivedGfsForecastProfileService {
       now: this.now,
       allowNonAnalysisCycle: true,
       minimumTime,
+      nativeSpecificHumidity: grid === "0p25",
     });
     const profile = await normalizer.getHistoricalProfile({
       latitude: query.latitude,
