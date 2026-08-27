@@ -50,7 +50,7 @@ describe("GEFS ensemble schema", () => {
         quantiles: [{ quantile: 0.5, value: 11 }],
         threshold: { operator: "gte", value: 11, count: 1, fraction: 0.5, interpretation: "raw_member_fraction_not_calibrated_probability" },
       },
-      source: { provider: "NOAA AWS Open Data", access: "s3_range", decoder: "wgrib2", product: "pgrb2a_0p50", allCacheHit: false },
+      source: { provider: "NOAA AWS Open Data", access: "s3_range", decoder: "wgrib2", product: "pgrb2a_0p50", horizontalGridDegrees: 0.5, allCacheHit: false },
     })).not.toThrow();
   });
 });
