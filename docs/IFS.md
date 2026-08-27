@@ -19,13 +19,16 @@ WFG exposes ECMWF's deterministic IFS Open Data forecast through the same atmosp
 
 The source adapter resolves `latest` against the **requested selection**, not merely the newest cycle name. If a newly initializing cycle has not yet published the requested fields at the required lead, WFG walks back to the newest cycle that can satisfy the complete point request.
 
-## First IFS slice
+## Current IFS query surface
 
-The first implementation intentionally exposes one coherent operation:
+IFS now exposes the same deterministic state through several geometries while pinning one initialization per composed request:
 
-- one point;
-- one valid time;
-- pressure-level variables and/or selected non-isobaric fields;
+- one point at one valid time;
+- one-point time series on the native IFS cadence;
+- multi-point sampling at one valid time;
+- multi-point time series with an explicit point × time guardrail;
+- great-circle transects at one valid time;
+- pressure-level variables and/or selected non-isobaric fields throughout;
 - deterministic normalized output with explicit run, lead, sampled grid point and ECMWF provenance.
 
 Use the same public query operation as the other models:
@@ -95,8 +98,12 @@ The first slice includes:
 
 Units are normalized at the model boundary: temperatures to °C, precipitation metres to millimetres, and fractional cloud cover to percent.
 
+## Composition and source reuse
+
+Time ranges resolve one selection-capable IFS initialization for the complete range and keep it fixed. Native output cadence is preserved rather than resampled. Multi-point and transect operations reuse immutable selected-message cache entries, so adding points does not multiply upstream ECMWF downloads for the same run/lead/selection.
+
 ## Deliberate capability boundary
 
-IFS time series, multi-point queries, transects, area statistics and diagnostics are not silently emulated by GFS code or by repeated public calls. They currently fail as unsupported IFS operations. They can be added behind the same `dataset: "ifs"` contract as source-native implementations are completed.
+IFS **area statistics and diagnostics** remain unsupported in this slice. They fail explicitly rather than being emulated with another model or hidden repeated public calls. They can be added behind the same `dataset: "ifs"` contract as source-native implementations are completed.
 
 This keeps the architecture rule intact: **unify operations and physics; preserve model semantics.**
