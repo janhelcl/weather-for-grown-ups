@@ -15,6 +15,9 @@ export const RDA_GFS_0P25_FORECAST_START = new Date("2015-01-15T00:00:00Z");
 export const RDA_GFS_0P25_NCSS_BASE_URL =
   "https://tds.gdex.ucar.edu/thredds/ncss/grid/files/g/d084001";
 
+const TRANSIENT_GDEX_STATUS_CODES = new Set([502, 503, 504]);
+const GDEX_MAX_ATTEMPTS = 3;
+
 export interface RdaAreaNetcdfReader {
   dimensions: readonly { name: string; size: number }[];
   dataVariableExists(name: string): boolean;
@@ -68,30 +71,43 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
       return { csv: await readFile(cachePath, "utf8"), dataset, cacheHit: true };
     }
 
-    return this.options.limiter.run(async () => {
+    for (let attempt = 1; attempt <= GDEX_MAX_ATTEMPTS; attempt += 1) {
       if (await exists(cachePath)) {
         return { csv: await readFile(cachePath, "utf8"), dataset, cacheHit: true };
       }
 
-      const response = await this.fetchFn(url, {
-        headers: { "user-agent": "weather-for-grown-ups/0.1" },
+      const result = await this.options.limiter.run(async () => {
+        const response = await this.fetchFn(url, {
+          headers: { "user-agent": "weather-for-grown-ups/0.1" },
+        });
+        return {
+          status: response.status,
+          statusText: response.statusText,
+          bytes: response.ok ? new Uint8Array(await response.arrayBuffer()) : undefined,
+        };
       });
-      if (response.status === 404) {
+
+      if (
+        TRANSIENT_GDEX_STATUS_CODES.has(result.status)
+        && attempt < GDEX_MAX_ATTEMPTS
+      ) {
+        continue;
+      }
+      if (result.status === 404) {
         throw new Error(
           `NCAR/GDEX historical GFS 0.25 forecast is not available for run ${request.runTime.toISOString()} f${formatForecastHour(request.forecastHour)} (${dataset})`,
         );
       }
-      if (!response.ok) {
+      if (result.status < 200 || result.status >= 300 || result.bytes === undefined) {
         throw new Error(
-          `NCAR/GDEX historical GFS 0.25 area request failed: HTTP ${response.status} ${response.statusText}`,
+          `NCAR/GDEX historical GFS 0.25 area request failed: HTTP ${result.status} ${result.statusText}`,
         );
       }
 
       let csv: string;
       try {
-        const bytes = new Uint8Array(await response.arrayBuffer());
         csv = convertRdaGfs025AreaNetcdfToCsv(
-          this.netcdfReaderFactory(bytes),
+          this.netcdfReaderFactory(result.bytes),
           request,
         );
       } catch (error) {
@@ -105,7 +121,9 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
       await writeFile(tempPath, csv, "utf8");
       await rename(tempPath, cachePath);
       return { csv, dataset, cacheHit: false };
-    });
+    }
+
+    throw new Error("NCAR/GDEX historical GFS 0.25 area retry loop exhausted unexpectedly");
   }
 
   private async fetchCsv(
@@ -121,37 +139,51 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
       return { csv: await readFile(cachePath, "utf8"), dataset, cacheHit: true };
     }
 
-    return this.options.limiter.run(async () => {
+    for (let attempt = 1; attempt <= GDEX_MAX_ATTEMPTS; attempt += 1) {
       if (await exists(cachePath)) {
         return { csv: await readFile(cachePath, "utf8"), dataset, cacheHit: true };
       }
 
-      const response = await this.fetchFn(url, {
-        headers: { "user-agent": "weather-for-grown-ups/0.1" },
+      const result = await this.options.limiter.run(async () => {
+        const response = await this.fetchFn(url, {
+          headers: { "user-agent": "weather-for-grown-ups/0.1" },
+        });
+        return {
+          status: response.status,
+          statusText: response.statusText,
+          csv: response.ok ? await response.text() : undefined,
+        };
       });
-      if (response.status === 404) {
+
+      if (
+        TRANSIENT_GDEX_STATUS_CODES.has(result.status)
+        && attempt < GDEX_MAX_ATTEMPTS
+      ) {
+        continue;
+      }
+      if (result.status === 404) {
         throw new Error(
           `NCAR/GDEX historical GFS 0.25 forecast is not available for run ${runTime.toISOString()} f${formatForecastHour(forecastHour)} (${dataset})`,
         );
       }
-      if (!response.ok) {
+      if (result.status < 200 || result.status >= 300 || result.csv === undefined) {
         throw new Error(
-          `NCAR/GDEX historical GFS 0.25 request failed: HTTP ${response.status} ${response.statusText}`,
+          `NCAR/GDEX historical GFS 0.25 request failed: HTTP ${result.status} ${result.statusText}`,
         );
       }
-
-      const csv = await response.text();
-      if (!csv.includes("\n")) {
+      if (!result.csv.includes("\n")) {
         throw new Error(
-          `NCAR/GDEX historical GFS 0.25 returned an unexpected response: ${csv.slice(0, 240)}`,
+          `NCAR/GDEX historical GFS 0.25 returned an unexpected response: ${result.csv.slice(0, 240)}`,
         );
       }
 
       const tempPath = `${cachePath}.${process.pid}.tmp`;
-      await writeFile(tempPath, csv, "utf8");
+      await writeFile(tempPath, result.csv, "utf8");
       await rename(tempPath, cachePath);
-      return { csv, dataset, cacheHit: false };
-    });
+      return { csv: result.csv, dataset, cacheHit: false };
+    }
+
+    throw new Error("NCAR/GDEX historical GFS 0.25 retry loop exhausted unexpectedly");
   }
 }
 

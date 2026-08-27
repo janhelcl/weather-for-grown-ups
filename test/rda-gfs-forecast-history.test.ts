@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildRdaGfs025ForecastAreaUrl,
   convertRdaGfs025AreaNetcdfToCsv,
+  RdaGfsForecastHistorySource,
   type RdaAreaNetcdfReader,
 } from "../src/sources/rda-gfs-forecast-history.js";
 
@@ -75,5 +79,112 @@ describe("GDEX 0.25 area transport", () => {
     };
     expect(() => convertRdaGfs025AreaNetcdfToCsv(reader, request))
       .toThrow("has 3 values; expected 4");
+  });
+});
+
+
+describe("GDEX transient failure handling", () => {
+  const dirs: string[] = [];
+  afterEach(async () => {
+    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  it("retries transient point failures through the supplied limiter", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-gdex-test-"));
+    dirs.push(cacheDir);
+    const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 504, statusText: "Gateway Time-out" }))
+      .mockResolvedValueOnce(new Response(
+        'time,alt[unit="Pa"],latitude,longitude,Temperature_isobaric[unit="K"]\n2026-08-24T06:00:00Z,85000,50,14,285.15',
+        { status: 200 },
+      ));
+    const source = new RdaGfsForecastHistorySource({
+      cacheDir,
+      limiter: { run },
+      fetchFn,
+    });
+
+    const result = await source.fetch({
+      runTime: new Date("2026-08-24T00:00:00Z"),
+      forecastHour: 6,
+      latitude: 50,
+      longitude: 14,
+      variables: ["Temperature_isobaric"],
+    });
+    expect(result.cacheHit).toBe(false);
+    expect(result.csv).toContain("285.15");
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenCalledTimes(2);
+
+    const cached = await source.fetch({
+      runTime: new Date("2026-08-24T00:00:00Z"),
+      forecastHour: 6,
+      latitude: 50,
+      longitude: 14,
+      variables: ["Temperature_isobaric"],
+    });
+    expect(cached.cacheHit).toBe(true);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops after three transient failures", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-gdex-test-"));
+    dirs.push(cacheDir);
+    const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
+    const fetchFn = vi.fn(async () =>
+      new Response("", { status: 503, statusText: "Service Unavailable" })
+    );
+    const source = new RdaGfsForecastHistorySource({
+      cacheDir,
+      limiter: { run },
+      fetchFn,
+    });
+
+    await expect(source.fetch({
+      runTime: new Date("2026-08-24T00:00:00Z"),
+      forecastHour: 6,
+      latitude: 50,
+      longitude: 14,
+      variables: ["Temperature_isobaric"],
+    })).rejects.toThrow("HTTP 503 Service Unavailable");
+    expect(fetchFn).toHaveBeenCalledTimes(3);
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries transient NetCDF area failures and decodes the successful response", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-gdex-test-"));
+    dirs.push(cacheDir);
+    const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 502, statusText: "Bad Gateway" }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), { status: 200 }));
+    const data: Record<string, unknown> = {
+      latitude: [50, 49.75],
+      longitude: [14, 14.25],
+      isobaric: [85000],
+      Temperature_isobaric: [278, 279, 280, 281],
+    };
+    const source = new RdaGfsForecastHistorySource({
+      cacheDir,
+      limiter: { run },
+      fetchFn,
+      netcdfReaderFactory: () => ({
+        dimensions: [
+          { name: "latitude", size: 2 },
+          { name: "time", size: 1 },
+          { name: "isobaric", size: 1 },
+          { name: "longitude", size: 2 },
+        ],
+        dataVariableExists: (name) => name in data,
+        getDataVariable: (name) => data[name],
+      }),
+    });
+
+    const result = await source.fetchArea(request);
+    expect(result.csv).toContain("latitude,longitude,isobaric,Temperature_isobaric");
+    expect(result.csv).toContain("49.75,14.25,85000,281");
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenCalledTimes(2);
   });
 });
