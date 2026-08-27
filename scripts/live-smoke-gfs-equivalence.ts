@@ -5,7 +5,15 @@ import {
 } from "../src/core/unified-atmosphere-api.js";
 
 type Grid = "0p25" | "0p50";
-type Source = "s3" | "archive";
+type Source = "nomads" | "s3" | "archive";
+
+type ComparisonPlan = {
+  leftSource: Source;
+  rightSource: Source;
+  mode: "historical_archive" | "retained_operational_fallback";
+  archiveStatus: "available" | "upstream_unavailable";
+  archiveFailure?: string;
+};
 
 const HOUR_MS = 3_600_000;
 const POINT = { latitude: 50, longitude: 14 };
@@ -37,29 +45,30 @@ const diagnosticService = new UnifiedAtmosphereDiagnosticService();
 
 const summaries = [];
 for (const grid of ["0p25", "0p50"] as const) {
-  summaries.push(await verifyGrid(grid));
+  const plan = await comparisonPlan(grid);
+  summaries.push(await verifyGrid(grid, plan));
 }
 console.log(JSON.stringify({ checkedAt: new Date().toISOString(), summaries }, null, 2));
 
-async function verifyGrid(grid: Grid) {
-  const run = await findOverlapRun(grid);
+async function verifyGrid(grid: Grid, plan: ComparisonPlan) {
+  const run = await findOverlapRun(grid, plan.leftSource, plan.rightSource);
   const runIso = run.toISOString();
   const f006 = new Date(run.getTime() + 6 * HOUR_MS).toISOString();
   const f012 = new Date(run.getTime() + 12 * HOUR_MS).toISOString();
 
-  const operationalProfile = await pointProfile(grid, "s3", runIso, f006);
-  const archivedProfile = await pointProfile(grid, "archive", runIso, f006);
+  const operationalProfile = await pointProfile(grid, plan.leftSource, runIso, f006);
+  const archivedProfile = await pointProfile(grid, plan.rightSource, runIso, f006);
   assert.equal(operationalProfile.run, archivedProfile.run);
   assert.equal(operationalProfile.validTime, archivedProfile.validTime);
   assert.deepEqual(operationalProfile.gridPoint, archivedProfile.gridPoint);
   compareNumericTree(operationalProfile.levels, archivedProfile.levels, `${grid}.profile.levels`, 2e-4);
 
-  const operationalFields = await pointFields(grid, "s3", runIso, f006);
-  const archivedFields = await pointFields(grid, "archive", runIso, f006);
+  const operationalFields = await pointFields(grid, plan.leftSource, runIso, f006);
+  const archivedFields = await pointFields(grid, plan.rightSource, runIso, f006);
   compareFieldResults(operationalFields.fields, archivedFields.fields, `${grid}.fields`);
 
-  const operationalRange = await pointRange(grid, "s3", runIso, f006, f012);
-  const archivedRange = await pointRange(grid, "archive", runIso, f006, f012);
+  const operationalRange = await pointRange(grid, plan.leftSource, runIso, f006, f012);
+  const archivedRange = await pointRange(grid, plan.rightSource, runIso, f006, f012);
   const operationalByHour = new Map<number, any>(
     operationalRange.series.map((step: any) => [step.forecastHour, step]),
   );
@@ -85,8 +94,8 @@ async function verifyGrid(grid: Grid) {
     );
   }
 
-  const operationalPoints = await pointsInstant(grid, "s3", runIso, f006);
-  const archivedPoints = await pointsInstant(grid, "archive", runIso, f006);
+  const operationalPoints = await pointsInstant(grid, plan.leftSource, runIso, f006);
+  const archivedPoints = await pointsInstant(grid, plan.rightSource, runIso, f006);
   assert.equal(operationalPoints.points.length, archivedPoints.points.length);
   for (let index = 0; index < operationalPoints.points.length; index += 1) {
     const left = operationalPoints.points[index];
@@ -96,8 +105,8 @@ async function verifyGrid(grid: Grid) {
     compareNumericTree(left.levels, right.levels, `${grid}.points[${index}]`, 2e-4);
   }
 
-  const operationalLayer = await layerDiagnostic(grid, "s3", runIso, f006);
-  const archivedLayer = await layerDiagnostic(grid, "archive", runIso, f006);
+  const operationalLayer = await layerDiagnostic(grid, plan.leftSource, runIso, f006);
+  const archivedLayer = await layerDiagnostic(grid, plan.rightSource, runIso, f006);
   compareNumericTree(
     { layer: operationalLayer.layer, diagnostics: operationalLayer.diagnostics },
     { layer: archivedLayer.layer, diagnostics: archivedLayer.diagnostics },
@@ -105,8 +114,8 @@ async function verifyGrid(grid: Grid) {
     3e-4,
   );
 
-  const operationalProfileDiagnostic = await profileDiagnostic(grid, "s3", runIso, f006);
-  const archivedProfileDiagnostic = await profileDiagnostic(grid, "archive", runIso, f006);
+  const operationalProfileDiagnostic = await profileDiagnostic(grid, plan.leftSource, runIso, f006);
+  const archivedProfileDiagnostic = await profileDiagnostic(grid, plan.rightSource, runIso, f006);
   compareNumericTree(
     operationalProfileDiagnostic.diagnostics,
     archivedProfileDiagnostic.diagnostics,
@@ -114,8 +123,8 @@ async function verifyGrid(grid: Grid) {
     1e-2,
   );
 
-  const operationalParcel = await parcelDiagnostic(grid, "s3", runIso, f006);
-  const archivedParcel = await parcelDiagnostic(grid, "archive", runIso, f006);
+  const operationalParcel = await parcelDiagnostic(grid, plan.leftSource, runIso, f006);
+  const archivedParcel = await parcelDiagnostic(grid, plan.rightSource, runIso, f006);
   if (grid === "0p25") {
     compareNumericTree(
       stripParcelPath(operationalParcel.parcel),
@@ -135,25 +144,39 @@ async function verifyGrid(grid: Grid) {
     );
   }
 
-  const operationalArea = await areaSummary(grid, "s3", runIso, f006);
-  const archivedArea = await areaSummary(grid, "archive", runIso, f006);
-  assert.equal(
-    operationalArea.statistics.definedGridPoints,
-    archivedArea.statistics.definedGridPoints,
-    `${grid}: area grid-point count differs`,
-  );
-  compareNumericTree(
-    {
-      statistics: operationalArea.statistics,
-      distribution: operationalArea.distribution,
-    },
-    {
-      statistics: archivedArea.statistics,
-      distribution: archivedArea.distribution,
-    },
-    `${grid}.area`,
-    3e-4,
-  );
+  let areaGridPoints: number;
+  let areaParity: "numeric_archive" | "operational_transport_not_independently_selectable";
+  if (plan.mode === "historical_archive") {
+    const operationalArea = await areaSummary(grid, plan.leftSource, runIso, f006);
+    const archivedArea = await areaSummary(grid, plan.rightSource, runIso, f006);
+    assert.equal(
+      operationalArea.statistics.definedGridPoints,
+      archivedArea.statistics.definedGridPoints,
+      `${grid}: area grid-point count differs`,
+    );
+    compareNumericTree(
+      {
+        statistics: operationalArea.statistics,
+        distribution: operationalArea.distribution,
+      },
+      {
+        statistics: archivedArea.statistics,
+        distribution: archivedArea.distribution,
+      },
+      `${grid}.area`,
+      3e-4,
+    );
+    areaGridPoints = operationalArea.statistics.definedGridPoints;
+    areaParity = "numeric_archive";
+  } else {
+    // The operational area service is NOMADS-backed and currently does not
+    // expose a source selector, so NOMADS-vs-S3 would not be independent here.
+    // Exercise the area surface once and report the limitation explicitly.
+    const area = await areaSummary(grid, "nomads", runIso, f006);
+    assert(area.statistics.definedGridPoints > 0, `${grid}: area result is empty`);
+    areaGridPoints = area.statistics.definedGridPoints;
+    areaParity = "operational_transport_not_independently_selectable";
+  }
 
   return {
     grid,
@@ -161,13 +184,19 @@ async function verifyGrid(grid: Grid) {
     validTime: f006,
     operationalModel: operationalProfile.model,
     archiveModel: archivedProfile.model,
+    comparisonMode: plan.mode,
+    archiveStatus: plan.archiveStatus,
+    ...(plan.archiveFailure === undefined ? {} : { archiveFailure: plan.archiveFailure }),
+    leftSourceRequested: plan.leftSource,
+    rightSourceRequested: plan.rightSource,
     operationalSource: operationalProfile.source,
-    archiveSource: archivedProfile.source,
+    comparisonSource: archivedProfile.source,
     rangeForecastHours: {
       operational: operationalRange.series.map((step: any) => step.forecastHour),
       archive: archivedRange.series.map((step: any) => step.forecastHour),
     },
-    areaGridPoints: operationalArea.statistics.definedGridPoints,
+    areaGridPoints,
+    areaParity,
     pressureHumidityParity: grid === "0p25"
       ? "native_specific_humidity"
       : "archive_specific_humidity_reconstructed_from_temperature_relative_humidity",
@@ -175,7 +204,66 @@ async function verifyGrid(grid: Grid) {
   };
 }
 
-async function findOverlapRun(grid: Grid): Promise<Date> {
+async function comparisonPlan(grid: Grid): Promise<ComparisonPlan> {
+  if (grid === "0p50") {
+    return {
+      leftSource: "s3",
+      rightSource: "archive",
+      mode: "historical_archive",
+      archiveStatus: "available",
+    };
+  }
+
+  const candidate = candidateRun(3);
+  const run = candidate.toISOString();
+  const validTime = new Date(candidate.getTime() + 6 * HOUR_MS).toISOString();
+  try {
+    await minimalPoint("0p25", "archive", run, validTime);
+    console.log("[0p25] true GDEX archive is available; testing S3 vs archive");
+    return {
+      leftSource: "s3",
+      rightSource: "archive",
+      mode: "historical_archive",
+      archiveStatus: "available",
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!isUpstreamArchiveAvailabilityError(message)) throw error;
+    console.log(
+      `[0p25] GDEX archive unavailable (${message}); testing NOMADS vs NOAA AWS trailing-30-day retention instead`,
+    );
+    return {
+      leftSource: "nomads",
+      rightSource: "s3",
+      mode: "retained_operational_fallback",
+      archiveStatus: "upstream_unavailable",
+      archiveFailure: message,
+    };
+  }
+}
+
+function candidateRun(daysAgo: number): Date {
+  const now = new Date();
+  return new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() - daysAgo,
+    0,
+    0,
+    0,
+    0,
+  ));
+}
+
+function isUpstreamArchiveAvailabilityError(message: string): boolean {
+  return /NCAR\/GDEX historical GFS 0\.25 (?:request failed: HTTP (?:502|503|504)|forecast is not available for run)/.test(message);
+}
+
+async function findOverlapRun(
+  grid: Grid,
+  leftSource: Source,
+  rightSource: Source,
+): Promise<Date> {
   const now = new Date();
   const failures: string[] = [];
   for (const daysAgo of [3, 4, 5, 6, 7, 8]) {
@@ -191,9 +279,9 @@ async function findOverlapRun(grid: Grid): Promise<Date> {
     const run = candidate.toISOString();
     const validTime = new Date(candidate.getTime() + 6 * HOUR_MS).toISOString();
     try {
-      await minimalPoint(grid, "archive", run, validTime);
-      await minimalPoint(grid, "s3", run, validTime);
-      console.log(`[${grid}] overlap run ${run}`);
+      await minimalPoint(grid, leftSource, run, validTime);
+      await minimalPoint(grid, rightSource, run, validTime);
+      console.log(`[${grid}] overlap run ${run} (${leftSource} vs ${rightSource})`);
       return candidate;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -202,7 +290,7 @@ async function findOverlapRun(grid: Grid): Promise<Date> {
     }
   }
   throw new Error(
-    `Could not find recent operational/archive overlap for GFS ${grid}. Tried:\n${failures.join("\n")}`,
+    `Could not find recent GFS ${grid} overlap for ${leftSource} vs ${rightSource}. Tried:\n${failures.join("\n")}`,
   );
 }
 

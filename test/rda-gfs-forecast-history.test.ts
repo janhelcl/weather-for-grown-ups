@@ -188,3 +188,97 @@ describe("GDEX transient failure handling", () => {
     expect(run).toHaveBeenCalledTimes(2);
   });
 });
+
+
+describe("GDEX terminal and decoder edge cases", () => {
+  const dirs: string[] = [];
+  afterEach(async () => {
+    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  it("does not retry a missing point forecast", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-gdex-terminal-"));
+    dirs.push(cacheDir);
+    const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
+    const fetchFn = vi.fn(async () => new Response("", { status: 404, statusText: "Not Found" }));
+    const source = new RdaGfsForecastHistorySource({ cacheDir, limiter: { run }, fetchFn });
+
+    await expect(source.fetch({
+      runTime: new Date("2026-08-24T00:00:00Z"),
+      forecastHour: 6,
+      latitude: 50,
+      longitude: 14,
+      variables: ["Temperature_isobaric"],
+    })).rejects.toThrow("is not available for run");
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(run).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry a missing area forecast", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-gdex-terminal-"));
+    dirs.push(cacheDir);
+    const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
+    const fetchFn = vi.fn(async () => new Response("", { status: 404, statusText: "Not Found" }));
+    const source = new RdaGfsForecastHistorySource({ cacheDir, limiter: { run }, fetchFn });
+
+    await expect(source.fetchArea(request)).rejects.toThrow("is not available for run");
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(run).toHaveBeenCalledOnce();
+  });
+
+  it("normalizes a surface NetCDF subset without inventing a vertical axis", () => {
+    const surfaceRequest = { ...request, verticalCoordinate: undefined };
+    const data: Record<string, unknown> = {
+      latitude: [50],
+      longitude: [14, 14.25],
+      Temperature_isobaric: [278, 279],
+    };
+    const reader: RdaAreaNetcdfReader = {
+      dimensions: [
+        { name: "latitude", size: 1 },
+        { name: "time", size: 1 },
+        { name: "longitude", size: 2 },
+      ],
+      dataVariableExists: (name) => name in data,
+      getDataVariable: (name) => data[name],
+    };
+    expect(convertRdaGfs025AreaNetcdfToCsv(reader, surfaceRequest).split("\n")).toEqual([
+      "latitude,longitude,Temperature_isobaric",
+      "50,14,278",
+      "50,14.25,279",
+    ]);
+  });
+
+  it("rejects a NetCDF subset missing the requested variable", () => {
+    const reader: RdaAreaNetcdfReader = {
+      dimensions: [
+        { name: "latitude", size: 1 },
+        { name: "longitude", size: 1 },
+        { name: "isobaric", size: 1 },
+      ],
+      dataVariableExists: (name) => name !== "Temperature_isobaric",
+      getDataVariable: (name) => name === "latitude" ? [50] : name === "longitude" ? [14] : [85000],
+    };
+    expect(() => convertRdaGfs025AreaNetcdfToCsv(reader, request))
+      .toThrow("missing variable Temperature_isobaric");
+  });
+
+  it("rejects a pressure subset that omits its returned vertical coordinate", () => {
+    const data: Record<string, unknown> = {
+      latitude: [50],
+      longitude: [14],
+      Temperature_isobaric: [278],
+    };
+    const reader: RdaAreaNetcdfReader = {
+      dimensions: [
+        { name: "latitude", size: 1 },
+        { name: "time", size: 1 },
+        { name: "longitude", size: 1 },
+      ],
+      dataVariableExists: (name) => name in data,
+      getDataVariable: (name) => data[name],
+    };
+    expect(() => convertRdaGfs025AreaNetcdfToCsv(reader, request))
+      .toThrow("missing the returned vertical coordinate");
+  });
+});
