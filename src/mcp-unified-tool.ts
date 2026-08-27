@@ -102,7 +102,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("verify_forecast", {
     title: "Verify an archived forecast",
-    description: "Verify archived GFS forecasts against either later GFS analysis or IGRA v2.2 radiosondes. Atomic form uses time.at plus one leadHours value. IGRA also supports a bounded skill-summary form using time.from/time.to plus up to three leadHours values: WFG deterministically samples at most eight nominal sounding times and aggregates count, signed bias, MAE and RMSE by lead × pressure × observed field while retaining failed evaluations explicitly. IGRA remains an observation reference here, not a gridded query_atmosphere dataset.",
+    description: "Verify archived GFS forecasts against either later GFS analysis or IGRA v2.2 radiosondes. Atomic form uses time.at plus one leadHours value. Both references support a bounded skill-summary form using time.from/time.to plus up to three leadHours values: WFG deterministically samples at most eight nominal verification times and aggregates count, signed bias, MAE and RMSE by lead × pressure × field while retaining failed evaluations explicitly. GFS-analysis summaries are analysis-minus-forecast on the native 0.5° Grid 4 archive; IGRA summaries are observation-minus-forecast and may select an explicit or nearby station. IGRA remains a verification reference here, not a gridded query_atmosphere dataset.",
     inputSchema: verifyAtmosphericForecastSchema,
     outputSchema: unifiedSpecializedResultSchema,
   }, async (query) => {

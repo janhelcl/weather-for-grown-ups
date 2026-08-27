@@ -198,8 +198,8 @@ function registerVerifyCommand(program: Command): void {
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .option("--at <iso>", "One historical valid time")
-    .option("--from <iso>", "Skill-summary range start; IGRA only")
-    .option("--to <iso>", "Skill-summary range end; IGRA only")
+    .option("--from <iso>", "Skill-summary range start")
+    .option("--to <iso>", "Skill-summary range end")
     .requiredOption("--lead-hours <number|list>", "Forecast lead(s) in hours; multiples of 6")
     .option("--reference <gfs-analysis|igra>", "Verification reference", "gfs-analysis")
     .option("--hours <list>", "Skill-summary nominal UTC cycles", "0,12")
@@ -221,9 +221,6 @@ function registerVerifyCommand(program: Command): void {
       }
 
       const referenceDataset = String(options.reference);
-      if (hasRange && referenceDataset !== "igra") {
-        throw new Error("Skill-summary verification currently requires --reference igra");
-      }
       const defaultVariables = referenceDataset === "igra"
         ? DEFAULT_IGRA_VERIFICATION_VARIABLES
         : DEFAULT_UNIFIED_VARIABLES;
@@ -253,7 +250,7 @@ function registerVerifyCommand(program: Command): void {
           }
         : {
             ...common,
-            referenceDataset: "igra" as const,
+            referenceDataset: referenceDataset as "gfs-analysis" | "igra",
             time: {
               from: options.from,
               to: options.to,

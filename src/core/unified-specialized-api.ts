@@ -1,6 +1,7 @@
 import { GefsRunComparisonService } from "./gefs-run-comparison.js";
 import { GfsGefsComparisonService } from "./gfs-gefs-comparison.js";
 import { HistoricalIndexService } from "./history-index.js";
+import { HistoricalForecastSkillService } from "./history-skill.js";
 import { HistoricalForecastVerificationService } from "./history-verification.js";
 import { IgraForecastVerificationService } from "./igra-verification.js";
 import { IgraForecastSkillService } from "./igra-skill.js";
@@ -99,6 +100,8 @@ export class UnifiedForecastVerificationService {
       new IgraForecastVerificationService(),
     private readonly igraSkillService: Pick<IgraForecastSkillService, "summarize"> =
       new IgraForecastSkillService(),
+    private readonly analysisSkillService: Pick<HistoricalForecastSkillService, "summarize"> =
+      new HistoricalForecastSkillService(),
   ) {}
 
   async verify(input: VerifyAtmosphericForecastInput): Promise<UnifiedSpecializedResult> {
@@ -111,7 +114,28 @@ export class UnifiedForecastVerificationService {
         hoursUtc: Array<0 | 6 | 12 | 18>;
         maxValidTimes: number;
       };
-      const result = await this.igraSkillService.summarize({
+
+      if (request.referenceDataset === "igra") {
+        const result = await this.igraSkillService.summarize({
+          latitude: request.geometry.latitude,
+          longitude: request.geometry.longitude,
+          startTime: rangeTime.from,
+          endTime: rangeTime.to,
+          cycleHoursUtc: rangeTime.hoursUtc,
+          maxValidTimes: rangeTime.maxValidTimes,
+          leadHours: request.leadHours,
+          variables: request.variables as any,
+          pressureLevelsHpa: request.pressureLevelsHpa,
+          ...(request.gfsGrid === undefined ? {} : { gfsGrid: request.gfsGrid }),
+          ...(request.stationId === undefined ? {} : { stationId: request.stationId }),
+          ...(request.maxStationDistanceKm === undefined
+            ? {}
+            : { maxStationDistanceKm: request.maxStationDistanceKm }),
+        });
+        return wrap("verify_forecast", ["gfs", "igra"], result);
+      }
+
+      const result = await this.analysisSkillService.summarize({
         latitude: request.geometry.latitude,
         longitude: request.geometry.longitude,
         startTime: rangeTime.from,
@@ -121,11 +145,8 @@ export class UnifiedForecastVerificationService {
         leadHours: request.leadHours,
         variables: request.variables as any,
         pressureLevelsHpa: request.pressureLevelsHpa,
-        ...(request.gfsGrid === undefined ? {} : { gfsGrid: request.gfsGrid }),
-        ...(request.stationId === undefined ? {} : { stationId: request.stationId }),
-        maxStationDistanceKm: request.maxStationDistanceKm,
       });
-      return wrap("verify_forecast", ["gfs", "igra"], result);
+      return wrap("verify_forecast", ["gfs", "gfs-analysis"], result);
     }
 
     const instantTime = request.time as { at: string };
