@@ -2,6 +2,7 @@ export const ATMOSPHERIC_DATASET_IDS = [
   "gfs_0p25",
   "gfs_0p50",
   "gefs_0p50",
+  "ifs_0p25",
   "gfs_grid4_analysis_0p5",
 ] as const;
 
@@ -29,7 +30,7 @@ export type AtmosphericOperationId = (typeof ATMOSPHERIC_OPERATION_IDS)[number];
 
 export interface AtmosphericDatasetDefinition {
   id: AtmosphericDatasetId;
-  family: "gfs" | "gefs";
+  family: "gfs" | "gefs" | "ifs";
   kind: AtmosphericDatasetKind;
   role: AtmosphericDatasetRole;
   horizontalGridDegrees: number;
@@ -107,6 +108,15 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "aligned_model_comparison",
     ],
   },
+  ifs_0p25: {
+    id: "ifs_0p25",
+    family: "ifs",
+    kind: "deterministic",
+    role: "forecast",
+    horizontalGridDegrees: 0.25,
+    maxForecastHour: 360,
+    operations: ["profile"],
+  },
   gfs_grid4_analysis_0p5: {
     id: "gfs_grid4_analysis_0p5",
     family: "gfs",
@@ -140,7 +150,7 @@ export function datasetSupportsOperation(
  * original operational models so callers that truly mean "forecast models" do
  * not silently start iterating historical analysis datasets.
  */
-export const ATMOSPHERIC_MODEL_IDS = ["gfs_0p25", "gfs_0p50", "gefs_0p50"] as const;
+export const ATMOSPHERIC_MODEL_IDS = ["gfs_0p25", "gfs_0p50", "gefs_0p50", "ifs_0p25"] as const;
 export type AtmosphericModelId = (typeof ATMOSPHERIC_MODEL_IDS)[number];
 export type AtmosphericModelKind = AtmosphericDatasetKind;
 export type AtmosphericModelDefinition = AtmosphericDatasetDefinition;
@@ -148,6 +158,7 @@ export const ATMOSPHERIC_MODEL_CATALOG: Record<AtmosphericModelId, AtmosphericDa
   gfs_0p25: ATMOSPHERIC_DATASET_CATALOG.gfs_0p25,
   gfs_0p50: ATMOSPHERIC_DATASET_CATALOG.gfs_0p50,
   gefs_0p50: ATMOSPHERIC_DATASET_CATALOG.gefs_0p50,
+  ifs_0p25: ATMOSPHERIC_DATASET_CATALOG.ifs_0p25,
 };
 
 export function modelSupportsOperation(
