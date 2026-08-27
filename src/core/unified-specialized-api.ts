@@ -104,16 +104,22 @@ export class UnifiedForecastVerificationService {
   async verify(input: VerifyAtmosphericForecastInput): Promise<UnifiedSpecializedResult> {
     const request = verifyAtmosphericForecastSchema.parse(input);
 
-    if ("from" in request.time) {
+    if (Array.isArray(request.leadHours)) {
+      const rangeTime = request.time as {
+        from: string;
+        to: string;
+        hoursUtc: Array<0 | 6 | 12 | 18>;
+        maxValidTimes: number;
+      };
       const result = await this.igraSkillService.summarize({
         latitude: request.geometry.latitude,
         longitude: request.geometry.longitude,
-        startTime: request.time.from,
-        endTime: request.time.to,
-        cycleHoursUtc: request.time.hoursUtc,
-        maxValidTimes: request.time.maxValidTimes,
+        startTime: rangeTime.from,
+        endTime: rangeTime.to,
+        cycleHoursUtc: rangeTime.hoursUtc,
+        maxValidTimes: rangeTime.maxValidTimes,
         leadHours: request.leadHours,
-        variables: request.variables,
+        variables: request.variables as any,
         pressureLevelsHpa: request.pressureLevelsHpa,
         ...(request.gfsGrid === undefined ? {} : { gfsGrid: request.gfsGrid }),
         ...(request.stationId === undefined ? {} : { stationId: request.stationId }),
