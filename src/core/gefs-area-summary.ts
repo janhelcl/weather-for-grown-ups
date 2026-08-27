@@ -30,7 +30,7 @@ import { summarizeNumericDistribution } from "./ensemble-statistics.js";
 import { DEFAULT_GEFS_MEMBER_CONCURRENCY } from "./gefs-ensemble.js";
 import { GefsLatestRunResolver, type GefsLatestRunProvider } from "./gefs-latest-run.js";
 import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
-import { gefsAtmosProductForSelection, gefsAtmosProductGridDegrees } from "../sources/gefs-s3.js";
+import { gefsAtmosProductForSelection, gefsAtmosProductGridDegrees, type GefsAtmosProduct } from "../sources/gefs-s3.js";
 
 export interface GefsAreaGridDecoder {
   readonly engine?: GribDecoderName;
@@ -103,8 +103,8 @@ export class GefsAreaSummaryService {
     }
 
     const memberComputations = query.field === undefined
-      ? await this.summarizePressureMembers(query, box, run, forecastHour, members)
-      : await this.summarizeFieldMembers(query, box, run, forecastHour, members);
+      ? await this.summarizePressureMembers(query, box, run, forecastHour, members, product)
+      : await this.summarizeFieldMembers(query, box, run, forecastHour, members, product);
 
     const outputDefinition = query.field === undefined
       ? pressureOutput(query.variable!)
@@ -155,6 +155,7 @@ export class GefsAreaSummaryService {
     run: Date,
     forecastHour: number,
     members: GefsMember[],
+    product: GefsAtmosProduct,
   ): Promise<MemberAreaComputation[]> {
     const variable = VARIABLE_CATALOG[query.variable!] as RawVariableDefinition;
     return mapConcurrent(members, this.concurrency, async (member) => {
@@ -180,6 +181,7 @@ export class GefsAreaSummaryService {
     run: Date,
     forecastHour: number,
     members: GefsMember[],
+    product: GefsAtmosProduct,
   ): Promise<MemberAreaComputation[]> {
     const definition = GEFS_PGRB2A_FIELD_CATALOG[query.field!] as RawGefsFieldDefinition;
     const selector: AreaMessageSelector = {
