@@ -13,6 +13,8 @@ import { gefsProfileVariableSchema } from "./gefs-ensemble-profile.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 
 export const gefsPgrb2aFieldSchema = z.enum(GEFS_PGRB2A_FIELD_IDS);
+export const gefsAtmosProductSchema = z.enum(["pgrb2a_0p50", "pgrb2s_0p25"]);
+export const gefsAtmosGridDegreesSchema = z.union([z.literal(0.25), z.literal(0.5)]);
 
 export const gefsBundleSelectionSchema = z.object({
   variables: z.array(gefsProfileVariableSchema).max(GEFS_PROFILE_VARIABLES.length).default([]).describe(
@@ -182,7 +184,8 @@ export const gefsMemberBundleResultSchema = z.object({
     provider: z.literal("NOAA AWS Open Data"),
     access: z.literal("s3_range"),
     decoder: z.enum(["gribberish", "wgrib2"]),
-    product: z.literal("pgrb2a_0p50"),
+    product: gefsAtmosProductSchema,
+    horizontalGridDegrees: gefsAtmosGridDegreesSchema,
     allCacheHit: z.boolean(),
   }),
 });
