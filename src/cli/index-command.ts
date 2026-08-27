@@ -1,6 +1,8 @@
 import type { Command } from "commander";
 import { HistoricalIndexBackfillService } from "../core/history-backfill.js";
 import { HistoricalIndexService } from "../core/history-index.js";
+import { VerificationIndexBackfillService } from "../core/verification-index-backfill.js";
+import { VerificationIndexSkillService } from "../core/verification-index-skill.js";
 import {
   DEFAULT_HISTORICAL_BACKFILL_MAX_FETCHES,
   historicalIndexBackfillResultSchema,
@@ -12,6 +14,11 @@ import {
   type HistoricalCycleHourUtc,
   type HistoricalGfsVariableId,
 } from "../schema/history.js";
+import {
+  DEFAULT_VERIFICATION_INDEX_MAX_FETCHES,
+  verificationIndexBackfillResultSchema,
+  verificationIndexSkillResultSchema,
+} from "../schema/verification-index.js";
 import { DEFAULT_LEVELS, parseLevels } from "./shared.js";
 
 const DEFAULT_INDEX_VARIABLES = "temperature,relative_humidity,wind,geopotential_height";
@@ -83,6 +90,92 @@ export function registerIndexCommand(program: Command): void {
       }));
       print(result, Boolean(options.json));
     });
+
+  index
+    .command("verification-backfill")
+    .description("Resumably materialize atomic forecast-verification cases into the local verification corpus")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--from <iso>", "Inclusive verification range start")
+    .requiredOption("--to <iso>", "Inclusive verification range end")
+    .requiredOption("--lead-hours <list>", "Forecast leads in hours; multiples of 6")
+    .option("--reference <gfs-analysis|igra>", "Verification reference", "gfs-analysis")
+    .option("--cycles <list>", "UTC verification cycles: 0,6,12,18", "0,12")
+    .option("--vars <list>", "Pressure-level variables", DEFAULT_INDEX_VARIABLES)
+    .option("--levels <list>", "Pressure levels in hPa", DEFAULT_LEVELS)
+    .option("--grid <0p25|0p50>", "Archived GFS grid; IGRA only")
+    .option("--station <id>", "Explicit 11-character IGRA station ID")
+    .option("--max-station-distance-km <number>", "Maximum IGRA station distance", Number)
+    .option("--max-fetches <number>", "Maximum missing atomic cases attempted by this invocation", Number, DEFAULT_VERIFICATION_INDEX_MAX_FETCHES)
+    .option("--newest-first", "Fill newest missing cases first")
+    .option("--dry-run", "Plan without fetching or writing")
+    .option("--continue-on-error", "Continue after an archive/observation error")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const result = verificationIndexBackfillResultSchema.parse(
+        await new VerificationIndexBackfillService().backfill({
+          referenceDataset: parseReference(options.reference),
+          latitude: options.lat,
+          longitude: options.lon,
+          startTime: options.from,
+          endTime: options.to,
+          cycleHoursUtc: parseCycles(options.cycles),
+          leadHours: parseNumbers(options.leadHours),
+          variables: parseStringList(options.vars),
+          pressureLevelsHpa: parseLevels(options.levels),
+          ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
+          ...(options.station === undefined ? {} : { stationId: options.station }),
+          ...(options.maxStationDistanceKm === undefined
+            ? {}
+            : { maxStationDistanceKm: options.maxStationDistanceKm }),
+          maxFetches: options.maxFetches,
+          order: options.newestFirst ? "newest_first" : "oldest_first",
+          dryRun: Boolean(options.dryRun),
+          continueOnError: Boolean(options.continueOnError),
+        }),
+      );
+      print(result, Boolean(options.json));
+    });
+
+  index
+    .command("verification-summary")
+    .description("Summarize materialized verification skill locally without NOAA requests")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--from <iso>", "Inclusive verification range start")
+    .requiredOption("--to <iso>", "Inclusive verification range end")
+    .requiredOption("--lead-hours <list>", "Forecast leads in hours; multiples of 6")
+    .option("--reference <gfs-analysis|igra>", "Verification reference", "gfs-analysis")
+    .option("--cycles <list>", "UTC verification cycles: 0,6,12,18", "0,12")
+    .option("--months <list>", "Optional UTC month filter, e.g. 3,4,5")
+    .option("--vars <list>", "Pressure-level variables", DEFAULT_INDEX_VARIABLES)
+    .option("--levels <list>", "Pressure levels in hPa", DEFAULT_LEVELS)
+    .option("--grid <0p25|0p50>", "Filter actual archived GFS grid; IGRA only")
+    .option("--station <id>", "Filter actual IGRA station ID")
+    .option("--max-station-distance-km <number>", "Filter IGRA cases by actual station distance", Number)
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const result = verificationIndexSkillResultSchema.parse(
+        await new VerificationIndexSkillService().summarize({
+          referenceDataset: parseReference(options.reference),
+          latitude: options.lat,
+          longitude: options.lon,
+          startTime: options.from,
+          endTime: options.to,
+          cycleHoursUtc: parseCycles(options.cycles),
+          leadHours: parseNumbers(options.leadHours),
+          variables: parseStringList(options.vars),
+          pressureLevelsHpa: parseLevels(options.levels),
+          ...(options.months === undefined ? {} : { monthsUtc: parseNumbers(options.months) }),
+          ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
+          ...(options.station === undefined ? {} : { stationId: options.station }),
+          ...(options.maxStationDistanceKm === undefined
+            ? {}
+            : { maxStationDistanceKm: options.maxStationDistanceKm }),
+        }),
+      );
+      print(result, Boolean(options.json));
+    });
 }
 
 function assertAnalysisDataset(value: unknown): void {
@@ -117,4 +210,24 @@ function print(result: unknown, json: boolean): void {
     return;
   }
   console.dir(result, { depth: null });
+}
+
+function parseReference(value: unknown): "gfs-analysis" | "igra" {
+  const reference = String(value).trim().toLowerCase();
+  if (reference === "gfs-analysis" || reference === "igra") return reference;
+  throw new Error(`Expected --reference gfs-analysis|igra, received: ${value}`);
+}
+
+function parseStringList(value: unknown): string[] {
+  const values = String(value).split(",").map((item) => item.trim()).filter(Boolean);
+  if (values.length === 0) throw new Error("Expected a non-empty comma-separated list");
+  return values;
+}
+
+function parseNumbers(value: unknown): number[] {
+  const values = String(value).split(",").map((item) => Number(item.trim()));
+  if (values.length === 0 || values.some((item) => !Number.isFinite(item))) {
+    throw new Error("Expected a comma-separated numeric list");
+  }
+  return values;
 }
