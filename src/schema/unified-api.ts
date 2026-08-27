@@ -201,7 +201,7 @@ export const queryAtmosphereSchema = z.object({
   selection: atmosphericSelectionSchema,
   forecast: atmosphericForecastOptionsSchema.optional(),
   ensemble: atmosphericEnsembleOptionsSchema.optional(),
-  source: z.enum(["nomads", "s3"]).optional().describe("GFS-only source override"),
+  source: z.enum(["nomads", "s3", "archive"]).optional().describe("GFS-only source override; archive forces the resolution-matched historical backend"),
   aggregate: atmosphericAggregationSchema,
   limits: atmosphericLimitsSchema,
 }).superRefine(validateCommonAtmosphericRequest);
@@ -240,7 +240,7 @@ export const diagnoseAtmosphereSchema = z.object({
   diagnostic: atmosphericDiagnosticSelectionSchema,
   forecast: atmosphericForecastOptionsSchema.optional(),
   ensemble: atmosphericEnsembleOptionsSchema.optional(),
-  source: z.enum(["nomads", "s3"]).optional().describe("GFS-only source override"),
+  source: z.enum(["nomads", "s3", "archive"]).optional().describe("GFS-only source override; archive forces the resolution-matched historical backend"),
 }).superRefine((request, context) => {
   validateDatasetModifiers(request, context);
   if ("from" in request.time && request.ensemble?.includeMembers === true) {
@@ -257,6 +257,7 @@ export const unifiedAtmosphereResultSchema = z.object({
   internalDatasetId: z.enum([
     "gfs_0p25",
     "gfs_0p50",
+    "gfs_0p25_forecast_archive",
     "gefs_0p50",
     "gfs_grid4_analysis_0p5",
     "gfs_grid4_forecast_0p5_archive",
