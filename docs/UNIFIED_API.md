@@ -213,10 +213,10 @@ What GFS predicted in the past uses the same `gfs` dataset with an explicit old 
     "longitude": 14.43
   },
   "forecast": {
-    "run": "2017-05-07T12:00:00Z"
+    "run": "2019-12-24T12:00:00Z"
   },
   "time": {
-    "at": "2017-05-09T12:00:00Z"
+    "at": "2019-12-26T18:00:00Z"
   },
   "selection": {
     "variables": ["temperature", "relative_humidity", "wind"],
@@ -225,7 +225,7 @@ What GFS predicted in the past uses the same `gfs` dataset with an explicit old 
 }
 ```
 
-This means “what did the 2017-05-07 12Z GFS run predict for 2017-05-09 12Z?” The result keeps `dataset: "gfs"` but exposes `internalDatasetId: "gfs_grid4_forecast_0p5_archive"` and NCEI provenance.
+This means “what did the 2019-12-24 12Z GFS run predict for 2019-12-26 18Z?” The result keeps `dataset: "gfs"` but exposes `internalDatasetId: "gfs_grid4_forecast_0p5_archive"` and NCEI provenance.
 
 The same atmospheric question against historical analysis:
 
@@ -238,7 +238,7 @@ The same atmospheric question against historical analysis:
     "longitude": 14.43
   },
   "time": {
-    "at": "2017-05-09T12:00:00Z"
+    "at": "2019-12-26T18:00:00Z"
   },
   "selection": {
     "variables": ["temperature", "relative_humidity", "wind"],
@@ -369,9 +369,9 @@ Historical forecast: keep the dataset as GFS and select the old initialization.
 ```bash
 wfg query \
   --dataset gfs \
-  --run 2017-05-07T12:00:00Z \
+  --run 2019-12-24T12:00:00Z \
   --lat 50.08 --lon 14.43 \
-  --at 2017-05-09T12:00:00Z \
+  --at 2019-12-26T18:00:00Z \
   --vars temperature,relative_humidity,wind \
   --levels 850,700,500 \
   --json
@@ -385,7 +385,7 @@ Historical analysis: change the dataset and time.
 wfg query \
   --dataset gfs-analysis \
   --lat 50.08 --lon 14.43 \
-  --at 2017-05-09T12:00:00Z \
+  --at 2019-12-26T18:00:00Z \
   --vars temperature,relative_humidity,wind \
   --levels 850,700,500 \
   --json
@@ -416,7 +416,7 @@ Diagnostics:
 wfg diagnose \
   --dataset gfs-analysis \
   --lat 50.08 --lon 14.43 \
-  --at 2017-05-09T12:00:00Z \
+  --at 2019-12-26T18:00:00Z \
   --kind layer \
   --lower 850 --upper 500 \
   --diagnostics wind_shear \
