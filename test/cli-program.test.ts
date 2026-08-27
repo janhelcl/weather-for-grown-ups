@@ -47,10 +47,20 @@ describe("CLI public surface", () => {
   it("exposes GFS grid selection on the canonical forecast-capable commands", () => {
     const program = createCliProgram();
 
-    for (const name of ["query", "diagnose", "compare-runs", "compare-datasets"]) {
+    for (const name of ["query", "diagnose", "compare-runs", "compare-datasets", "verify"]) {
       const command = program.commands.find((candidate) => candidate.name() === name);
       expect(command?.options.some((option) => option.long === "--grid")).toBe(true);
     }
+  });
+
+  it("keeps radiosonde verification inside the canonical verify command", () => {
+    const verify = createCliProgram().commands.find((command) => command.name() === "verify");
+    const options = new Set(verify?.options.map((option) => option.long));
+
+    expect(options).toContain("--reference");
+    expect(options).toContain("--station");
+    expect(options).toContain("--max-station-distance-km");
+    expect(options).toContain("--grid");
   });
 
   it("keeps index maintenance behind one neutral admin command", () => {

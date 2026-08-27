@@ -124,6 +124,8 @@ Historical **GFS Grid 4 0.5° analysis** is exposed as the third public dataset,
 
 Historical **GFS forecasts** do not add another public dataset. Keep `dataset: "gfs"`, provide an explicit old forecast run, and select `forecast.grid` when needed. `0p25` routes to the NCAR/GDEX d084001 0.25° archive (`gfs_0p25_forecast_archive`), available from 2015-01-15 with native 3-hour output through +240 h and 12-hour output from +252 h through +384 h. `0p50` routes to NOAA NCEI Grid 4 (`gfs_grid4_forecast_0p5_archive`), beginning 2006-10-10 with native 3-hour output through +192 h. Direct online archive availability can vary. Both paths preserve run, valid time, lead, grid and archive provenance across unified state queries and layer/profile/parcel diagnostics.
 
+Forecast verification can use either the later `gfs-analysis` model state or a real **NOAA IGRA v2.2 radiosonde** reference. IGRA remains a verification reference rather than a fourth gridded atmospheric dataset: WFG selects a nearby or explicit sounding station, samples the archived GFS forecast at the sounding location, and compares only pressure levels that were actually observed. No vertical interpolation is hidden inside the verification result.
+
 ## The design rule
 
 > **Unify operations and physics; preserve model semantics.**

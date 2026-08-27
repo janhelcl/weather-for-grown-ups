@@ -102,7 +102,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("verify_forecast", {
     title: "Verify an archived forecast",
-    description: "Compare an archived GFS forecast with the later historical GFS analysis at the same valid time and Grid 4 point. Verification currently uses gfs as the forecast dataset and gfs-analysis as the reference; results are analysis-minus-forecast and are verification against model analysis, not observations.",
+    description: "Verify an archived GFS forecast against either later GFS analysis or an IGRA v2.2 radiosonde. The gfs-analysis mode preserves the existing same-Grid-4 analysis-minus-forecast contract. The igra mode selects a nearby or explicit radiosonde station, samples GFS at the sounding location, compares only exact observed pressure levels, and returns observation-minus-forecast differences with station/provenance metadata. IGRA is an observation reference here, not a gridded query_atmosphere dataset.",
     inputSchema: verifyAtmosphericForecastSchema,
     outputSchema: unifiedSpecializedResultSchema,
   }, async (query) => {

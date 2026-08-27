@@ -44,6 +44,10 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 
 `npm run test:live:history` exercises a fixed 2017 NOAA NCEI Grid 4 analysis profile through THREDDS NCSS. It verifies the historical archive path, point/profile response parsing, 0.5° grid provenance, normalized temperature/humidity/wind/height fields, and the historical-analysis result contract without depending on current GFS publication timing.
 
+### IGRA radiosonde verification
+
+`npm run test:live:igra` selects a recent 12 UTC sounding from Praha-Libuš (`EZM00011520`), reads the official NOAA IGRA v2.2 station ZIP, and verifies a 48-hour archived GFS 0.25° forecast against exact observed pressure levels. It checks observation-minus-forecast output, station metadata and the no-hidden-interpolation contract. IGRA file access and archived NOAA requests share WFG's file-backed courtesy limiter.
+
 ### GFS operational transport parity
 
 `npm run test:live:gfs-operational-parity` compares a recent same-run GFS profile through NOMADS and NOAA AWS for both `0p25` and `0p50`. It is a transport/decoder parity contract for current operational data; it says nothing about the historical archives.
