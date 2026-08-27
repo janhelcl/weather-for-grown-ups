@@ -145,7 +145,7 @@ export class IfsProfileService {
       ...(fields.length === 0 ? {} : { fields }),
       source: {
         provider: "ECMWF Open Data",
-        access: "s3_range",
+        access: "indexed_http_range",
         decoder: this.decoder.engine ?? "gribberish",
         product: "ifs_0p25_oper_fc",
         horizontalGridDegrees: 0.25,
