@@ -293,11 +293,11 @@ function validateCommonAtmosphericRequest(
   validateDatasetModifiers(request, context);
 
   const isRange = "from" in request.time;
-  if (request.dataset === "ifs" && (request.geometry.type !== "point" || isRange)) {
+  if (request.dataset === "ifs" && request.geometry.type === "area") {
     context.addIssue({
       code: "custom",
-      path: request.geometry.type !== "point" ? ["geometry"] : ["time"],
-      message: "IFS currently supports point geometry at one valid time; additional geometries and time ranges will use the same dataset contract in later slices",
+      path: ["geometry"],
+      message: "IFS area statistics are not implemented yet; use point, points, or transect geometry",
     });
   }
   if (isRange && (request.geometry.type === "transect" || request.geometry.type === "area")) {

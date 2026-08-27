@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   ifsForecastHour,
+  ifsForecastHoursInRange,
   ifsMaxForecastHour,
+  ifsValidTimeForForecastHour,
   isNativeIfsForecastHour,
   latestIfsCycleAtOrBefore,
   parseIfsRun,
@@ -26,6 +28,16 @@ describe("IFS native run semantics", () => {
     expect(ifsForecastHour(run, new Date("2026-08-27T18:00:00Z"))).toBe(6);
     expect(() => ifsForecastHour(run, new Date(run.getTime() + 147 * 3_600_000)))
       .toThrow("does not publish f147");
+  });
+
+  it("enumerates native outputs across the 3h-to-6h cadence transition", () => {
+    const run = new Date("2026-08-27T12:00:00Z");
+    const start = new Date(run.getTime() + 138 * 3_600_000);
+    const end = new Date(run.getTime() + 156 * 3_600_000);
+    expect(ifsForecastHoursInRange(run, start, end)).toEqual([138, 141, 144, 150, 156]);
+    expect(ifsValidTimeForForecastHour(run, 150).getTime() - run.getTime())
+      .toBe(150 * 3_600_000);
+    expect(() => ifsValidTimeForForecastHour(run, 147)).toThrow("not native");
   });
 
   it("requires exact synoptic initialization cycles", () => {

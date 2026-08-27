@@ -39,14 +39,14 @@ Nonlinear diagnostics are evaluated on each GEFS member before aggregation. WFG 
 | Operation | GFS 0.25° / 0.5° forecast | GEFS forecast | IFS 0.25° forecast | GFS Grid 4 0.5° analysis |
 | --- | --- | --- | --- | --- |
 | profile | ✅ deterministic | ✅ member distributions | ✅ deterministic point/instant | ✅ analyzed state |
-| timeseries | ✅ forecast evolution | ✅ ensemble evolution | ⏳ | ✅ selected analysis cycles |
+| timeseries | ✅ forecast evolution | ✅ ensemble evolution | ✅ native-cadence deterministic evolution | ✅ selected analysis cycles |
 | layer diagnostics | ✅ | ✅ member-first | ⏳ | ✅ same deterministic kernel |
 | profile diagnostics | ✅ | ✅ member-first | ⏳ | ✅ same deterministic kernel |
 | parcel diagnostics | ✅ | ✅ member-first | ⏳ | ✅ same parcel engine |
 | diagnostic time series | ✅ | ✅ | ⏳ | ✅ selected analysis cycles |
-| points | ✅ shared S3 slice | ✅ member slices reused | ⏳ | ✅ bounded serial NCSS points |
-| points time series | ✅ | ✅ | ⏳ | ✅ bounded cycle × point matrix |
-| transect | ✅ shared great-circle geometry | ✅ shared great-circle geometry | ⏳ | ✅ shared great-circle geometry |
+| points | ✅ shared S3 slice | ✅ member slices reused | ✅ cached selected-message reuse | ✅ bounded serial NCSS points |
+| points time series | ✅ | ✅ | ✅ bounded point × native-time matrix | ✅ bounded cycle × point matrix |
+| transect | ✅ shared great-circle geometry | ✅ shared great-circle geometry | ✅ shared great-circle geometry | ✅ shared great-circle geometry |
 | area summary | ✅ NOMADS bbox | ✅ member-first | ⏳ | ✅ native NCEI NCSS bbox |
 | run comparison | ✅ | ✅ | ⏳ | — |
 | scalar ensemble distribution | — | ✅ | — | — |

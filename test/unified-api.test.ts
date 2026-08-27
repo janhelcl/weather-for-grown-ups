@@ -255,11 +255,13 @@ describe("unified atmospheric routing", () => {
   it("routes time range semantics to forecast or analysis implementations", async () => {
     const gfsTimeSeries = { getTimeSeries: vi.fn(async () => ({ route: "gfs-series" })) };
     const gefsTimeSeries = { getTimeSeries: vi.fn(async () => ({ route: "gefs-series" })) };
+    const ifsTimeSeries = { getTimeSeries: vi.fn(async () => ({ route: "ifs-series" })) };
     const historyTimeSeries = { getHistoricalTimeSeries: vi.fn(async () => ({ route: "history-series" })) };
 
     const service = new UnifiedAtmosphereQueryService({
       gfsTimeSeries: gfsTimeSeries as any,
       gefsTimeSeries: gefsTimeSeries as any,
+      ifsTimeSeries: ifsTimeSeries as any,
       historyTimeSeries: historyTimeSeries as any,
     });
 
@@ -274,6 +276,7 @@ describe("unified atmospheric routing", () => {
 
     expect((await service.query({ dataset: "gfs", ...range })).result).toEqual({ route: "gfs-series" });
     expect((await service.query({ dataset: "gefs", ...range })).result).toEqual({ route: "gefs-series" });
+    expect((await service.query({ dataset: "ifs", ...range })).result).toEqual({ route: "ifs-series" });
     expect((await service.query({
       dataset: "gfs-analysis",
       ...range,
@@ -612,16 +615,20 @@ describe("unified geometry routing coverage", () => {
   it("routes multi-point instant and range queries across all datasets", async () => {
     const gfsPoints = { getPoints: vi.fn(async () => ({ route: "gfs-points" })) };
     const gefsPoints = { getPoints: vi.fn(async () => ({ route: "gefs-points" })) };
+    const ifsPoints = { getPoints: vi.fn(async () => ({ route: "ifs-points" })) };
     const historyPoints = { getPoints: vi.fn(async () => ({ route: "history-points" })) };
     const gfsPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "gfs-points-series" })) };
     const gefsPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "gefs-points-series" })) };
+    const ifsPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "ifs-points-series" })) };
     const historyPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "history-points-series" })) };
     const service = new UnifiedAtmosphereQueryService({
       gfsPoints: gfsPoints as any,
       gefsPoints: gefsPoints as any,
+      ifsPoints: ifsPoints as any,
       historyPoints: historyPoints as any,
       gfsPointsTimeSeries: gfsPointsTimeSeries as any,
       gefsPointsTimeSeries: gefsPointsTimeSeries as any,
+      ifsPointsTimeSeries: ifsPointsTimeSeries as any,
       historyPointsTimeSeries: historyPointsTimeSeries as any,
     });
 
@@ -638,6 +645,8 @@ describe("unified geometry routing coverage", () => {
       .toEqual({ route: "gfs-points" });
     expect((await service.query({ dataset: "gefs", geometry, time: instant, selection })).result)
       .toEqual({ route: "gefs-points" });
+    expect((await service.query({ dataset: "ifs", geometry, time: instant, selection })).result)
+      .toEqual({ route: "ifs-points" });
     expect((await service.query({
       dataset: "gfs-analysis",
       geometry,
@@ -666,6 +675,13 @@ describe("unified geometry routing coverage", () => {
       limits: { maxPointSteps: 10 },
     })).result).toEqual({ route: "gefs-points-series" });
     expect((await service.query({
+      dataset: "ifs",
+      geometry,
+      time: range,
+      selection,
+      limits: { maxPointSteps: 10 },
+    })).result).toEqual({ route: "ifs-points-series" });
+    expect((await service.query({
       dataset: "gfs-analysis",
       geometry,
       time: {
@@ -682,10 +698,12 @@ describe("unified geometry routing coverage", () => {
   it("routes transects through dataset-native implementations", async () => {
     const gfsTransect = { getTransect: vi.fn(async () => ({ route: "gfs-transect" })) };
     const gefsTransect = { getTransect: vi.fn(async () => ({ route: "gefs-transect" })) };
+    const ifsTransect = { getTransect: vi.fn(async () => ({ route: "ifs-transect" })) };
     const historyTransect = { getTransect: vi.fn(async () => ({ route: "history-transect" })) };
     const service = new UnifiedAtmosphereQueryService({
       gfsTransect: gfsTransect as any,
       gefsTransect: gefsTransect as any,
+      ifsTransect: ifsTransect as any,
       historyTransect: historyTransect as any,
     });
     const geometry = {
@@ -709,6 +727,13 @@ describe("unified geometry routing coverage", () => {
       selection: { fields: ["wind_10m"] },
       ensemble: { quantiles: [0.1, 0.5, 0.9], includeMembers: false, maxMemberSamples: 100 },
     })).result).toEqual({ route: "gefs-transect" });
+
+    expect((await service.query({
+      dataset: "ifs",
+      geometry,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { fields: ["wind_10m"] },
+    })).result).toEqual({ route: "ifs-transect" });
 
     expect((await service.query({
       dataset: "gfs-analysis",

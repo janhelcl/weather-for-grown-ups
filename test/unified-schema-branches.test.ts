@@ -136,20 +136,8 @@ describe("unified atmospheric schema capability branches", () => {
     })).toThrow("forecast.grid is only configurable for the gfs dataset");
   });
 
-  it("accepts the first IFS point slice and rejects unsupported IFS shapes explicitly", () => {
+  it("accepts IFS point ranges, points and transects while rejecting unsupported area/diagnostics", () => {
     expect(queryAtmosphereSchema.parse({
-      dataset: "ifs",
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection: {
-        variables: ["temperature", "wind"],
-        pressureLevelsHpa: [850, 500],
-        fields: ["temperature_2m"],
-      },
-      forecast: { run: "latest" },
-    }).dataset).toBe("ifs");
-
-    expect(() => queryAtmosphereSchema.parse({
       dataset: "ifs",
       geometry: point,
       time: {
@@ -157,17 +145,43 @@ describe("unified atmospheric schema capability branches", () => {
         to: "2026-08-28T12:00:00Z",
       },
       selection: pressureSelection,
-    })).toThrow("IFS currently supports point geometry at one valid time");
+      forecast: { run: "latest" },
+    }).dataset).toBe("ifs");
 
-    expect(() => queryAtmosphereSchema.parse({
+    expect(queryAtmosphereSchema.parse({
       dataset: "ifs",
       geometry: {
         type: "points",
         points: [{ latitude: 50, longitude: 14 }],
       },
       time: { at: "2026-08-28T12:00:00Z" },
+      selection: { fields: ["wind_10m"] },
+    }).geometry.type).toBe("points");
+
+    expect(queryAtmosphereSchema.parse({
+      dataset: "ifs",
+      geometry: {
+        type: "transect",
+        start: { latitude: 50, longitude: 14 },
+        end: { latitude: 50.5, longitude: 15 },
+        samples: 5,
+      },
+      time: { at: "2026-08-28T12:00:00Z" },
       selection: pressureSelection,
-    })).toThrow("IFS currently supports point geometry at one valid time");
+    }).geometry.type).toBe("transect");
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "ifs",
+      geometry: {
+        type: "area",
+        westLongitude: 14,
+        eastLongitude: 15,
+        southLatitude: 49,
+        northLatitude: 50,
+      },
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: pressureSelection,
+    })).toThrow("IFS area statistics are not implemented");
 
     expect(() => diagnoseAtmosphereSchema.parse({
       dataset: "ifs",

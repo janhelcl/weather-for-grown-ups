@@ -10,6 +10,7 @@ import {
   expandIfsFields,
   expandIfsPressureVariables,
   type IfsFieldId,
+  type IfsPressureVariableId,
   type IfsRawFieldId,
   type IfsRawPressureVariableId,
 } from "../catalog/ifs.js";
@@ -153,6 +154,18 @@ export class IfsProfileService {
       },
     });
   }
+}
+
+export function ifsIndexSelectorsForSelection(selection: {
+  variables?: readonly IfsPressureVariableId[] | undefined;
+  pressureLevelsHpa?: readonly number[] | undefined;
+  fields?: readonly IfsFieldId[] | undefined;
+}): IfsIndexSelector[] {
+  return prepareSelection({
+    variables: selection.variables === undefined ? undefined : [...selection.variables],
+    pressureLevelsHpa: selection.pressureLevelsHpa === undefined ? undefined : [...selection.pressureLevelsHpa],
+    fields: selection.fields === undefined ? undefined : [...selection.fields],
+  } as ReturnType<typeof ifsPointQuerySchema.parse>).map((item) => item.selector);
 }
 
 class BundledIfsPointDecoder implements IfsPointDecoder {

@@ -47,6 +47,33 @@ export function isNativeIfsForecastHour(run: Date, forecastHour: number): boolea
     && forecastHour % 6 === 0;
 }
 
+export function ifsForecastHoursInRange(
+  run: Date,
+  startTime: Date,
+  endTime: Date,
+): number[] {
+  if (endTime.getTime() < startTime.getTime()) {
+    throw new Error("IFS end time must be at or after start time");
+  }
+  const firstHour = Math.ceil((startTime.getTime() - run.getTime()) / HOUR_MS);
+  const lastHour = Math.floor((endTime.getTime() - run.getTime()) / HOUR_MS);
+  const result: number[] = [];
+  for (let forecastHour = Math.max(0, firstHour); forecastHour <= lastHour; forecastHour += 1) {
+    if (isNativeIfsForecastHour(run, forecastHour)) result.push(forecastHour);
+  }
+  if (result.length === 0) {
+    throw new Error("Requested IFS time range contains no native forecast outputs for the selected run");
+  }
+  return result;
+}
+
+export function ifsValidTimeForForecastHour(run: Date, forecastHour: number): Date {
+  if (!isNativeIfsForecastHour(run, forecastHour)) {
+    throw new Error(`IFS f${forecastHour} is not native for run ${run.toISOString()}`);
+  }
+  return new Date(run.getTime() + forecastHour * HOUR_MS);
+}
+
 export function latestIfsCycleAtOrBefore(time: Date): Date {
   const date = new Date(time);
   date.setUTCMinutes(0, 0, 0);

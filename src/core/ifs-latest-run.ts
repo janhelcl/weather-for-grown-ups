@@ -5,6 +5,8 @@ import {
 } from "../sources/ifs-open-data.js";
 import {
   ifsForecastHour,
+  ifsForecastHoursInRange,
+  ifsMaxForecastHour,
   isNativeIfsForecastHour,
   latestIfsCycleAtOrBefore,
   previousIfsCycle,
@@ -15,6 +17,14 @@ const HOUR_MS = 3_600_000;
 export interface IfsLatestRunProvider {
   resolveLatestRun(
     validTime: Date,
+    selectors: readonly IfsIndexSelector[],
+  ): Promise<Date>;
+}
+
+export interface IfsLatestRangeRunProvider {
+  resolveLatestRunForRange(
+    startTime: Date,
+    endTime: Date,
     selectors: readonly IfsIndexSelector[],
   ): Promise<Date>;
 }
@@ -34,6 +44,39 @@ export class IfsLatestRunResolver implements IfsLatestRunProvider {
     this.probe = options.probe ?? new IfsOpenDataRunProbe();
     this.now = options.now ?? (() => new Date());
     this.maxCandidates = options.maxCandidates ?? 12;
+  }
+
+  async resolveLatestRunForRange(
+    startTime: Date,
+    endTime: Date,
+    selectors: readonly IfsIndexSelector[],
+  ): Promise<Date> {
+    if (endTime.getTime() < startTime.getTime()) {
+      throw new Error("IFS end time must be at or after start time");
+    }
+    const anchorTime = new Date(Math.min(this.now().getTime(), endTime.getTime()));
+    const anchor = latestIfsCycleAtOrBefore(anchorTime);
+
+    for (let index = 0; index < this.maxCandidates; index += 1) {
+      const run = previousIfsCycle(anchor, index);
+      if (run.getTime() > startTime.getTime()) continue;
+      const maxValidTime = run.getTime() + ifsMaxForecastHour(run) * HOUR_MS;
+      if (maxValidTime < endTime.getTime()) continue;
+
+      let forecastHours: number[];
+      try {
+        forecastHours = ifsForecastHoursInRange(run, startTime, endTime);
+      } catch {
+        continue;
+      }
+      const lastForecastHour = forecastHours[forecastHours.length - 1];
+      if (lastForecastHour === undefined) continue;
+      if (await this.probe.isForecastAvailable(run, lastForecastHour, selectors)) return run;
+    }
+
+    throw new Error(
+      `No published ECMWF IFS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested time range and field selection`,
+    );
   }
 
   async resolveLatestRun(
