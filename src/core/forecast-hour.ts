@@ -1,3 +1,4 @@
+import type { GfsGrid } from "../schema/gfs-grid.js";
 const GFS_RUN_HOURS = new Set([0, 6, 12, 18]);
 const HOUR_MS = 3_600_000;
 export const GFS_MAX_FORECAST_HOUR = 384;
@@ -9,6 +10,9 @@ export const GFS_NATIVE_FORECAST_HOURS = Object.freeze([
     (_, index) => 123 + index * 3,
   ),
 ]);
+export const GFS_0P50_NATIVE_FORECAST_HOURS = Object.freeze(
+  Array.from({ length: GFS_MAX_FORECAST_HOUR / 3 + 1 }, (_, index) => index * 3),
+);
 
 export function parseGfsRun(value: string): Date {
   const run = new Date(value);
@@ -26,26 +30,35 @@ export function parseGfsRun(value: string): Date {
   return run;
 }
 
-export function forecastHour(run: Date, validTime: Date): number {
+export function forecastHour(run: Date, validTime: Date, grid: GfsGrid = "0p25"): number {
   const hours = (validTime.getTime() - run.getTime()) / HOUR_MS;
   if (!Number.isInteger(hours) || hours < 0) {
     throw new Error("validTime must be a whole forecast hour at or after run time");
   }
   if (hours > GFS_MAX_FORECAST_HOUR) throw new Error(`GFS forecast hour must be <= ${GFS_MAX_FORECAST_HOUR}`);
-  if (hours > GFS_HOURLY_THROUGH_FORECAST_HOUR && hours % 3 !== 0) {
+  if (grid === "0p50" && hours % 3 !== 0) {
+    throw new Error("GFS 0.5° output is available every 3 hours");
+  }
+  if (grid === "0p25" && hours > GFS_HOURLY_THROUGH_FORECAST_HOUR && hours % 3 !== 0) {
     throw new Error("After forecast hour 120, GFS 0.25° output is available every 3 hours");
   }
   return hours;
 }
 
-export function nativeForecastHoursInRange(run: Date, startTime: Date, endTime: Date): number[] {
+export function nativeForecastHoursInRange(
+  run: Date,
+  startTime: Date,
+  endTime: Date,
+  grid: GfsGrid = "0p25",
+): number[] {
   if (endTime.getTime() < startTime.getTime()) {
     throw new Error("endTime must be at or after startTime");
   }
 
   const startMs = startTime.getTime();
   const endMs = endTime.getTime();
-  const hours = GFS_NATIVE_FORECAST_HOURS.filter((forecastHourValue) => {
+  const nativeHours = grid === "0p50" ? GFS_0P50_NATIVE_FORECAST_HOURS : GFS_NATIVE_FORECAST_HOURS;
+  const hours = nativeHours.filter((forecastHourValue) => {
     const validMs = run.getTime() + forecastHourValue * HOUR_MS;
     return validMs >= startMs && validMs <= endMs;
   });

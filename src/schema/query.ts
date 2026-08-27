@@ -4,6 +4,7 @@ import { NON_ISOBARIC_FIELD_CATALOG, NON_ISOBARIC_FIELD_IDS } from "../catalog/n
 import { PARCEL_DEFINITION_IDS } from "../catalog/parcel-diagnostics.js";
 import { isSupportedGfsPressureLevel } from "../catalog/pressure-levels.js";
 import { PROFILE_DIAGNOSTIC_IDS } from "../catalog/profile-diagnostics.js";
+import { gfsGridSchema, type GfsGrid } from "./gfs-grid.js";
 
 export const rawVariableIdSchema = z.enum([
   "temperature",
@@ -99,6 +100,7 @@ function validateAtmosphericSelection(
 export const profileQuerySchema = z.object({
   ...pointSchema,
   run: runSelectorSchema,
+  grid: gfsGridSchema,
   validTime: isoDateTimeSchema.describe("Forecast valid time"),
   ...atmosphericSelectionSchema,
   source: profileSourceIdSchema.default("nomads").describe("Data access path: NOMADS geographic subset or NOAA AWS byte ranges"),
@@ -107,6 +109,7 @@ export const profileQuerySchema = z.object({
 export const layerDiagnosticsQuerySchema = z.object({
   ...pointSchema,
   run: runSelectorSchema,
+  grid: gfsGridSchema,
   validTime: isoDateTimeSchema.describe("Forecast valid time"),
   lowerPressureHpa: pressureLevelSchema.describe("Lower-altitude pressure surface; must be greater than upperPressureHpa"),
   upperPressureHpa: pressureLevelSchema.describe("Upper-altitude pressure surface; must be less than lowerPressureHpa"),
@@ -125,6 +128,7 @@ export const layerDiagnosticsQuerySchema = z.object({
 export const profileDiagnosticsQuerySchema = z.object({
   ...pointSchema,
   run: runSelectorSchema,
+  grid: gfsGridSchema,
   validTime: isoDateTimeSchema.describe("Forecast valid time"),
   pressureLevelsHpa: z.array(pressureLevelSchema).min(2).describe("Published GFS pressure surfaces sampled for whole-profile diagnostics"),
   diagnostics: z.array(profileDiagnosticIdSchema).min(1),
@@ -142,6 +146,7 @@ export const profileDiagnosticsQuerySchema = z.object({
 export const parcelDiagnosticsQuerySchema = z.object({
   ...pointSchema,
   run: runSelectorSchema,
+  grid: gfsGridSchema,
   validTime: isoDateTimeSchema.describe("Forecast valid time"),
   pressureLevelsHpa: z.array(pressureLevelSchema).min(2).describe("Published pressure surfaces forming the explicit environmental sounding used for parcel ascent and CAPE/CIN integration"),
   parcel: parcelDefinitionIdSchema.describe("Explicit parcel initialization method"),
@@ -161,6 +166,7 @@ export const DEFAULT_BATCH_MAX_POINTS = 50;
 export const batchPointsQuerySchema = z.object({
   points: z.array(pointCoordinateSchema).min(1).max(DEFAULT_BATCH_MAX_POINTS),
   run: runSelectorSchema,
+  grid: gfsGridSchema,
   validTime: isoDateTimeSchema.describe("Forecast valid time shared by every requested point"),
   ...atmosphericSelectionSchema,
 }).superRefine(validateAtmosphericSelection);
@@ -171,6 +177,7 @@ export const GFS_TOTAL_NATIVE_FORECAST_STEPS = 209;
 export const timeSeriesQuerySchema = z.object({
   ...pointSchema,
   run: runSelectorSchema,
+  grid: gfsGridSchema,
   startTime: isoDateTimeSchema.describe("Inclusive start of requested valid-time range"),
   endTime: isoDateTimeSchema.describe("Inclusive end of requested valid-time range"),
   ...atmosphericSelectionSchema,
@@ -186,6 +193,7 @@ export const MAX_POINTS_TIME_SERIES_MAX_SAMPLES = 5_000;
 export const pointsTimeSeriesQuerySchema = z.object({
   points: z.array(pointCoordinateSchema).min(1).max(DEFAULT_POINTS_TIME_SERIES_MAX_POINTS),
   run: runSelectorSchema,
+  grid: gfsGridSchema,
   startTime: isoDateTimeSchema.describe("Inclusive start of requested valid-time range"),
   endTime: isoDateTimeSchema.describe("Inclusive end of requested valid-time range"),
   ...atmosphericSelectionSchema,
@@ -207,12 +215,17 @@ export const runComparisonQuerySchema = z.object({
 export const DEFAULT_AREA_MAX_GRID_POINTS = 50_000;
 export const GFS_GRID_SPACING_DEG = 0.25;
 
+export function gfsGridSpacingDegrees(grid: GfsGrid): number {
+  return grid === "0p50" ? 0.5 : GFS_GRID_SPACING_DEG;
+}
+
 export const areaSummaryQuerySchema = z.object({
   westLongitude: z.number().min(-180).max(180),
   eastLongitude: z.number().min(-180).max(180),
   southLatitude: z.number().min(-90).max(90),
   northLatitude: z.number().min(-90).max(90),
   run: runSelectorSchema,
+  grid: gfsGridSchema,
   validTime: isoDateTimeSchema.describe("Forecast valid time"),
   variable: rawVariableIdSchema.optional(),
   pressureLevelHpa: pressureLevelSchema.optional(),

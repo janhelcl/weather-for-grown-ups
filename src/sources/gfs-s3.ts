@@ -1,4 +1,5 @@
 import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
+import type { GfsGrid } from "../schema/gfs-grid.js";
 import {
   parseGribIndex,
   selectNonIsobaricByteRanges,
@@ -15,34 +16,35 @@ export interface ForecastAvailabilitySelection {
 }
 
 export interface RunAvailabilityProbe {
-  isRunComplete(run: Date): Promise<boolean>;
+  isRunComplete(run: Date, grid?: GfsGrid): Promise<boolean>;
   isForecastAvailable(
     run: Date,
     forecastHour: number,
     selection: ForecastAvailabilitySelection,
+    grid?: GfsGrid,
   ): Promise<boolean>;
 }
 
-export function buildGfsS3ForecastUrl(run: Date, forecastHour: number): string {
+export function buildGfsS3ForecastUrl(run: Date, forecastHour: number, grid: GfsGrid = "0p25"): string {
   const date = yyyymmdd(run);
   const hour = run.getUTCHours().toString().padStart(2, "0");
   const fh = forecastHour.toString().padStart(3, "0");
-  return `${GFS_S3_BASE_URL}/gfs.${date}/${hour}/atmos/gfs.t${hour}z.pgrb2.0p25.f${fh}`;
+  return `${GFS_S3_BASE_URL}/gfs.${date}/${hour}/atmos/gfs.t${hour}z.pgrb2.${grid}.f${fh}`;
 }
 
-export function buildGfsS3ForecastIndexUrl(run: Date, forecastHour: number): string {
-  return `${buildGfsS3ForecastUrl(run, forecastHour)}.idx`;
+export function buildGfsS3ForecastIndexUrl(run: Date, forecastHour: number, grid: GfsGrid = "0p25"): string {
+  return `${buildGfsS3ForecastUrl(run, forecastHour, grid)}.idx`;
 }
 
-export function buildGfsS3RunMarkerUrl(run: Date): string {
-  return buildGfsS3ForecastIndexUrl(run, COMPLETE_RUN_MARKER_FORECAST_HOUR);
+export function buildGfsS3RunMarkerUrl(run: Date, grid: GfsGrid = "0p25"): string {
+  return buildGfsS3ForecastIndexUrl(run, COMPLETE_RUN_MARKER_FORECAST_HOUR, grid);
 }
 
 export class GfsS3RunProbe implements RunAvailabilityProbe {
   constructor(private readonly fetchFn: typeof fetch = globalThis.fetch) {}
 
-  async isRunComplete(run: Date): Promise<boolean> {
-    const url = buildGfsS3RunMarkerUrl(run);
+  async isRunComplete(run: Date, grid: GfsGrid = "0p25"): Promise<boolean> {
+    const url = buildGfsS3RunMarkerUrl(run, grid);
     const response = await this.fetchFn(url, {
       method: "HEAD",
       headers: { "user-agent": "weather-for-grown-ups/0.1" },
@@ -59,8 +61,9 @@ export class GfsS3RunProbe implements RunAvailabilityProbe {
     run: Date,
     forecastHour: number,
     selection: ForecastAvailabilitySelection,
+    grid: GfsGrid = "0p25",
   ): Promise<boolean> {
-    const url = buildGfsS3ForecastIndexUrl(run, forecastHour);
+    const url = buildGfsS3ForecastIndexUrl(run, forecastHour, grid);
     const response = await this.fetchFn(url, {
       headers: { "user-agent": "weather-for-grown-ups/0.1" },
     });

@@ -1,4 +1,5 @@
 import * as z from "zod/v4";
+import { gfsGridSchema } from "./gfs-grid.js";
 import {
   DEFAULT_TIME_SERIES_MAX_STEPS,
   GFS_TOTAL_NATIVE_FORECAST_STEPS,
@@ -36,6 +37,7 @@ const pointShape = pointCoordinateSchema.shape;
 export const diagnosticTimeSeriesQuerySchema = z.object({
   ...pointShape,
   run: runSelectorSchema,
+  grid: gfsGridSchema,
   startTime: isoDateTimeSchema.describe("Inclusive start of requested valid-time range"),
   endTime: isoDateTimeSchema.describe("Inclusive end of requested valid-time range"),
   diagnostic: diagnosticTimeSeriesSelectionSchema,
