@@ -52,6 +52,28 @@ describe("archived GFS unified routing policy", () => {
     expect(shouldUseArchivedGfsForecast(recent, now)).toBe(false);
   });
 
+  it("lets explicit source selection override rolling-window archive routing", () => {
+    const now = new Date("2026-08-27T12:00:00Z");
+    const recentRun = "2026-08-24T00:00:00Z";
+    const oldRun = "2017-05-07T12:00:00Z";
+
+    expect(shouldUseArchivedGfsForecast({
+      dataset: "gfs",
+      forecast: { run: recentRun, grid: "0p25" },
+      source: "archive",
+    }, now)).toBe(true);
+    expect(shouldUseArchivedGfsForecast({
+      dataset: "gfs",
+      forecast: { run: oldRun, grid: "0p25" },
+      source: "s3",
+    }, now)).toBe(false);
+    expect(shouldUseArchivedGfsForecast({
+      dataset: "gfs",
+      forecast: { run: oldRun, grid: "0p50" },
+      source: "nomads",
+    }, now)).toBe(false);
+  });
+
   it("does not archive non-GFS or symbolic run selectors", () => {
     const now = new Date("2026-08-27T12:00:00Z");
     const analysis = queryAtmosphereSchema.parse({
@@ -92,6 +114,16 @@ describe("archived GFS unified routing policy", () => {
       new Date("2017-05-16T00:00:00Z"),
       new Date("2017-05-17T00:00:00Z"),
     )).toThrow("No native archived GFS Grid 4 forecast outputs");
+  });
+
+  it("enumerates 0.25 archive cadence through the 3h-to-12h transition", () => {
+    const run = new Date("2026-08-20T00:00:00Z");
+    expect(archivedGfsForecastHoursInRange(
+      run,
+      new Date("2026-08-30T00:00:00Z"),
+      new Date("2026-08-31T00:00:00Z"),
+      "0p25",
+    )).toEqual([240, 252, 264]);
   });
 
   it("enumerates native Grid 4 outputs at 3-hour cadence through +192h", () => {

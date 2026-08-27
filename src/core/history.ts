@@ -272,6 +272,7 @@ export function parseHistoricalProfileCsv(
   const headers = parseCsvLine(lines[0]!).map(normalizeHeader);
   const pressureIndex = findHeaderIndex(headers, [
     "vertCoord",
+    "alt",
     "isobaric",
     "isobaric1",
     "isobaric2",
