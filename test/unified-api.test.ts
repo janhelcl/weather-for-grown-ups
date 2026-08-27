@@ -614,6 +614,58 @@ describe("unified geometry routing coverage", () => {
   });
 });
 
+describe("unified archived forecast diagnostic routing", () => {
+  it("keeps dataset=gfs while routing old explicit runs to archived diagnostics", async () => {
+    const operational = { getLayerDiagnostics: vi.fn(async () => ({ route: "operational" })) };
+    const archivedGfs = {
+      diagnose: vi.fn(async () => ({
+        model: "gfs_grid4_forecast_0p5_archive",
+        route: "archive-diagnostic",
+      })),
+    };
+    const service = new UnifiedAtmosphereDiagnosticService({
+      layer: operational as any,
+      archivedGfs: archivedGfs as any,
+      now: () => new Date("2026-08-27T12:00:00Z"),
+    });
+
+    const archived = await service.diagnose({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2017-05-09T12:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+      forecast: { run: "2017-05-07T12:00:00Z" },
+    });
+    expect(archived.dataset).toBe("gfs");
+    expect(archived.internalDatasetId).toBe("gfs_grid4_forecast_0p5_archive");
+    expect(archived.result).toEqual({
+      model: "gfs_grid4_forecast_0p5_archive",
+      route: "archive-diagnostic",
+    });
+    expect(archivedGfs.diagnose).toHaveBeenCalledOnce();
+    expect(operational.getLayerDiagnostics).not.toHaveBeenCalled();
+
+    await service.diagnose({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-21T12:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+      forecast: { run: "2026-08-20T12:00:00Z" },
+    });
+    expect(operational.getLayerDiagnostics).toHaveBeenCalledOnce();
+  });
+});
+
 describe("unified diagnostic routing coverage", () => {
   it("routes instant layer, profile and parcel diagnostics", async () => {
     const layer = { getLayerDiagnostics: vi.fn(async () => ({ route: "layer" })) };
