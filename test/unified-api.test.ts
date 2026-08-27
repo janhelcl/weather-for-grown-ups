@@ -380,6 +380,48 @@ describe("unified specialized operations", () => {
     })).rejects.toThrow("gfsGrid is only valid for GFS run comparison");
   });
 
+  it("rejects ensemble controls on deterministic GFS run comparison", async () => {
+    const service = new UnifiedRunComparisonService(
+      { compareRuns: vi.fn() } as any,
+      { compareRuns: vi.fn() } as any,
+    );
+    await expect(service.compare({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      ensemble: { members: ["c00", "p01"] },
+    })).rejects.toThrow("ensemble controls are only valid for gefs");
+  });
+
+  it("rejects GEFS run comparison selections outside one raw pressure variable", async () => {
+    const service = new UnifiedRunComparisonService(
+      { compareRuns: vi.fn() } as any,
+      { compareRuns: vi.fn() } as any,
+    );
+
+    await expect(service.compare({
+      dataset: "gefs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { fields: ["temperature_2m"] },
+    })).rejects.toThrow(
+      "GEFS run comparison currently requires exactly one raw pressure variable at one pressure level",
+    );
+
+    await expect(service.compare({
+      dataset: "gefs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: {
+        variables: ["temperature", "u_wind"],
+        pressureLevelsHpa: [850],
+      },
+    })).rejects.toThrow(
+      "GEFS run comparison currently requires exactly one raw pressure variable at one pressure level",
+    );
+  });
+
   it("passes explicit GEFS comparison controls without member-trajectory semantics", async () => {
     const gfs = { compareRuns: vi.fn() };
     const gefs = { compareRuns: vi.fn(async (query) => ({ route: "gefs-runs", query })) };
@@ -471,6 +513,17 @@ describe("unified specialized operations", () => {
       members: ["c00", "p01"],
       quantiles: [0.25, 0.75],
     }));
+  });
+
+  it("rejects historical verification leads off the native six-hour analysis cadence", async () => {
+    const service = new UnifiedForecastVerificationService({ verify: vi.fn() } as any);
+    await expect(service.verify({
+      geometry: point,
+      time: { at: "2017-05-09T12:00:00Z" },
+      leadHours: 5,
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    })).rejects.toThrow("leadHours must be a multiple of 6");
   });
 
   it("maps generic dataset comparison, verification and analog operations to existing primitives", async () => {
