@@ -180,6 +180,8 @@ The compact public vocabulary is:
 
 `verify_forecast` has two reference semantics. The default `referenceDataset: "gfs-analysis"` preserves the original same-grid analysis-minus-forecast comparison. `referenceDataset: "igra"` uses NOAA IGRA v2.2 radiosonde observations: an explicit `stationId` may be supplied or WFG chooses the nearest station covering the requested year within `maxStationDistanceKm`; the forecast is sampled at the sounding location and only exact observed pressure levels are compared. IGRA therefore appears as a verification reference, not as a `query_atmosphere` dataset.
 
+Atomic verification uses `time: { at }` and one numeric `leadHours`. IGRA skill summaries use `time: { from, to, hoursUtc?, maxValidTimes? }` and an array of up to three `leadHours`. The summary is bounded to eight sampled nominal times and 24 forecast evaluations. If more eligible sounding times exist, WFG chooses an evenly spaced deterministic sample and reports both eligible and sampled counts. Every evaluation remains visible as success/failure; statistics include their own sample counts and aggregate observation-minus-forecast bias, MAE and RMSE independently by lead, pressure and field.
+
 Index materialization/backfill is an administrative concern and is intentionally CLI-only through `wfg index build` and `wfg index backfill`; it is not part of the normal MCP weather-tool catalog.
 
 ## `query_atmosphere`
