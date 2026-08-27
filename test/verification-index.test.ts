@@ -160,7 +160,6 @@ describe("VerificationIndexBackfillService", () => {
       cycleHoursUtc: [12], leadHours: [24],
       variables: ["temperature"], pressureLevelsHpa: [850],
       stationId: "EZM00011520", gfsGrid: "0p25", maxStationDistanceKm: 100,
-      newest_first: undefined as never,
       order: "newest_first",
       maxFetches: 1,
     } as any);
