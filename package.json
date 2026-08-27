@@ -63,7 +63,8 @@
     "prepublishOnly": "npm run typecheck && npm test && npm run build && npm run test:smoke",
     "test:live:gfs-operational-parity": "tsx scripts/live-smoke-gfs-operational-parity.ts",
     "test:live:gfs-archive-equivalence": "tsx scripts/live-smoke-gfs-equivalence.ts",
-    "test:live:igra": "tsx scripts/live-smoke-igra-verification.ts"
+    "test:live:igra": "tsx scripts/live-smoke-igra-verification.ts",
+    "test:live:igra-skill": "tsx scripts/live-smoke-igra-skill.ts"
   },
   "dependencies": {
     "@mattnucc/gribberish": "^1.6.0",
