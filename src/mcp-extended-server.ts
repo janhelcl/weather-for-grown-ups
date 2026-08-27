@@ -52,7 +52,8 @@ import {
   handleMaterializeGfsHistoryIndex,
   handleVerifyGfsHistoricalForecast,
 } from "./mcp-history-tool.js";
-import { createMcpServer as createBaseMcpServer } from "./mcp-server.js";\nimport { registerUnifiedAtmosphereTools } from "./mcp-unified-tool.js";
+import { createMcpServer as createBaseMcpServer } from "./mcp-server.js";
+import { registerUnifiedAtmosphereTools } from "./mcp-unified-tool.js";
 import {
   gefsAreaSummaryQuerySchema,
   gefsAreaSummaryResultSchema,
@@ -322,6 +323,8 @@ export function createMcpServer() {
     inputSchema: gefsAreaSummaryQuerySchema,
     outputSchema: gefsAreaSummaryResultSchema,
   }, async (query) => handleGetGefsAreaSummary(areaService, query));
+
+  registerUnifiedAtmosphereTools(server);
 
   return server;
 }
