@@ -6,7 +6,6 @@ import {
 export const IFS_OPEN_DATA_BASE_URL = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com";
 export const IFS_OPEN_DATA_MIRRORS = [
   { id: "aws", baseUrl: IFS_OPEN_DATA_BASE_URL },
-  { id: "azure", baseUrl: "https://ai4edataeuwest.blob.core.windows.net/ecmwf" },
   { id: "google", baseUrl: "https://storage.googleapis.com/ecmwf-open-data" },
   { id: "ecmwf", baseUrl: "https://data.ecmwf.int/forecasts" },
 ] as const;
