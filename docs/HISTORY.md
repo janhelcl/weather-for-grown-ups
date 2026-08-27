@@ -272,7 +272,7 @@ The returned distance is a model-state similarity score only. It is not a climat
 
 ## Archived forecast verification
 
-Verification compares **one archived Grid 4 forecast** with the later Grid 4 analysis on the same 0.5° grid point and valid time. This deliberately keeps the primitive atomic: one tool call verifies one lead. An agent can compose calls for 24/48/72-hour comparisons when it actually needs a verification curve, without every request automatically becoming several throttled archive reads.
+The default verification mode compares **one archived Grid 4 forecast** with the later Grid 4 analysis on the same 0.5° grid point and valid time. This deliberately keeps the primitive atomic: one tool call verifies one lead. An agent can compose calls for 24/48/72-hour comparisons when it actually needs a verification curve, without every request automatically becoming several throttled archive reads.
 
 The input is anchored on the historical `validTime`; WFG derives the forecast run as `validTime - leadHours`. `leadHours` must be a multiple of 6 and is bounded to **0–192 hours**, so the verification target is always a native analysis cycle.
 
@@ -315,7 +315,9 @@ The result contains both normalized profiles, exact forecast and analysis datase
 
 NCEI documents Grid 4 forecast history beginning in 2006, but continuously online THREDDS availability is more limited than the analysis archive; older forecast data may require retrieval through NCEI HAS. WFG surfaces this distinction explicitly when an archived forecast is not available online.
 
-Verification is against **GFS analysis, not observations**. It answers how a forecast differed from the model's later assimilated state. It does not measure observational error, and long-period comparisons must account for changes in historical GFS versions.
+With `referenceDataset: "gfs-analysis"`, verification is against **GFS analysis, not observations**. It answers how a forecast differed from the model's later assimilated state and long-period comparisons must account for changes in historical GFS versions.
+
+With `referenceDataset: "igra"`, verification instead uses **NOAA IGRA v2.2 radiosonde observations**. WFG selects a nearby or explicit station, retrieves the exact nominal sounding, samples the archived GFS forecast at the sounding launch location, and compares only requested pressure levels that are present exactly in the sounding. It does not vertically interpolate sparse observations. The result reports matched and missing levels, station distance, sounding coordinates, source file and observation-minus-forecast changes. This is a point-observation-versus-model-grid comparison; balloon drift, instrument changes and station relocations remain explicit caveats.
 
 ## Data access and caching
 
