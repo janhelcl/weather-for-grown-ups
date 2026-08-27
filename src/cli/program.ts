@@ -16,7 +16,7 @@ import { registerHistoryTransectCommand } from "./history-transect-command.js";
 import { registerHistoryCommand } from "./history-command.js";
 import { registerModelComparisonCommand } from "./model-comparison-command.js";
 import { registerPointCommands } from "./point-commands.js";
-import { registerTransectCommand } from "./transect-command.js";
+import { registerTransectCommand } from "./transect-command.js";\nimport { registerUnifiedAtmosphereCommands } from "./unified-atmosphere-command.js";
 
 export function createCliProgram(): Command {
   const program = new Command()
