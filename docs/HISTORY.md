@@ -321,6 +321,58 @@ With `referenceDataset: "igra"`, verification instead uses **NOAA IGRA v2.2 radi
 
 For a bounded skill summary, use a historical range and several lead times in the same `verify_forecast` operation. This range form works with either verification reference. WFG enumerates the selected nominal UTC cycles, samples at most eight times evenly across the period, and permits at most three leads (24 forecast evaluations total). Each successful atomic comparison contributes to lead × pressure × field statistics: sample count, signed bias, MAE and RMSE. Failed archive cases or unavailable soundings remain in the evaluation list, so a field with `count: 5` is never presented as if it had eight comparisons. With `gfs-analysis`, the statistics are native 0.5° Grid 4 analysis-minus-forecast deltas; with `igra`, they are observation-minus-forecast deltas and retain station provenance. Circular wind-direction metrics aggregate shortest signed angular errors.
 
+## Materialized verification corpus
+
+Small interactive skill summaries deliberately remain bounded because live verification fans out into archived forecast plus reference reads. For larger questions, WFG now materializes **atomic verification cases** into a separate append-only JSONL corpus and aggregates them locally.
+
+By default the corpus lives at:
+
+```text
+~/.cache/wfg/verification-index/evaluations.jsonl
+```
+
+Set `WFG_VERIFICATION_INDEX_PATH` to move it. The corpus is separate from the historical-profile analog index because its semantic key includes verification reference, valid time, forecast lead, request point, selection, and IGRA controls where applicable.
+
+Backfill is resumable and NOAA-paced:
+
+```bash
+wfg index verification-backfill \
+  --reference igra \
+  --lat 50.08 --lon 14.43 \
+  --from 2020-01-01T00:00:00Z \
+  --to 2025-12-31T23:59:59Z \
+  --cycles 12 \
+  --lead-hours 24,48,72 \
+  --station EZM00011520 \
+  --vars temperature,wind \
+  --levels 850,700,500 \
+  --max-fetches 32 \
+  --json
+```
+
+Each invocation skips already materialized atomic cases before archive access, then attempts only the configured fetch budget. `--dry-run`, `--newest-first`, and `--continue-on-error` mirror the history backfill controls. The planning limit is 250,000 atomic cases, while one invocation attempts at most 256 missing cases.
+
+Once materialized, multi-year and seasonal skill summaries make **zero upstream requests**:
+
+```bash
+wfg index verification-summary \
+  --reference igra \
+  --lat 50.08 --lon 14.43 \
+  --from 2020-01-01T00:00:00Z \
+  --to 2025-12-31T23:59:59Z \
+  --cycles 12 \
+  --months 3,4,5 \
+  --lead-hours 24,48,72 \
+  --station EZM00011520 \
+  --vars temperature,wind \
+  --levels 850,700,500 \
+  --json
+```
+
+The summary uses the same lead × pressure × field bias/MAE/RMSE kernel as interactive verification. It reports expected versus materialized evaluation counts and an explicit coverage rate, so a partially backfilled corpus cannot masquerade as a complete seasonal sample. IGRA summaries also report the actual stations represented. Cases materialized once via nearest-station selection and once via an explicit station are deduplicated by their actual verification identity before aggregation.
+
+The same corpus supports `--reference gfs-analysis`; those records preserve native 0.5° Grid 4 analysis-minus-forecast semantics and are never mixed with observation-minus-forecast IGRA records.
+
 ## Data access and caching
 
 WFG uses NCEI's THREDDS NetCDF Subset Service (NCSS). Point/profile queries use grid-as-point mode, requesting selected pressure profiles without downloading full historical GRIB files. Area summaries use NCSS geographic bbox/grid subsets and aggregate the returned cells locally. Compatible point-profile variables are bundled together; variables using different historical pressure axes are fetched separately and merged locally.
