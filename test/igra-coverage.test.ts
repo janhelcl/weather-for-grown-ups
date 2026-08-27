@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { deflateRawSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IgraObservationProfileService, selectIgraStation } from "../src/core/igra-observation.js";
+import { IgraForecastVerificationService } from "../src/core/igra-verification.js";
 import {
   NceiIgraSource,
   extractSingleTextFileZip,
@@ -129,6 +130,24 @@ describe("IGRA ZIP edge branches", () => {
     );
   });
 
+  it("rejects malformed central and local ZIP headers", () => {
+    const centralBroken = Buffer.from(singleFileZip("station.txt", Buffer.from("x"), 0));
+    const centralOffset = centralBroken.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+    centralBroken.writeUInt32LE(0, centralOffset);
+    expect(() => extractSingleTextFileZip(centralBroken)).toThrow(/central directory is malformed/);
+
+    const localBroken = Buffer.from(singleFileZip("station.txt", Buffer.from("x"), 0));
+    localBroken.writeUInt32LE(0, 0);
+    expect(() => extractSingleTextFileZip(localBroken)).toThrow(/local file header is malformed/);
+  });
+
+  it("rejects a central-directory size mismatch", () => {
+    const zip = Buffer.from(singleFileZip("station.txt", Buffer.from("abc"), 0));
+    const centralOffset = zip.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+    zip.writeUInt32LE(99, centralOffset + 24);
+    expect(() => extractSingleTextFileZip(zip)).toThrow(/extracted size does not match/);
+  });
+
   it("rejects ZIPs without a sounding text entry", () => {
     expect(() => extractSingleTextFileZip(singleFileZip(
       "readme.bin",
@@ -240,6 +259,127 @@ describe("IGRA station and observation guardrails", () => {
       pressureLevelsHpa: [850],
       maxStationDistanceKm: 25,
     })).rejects.toThrow(/sounding location is .* beyond/);
+  });
+
+  it("projects every supported observation variable without inventing missing wind fields", async () => {
+    const service = new IgraObservationProfileService({
+      source: {
+        listStations: vi.fn(async () => [prague]),
+        getSounding: vi.fn(async () => ({
+          stationId: prague.id,
+          nominalTime: "2026-08-24T12:00:00.000Z",
+          soundingLatitude: prague.latitude,
+          soundingLongitude: prague.longitude,
+          levels: [{
+            pressureHpa: 850,
+            temperatureC: 12,
+            relativeHumidityPct: 65,
+            geopotentialHeightGpm: 1450,
+            dewPointC: 6,
+            windSpeedMs: 8,
+          }],
+          sourceFile: "test.zip",
+          cacheHit: true,
+        })),
+      },
+      now: () => new Date("2026-08-27T00:00:00Z"),
+    });
+
+    const result = await service.getProfile({
+      latitude: prague.latitude,
+      longitude: prague.longitude,
+      validTime: new Date("2026-08-24T12:00:00Z"),
+      variables: ["temperature", "relative_humidity", "geopotential_height", "dew_point", "wind"],
+      pressureLevelsHpa: [850],
+      maxStationDistanceKm: 25,
+    });
+
+    expect(result.levels[0]).toEqual({
+      pressureHpa: 850,
+      temperatureC: 12,
+      relativeHumidityPct: 65,
+      geopotentialHeightGpm: 1450,
+      dewPointC: 6,
+      windSpeedMs: 8,
+    });
+  });
+});
+
+describe("IGRA verification guardrails", () => {
+  it("rejects future valid times before touching either source", async () => {
+    const observationGetter = { getProfile: vi.fn() };
+    const forecastGetter = { getArchivedForecastProfile: vi.fn() };
+    const service = new IgraForecastVerificationService({
+      observationGetter,
+      forecastGetter,
+      now: () => new Date("2026-08-27T00:00:00Z"),
+    });
+
+    await expect(service.verify({
+      latitude: 50,
+      longitude: 14,
+      validTime: "2026-08-28T00:00:00Z",
+      leadHours: 48,
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    })).rejects.toThrow(/must not be in the future/);
+    expect(observationGetter.getProfile).not.toHaveBeenCalled();
+  });
+
+  it("rejects a forecast whose valid time differs from the sounding", async () => {
+    const service = new IgraForecastVerificationService({
+      observationGetter: {
+        getProfile: vi.fn(async () => ({
+          nominalTime: "2026-08-24T12:00:00.000Z",
+          requestedPoint: { latitude: 50, longitude: 14 },
+          station: {
+            ...prague,
+            distanceKm: 0,
+            soundingLatitude: prague.latitude,
+            soundingLongitude: prague.longitude,
+          },
+          levels: [{ pressureHpa: 850, temperatureC: 12 }],
+          matchedPressureLevelsHpa: [850],
+          missingPressureLevelsHpa: [],
+          source: {
+            provider: "NOAA NCEI" as const,
+            access: "igra_v2_2_station_file" as const,
+            dataset: "igra_v2_2" as const,
+            sourceFile: "test.zip",
+            cacheHit: true,
+          },
+        })),
+      },
+      forecastGetter: {
+        getArchivedForecastProfile: vi.fn(async () => ({
+          model: "gfs_0p25_forecast_archive" as const,
+          runTime: "2026-08-22T12:00:00.000Z",
+          forecastHour: 48,
+          validTime: "2026-08-24T18:00:00.000Z",
+          requestedPoint: { latitude: prague.latitude, longitude: prague.longitude },
+          gridPoint: { latitude: 50, longitude: 14.5 },
+          selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+          levels: [{ pressureHpa: 850, temperatureC: 10 }],
+          source: {
+            provider: "NCAR GDEX",
+            access: "gdex_thredds_ncss",
+            dataset: "test",
+            cacheHit: true,
+          },
+          caveat: "test",
+        })),
+      },
+      now: () => new Date("2026-08-27T00:00:00Z"),
+    });
+
+    await expect(service.verify({
+      latitude: 50,
+      longitude: 14,
+      validTime: "2026-08-24T12:00:00Z",
+      leadHours: 48,
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    })).rejects.toThrow(/does not match IGRA sounding nominal time/);
   });
 });
 
