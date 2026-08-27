@@ -887,6 +887,31 @@ describe("unified diagnostic routing coverage", () => {
     })).result).toEqual({ route: "profile" });
 
     expect((await service.diagnose({
+      dataset: "ifs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+      forecast: { run: "latest" },
+    })).result).toEqual({ route: "layer" });
+
+    expect((await service.diagnose({
+      dataset: "ifs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [925, 850, 700, 500],
+        diagnostics: ["freezing_level_crossings"],
+      },
+      forecast: { run: "latest" },
+    })).result).toEqual({ route: "profile" });
+
+    expect((await service.diagnose({
       dataset: "gfs-analysis",
       geometry: point,
       time: { at: "2017-05-09T12:00:00Z" },
@@ -899,6 +924,14 @@ describe("unified diagnostic routing coverage", () => {
 
     expect(layer.getLayerDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ model: "gfs_0p25" }));
     expect(profile.getProfileDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ model: "gefs_0p50" }));
+    expect(layer.getLayerDiagnostics).toHaveBeenCalledWith(expect.objectContaining({
+      model: "ifs_0p25",
+      query: expect.objectContaining({ run: "latest", validTime: "2026-08-28T12:00:00Z" }),
+    }));
+    expect(profile.getProfileDiagnostics).toHaveBeenCalledWith(expect.objectContaining({
+      model: "ifs_0p25",
+      query: expect.objectContaining({ run: "latest", validTime: "2026-08-28T12:00:00Z" }),
+    }));
     expect(parcel.getParcelDiagnostics).toHaveBeenCalledWith(expect.objectContaining({
       model: "gfs_grid4_analysis_0p5",
     }));
