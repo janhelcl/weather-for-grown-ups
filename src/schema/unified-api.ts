@@ -141,18 +141,21 @@ export const atmosphericSelectionSchema = z.object({
       message: "Request at least one pressure-level variable or non-isobaric field",
     });
   }
-  for (const [path, values] of [
-    ["variables", selection.variables],
-    ["pressureLevelsHpa", selection.pressureLevelsHpa],
-    ["fields", selection.fields],
-  ] as const) {
-    if (values !== undefined && new Set(values).size !== values.length) {
-      context.addIssue({
-        code: "custom",
-        path: [path],
-        message: `${path} must not contain duplicates`,
-      });
-    }
+  if (selection.variables !== undefined && new Set(selection.variables).size !== selection.variables.length) {
+    context.addIssue({ code: "custom", path: ["variables"], message: "variables must not contain duplicates" });
+  }
+  if (
+    selection.pressureLevelsHpa !== undefined
+    && new Set(selection.pressureLevelsHpa).size !== selection.pressureLevelsHpa.length
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["pressureLevelsHpa"],
+      message: "pressureLevelsHpa must not contain duplicates",
+    });
+  }
+  if (selection.fields !== undefined && new Set(selection.fields).size !== selection.fields.length) {
+    context.addIssue({ code: "custom", path: ["fields"], message: "fields must not contain duplicates" });
   }
 });
 
@@ -301,13 +304,7 @@ function validateCommonAtmosphericRequest(
 }
 
 function validateDatasetModifiers(
-  request: {
-    dataset: PublicAtmosphericDataset;
-    time: z.infer<typeof atmosphericTimeSchema>;
-    forecast?: z.infer<typeof atmosphericForecastOptionsSchema>;
-    ensemble?: z.infer<typeof atmosphericEnsembleOptionsSchema>;
-    source?: "nomads" | "s3";
-  },
+  request: any,
   context: z.RefinementCtx,
 ): void {
   if (request.dataset === "gfs-analysis" && request.forecast !== undefined) {
