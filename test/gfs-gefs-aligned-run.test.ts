@@ -40,6 +40,30 @@ describe("GfsGefsAlignedRunResolver", () => {
     ]);
   });
 
+  it("checks the selected deterministic 0.5 grid when aligning with GEFS", async () => {
+    const calls: any[] = [];
+    const resolver = new GfsGefsAlignedRunResolver({
+      now: () => new Date("2026-08-23T19:00:00Z"),
+      gfsProbe: {
+        isRunComplete: async () => true,
+        isForecastAvailable: async (...args: any[]) => {
+          calls.push(args);
+          return true;
+        },
+      },
+      gefsProbe: { areMembersAvailable: async () => true },
+    });
+
+    await resolver.resolveLatestAlignedRun(
+      new Date("2026-08-23T18:00:00Z"),
+      "TMP",
+      850,
+      ["c00", "p01"],
+      "0p50",
+    );
+    expect(calls[0]?.[3]).toBe("0p50");
+  });
+
   it("rejects valid times that are not on the shared GEFS three-hour cadence", async () => {
     const resolver = new GfsGefsAlignedRunResolver({
       now: () => new Date("2026-08-23T19:00:00Z"),

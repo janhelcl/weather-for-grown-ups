@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { GfsGefsComparisonService } from "../src/core/gfs-gefs-comparison.js";
 
-function gfsResult(value: number) {
+function gfsResult(value: number, model: "gfs_0p25" | "gfs_0p50" = "gfs_0p25") {
   return {
-    model: "gfs_0p25" as const,
+    model,
     run: "2026-08-23T12:00:00.000Z",
     validTime: "2026-08-23T18:00:00.000Z",
     forecastHour: 6,
@@ -91,6 +91,42 @@ describe("GfsGefsComparisonService", () => {
     expect(result.comparison.rangePosition).toBe("above_member_max");
     expect(result.comparison.outsideMemberRange).toBe(true);
     expect(result.comparison.interpretation).toBe("raw_model_vs_raw_ensemble_distribution_not_calibrated_uncertainty");
+  });
+
+  it("compares GEFS against deterministic GFS on the selected 0.5 grid", async () => {
+    let profileQuery: any;
+    let alignedGrid: any;
+    const service = new GfsGefsComparisonService({
+      profileGetter: {
+        getProfile: async (query) => {
+          profileQuery = query;
+          return gfsResult(10, "gfs_0p50");
+        },
+      },
+      ensembleGetter: { getEnsemble: async () => gefsResult([7, 8, 9]) },
+      alignedRunProvider: {
+        resolveLatestAlignedRun: async (_valid, _code, _level, _members, grid) => {
+          alignedGrid = grid;
+          return new Date("2026-08-23T12:00:00Z");
+        },
+      },
+    });
+
+    const result = await service.compare({
+      latitude: 50.08,
+      longitude: 14.43,
+      gfsGrid: "0p50",
+      run: "latest",
+      validTime: "2026-08-23T18:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["c00", "p01", "p02"],
+      quantiles: [0.5],
+    });
+
+    expect(alignedGrid).toBe("0p50");
+    expect(profileQuery.grid).toBe("0p50");
+    expect(result.deterministicGfs.model).toBe("gfs_0p50");
   });
 
   it("reports an undefined standardized difference when selected members have zero spread", async () => {

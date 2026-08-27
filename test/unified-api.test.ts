@@ -431,10 +431,12 @@ describe("unified specialized operations", () => {
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       selection: { fields: ["temperature_2m"] },
+      gfsGrid: "0p50",
       cycles: 2,
     });
     expect(gfs.compareRuns).toHaveBeenCalledWith(expect.objectContaining({
       fields: ["temperature_2m"],
+      grid: "0p50",
       cycles: 2,
     }));
 
@@ -445,10 +447,12 @@ describe("unified specialized operations", () => {
       time: { at: "2026-08-28T12:00:00Z" },
       variable: "temperature",
       pressureLevelHpa: 850,
+      gfsGrid: "0p50",
       members: ["c00", "p01"],
       quantiles: [0.25, 0.75],
     });
     expect(compare.compare).toHaveBeenCalledWith(expect.objectContaining({
+      gfsGrid: "0p50",
       members: ["c00", "p01"],
       quantiles: [0.25, 0.75],
     }));

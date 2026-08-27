@@ -21,7 +21,7 @@ function profileFor(
   const valid = new Date(String(query.validTime));
   const forecastHour = (valid.getTime() - run.getTime()) / 3_600_000;
   return {
-    model: "gfs_0p25",
+    model: query.grid === "0p50" ? "gfs_0p50" : "gfs_0p25",
     run: run.toISOString(),
     validTime: valid.toISOString(),
     forecastHour,
@@ -118,6 +118,16 @@ describe("RunComparisonService", () => {
     expect(getProfile.mock.calls.every(([query]) => query.source === "s3")).toBe(true);
   });
 
+  it("compares consecutive cycles on the explicit 0.5 grid", async () => {
+    const getProfile = vi.fn(async (query: ProfileQueryInput) => profileFor(query, 5, 180));
+    const service = new RunComparisonService({ profileGetter: { getProfile } });
+    const result = await service.compareRuns({ ...baseQuery, grid: "0p50" });
+
+    expect(result.model).toBe("gfs_0p50");
+    expect(getProfile).toHaveBeenCalledTimes(3);
+    expect(getProfile.mock.calls.every(([query]) => query.grid === "0p50")).toBe(true);
+  });
+
   it("marks interval fields non-comparable when their absolute windows differ", async () => {
     const getProfile = vi.fn(async (query: ProfileQueryInput) => profileFor(
       query,
@@ -159,6 +169,20 @@ describe("RunComparisonService", () => {
       "2026-08-19T06:00:00.000Z",
       "2026-08-19T12:00:00.000Z",
     ]);
+  });
+
+  it("uses grid-aware latest discovery for 0.5 run comparison", async () => {
+    const resolveLatestRun = vi.fn(async () => new Date(anchorRun));
+    const getProfile = vi.fn(async (query: ProfileQueryInput) => profileFor(query, 5, 180));
+    const service = new RunComparisonService({
+      latestRunProvider: { resolveLatestRun },
+      profileGetter: { getProfile },
+    });
+    await service.compareRuns({ ...baseQuery, anchorRun: "latest", grid: "0p50" });
+    expect(resolveLatestRun).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "valid_time" }),
+      "0p50",
+    );
   });
 
   it("uses complete-run discovery for latest_complete", async () => {
