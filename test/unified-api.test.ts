@@ -209,6 +209,47 @@ describe("unified catalog", () => {
 });
 
 
+describe("unified catalog branch coverage", () => {
+  it("supports GEFS-only search without a GFS representative", () => {
+    const result = searchAtmosphereCatalog({
+      datasets: ["gefs"],
+      sections: ["variables"],
+      search: "temp",
+      limit: 5,
+    });
+
+    expect(result.matches.length).toBeGreaterThan(0);
+    expect(result.matches.every((match) =>
+      match.support.every((support) => support.dataset === "gefs"))).toBe(true);
+  });
+
+  it("filters historical instantaneous raw fields and truncates deterministically", () => {
+    const result = searchAtmosphereCatalog({
+      datasets: ["gfs-analysis"],
+      sections: ["fields"],
+      classification: "raw",
+      temporalSemantics: "instantaneous",
+      limit: 1,
+    });
+
+    expect(result.totalMatches).toBeGreaterThan(1);
+    expect(result.truncated).toBe(true);
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0]?.support[0]?.dataset).toBe("gfs-analysis");
+  });
+
+  it("returns zero matches for an impossible unified search", () => {
+    const result = searchAtmosphereCatalog({
+      datasets: ["gfs", "gefs", "gfs-analysis"],
+      search: "definitely impossible atmospheric token",
+    });
+
+    expect(result.totalMatches).toBe(0);
+    expect(result.truncated).toBe(false);
+    expect(result.matches).toEqual([]);
+  });
+});
+
 describe("unified specialized operations", () => {
   it("keeps compare-runs dataset-aware while delegating to native semantics", async () => {
     const gfs = { compareRuns: vi.fn(async (query) => ({ route: "gfs-runs", query })) };
