@@ -7,14 +7,14 @@ WFG exposes ECMWF's deterministic IFS Open Data forecast through the same atmosp
 - public dataset: `ifs`
 - internal dataset: `ifs_0p25`
 - horizontal grid: 0.25°
-- source: ECMWF Open Data on AWS
+- source: ECMWF Open Data, using AWS first with Azure/Google/ECMWF HTTPS mirror failover
 - product: deterministic IFS operational forecast (`oper`, `fc`)
 - cycles: 00/06/12/18 UTC
 - 00/12Z horizon: `f000`–`f360`
 - 06/18Z horizon: `f000`–`f144`
 - cadence: 3-hourly through `f144`; 00/12Z then 6-hourly from `f150` through `f360`
 - pressure levels: 1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50, 10 hPa
-- transport: JSON-lines `.index` inventory + exact HTTP byte ranges
+- transport: JSON-lines `.index` inventory + exact HTTP byte ranges, with bounded retry/failover across official mirrors
 - decoding: bundled GRIB2 decoder, including ECMWF CCSDS/AEC packing
 
 The source adapter resolves `latest` against the **requested selection**, not merely the newest cycle name. If a newly initializing cycle has not yet published the requested fields at the required lead, WFG walks back to the newest cycle that can satisfy the complete point request.
