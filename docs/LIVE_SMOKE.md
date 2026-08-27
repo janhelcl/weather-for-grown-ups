@@ -40,9 +40,9 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 
 `npm run test:live:s3` exercises deterministic GFS selected-message access and higher-level composition against NOAA AWS Open Data.
 
-### Historical GFS analysis
+### Historical GFS analysis and forecast skill
 
-`npm run test:live:history` exercises a fixed 2017 NOAA NCEI Grid 4 analysis profile through THREDDS NCSS. It verifies the historical archive path, point/profile response parsing, 0.5° grid provenance, normalized temperature/humidity/wind/height fields, and the historical-analysis result contract without depending on current GFS publication timing.
+`npm run test:live:history` exercises fixed NOAA NCEI Grid 4 data through THREDDS NCSS. It verifies a 2017 historical analysis profile and time series, then an archived 2019 forecast against the later 0.5° analysis and the bounded `gfs-analysis` skill-summary path. The skill smoke reuses the same fixed verification case, so it proves the range aggregation contract without turning the live test into a large archive scan.
 
 ### IGRA radiosonde verification
 
