@@ -4,6 +4,12 @@ import {
   UnifiedAtmosphereQueryService,
 } from "../src/core/unified-atmosphere-api.js";
 import {
+  UnifiedAnalogService,
+  UnifiedDatasetComparisonService,
+  UnifiedForecastVerificationService,
+  UnifiedRunComparisonService,
+} from "../src/core/unified-specialized-api.js";
+import {
   queryAtmosphereSchema,
 } from "../src/schema/unified-api.js";
 
@@ -198,5 +204,77 @@ describe("unified catalog", () => {
       "gefs",
       "gfs-analysis",
     ]);
+  });
+});
+
+
+describe("unified specialized operation aliases", () => {
+  it("keeps compare-runs dataset-aware while delegating to native semantics", async () => {
+    const gfs = { compareRuns: vi.fn(async (query) => ({ route: "gfs-runs", query })) };
+    const gefs = { compareRuns: vi.fn(async (query) => ({ route: "gefs-runs", query })) };
+    const service = new UnifiedRunComparisonService(gfs as any, gefs as any);
+
+    const gfsResult = await service.compare({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      cycles: 3,
+    });
+    expect((gfsResult.result as any).route).toBe("gfs-runs");
+    expect(gfs.compareRuns).toHaveBeenCalledOnce();
+
+    const gefsResult = await service.compare({
+      dataset: "gefs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      cycles: 3,
+    });
+    expect((gefsResult.result as any).route).toBe("gefs-runs");
+    expect(gefs.compareRuns).toHaveBeenCalledOnce();
+  });
+
+  it("maps generic dataset comparison, verification and analog operations to existing primitives", async () => {
+    const compare = { compare: vi.fn(async (query) => ({ route: "dataset-compare", query })) };
+    const verify = { verify: vi.fn(async (query) => ({ route: "verify", query })) };
+    const analog = { findAnalogs: vi.fn(async (query) => ({ route: "analogs", query })) };
+
+    const compared = await new UnifiedDatasetComparisonService(compare as any).compare({
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
+    expect((compared.result as any).route).toBe("dataset-compare");
+    expect(compare.compare).toHaveBeenCalledWith(expect.objectContaining({
+      validTime: "2026-08-28T12:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    }));
+
+    const verified = await new UnifiedForecastVerificationService(verify as any).verify({
+      geometry: point,
+      time: { at: "2019-12-26T18:00:00Z" },
+      leadHours: 54,
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    });
+    expect((verified.result as any).route).toBe("verify");
+    expect(verify.verify).toHaveBeenCalledWith(expect.objectContaining({
+      validTime: "2019-12-26T18:00:00Z",
+      leadHours: 54,
+    }));
+
+    const analogs = await new UnifiedAnalogService(analog as any).find({
+      geometry: point,
+      time: { at: "2017-05-09T12:00:00Z" },
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    });
+    expect((analogs.result as any).route).toBe("analogs");
+    expect(analog.findAnalogs).toHaveBeenCalledWith(expect.objectContaining({
+      targetTime: "2017-05-09T12:00:00Z",
+    }));
   });
 });
