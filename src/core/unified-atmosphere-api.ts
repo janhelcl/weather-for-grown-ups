@@ -26,6 +26,12 @@ import { HistoricalTimeSeriesService } from "./history-time-series.js";
 import { HistoricalTransectService } from "./history-transect.js";
 import { HistoricalProfileService } from "./history.js";
 import { IfsProfileService } from "./ifs-profile.js";
+import {
+  IfsPointsService,
+  IfsPointsTimeSeriesService,
+  IfsTimeSeriesService,
+  IfsTransectService,
+} from "./ifs-spatiotemporal.js";
 import { PointsTimeSeriesService } from "./points-time-series.js";
 import { ProfileService } from "./profile.js";
 import { TimeSeriesService } from "./time-series.js";
@@ -45,6 +51,12 @@ import { historicalPointsQuerySchema } from "../schema/history-points.js";
 import { historicalTransectQuerySchema } from "../schema/history-transect.js";
 import { historicalProfileQuerySchema, historicalTimeSeriesQuerySchema } from "../schema/history.js";
 import { ifsPointQuerySchema } from "../schema/ifs.js";
+import {
+  ifsPointsQuerySchema,
+  ifsPointsTimeSeriesQuerySchema,
+  ifsTimeSeriesQuerySchema,
+  ifsTransectQuerySchema,
+} from "../schema/ifs-spatiotemporal.js";
 import {
   batchPointsQuerySchema,
   pointsTimeSeriesQuerySchema,
@@ -78,6 +90,10 @@ export interface UnifiedAtmosphereQueryServiceOptions {
   gefsTransect?: Pick<GefsTransectService, "getTransect">;
   gefsArea?: Pick<GefsAreaSummaryService, "summarize">;
   ifsProfile?: Pick<IfsProfileService, "getProfile">;
+  ifsTimeSeries?: Pick<IfsTimeSeriesService, "getTimeSeries">;
+  ifsPoints?: Pick<IfsPointsService, "getPoints">;
+  ifsPointsTimeSeries?: Pick<IfsPointsTimeSeriesService, "getPointsTimeSeries">;
+  ifsTransect?: Pick<IfsTransectService, "getTransect">;
   historyProfile?: Pick<HistoricalProfileService, "getHistoricalProfile">;
   historyFields?: Pick<HistoricalFieldsService, "getHistoricalFields">;
   historyTimeSeries?: Pick<HistoricalTimeSeriesService, "getHistoricalTimeSeries">;
@@ -104,6 +120,10 @@ export class UnifiedAtmosphereQueryService {
   private readonly gefsTransect: Pick<GefsTransectService, "getTransect">;
   private readonly gefsArea: Pick<GefsAreaSummaryService, "summarize">;
   private readonly ifsProfile: Pick<IfsProfileService, "getProfile">;
+  private readonly ifsTimeSeries: Pick<IfsTimeSeriesService, "getTimeSeries">;
+  private readonly ifsPoints: Pick<IfsPointsService, "getPoints">;
+  private readonly ifsPointsTimeSeries: Pick<IfsPointsTimeSeriesService, "getPointsTimeSeries">;
+  private readonly ifsTransect: Pick<IfsTransectService, "getTransect">;
   private readonly historyProfile: Pick<HistoricalProfileService, "getHistoricalProfile">;
   private readonly historyFields: Pick<HistoricalFieldsService, "getHistoricalFields">;
   private readonly historyTimeSeries: Pick<HistoricalTimeSeriesService, "getHistoricalTimeSeries">;
@@ -129,6 +149,10 @@ export class UnifiedAtmosphereQueryService {
     this.gefsTransect = options.gefsTransect ?? new GefsTransectService();
     this.gefsArea = options.gefsArea ?? new GefsAreaSummaryService();
     this.ifsProfile = options.ifsProfile ?? new IfsProfileService();
+    this.ifsTimeSeries = options.ifsTimeSeries ?? new IfsTimeSeriesService();
+    this.ifsPoints = options.ifsPoints ?? new IfsPointsService();
+    this.ifsPointsTimeSeries = options.ifsPointsTimeSeries ?? new IfsPointsTimeSeriesService();
+    this.ifsTransect = options.ifsTransect ?? new IfsTransectService();
     this.historyProfile = options.historyProfile ?? new HistoricalProfileService();
     this.historyFields = options.historyFields ?? new HistoricalFieldsService();
     this.historyTimeSeries = options.historyTimeSeries ?? new HistoricalTimeSeriesService();
@@ -260,6 +284,17 @@ export class UnifiedAtmosphereQueryService {
       return this.gefsTimeSeries.getTimeSeries(query);
     }
 
+    if (request.dataset === "ifs") {
+      return this.ifsTimeSeries.getTimeSeries(ifsTimeSeriesQuerySchema.parse({
+        ...point,
+        run,
+        startTime: request.time.from,
+        endTime: request.time.to,
+        ...gfsSelection(request),
+        ...(request.time.maxSteps === undefined ? {} : { maxSteps: request.time.maxSteps }),
+      }));
+    }
+
     const historyRange = {
       ...point,
       startTime: request.time.from,
@@ -311,6 +346,14 @@ export class UnifiedAtmosphereQueryService {
           : { maxMemberSamples: request.ensemble.maxMemberSamples }),
       }));
     }
+    if (request.dataset === "ifs") {
+      return this.ifsPoints.getPoints(ifsPointsQuerySchema.parse({
+        points: request.geometry.points,
+        run,
+        validTime: request.time.at,
+        ...gfsSelection(request),
+      }));
+    }
     return this.historyPoints.getPoints(historicalPointsQuerySchema.parse({
       points: request.geometry.points,
       analysisTime: request.time.at,
@@ -349,6 +392,17 @@ export class UnifiedAtmosphereQueryService {
         ...(request.ensemble?.maxMemberSamples === undefined
           ? {}
           : { maxMemberSamples: request.ensemble.maxMemberSamples }),
+      }));
+    }
+    if (request.dataset === "ifs") {
+      return this.ifsPointsTimeSeries.getPointsTimeSeries(ifsPointsTimeSeriesQuerySchema.parse({
+        points: request.geometry.points,
+        run,
+        startTime: request.time.from,
+        endTime: request.time.to,
+        ...gfsSelection(request),
+        ...(request.time.maxSteps === undefined ? {} : { maxSteps: request.time.maxSteps }),
+        ...(request.limits?.maxPointSteps === undefined ? {} : { maxPointSteps: request.limits.maxPointSteps }),
       }));
     }
     return this.historyPointsTimeSeries.getPointsTimeSeries(historicalPointsTimeSeriesQuerySchema.parse({
@@ -394,6 +448,16 @@ export class UnifiedAtmosphereQueryService {
         ...(request.ensemble?.maxMemberSamples === undefined
           ? {}
           : { maxMemberSamples: request.ensemble.maxMemberSamples }),
+        ...(request.geometry.samples === undefined ? {} : { samples: request.geometry.samples }),
+      }));
+    }
+    if (request.dataset === "ifs") {
+      return this.ifsTransect.getTransect(ifsTransectQuerySchema.parse({
+        start: request.geometry.start,
+        end: request.geometry.end,
+        run,
+        validTime: request.time.at,
+        ...gfsSelection(request),
         ...(request.geometry.samples === undefined ? {} : { samples: request.geometry.samples }),
       }));
     }
