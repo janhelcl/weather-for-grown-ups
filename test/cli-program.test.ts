@@ -1,174 +1,51 @@
 import { describe, expect, it } from "vitest";
 import { createCliProgram } from "../src/cli/program.js";
-import {
-  collectPoint,
-  gefsBundleSelection,
-  parseAtmosphericModel,
-  parseFields,
-  parseGefsFields,
-  parseGefsMembers,
-  parseGefsProfileVariables,
-  parseGefsVariables,
-  parseLayerDiagnostics,
-  parseLevels,
-  parseNumbers,
-  parseProfileDiagnostics,
-  parseVariables,
-  pointSelection,
-} from "../src/cli/shared.js";
 
 const EXPECTED_COMMANDS = [
   "catalog",
   "query",
   "diagnose",
+  "compare-runs",
   "compare-datasets",
   "verify",
   "analogs",
-  "latest",
-  "profile",
-  "points",
-  "timeseries",
-  "points-timeseries",
-  "compare-runs",
-  "history",
-  "history-timeseries",
-  "history-index",
-  "history-backfill",
-  "history-analogs",
-  "history-verify",
-  "history-area",
-  "history-fields",
-  "history-fields-timeseries",
-  "history-parcel",
-  "history-parcel-timeseries",
-  "history-points",
-  "history-points-timeseries",
-  "history-transect",
-  "history-layer-diagnostics",
-  "history-profile-diagnostics",
-  "history-diagnostic-timeseries",
-  "ensemble",
-  "ensemble-profile",
-  "ensemble-timeseries",
-  "ensemble-fields",
-  "ensemble-fields-timeseries",
-  "ensemble-fields-points",
-  "ensemble-fields-points-timeseries",
-  "ensemble-parcel",
-  "ensemble-parcel-timeseries",
-  "compare-gfs-gefs",
-  "layer",
-  "profile-diagnostics",
-  "parcel",
-  "diagnostic-timeseries",
-  "transect",
-  "area",
+  "index",
 ];
 
-describe("CLI program registration", () => {
-  it("registers the complete public command surface exactly once", () => {
+describe("CLI public surface", () => {
+  it("registers only the canonical operation vocabulary", () => {
     const names = createCliProgram().commands.map((command) => command.name());
 
     expect(names).toEqual(EXPECTED_COMMANDS);
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it("keeps one root program rather than routed command programs", () => {
-    const program = createCliProgram();
+  it("has no model-, ensemble-, or history-named compatibility commands", () => {
+    const names = createCliProgram().commands.map((command) => command.name());
 
-    expect(program.name()).toBe("wfg");
-    expect(program.version()).toBe("0.1.0");
-    expect(program.commands).toHaveLength(EXPECTED_COMMANDS.length);
+    expect(names.some((name) => name.startsWith("history"))).toBe(false);
+    expect(names.some((name) => name.startsWith("ensemble"))).toBe(false);
+    expect(names).not.toContain("profile");
+    expect(names).not.toContain("points");
+    expect(names).not.toContain("timeseries");
+    expect(names).not.toContain("transect");
+    expect(names).not.toContain("area");
+    expect(names).not.toContain("compare-gfs-gefs");
+    expect(names).not.toContain("latest");
   });
 
-  it("exposes unified dataset-aware discovery without removing the legacy model selector", () => {
-    const command = createCliProgram().commands.find((candidate) => candidate.name() === "catalog");
-    expect(command?.options.some((option) => option.long === "--dataset")).toBe(true);
-    expect(command?.options.some((option) => option.long === "--model")).toBe(true);
-  });
-
-  it("keeps canonical shared operations model-selectable without multiplying commands", () => {
+  it("uses dataset rather than model vocabulary", () => {
     const program = createCliProgram();
-    for (const name of ["profile", "points", "timeseries", "points-timeseries", "layer", "profile-diagnostics", "diagnostic-timeseries", "compare-runs", "transect"]) {
+
+    for (const name of ["catalog", "query", "diagnose", "compare-runs"]) {
       const command = program.commands.find((candidate) => candidate.name() === name);
-      expect(command?.options.some((option) => option.long === "--model")).toBe(true);
+      expect(command?.options.some((option) => option.long === "--dataset")).toBe(true);
+      expect(command?.options.some((option) => option.long === "--model")).toBe(false);
     }
   });
-});
 
-describe("CLI shared parsing", () => {
-  it("uses the default pressure selection when no fields are specified", () => {
-    expect(pointSelection(undefined, undefined, undefined)).toEqual({
-      variables: ["temperature", "relative_humidity", "wind"],
-      pressureLevelsHpa: [1000, 925, 850, 700, 500],
-    });
-  });
-
-  it("supports fields-only selections without silently adding pressure defaults", () => {
-    expect(pointSelection(undefined, undefined, "temperature_2m,wind_10m")).toEqual({
-      fields: ["temperature_2m", "wind_10m"],
-    });
-    expect(gefsBundleSelection(undefined, undefined, "temperature_2m,wind_10m", "temperature", "850")).toEqual({
-      variables: [],
-      pressureLevelsHpa: [],
-      fields: ["temperature_2m", "wind_10m"],
-    });
-  });
-
-  it("fills the missing half of an explicit pressure selection with defaults", () => {
-    expect(pointSelection("dew_point", undefined, undefined)).toEqual({
-      variables: ["dew_point"],
-      pressureLevelsHpa: [1000, 925, 850, 700, 500],
-    });
-    expect(pointSelection(undefined, "850,700", undefined)).toEqual({
-      variables: ["temperature", "relative_humidity", "wind"],
-      pressureLevelsHpa: [850, 700],
-    });
-    expect(gefsBundleSelection("dew_point", undefined, undefined, "temperature", "850")).toEqual({
-      variables: ["dew_point"],
-      pressureLevelsHpa: [850],
-      fields: [],
-    });
-    expect(gefsBundleSelection(undefined, "850,700", undefined, "temperature", "850")).toEqual({
-      variables: ["temperature"],
-      pressureLevelsHpa: [850, 700],
-      fields: [],
-    });
-  });
-
-  it("parses repeatable point coordinates and rejects malformed coordinates", () => {
-    expect(collectPoint("50.08,14.43", undefined)).toEqual([{ latitude: 50.08, longitude: 14.43 }]);
-    expect(collectPoint("46.24,13.18", [{ latitude: 50.08, longitude: 14.43 }])).toEqual([
-      { latitude: 50.08, longitude: 14.43 },
-      { latitude: 46.24, longitude: 13.18 },
-    ]);
-    expect(() => collectPoint("50.08", undefined)).toThrow("Expected --point lat,lon");
-    expect(() => collectPoint("north,east", undefined)).toThrow("Expected numeric --point lat,lon");
-  });
-
-  it("parses comma-separated CLI lists consistently", () => {
-    expect(parseVariables("temperature, wind")).toEqual(["temperature", "wind"]);
-    expect(parseGefsVariables("temperature, u_wind")).toEqual(["temperature", "u_wind"]);
-    expect(parseGefsProfileVariables("temperature, dew_point")).toEqual(["temperature", "dew_point"]);
-    expect(parseGefsFields("temperature_2m, wind_10m")).toEqual(["temperature_2m", "wind_10m"]);
-    expect(parseGefsMembers("p02, c00,p01")).toEqual(["p02", "c00", "p01"]);
-    expect(parseNumbers("0.1, 0.5,0.9")).toEqual([0.1, 0.5, 0.9]);
-    expect(parseLevels("1000, 850,700")).toEqual([1000, 850, 700]);
-    expect(parseFields(undefined)).toEqual([]);
-    expect(parseFields("temperature_2m, low_cloud_cover")).toEqual(["temperature_2m", "low_cloud_cover"]);
-    expect(parseLayerDiagnostics("temperature_lapse_rate, wind_shear")).toEqual([
-      "temperature_lapse_rate",
-      "wind_shear",
-    ]);
-    expect(parseProfileDiagnostics("freezing_level_crossings, temperature_inversion_layers")).toEqual([
-      "freezing_level_crossings",
-      "temperature_inversion_layers",
-    ]);
-  });
-
-  it("normalizes supported atmospheric CLI model aliases and rejects unknown models", () => {
-    expect(parseAtmosphericModel("GFS")).toBe("gfs");
-    expect(parseAtmosphericModel(" gefs ")).toBe("gefs");
-    expect(() => parseAtmosphericModel("ecmwf")).toThrow("Expected --model gfs|gefs");
+  it("keeps index maintenance behind one neutral admin command", () => {
+    const index = createCliProgram().commands.find((command) => command.name() === "index");
+    expect(index?.commands.map((command) => command.name())).toEqual(["build", "backfill"]);
   });
 });
