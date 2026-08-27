@@ -6,7 +6,7 @@ import { areaThresholdSchema } from "./area-summary.js";
 import { gfsGridWithDefaultSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 
-export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "gefs", "gfs-analysis"] as const;
+export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "gefs", "ifs", "gfs-analysis"] as const;
 export const publicAtmosphericDatasetSchema = z.enum(PUBLIC_ATMOSPHERIC_DATASET_IDS);
 export type PublicAtmosphericDataset = z.infer<typeof publicAtmosphericDatasetSchema>;
 
@@ -20,6 +20,11 @@ export const PUBLIC_DATASET_METADATA = {
     internalDatasetId: "gefs_0p50",
     role: "forecast",
     kind: "ensemble",
+  },
+  ifs: {
+    internalDatasetId: "ifs_0p25",
+    role: "forecast",
+    kind: "deterministic",
   },
   "gfs-analysis": {
     internalDatasetId: "gfs_grid4_analysis_0p5",
@@ -164,7 +169,7 @@ export const atmosphericForecastOptionsSchema = z.object({
   run: z.string().min(1).default("latest").describe(
     "Forecast initialization: latest, latest_complete where supported, or an explicit ISO cycle",
   ),
-  grid: gfsGridWithDefaultSchema.describe("GFS horizontal grid: 0p25 (default) or 0p50; ignored for GEFS"),
+  grid: gfsGridWithDefaultSchema.describe("GFS horizontal grid: 0p25 (default) or 0p50; non-GFS datasets use their fixed native grid"),
 });
 
 export const atmosphericEnsembleOptionsSchema = z.object({
@@ -243,6 +248,13 @@ export const diagnoseAtmosphereSchema = z.object({
   source: z.enum(["nomads", "s3", "archive"]).optional().describe("GFS-only source override; archive forces the resolution-matched historical backend"),
 }).superRefine((request, context) => {
   validateDatasetModifiers(request, context);
+  if (request.dataset === "ifs") {
+    context.addIssue({
+      code: "custom",
+      path: ["dataset"],
+      message: "IFS diagnostics are not implemented in the first IFS slice; use query_atmosphere for point pressure/field state",
+    });
+  }
   if ("from" in request.time && request.ensemble?.includeMembers === true) {
     context.addIssue({
       code: "custom",
@@ -259,6 +271,7 @@ export const unifiedAtmosphereResultSchema = z.object({
     "gfs_0p50",
     "gfs_0p25_forecast_archive",
     "gefs_0p50",
+    "ifs_0p25",
     "gfs_grid4_analysis_0p5",
     "gfs_grid4_forecast_0p5_archive",
   ]),
@@ -280,6 +293,13 @@ function validateCommonAtmosphericRequest(
   validateDatasetModifiers(request, context);
 
   const isRange = "from" in request.time;
+  if (request.dataset === "ifs" && (request.geometry.type !== "point" || isRange)) {
+    context.addIssue({
+      code: "custom",
+      path: request.geometry.type !== "point" ? ["geometry"] : ["time"],
+      message: "IFS currently supports point geometry at one valid time; additional geometries and time ranges will use the same dataset contract in later slices",
+    });
+  }
   if (isRange && (request.geometry.type === "transect" || request.geometry.type === "area")) {
     context.addIssue({
       code: "custom",
