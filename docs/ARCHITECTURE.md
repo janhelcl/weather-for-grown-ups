@@ -40,8 +40,8 @@ Nonlinear diagnostics are evaluated on each GEFS member before aggregation. WFG 
 | --- | --- | --- | --- | --- |
 | profile | ✅ deterministic | ✅ member distributions | ✅ deterministic point/instant | ✅ analyzed state |
 | timeseries | ✅ forecast evolution | ✅ ensemble evolution | ✅ native-cadence deterministic evolution | ✅ selected analysis cycles |
-| layer diagnostics | ✅ | ✅ member-first | ⏳ | ✅ same deterministic kernel |
-| profile diagnostics | ✅ | ✅ member-first | ⏳ | ✅ same deterministic kernel |
+| layer diagnostics | ✅ | ✅ member-first | ✅ same deterministic kernel | ✅ same deterministic kernel |
+| profile diagnostics | ✅ | ✅ member-first | ✅ same deterministic kernel | ✅ same deterministic kernel |
 | parcel diagnostics | ✅ | ✅ member-first | ⏳ | ✅ same parcel engine |
 | diagnostic time series | ✅ | ✅ | ⏳ | ✅ selected analysis cycles |
 | points | ✅ shared S3 slice | ✅ member slices reused | ✅ cached selected-message reuse | ✅ bounded serial NCSS points |
@@ -65,7 +65,9 @@ GFS forecast profile --------------------┐
                                           │
 historical GFS analysis profile ----------├─> normalized pressure states ─> shared physics
                                           │
-GEFS member profile ─> member ------------┘
+GEFS member profile ─> member ------------┤
+                                          │
+IFS deterministic profile ----------------┘
 ```
 
 This keeps physical formulas model-independent while leaving model identity, source inventory, cycle semantics and result shape explicit.
