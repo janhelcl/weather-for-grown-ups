@@ -178,6 +178,48 @@ describe("VerificationIndexBackfillService", () => {
     });
   });
 
+  it("uses IGRA default grid/station controls when none are requested", async () => {
+    const stored: any[] = [];
+    const store = {
+      path: "/tmp/verification.jsonl",
+      readAll: vi.fn(async () => stored),
+      append: vi.fn(async (records: any[]) => { stored.push(...records); return records.length; }),
+    };
+    const verify = vi.fn(async (input: any) => ({
+      validTime: new Date(input.validTime).toISOString(),
+      leadHours: input.leadHours,
+      gfsGrid: "0p25",
+      station: { id: "EZM00011520" },
+      pressureLevels: [],
+    }));
+    const service = new VerificationIndexBackfillService({
+      store: store as any,
+      igraVerifier: { verify } as any,
+      now: () => new Date("2026-08-27T00:00:00Z"),
+    });
+
+    const result = await service.backfill({
+      referenceDataset: "igra",
+      latitude: 50.08, longitude: 14.43,
+      startTime: "2026-08-01T12:00:00Z", endTime: "2026-08-01T12:00:00Z",
+      cycleHoursUtc: [12], leadHours: [24],
+      variables: ["temperature"], pressureLevelsHpa: [850],
+      maxFetches: 1,
+    });
+
+    expect(result.status).toBe("complete");
+    expect(verify).toHaveBeenCalledWith(expect.objectContaining({
+      maxStationDistanceKm: 250,
+    }));
+    expect(verify.mock.calls[0]?.[0]).not.toHaveProperty("stationId");
+    expect(verify.mock.calls[0]?.[0]).not.toHaveProperty("gfsGrid");
+    expect(stored[0]?.request).toEqual(expect.objectContaining({
+      maxStationDistanceKm: 250,
+    }));
+    expect(stored[0]?.request).not.toHaveProperty("stationId");
+    expect(stored[0]?.request).not.toHaveProperty("gfsGrid");
+  });
+
   it("reports stopped and continuing error states explicitly", async () => {
     const makeService = (continueMode: boolean) => {
       const stored: any[] = [];
@@ -351,6 +393,24 @@ describe("VerificationIndexSkillService", () => {
 
     expect(result.coverage.materializedEvaluations).toBe(1);
     expect(result.statistics[0]).toMatchObject({ count: 1, bias: 2 });
+  });
+
+  it("orders same-time materialized cases by lead before aggregation", async () => {
+    const records = [
+      analysisRecord("2020-03-01T12:00:00.000Z", 48, 2),
+      analysisRecord("2020-03-01T12:00:00.000Z", 24, 1),
+    ];
+    const store = { path: "/tmp/verification.jsonl", readAll: vi.fn(async () => records as any[]) };
+    const service = new VerificationIndexSkillService({ store: store as any });
+    const result = await service.summarize({
+      referenceDataset: "gfs-analysis",
+      latitude: 50.08, longitude: 14.43,
+      startTime: "2020-03-01T12:00:00Z", endTime: "2020-03-01T12:00:00Z",
+      cycleHoursUtc: [12], leadHours: [48, 24],
+      variables: ["temperature"], pressureLevelsHpa: [850],
+    });
+    expect(result.statistics.map((item) => item.leadHours)).toEqual([24, 48]);
+    expect(result.coverage.materializedEvaluations).toBe(2);
   });
 
   it("returns explicit zero coverage when a requested period has no eligible cycle", async () => {
