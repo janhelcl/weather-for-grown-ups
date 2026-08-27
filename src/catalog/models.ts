@@ -115,7 +115,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     role: "forecast",
     horizontalGridDegrees: 0.25,
     maxForecastHour: 360,
-    operations: ["profile"],
+    operations: ["profile", "timeseries", "points", "points_timeseries", "transect"],
   },
   gfs_grid4_analysis_0p5: {
     id: "gfs_grid4_analysis_0p5",
