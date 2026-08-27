@@ -1,6 +1,10 @@
 import * as z from "zod/v4";
 import { operationalGfsModelIdSchema } from "./gfs-grid.js";
 import {
+  ifsProfileDiagnosticsQuerySchema,
+  ifsProfileDiagnosticsResultSchema,
+} from "./ifs-diagnostics.js";
+import {
   gefsProfileDiagnosticsQuerySchema,
   gefsProfileDiagnosticsResultSchema,
 } from "./gefs-profile-diagnostics.js";
@@ -21,6 +25,10 @@ export const atmosphericProfileDiagnosticsRequestSchema = z.union([
     query: gefsProfileDiagnosticsQuerySchema,
   }),
   z.object({
+    model: z.literal("ifs_0p25"),
+    query: ifsProfileDiagnosticsQuerySchema,
+  }),
+  z.object({
     model: z.literal("gfs_grid4_analysis_0p5"),
     query: historicalProfileDiagnosticsQuerySchema,
   }),
@@ -29,6 +37,7 @@ export const atmosphericProfileDiagnosticsRequestSchema = z.union([
 export const atmosphericProfileDiagnosticsResultSchema = z.union([
   profileDiagnosticsResultSchema,
   gefsProfileDiagnosticsResultSchema,
+  ifsProfileDiagnosticsResultSchema,
   historicalProfileDiagnosticsResultSchema,
 ]);
 
