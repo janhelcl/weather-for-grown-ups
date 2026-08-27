@@ -19,6 +19,8 @@ import {
 
 const EXPECTED_COMMANDS = [
   "catalog",
+  "query",
+  "diagnose",
   "latest",
   "profile",
   "points",
