@@ -60,7 +60,7 @@ export class ArchivedGfsForecastDiagnosticService {
       throw new Error("Archived GFS forecast diagnostics require an explicit forecast.run cycle");
     }
     if (request.source !== undefined && request.source !== "archive") {
-      throw new Error("Archived GFS diagnostics only accept source=archive; use nomads/s3 for operational data");
+      throw new Error("source override is only available for operational GFS; archived forecasts accept source=archive only");
     }
     const run = parseGfsRun(selector);
     return "at" in request.time

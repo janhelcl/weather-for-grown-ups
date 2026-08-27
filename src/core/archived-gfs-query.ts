@@ -106,7 +106,7 @@ export class ArchivedGfsForecastQueryService {
   async query(request: QueryAtmosphereRequest): Promise<unknown> {
     if (request.dataset !== "gfs") throw new Error("Archived GFS forecast routing only accepts dataset=gfs");
     if (request.source !== undefined && request.source !== "archive") {
-      throw new Error("Archived GFS routing only accepts source=archive; use nomads/s3 for operational data");
+      throw new Error("source override is only available for operational GFS; archived forecasts accept source=archive only");
     }
     const selector = request.forecast?.run;
     if (selector === undefined || selector === "latest" || selector === "latest_complete") {

@@ -39,7 +39,7 @@ describe("archived GFS unified routing policy", () => {
       geometry: { type: "point", latitude: 50, longitude: 14 },
       time: { at: "2017-05-09T12:00:00Z" },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     });
     const recent = queryAtmosphereSchema.parse({
       dataset: "gfs",
@@ -121,7 +121,7 @@ describe("ArchivedGfsForecastQueryService", () => {
       geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
       time: { at: "2017-05-09T15:00:00Z" },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     });
 
     const result = await service.query(request) as any;
@@ -153,7 +153,7 @@ describe("ArchivedGfsForecastQueryService", () => {
         maxSteps: 3,
       },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     })) as any;
     expect(range.series.map((step: any) => step.forecastHour)).toEqual([0, 3, 6]);
 
@@ -168,7 +168,7 @@ describe("ArchivedGfsForecastQueryService", () => {
       },
       time: { at: "2017-05-07T18:00:00Z" },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     })) as any;
     expect(points.points).toHaveLength(2);
 
@@ -182,7 +182,7 @@ describe("ArchivedGfsForecastQueryService", () => {
       },
       time: { at: "2017-05-07T18:00:00Z" },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     })) as any;
     expect(transect.samples).toHaveLength(4);
     expect(transect.samples[0].fraction).toBe(0);
@@ -216,7 +216,7 @@ describe("ArchivedGfsForecastQueryService", () => {
         maxSteps: 2,
       },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     }))).rejects.toThrow("exceeding maxSteps=2");
   });
 
@@ -240,7 +240,7 @@ describe("ArchivedGfsForecastQueryService", () => {
         maxSteps: 2,
       },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     };
 
     const result = await service.query(queryAtmosphereSchema.parse({
@@ -266,7 +266,7 @@ describe("ArchivedGfsForecastQueryService", () => {
       geometry: { type: "point", latitude: 50, longitude: 14 },
       time: { at: "2017-05-07T18:00:00Z" },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
       source: "s3",
     });
     await expect(service.query(request)).rejects.toThrow(
