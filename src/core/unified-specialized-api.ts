@@ -3,6 +3,7 @@ import { GfsGefsComparisonService } from "./gfs-gefs-comparison.js";
 import { HistoricalIndexService } from "./history-index.js";
 import { HistoricalForecastVerificationService } from "./history-verification.js";
 import { IgraForecastVerificationService } from "./igra-verification.js";
+import { IgraForecastSkillService } from "./igra-skill.js";
 import { RunComparisonService } from "./run-comparison.js";
 import { gefsRunComparisonQuerySchema } from "../schema/gefs-run-comparison.js";
 import { gfsGefsComparisonQuerySchema } from "../schema/gfs-gefs-comparison.js";
@@ -96,10 +97,30 @@ export class UnifiedForecastVerificationService {
       new HistoricalForecastVerificationService(),
     private readonly igraService: Pick<IgraForecastVerificationService, "verify"> =
       new IgraForecastVerificationService(),
+    private readonly igraSkillService: Pick<IgraForecastSkillService, "summarize"> =
+      new IgraForecastSkillService(),
   ) {}
 
   async verify(input: VerifyAtmosphericForecastInput): Promise<UnifiedSpecializedResult> {
     const request = verifyAtmosphericForecastSchema.parse(input);
+
+    if ("from" in request.time) {
+      const result = await this.igraSkillService.summarize({
+        latitude: request.geometry.latitude,
+        longitude: request.geometry.longitude,
+        startTime: request.time.from,
+        endTime: request.time.to,
+        cycleHoursUtc: request.time.hoursUtc,
+        maxValidTimes: request.time.maxValidTimes,
+        leadHours: request.leadHours,
+        variables: request.variables,
+        pressureLevelsHpa: request.pressureLevelsHpa,
+        ...(request.gfsGrid === undefined ? {} : { gfsGrid: request.gfsGrid }),
+        ...(request.stationId === undefined ? {} : { stationId: request.stationId }),
+        maxStationDistanceKm: request.maxStationDistanceKm,
+      });
+      return wrap("verify_forecast", ["gfs", "igra"], result);
+    }
 
     if (request.referenceDataset === "igra") {
       const result = await this.igraService.verify({
