@@ -2,95 +2,39 @@
 
 WFG can place one deterministic GFS 0.25° pressure-level value inside the distribution of selected GEFS 0.5° members from the **same initialization cycle and valid time**.
 
-The purpose is to expose evidence for questions such as “is deterministic GFS unusually warm relative to the ensemble?” without inventing a hidden confidence score or an arbitrary binary outlier threshold.
+The public operation is `compare-datasets` / `compare_datasets`.
 
 ## Contract
 
-A comparison query selects:
+The current dataset pair is `["gfs","gefs"]`. A comparison selects one point, shared run (or `latest`), valid time, raw pressure variable/level, GEFS member set and optional quantiles.
 
-- one latitude/longitude;
-- one shared initialization cycle, or `latest`;
-- one valid time on the GEFS three-hour cadence;
-- one raw pressure-level variable supported by both model surfaces;
-- one published GEFS pressure level for that variable;
-- two or more GEFS members;
-- optional GEFS quantiles.
+`latest` is cross-dataset query-aware: a cycle is accepted only when both GFS and all requested GEFS members can satisfy the same valid time and selection.
 
-Supported variables are the same raw GEFS pressure variables:
+## Different grids are preserved
 
-- `temperature`;
-- `relative_humidity`;
-- `u_wind`;
-- `v_wind`;
-- `geopotential_height`.
+GFS is sampled from 0.25° and GEFS from 0.5°. The result preserves both sampled grid points separately rather than pretending the model grids are identical.
 
-## Aligned run selection
+## Returned evidence
 
-`run="latest"` is **cross-model query-aware**. WFG walks common 00Z/06Z/12Z/18Z cycles backward and accepts a cycle only when:
+The result includes the deterministic value, GEFS distribution and metrics such as deterministic-minus-ensemble-mean, standardized difference, empirical member rank information, range position and whether deterministic GFS lies outside the selected member range.
 
-1. deterministic GFS publishes the selected field/pressure surface at the required forecast hour; and
-2. every requested GEFS member exists at that same forecast hour.
+If ensemble spread is zero, standardized difference is null rather than infinite.
 
-The GFS value and GEFS member values therefore come from one shared initialization timestamp. WFG does not independently select a newer GFS cycle and an older GEFS cycle and compare them as though they were aligned.
-
-An explicit shared cycle is available for reproducibility.
-
-## Different model grids are preserved
-
-Deterministic GFS is sampled from its 0.25° grid and GEFS from its 0.5° grid. One requested coordinate may therefore resolve to different model grid points.
-
-The result preserves both sampled grid coordinates separately. WFG does not pretend the grids are identical or silently resample one model onto the other for this point comparison.
-
-## Returned comparison metrics
-
-The result contains the deterministic GFS value, requested GEFS member values, the GEFS distribution summary, and:
-
-- `deterministicMinusEnsembleMean`;
-- `standardizedDifference` = `(GFS - GEFS mean) / GEFS population standard deviation`;
-- member counts/fractions below and at-or-below deterministic GFS;
-- `rangePosition` — `below_member_min`, `within_member_range`, or `above_member_max`;
-- `outsideMemberRange`.
-
-If the selected members have zero spread, `standardizedDifference` is `null` rather than infinite or fabricated.
-
-## Why there is no `isOutlier` boolean
-
-An “outlier” threshold is a decision rule, not a raw model fact. A caller may care about the full member range, a chosen standardized difference, selected quantiles, or domain-specific materiality in physical units.
-
-WFG returns the evidence and leaves that rule explicit in the consuming layer.
-
-The interpretation marker is:
-
-`raw_model_vs_raw_ensemble_distribution_not_calibrated_uncertainty`
-
-Neither empirical member rank nor standardized difference is presented as a calibrated probability that the deterministic forecast is wrong.
+WFG deliberately does not return an `isOutlier` boolean: an outlier threshold is a consuming-layer decision rule, not a raw model fact.
 
 ## CLI
 
 ```bash
-wfg compare-gfs-gefs \
+wfg compare-datasets \
   --lat 50.08 \
   --lon 14.43 \
-  --valid 2026-08-24T12:00:00Z \
+  --at 2026-08-24T12:00:00Z \
   --var temperature \
   --level 850 \
   --quantiles 0.1,0.5,0.9 \
   --json
 ```
 
-All 31 GEFS members are used by default; `--members` can select a smaller explicit subset.
+MCP: `compare_datasets`.
 
-## MCP
-
-The equivalent MCP tool is `compare_gfs_to_gefs`.
-
-CLI and MCP use the same aligned-run/core comparison semantics.
-
-## Data paths
-
-Both sides use NOAA AWS Open Data:
-
-- deterministic GFS: selected `.idx` byte ranges from the 0.25° product;
-- GEFS: member-specific selected `.idx` byte ranges from the 0.5° `pgrb2a` product.
-
-Immutable slices are cached through the model-specific caches and sampled locally through WFG's decoder abstraction. The npm default decoder is bundled; native `wgrib2` remains an optional compatibility/debug backend.
+The interpretation remains raw deterministic-model versus raw ensemble-distribution evidence, not calibrated forecast uncertainty.
