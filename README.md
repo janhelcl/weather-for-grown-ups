@@ -8,7 +8,7 @@ Weather is the canonical agent tutorial: give the model a tool, ask for tomorrow
 
 One TypeScript core powers equal CLI and MCP surfaces. No need to teach your agent how to wrestle GRIB files first.
 
-Current release: **v0.1.0**.
+Current release: **v0.2.0**.
 
 ## Quick start
 
