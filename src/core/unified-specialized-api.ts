@@ -38,7 +38,7 @@ export class UnifiedRunComparisonService {
         longitude: request.geometry.longitude,
         anchorRun: request.anchorRun,
         ...(request.gfsGrid === undefined ? {} : { grid: request.gfsGrid }),
-        validTime: request.time.at,
+        validTime: instantTime.at,
         ...(request.selection.variables === undefined ? {} : { variables: request.selection.variables }),
         ...(request.selection.pressureLevelsHpa === undefined
           ? {}
@@ -57,7 +57,7 @@ export class UnifiedRunComparisonService {
       latitude: request.geometry.latitude,
       longitude: request.geometry.longitude,
       anchorRun: request.anchorRun,
-      validTime: request.time.at,
+      validTime: instantTime.at,
       variable: request.selection.variables![0],
       pressureLevelHpa: request.selection.pressureLevelsHpa![0],
       ...(request.ensemble?.members === undefined ? {} : { members: request.ensemble.members }),
@@ -81,7 +81,7 @@ export class UnifiedDatasetComparisonService {
       longitude: request.geometry.longitude,
       run: request.run,
       ...(request.gfsGrid === undefined ? {} : { gfsGrid: request.gfsGrid }),
-      validTime: request.time.at,
+      validTime: instantTime.at,
       variable: request.variable,
       pressureLevelHpa: request.pressureLevelHpa,
       ...(request.members === undefined ? {} : { members: request.members }),
@@ -128,11 +128,13 @@ export class UnifiedForecastVerificationService {
       return wrap("verify_forecast", ["gfs", "igra"], result);
     }
 
+    const instantTime = request.time as { at: string };
+
     if (request.referenceDataset === "igra") {
       const result = await this.igraService.verify({
         latitude: request.geometry.latitude,
         longitude: request.geometry.longitude,
-        validTime: request.time.at,
+        validTime: instantTime.at,
         leadHours: request.leadHours,
         variables: request.variables as any,
         pressureLevelsHpa: request.pressureLevelsHpa,
@@ -148,7 +150,7 @@ export class UnifiedForecastVerificationService {
     const result = await this.analysisService.verify(historicalForecastVerificationQuerySchema.parse({
       latitude: request.geometry.latitude,
       longitude: request.geometry.longitude,
-      validTime: request.time.at,
+      validTime: instantTime.at,
       leadHours: request.leadHours,
       variables: request.variables,
       pressureLevelsHpa: request.pressureLevelsHpa,
