@@ -201,7 +201,7 @@ function historyEntries(): CatalogEntry[] {
   });
 
   const fields = HISTORICAL_GFS_FIELD_IDS.map((id) => {
-    const definition = NON_ISOBARIC_FIELD_CATALOG[id];
+    const definition = (NON_ISOBARIC_FIELD_CATALOG as Record<string, any>)[id];
     if (definition === undefined) {
       return {
         dataset: "gfs-analysis" as const,
@@ -256,7 +256,7 @@ function diagnosticEntry(
     kind: string;
     description: string;
     verticalSemantics: string;
-    outputs: readonly Array<{ field: string; unit: string; description?: string }>;
+    outputs: ReadonlyArray<{ field: string; unit: string; description?: string }>;
   },
 ): CatalogEntry {
   return {
