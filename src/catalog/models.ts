@@ -146,9 +146,9 @@ export function datasetSupportsOperation(
 }
 
 /**
- * Backward-compatible forecast-model vocabulary. Keep this list limited to the
- * original operational models so callers that truly mean "forecast models" do
- * not silently start iterating historical analysis datasets.
+ * Forecast-model vocabulary. Keep this list limited to operational forecast
+ * models so callers that truly mean "forecast models" do not silently start
+ * iterating historical analysis datasets.
  */
 export const ATMOSPHERIC_MODEL_IDS = ["gfs_0p25", "gfs_0p50", "gefs_0p50", "ifs_0p25"] as const;
 export type AtmosphericModelId = (typeof ATMOSPHERIC_MODEL_IDS)[number];
