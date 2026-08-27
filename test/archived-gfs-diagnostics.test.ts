@@ -197,6 +197,79 @@ describe("ArchivedGfsForecastDiagnosticService", () => {
     expect(result.series.every((step: any) => step.kind === "layer")).toBe(true);
   });
 
+  it("compacts profile and parcel diagnostic ranges without parcel paths", async () => {
+    const service = new ArchivedGfsForecastDiagnosticService({ state: stateMock() });
+
+    const profile: any = await service.diagnose(diagnoseAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: {
+        from: "2017-05-07T12:00:00Z",
+        to: "2017-05-07T15:00:00Z",
+        maxSteps: 2,
+      },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [1000, 850, 700, 500],
+        diagnostics: ["freezing_level_crossings"],
+      },
+      forecast: { run },
+    }));
+    expect(profile.series.map((step: any) => step.kind)).toEqual(["profile", "profile"]);
+    expect(profile.series[0]).not.toHaveProperty("levels");
+
+    const parcel: any = await service.diagnose(diagnoseAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: {
+        from: "2017-05-07T12:00:00Z",
+        to: "2017-05-07T15:00:00Z",
+        maxSteps: 2,
+      },
+      diagnostic: {
+        kind: "parcel",
+        parcel: "surface_2m",
+        pressureLevelsHpa: [1000, 925, 850, 700, 500],
+      },
+      forecast: { run },
+    }));
+    expect(parcel.series.map((step: any) => step.kind)).toEqual(["parcel", "parcel"]);
+    expect(parcel.series[0].parcel).not.toHaveProperty("parcelPath");
+  });
+
+  it("rejects source overrides and unexpected archive state results", async () => {
+    const service = new ArchivedGfsForecastDiagnosticService({ state: stateMock() });
+    await expect(service.diagnose(diagnoseAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2017-05-09T12:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+      forecast: { run },
+      source: "s3",
+    }))).rejects.toThrow("source override is only available for operational GFS");
+
+    const malformed = new ArchivedGfsForecastDiagnosticService({
+      state: { query: vi.fn(async () => ({ model: "not-the-archive" })) },
+    });
+    await expect(malformed.diagnose(diagnoseAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2017-05-09T12:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+      forecast: { run },
+    }))).rejects.toThrow("unexpected result");
+  });
+
   it("keeps archive routing guards explicit", async () => {
     const service = new ArchivedGfsForecastDiagnosticService({ state: stateMock() });
 
