@@ -67,6 +67,6 @@ describe("IFS selected-message cache", () => {
     expect(result.cacheHit).toBe(false);
     expect(new TextDecoder().decode(await readFile(result.path))).toBe("GRIB");
     expect(fetchFn.mock.calls.some(([input]) =>
-      String(input).includes("ai4edataeuwest.blob.core.windows.net"))).toBe(true);
+      String(input).includes("storage.googleapis.com/ecmwf-open-data"))).toBe(true);
   });
 });
