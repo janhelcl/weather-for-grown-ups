@@ -85,7 +85,7 @@ export const ifsProfileResultSchema = z.object({
   fields: z.array(ifsFieldResultSchema).optional(),
   source: z.object({
     provider: z.literal("ECMWF Open Data"),
-    access: z.literal("s3_range"),
+    access: z.literal("indexed_http_range"),
     decoder: z.enum(["gribberish", "wgrib2"]),
     product: z.literal("ifs_0p25_oper_fc"),
     horizontalGridDegrees: z.literal(0.25),
