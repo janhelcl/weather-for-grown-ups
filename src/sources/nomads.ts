@@ -55,7 +55,9 @@ function buildNomadsUrl(request: NomadsRequest): string {
   const grid = request.grid ?? "0p25";
   const params = new URLSearchParams({
     dir: `/gfs.${runDate}/${runHour}/atmos`,
-    file: `gfs.t${runHour}z.pgrb2.${grid}.f${forecastHour}`,
+    file: grid === "0p50"
+      ? `gfs.t${runHour}z.pgrb2full.0p50.f${forecastHour}`
+      : `gfs.t${runHour}z.pgrb2.0p25.f${forecastHour}`,
     subregion: "",
     toplat: request.northLatitude.toString(),
     bottomlat: request.southLatitude.toString(),
