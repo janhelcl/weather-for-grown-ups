@@ -5,6 +5,7 @@ import {
   buildIfsOpenDataForecastIndexUrl,
   buildIfsOpenDataForecastUrl,
   fetchIfsWithRetry,
+  IFS_OPEN_DATA_MIRRORS,
   parseIfsOpenDataIndex,
   selectIfsIndexEntries,
   type IfsIndexSelector,
@@ -53,8 +54,26 @@ export class IfsOpenDataSubsetCache implements IfsSelectionSource {
   }
 
   private async download(request: IfsSelectionRequest, path: string): Promise<IfsSubsetFile> {
-    const gribUrl = buildIfsOpenDataForecastUrl(request.run, request.forecastHour);
-    const indexUrl = buildIfsOpenDataForecastIndexUrl(request.run, request.forecastHour);
+    const failures: string[] = [];
+    for (const mirror of IFS_OPEN_DATA_MIRRORS) {
+      try {
+        return await this.downloadFromMirror(request, path, mirror.baseUrl);
+      } catch (error) {
+        failures.push(`${mirror.id}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    throw new Error(
+      `ECMWF IFS selected-field download failed across all configured mirrors: ${failures.join(" | ")}`,
+    );
+  }
+
+  private async downloadFromMirror(
+    request: IfsSelectionRequest,
+    path: string,
+    baseUrl: string,
+  ): Promise<IfsSubsetFile> {
+    const gribUrl = buildIfsOpenDataForecastUrl(request.run, request.forecastHour, baseUrl);
+    const indexUrl = buildIfsOpenDataForecastIndexUrl(request.run, request.forecastHour, baseUrl);
     const entries = parseIfsOpenDataIndex(await this.fetchIndex(indexUrl));
     const selected = selectIfsIndexEntries(entries, request.selectors);
     const chunks = await mapConcurrent(selected, this.rangeConcurrency, async (entry) => {
