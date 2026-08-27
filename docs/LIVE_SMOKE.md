@@ -48,6 +48,8 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 
 `npm run test:live:igra` selects a recent 12 UTC sounding from Praha-Libuš (`EZM00011520`), reads the official NOAA IGRA v2.2 station ZIP, and verifies a 48-hour archived GFS 0.25° forecast against exact observed pressure levels. It checks observation-minus-forecast output, station metadata and the no-hidden-interpolation contract. IGRA file access and archived NOAA requests share WFG's file-backed courtesy limiter.
 
+`npm run test:live:igra-skill` covers the range form of the same public operation. It samples two recent Praha-Libuš 12Z valid times, evaluates +24 h and +48 h archived GFS forecasts, and requires non-empty count/bias/MAE/RMSE statistics. The script permits an individual upstream case to fail, but failures must remain explicit and at least one evaluation must succeed.
+
 ### GFS operational transport parity
 
 `npm run test:live:gfs-operational-parity` compares a recent same-run GFS profile through NOMADS and NOAA AWS for both `0p25` and `0p50`. It is a transport/decoder parity contract for current operational data; it says nothing about the historical archives.
