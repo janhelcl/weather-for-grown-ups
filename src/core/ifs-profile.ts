@@ -157,9 +157,9 @@ export class IfsProfileService {
 }
 
 export function ifsIndexSelectorsForSelection(selection: {
-  variables?: readonly IfsPressureVariableId[];
-  pressureLevelsHpa?: readonly number[];
-  fields?: readonly IfsFieldId[];
+  variables?: readonly IfsPressureVariableId[] | undefined;
+  pressureLevelsHpa?: readonly number[] | undefined;
+  fields?: readonly IfsFieldId[] | undefined;
 }): IfsIndexSelector[] {
   return prepareSelection({
     variables: selection.variables === undefined ? undefined : [...selection.variables],
