@@ -22,6 +22,11 @@ import {
 import { DEFAULT_GEFS_MEMBER_CONCURRENCY, type GefsPointDecoder } from "./gefs-ensemble.js";
 import { GefsLatestRunResolver, type GefsLatestRunProvider } from "./gefs-latest-run.js";
 import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
+import {
+  gefsAtmosProductForSelection,
+  gefsAtmosProductGridDegrees,
+  type GefsAtmosProduct,
+} from "../sources/gefs-s3.js";
 
 export interface GefsMemberBundleServiceOptions {
   cacheDir?: string;
@@ -51,7 +56,10 @@ export class GefsMemberBundleService {
     this.concurrency = options.concurrency ?? DEFAULT_GEFS_MEMBER_CONCURRENCY;
   }
 
-  async getBundle(input: GefsMemberBundleQueryInput): Promise<GefsMemberBundleResult> {
+  async getBundle(
+    input: GefsMemberBundleQueryInput,
+    productOverride?: GefsAtmosProduct,
+  ): Promise<GefsMemberBundleResult> {
     const query = gefsMemberBundleQuerySchema.parse(input);
     const validTime = new Date(query.validTime);
     const members = sortGefsMembers(query.members);
@@ -61,6 +69,10 @@ export class GefsMemberBundleService {
       ? await this.latestRunProvider.resolveLatestRun(validTime, members)
       : parseGefsRun(query.run);
     const forecastHour = gefsForecastHour(run, validTime);
+    const product = productOverride ?? gefsAtmosProductForSelection(
+      selection.rawPressureVariables.length > 0,
+      forecastHour,
+    );
 
     const samples = await mapConcurrent(members, this.concurrency, async (member) => {
       const file = await this.source.fetchSelection({
@@ -70,6 +82,7 @@ export class GefsMemberBundleService {
         variableCodes: selection.rawPressureVariables.map(({ definition }) => definition.gfsCode),
         pressureLevelsHpa: [...selection.pressureLevelsHpa],
         fields: [...selection.rawFields],
+        product,
       });
       const decoded = await this.decoder.extractPoint(file.path, query.longitude, query.latitude);
       return decodeGefsMemberBundle({
@@ -113,7 +126,8 @@ export class GefsMemberBundleService {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
         decoder: this.decoder.engine ?? "wgrib2",
-        product: "pgrb2a_0p50",
+        product,
+        horizontalGridDegrees: gefsAtmosProductGridDegrees(product),
         allCacheHit: samples.every((sample) => sample.cacheHit),
       },
     });
