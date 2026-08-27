@@ -89,11 +89,11 @@ export class DiagnosticTimeSeriesService {
           startTime,
           endTime,
           selection: availabilitySelection(diagnostic),
-        })
+        }, query.grid)
       : query.run === "latest_complete"
-        ? await this.latestRunProvider.resolveLatestRun()
+        ? await this.latestRunProvider.resolveLatestRun(undefined, query.grid)
         : parseGfsRun(query.run);
-    const forecastHours = nativeForecastHoursInRange(run, startTime, endTime);
+    const forecastHours = nativeForecastHoursInRange(run, startTime, endTime, query.grid);
 
     if (forecastHours.length > query.maxSteps) {
       throw new Error(
@@ -114,6 +114,7 @@ export class DiagnosticTimeSeriesService {
                 latitude: query.latitude,
                 longitude: query.longitude,
                 run: run.toISOString(),
+                grid: query.grid,
                 validTime,
                 lowerPressureHpa: diagnostic.lowerPressureHpa,
                 upperPressureHpa: diagnostic.upperPressureHpa,
@@ -128,6 +129,7 @@ export class DiagnosticTimeSeriesService {
                 latitude: query.latitude,
                 longitude: query.longitude,
                 run: run.toISOString(),
+                grid: query.grid,
                 validTime,
                 pressureLevelsHpa: diagnostic.pressureLevelsHpa,
                 diagnostics: diagnostic.diagnostics,
@@ -141,6 +143,7 @@ export class DiagnosticTimeSeriesService {
                 latitude: query.latitude,
                 longitude: query.longitude,
                 run: run.toISOString(),
+                grid: query.grid,
                 validTime,
                 pressureLevelsHpa: diagnostic.pressureLevelsHpa,
                 parcel: diagnostic.parcel,
@@ -166,7 +169,7 @@ export class DiagnosticTimeSeriesService {
     }
 
     return {
-      model: "gfs_0p25",
+      model: first.model,
       run: expectedRun,
       requestedStartTime: startTime.toISOString(),
       requestedEndTime: endTime.toISOString(),

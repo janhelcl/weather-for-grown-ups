@@ -51,11 +51,11 @@ export class TimeSeriesService {
             pressureLevelsHpa,
             fields,
           },
-        })
+        }, query.grid)
       : query.run === "latest_complete"
-        ? await this.latestRunProvider.resolveLatestRun()
+        ? await this.latestRunProvider.resolveLatestRun(undefined, query.grid)
         : parseGfsRun(query.run);
-    const forecastHours = nativeForecastHoursInRange(run, startTime, endTime);
+    const forecastHours = nativeForecastHoursInRange(run, startTime, endTime, query.grid);
 
     if (forecastHours.length > query.maxSteps) {
       throw new Error(
@@ -70,6 +70,7 @@ export class TimeSeriesService {
         latitude: query.latitude,
         longitude: query.longitude,
         run: run.toISOString(),
+        grid: query.grid,
         validTime: validTimeForForecastHour(run, forecastHourValue).toISOString(),
         ...(query.variables === undefined ? {} : { variables: query.variables }),
         ...(query.pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa: query.pressureLevelsHpa }),
@@ -97,7 +98,7 @@ export class TimeSeriesService {
     }
 
     return {
-      model: "gfs_0p25",
+      model: first.model,
       run: run.toISOString(),
       requestedStartTime: startTime.toISOString(),
       requestedEndTime: endTime.toISOString(),

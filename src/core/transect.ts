@@ -1,5 +1,6 @@
 import { BatchPointsService } from "./batch-points.js";
 import type { BatchPointsResult } from "./types.js";
+import type { OperationalGfsModelId } from "../schema/gfs-grid.js";
 import type { BatchPointsQueryInput, PointCoordinate, VariableId } from "../schema/query.js";
 import { transectQuerySchema, type TransectQueryInput } from "../schema/transect.js";
 
@@ -20,7 +21,7 @@ export interface TransectSampleResult {
 }
 
 export interface TransectResult {
-  model: "gfs_0p25";
+  model: OperationalGfsModelId;
   run: string;
   validTime: string;
   forecastHour: number;
@@ -52,6 +53,7 @@ export class TransectService {
     const batch = await this.batchPointsGetter.getPoints({
       points,
       run: query.run,
+      grid: query.grid,
       validTime: query.validTime,
       variables: query.variables,
       pressureLevelsHpa: query.pressureLevelsHpa,
@@ -62,7 +64,7 @@ export class TransectService {
     }
 
     return {
-      model: "gfs_0p25",
+      model: batch.model,
       run: batch.run,
       validTime: batch.validTime,
       forecastHour: batch.forecastHour,
