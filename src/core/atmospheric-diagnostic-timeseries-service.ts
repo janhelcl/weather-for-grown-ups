@@ -56,6 +56,7 @@ export class AtmosphericDiagnosticTimeSeriesService {
   private route(request: ReturnType<typeof atmosphericDiagnosticTimeSeriesRequestSchema.parse>) {
     switch (request.model) {
       case "gfs_0p25":
+      case "gfs_0p50":
         return this.gfs.getDiagnosticTimeSeries(request.query);
       case "gefs_0p50":
         return this.gefs.getDiagnosticTimeSeries(request.query);

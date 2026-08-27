@@ -56,6 +56,7 @@ export class AtmosphericParcelDiagnosticsService {
   private route(request: ReturnType<typeof atmosphericParcelDiagnosticsRequestSchema.parse>) {
     switch (request.model) {
       case "gfs_0p25":
+      case "gfs_0p50":
         return this.gfs.getParcelDiagnostics(request.query);
       case "gefs_0p50":
         return this.gefs.getParcelDiagnostics(request.query);

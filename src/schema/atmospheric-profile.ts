@@ -1,4 +1,5 @@
 import * as z from "zod/v4";
+import { operationalGfsModelIdSchema } from "./gfs-grid.js";
 import { gefsEnsembleProfileQuerySchema, gefsEnsembleProfileResultSchema } from "./gefs-ensemble-profile.js";
 import { historicalProfileQuerySchema } from "./history.js";
 import { historicalProfileResultSchema } from "./history-result.js";
@@ -7,13 +8,14 @@ import { profileResultSchema } from "./result.js";
 
 export const atmosphericModelIdSchema = z.enum([
   "gfs_0p25",
+  "gfs_0p50",
   "gefs_0p50",
   "gfs_grid4_analysis_0p5",
 ]);
 
 export const atmosphericProfileRequestSchema = z.union([
   z.object({
-    model: z.literal("gfs_0p25"),
+    model: operationalGfsModelIdSchema,
     query: profileQuerySchema,
   }),
   z.object({
