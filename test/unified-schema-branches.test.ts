@@ -183,7 +183,7 @@ describe("unified atmospheric schema capability branches", () => {
       selection: pressureSelection,
     })).toThrow("IFS area statistics are not implemented");
 
-    expect(() => diagnoseAtmosphereSchema.parse({
+    expect(diagnoseAtmosphereSchema.parse({
       dataset: "ifs",
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
@@ -193,7 +193,45 @@ describe("unified atmospheric schema capability branches", () => {
         upperPressureHpa: 500,
         diagnostics: ["wind_shear"],
       },
-    })).toThrow("IFS diagnostics are not implemented");
+      forecast: { run: "latest" },
+    }).dataset).toBe("ifs");
+
+    expect(diagnoseAtmosphereSchema.parse({
+      dataset: "ifs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [925, 850, 700, 500],
+        diagnostics: ["freezing_level_crossings"],
+      },
+    }).diagnostic.kind).toBe("profile");
+
+    expect(() => diagnoseAtmosphereSchema.parse({
+      dataset: "ifs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      diagnostic: {
+        kind: "parcel",
+        pressureLevelsHpa: [925, 850, 700, 500],
+        parcel: "surface_2m",
+      },
+    })).toThrow("IFS parcel diagnostics are not implemented");
+
+    expect(() => diagnoseAtmosphereSchema.parse({
+      dataset: "ifs",
+      geometry: point,
+      time: {
+        from: "2026-08-28T00:00:00Z",
+        to: "2026-08-28T12:00:00Z",
+      },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+    })).toThrow("IFS diagnostic time ranges are not implemented");
   });
 
   it("accepts either scalar area selection form and rejects area ranges", () => {

@@ -69,7 +69,7 @@ wfg query \
   --json
 ```
 
-No IFS-specific MCP tool is added.
+No IFS-specific MCP tool is added. The same `diagnose_atmosphere` / `wfg diagnose` surface also supports IFS layer and whole-profile diagnostics at one valid time.
 
 ## Canonical pressure variables
 
@@ -102,8 +102,20 @@ Units are normalized at the model boundary: temperatures to °C, precipitation m
 
 Time ranges resolve one selection-capable IFS initialization for the complete range and keep it fixed. Native output cadence is preserved rather than resampled. Multi-point and transect operations reuse immutable selected-message cache entries, so adding points does not multiply upstream ECMWF downloads for the same run/lead/selection.
 
+## Diagnostics
+
+IFS reuses WFG's normalized deterministic pressure-profile kernels for the full current layer and whole-profile diagnostic catalogs:
+
+- environmental temperature lapse rate;
+- vector wind shear and depth-normalized shear;
+- potential-temperature gradient;
+- freezing-level crossings;
+- sampled temperature-inversion layers.
+
+The IFS adapter fetches only the required pressure variables and keeps ECMWF run, lead, sampled grid point and source provenance attached to the derived result.
+
 ## Deliberate capability boundary
 
-IFS **area statistics and diagnostics** remain unsupported in this slice. They fail explicitly rather than being emulated with another model or hidden repeated public calls. They can be added behind the same `dataset: "ifs"` contract as source-native implementations are completed.
+IFS **area statistics, parcel diagnostics and diagnostic time series** remain unsupported in this slice. Parcel computation is intentionally deferred until the required near-surface humidity and geopotential inputs are verified in the ECMWF Open Data inventory. Unsupported operations fail explicitly rather than being emulated with another model or hidden repeated public calls.
 
 This keeps the architecture rule intact: **unify operations and physics; preserve model semantics.**

@@ -106,8 +106,8 @@ WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-firs
 | Pressure profiles | ✅ deterministic | ✅ member distributions | ✅ deterministic |
 | Mixed pressure/non-isobaric fields | ✅ | ✅ member-first bundles | ✅ point + instant |
 | Raw and mixed-field time series | ✅ | ✅ | ✅ deterministic |
-| Layer diagnostics | ✅ | ✅ per member → summarized | ⏳ |
-| Whole-profile diagnostics | ✅ | ✅ per member → structural summaries | ⏳ |
+| Layer diagnostics | ✅ | ✅ per member → summarized | ✅ deterministic |
+| Whole-profile diagnostics | ✅ | ✅ per member → structural summaries | ✅ deterministic |
 | Parcel / LCL / LFC / EL / CAPE / CIN | ✅ | ✅ per member → summarized | ⏳ |
 | Diagnostic time series | ✅ layer/profile/parcel | ✅ layer/profile/parcel | ⏳ |
 | Multi-point queries | ✅ | ✅ | ✅ |
@@ -120,7 +120,9 @@ WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-firs
 
 GEFS also supports control `c00` plus perturbed members `p01`–`p30`, native three-hour output through `f384`, mixed pressure/non-isobaric field bundles, and opt-in member payloads for auditability. Field-only requests automatically use NOAA's `pgrb2s` 0.25° selected-field product through `f240`; pressure-level and mixed requests use `pgrb2a` 0.5°, and field ranges extending beyond `f240` stay on 0.5° for the whole range. Result provenance reports the actual product and horizontal grid.
 
-ECMWF **IFS 0.25°** is exposed as `ifs` through the same `query` CLI and `query_atmosphere` MCP operation. Indexed range reads use the official Open Data replicas with bounded retry/failover rather than assuming one mirror is always available. Current Cycle 50r1 Open Data semantics are explicit: 00/12Z runs extend through `f360`, 06/18Z through `f144`, with 3-hour cadence through `f144` and 6-hour cadence thereafter on the long runs. See [IFS access](docs/IFS.md).\n\nHistorical **GFS Grid 4 0.5° analysis** is exposed as `gfs-analysis`, through the same `query` / `diagnose` CLI operations and `query_atmosphere` / `diagnose_atmosphere` MCP tools. It covers profiles, time series, diagnostics, parcels, multi-point queries, multi-point time series, transects and native bbox area statistics while preserving analysis-time semantics and NCEI provenance.
+ECMWF **IFS 0.25°** is exposed as `ifs` through the same `query` CLI and `query_atmosphere` MCP operation. Indexed range reads use the official Open Data replicas with bounded retry/failover rather than assuming one mirror is always available. Current Cycle 50r1 Open Data semantics are explicit: 00/12Z runs extend through `f360`, 06/18Z through `f144`, with 3-hour cadence through `f144` and 6-hour cadence thereafter on the long runs. See [IFS access](docs/IFS.md).
+
+Historical **GFS Grid 4 0.5° analysis** is exposed as `gfs-analysis`, through the same `query` / `diagnose` CLI operations and `query_atmosphere` / `diagnose_atmosphere` MCP tools. It covers profiles, time series, diagnostics, parcels, multi-point queries, multi-point time series, transects and native bbox area statistics while preserving analysis-time semantics and NCEI provenance.
 
 Historical **GFS forecasts** do not add another public dataset. Keep `dataset: "gfs"`, provide an explicit old forecast run, and select `forecast.grid` when needed. `0p25` routes to the NCAR/GDEX d084001 0.25° archive (`gfs_0p25_forecast_archive`), available from 2015-01-15 with native 3-hour output through +240 h and 12-hour output from +252 h through +384 h. `0p50` routes to NOAA NCEI Grid 4 (`gfs_grid4_forecast_0p5_archive`), beginning 2006-10-10 with native 3-hour output through +192 h. Direct online archive availability can vary. Both paths preserve run, valid time, lead, grid and archive provenance across unified state queries and layer/profile/parcel diagnostics.
 

@@ -13,6 +13,7 @@ import type { LayerDiagnosticsQueryInput } from "../schema/query.js";
 import type { LayerDiagnosticsResult } from "./types.js";
 import { GefsLayerDiagnosticsService } from "./gefs-layer-diagnostics.js";
 import { HistoricalDiagnosticsService } from "./history-diagnostics.js";
+import { IfsDiagnosticsService } from "./ifs-diagnostics.js";
 import { LayerDiagnosticsService } from "./layer-diagnostics.js";
 
 export interface DeterministicLayerDiagnosticsGetter {
@@ -23,6 +24,10 @@ export interface EnsembleLayerDiagnosticsGetter {
   getLayerDiagnostics(query: GefsLayerDiagnosticsQueryInput): Promise<GefsLayerDiagnosticsResult>;
 }
 
+export interface IfsLayerDiagnosticsGetter {
+  getLayerDiagnostics(query: import("../schema/ifs-diagnostics.js").IfsLayerDiagnosticsQueryInput): Promise<import("../schema/ifs-diagnostics.js").IfsLayerDiagnosticsResult>;
+}
+
 export interface HistoricalLayerDiagnosticsGetter {
   getLayerDiagnostics(query: HistoricalLayerDiagnosticsQueryInput): Promise<HistoricalLayerDiagnosticsResult>;
 }
@@ -30,17 +35,20 @@ export interface HistoricalLayerDiagnosticsGetter {
 export interface AtmosphericLayerDiagnosticsServiceOptions {
   gfs?: DeterministicLayerDiagnosticsGetter;
   gefs?: EnsembleLayerDiagnosticsGetter;
+  ifs?: IfsLayerDiagnosticsGetter;
   history?: HistoricalLayerDiagnosticsGetter;
 }
 
 export class AtmosphericLayerDiagnosticsService {
   private readonly gfs: DeterministicLayerDiagnosticsGetter;
   private readonly gefs: EnsembleLayerDiagnosticsGetter;
+  private readonly ifs: IfsLayerDiagnosticsGetter;
   private readonly history: HistoricalLayerDiagnosticsGetter;
 
   constructor(options: AtmosphericLayerDiagnosticsServiceOptions = {}) {
     this.gfs = options.gfs ?? new LayerDiagnosticsService();
     this.gefs = options.gefs ?? new GefsLayerDiagnosticsService();
+    this.ifs = options.ifs ?? new IfsDiagnosticsService();
     this.history = options.history ?? new HistoricalDiagnosticsService();
   }
 
@@ -58,6 +66,8 @@ export class AtmosphericLayerDiagnosticsService {
         return this.gfs.getLayerDiagnostics({ ...request.query, grid: "0p50" });
       case "gefs_0p50":
         return this.gefs.getLayerDiagnostics(request.query);
+      case "ifs_0p25":
+        return this.ifs.getLayerDiagnostics(request.query);
       case "gfs_grid4_analysis_0p5":
         return this.history.getLayerDiagnostics(request.query);
     }

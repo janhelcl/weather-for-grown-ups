@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AtmosphericProfileDiagnosticsService } from "../src/core/atmospheric-profile-diagnostics-service.js";
 import type { ProfileDiagnosticsResult } from "../src/core/types.js";
 import type { GefsProfileDiagnosticsResult } from "../src/schema/gefs-profile-diagnostics.js";
+import type { IfsProfileDiagnosticsResult } from "../src/schema/ifs-diagnostics.js";
 
 const gfsResult: ProfileDiagnosticsResult = {
   model: "gfs_0p25",
@@ -60,6 +61,26 @@ const gefsResult: GefsProfileDiagnosticsResult = {
   },
 };
 
+const ifsResult: IfsProfileDiagnosticsResult = {
+  model: "ifs_0p25",
+  run: gfsResult.run,
+  validTime: gfsResult.validTime,
+  forecastHour: 6,
+  requestedPoint: gfsResult.requestedPoint,
+  gridPoint: gfsResult.gridPoint,
+  sampledPressureLevelsHpa: [850, 500],
+  levels: gfsResult.levels,
+  diagnostics: [{ id: "freezing_level_crossings", crossings: [] }],
+  source: {
+    provider: "ECMWF Open Data",
+    access: "indexed_http_range",
+    decoder: "gribberish",
+    product: "ifs_0p25_oper_fc",
+    horizontalGridDegrees: 0.25,
+    cacheHit: true,
+  },
+};
+
 describe("atmospheric profile diagnostics dispatch", () => {
   it("routes deterministic requests to GFS", async () => {
     const getProfileDiagnostics = vi.fn(async () => gfsResult);
@@ -106,6 +127,28 @@ describe("atmospheric profile diagnostics dispatch", () => {
     });
     expect(result.model).toBe("gfs_0p50");
     expect(getProfileDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ grid: "0p50" }));
+  });
+
+  it("routes deterministic IFS profile diagnostics without GFS adaptation", async () => {
+    const getProfileDiagnostics = vi.fn(async () => ifsResult);
+    const service = new AtmosphericProfileDiagnosticsService({
+      gfs: { getProfileDiagnostics: async () => gfsResult },
+      gefs: { getProfileDiagnostics: async () => gefsResult },
+      ifs: { getProfileDiagnostics },
+    });
+    const result = await service.getProfileDiagnostics({
+      model: "ifs_0p25",
+      query: {
+        latitude: 50.08,
+        longitude: 14.43,
+        run: ifsResult.run,
+        validTime: ifsResult.validTime,
+        pressureLevelsHpa: [850, 500],
+        diagnostics: ["freezing_level_crossings"],
+      },
+    });
+    expect(result.model).toBe("ifs_0p25");
+    expect(getProfileDiagnostics).toHaveBeenCalledOnce();
   });
 
   it("routes ensemble requests to GEFS", async () => {

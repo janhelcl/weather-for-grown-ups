@@ -50,7 +50,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("query_atmosphere", {
     title: "Query atmospheric state",
-    description: "Query GFS, GEFS, ECMWF IFS, or historical GFS analysis through one dataset × geometry × time × selection contract. IFS supports deterministic 0.25° point queries and point time ranges, multi-point instant/range sampling, and transects with pressure-level variables and selected surface fields. IFS area statistics and diagnostics remain explicit unsupported boundaries. Geometry may be one point, multiple points, a transect, or an area; point geometries also accept time ranges. The result preserves dataset-native semantics: deterministic forecasts remain deterministic, GEFS remains member-first ensemble distributions, and historical analysis keeps analysis-time/NCEI provenance without invented forecast metadata.",
+    description: "Query GFS, GEFS, ECMWF IFS, or historical GFS analysis through one dataset × geometry × time × selection contract. IFS supports deterministic 0.25° point queries and point time ranges, multi-point instant/range sampling, and transects with pressure-level variables and selected surface fields. IFS area statistics remain an explicit unsupported boundary. Geometry may be one point, multiple points, a transect, or an area; point geometries also accept time ranges. The result preserves dataset-native semantics: deterministic forecasts remain deterministic, GEFS remains member-first ensemble distributions, and historical analysis keeps analysis-time/NCEI provenance without invented forecast metadata.",
     inputSchema: queryAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {
@@ -63,7 +63,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("diagnose_atmosphere", {
     title: "Derive atmospheric diagnostics",
-    description: "Run the shared WFG layer, whole-profile, or parcel physics on GFS, GEFS, or historical GFS analysis using one point/time contract. A time range produces a diagnostic series. GEFS diagnostics are calculated independently per member before aggregation; historical diagnostics use the same deterministic kernels on analyzed states.",
+    description: "Run shared WFG diagnostic physics through one point/time contract. GFS, GEFS and historical GFS analysis support layer, whole-profile and parcel diagnostics plus diagnostic time series. ECMWF IFS supports deterministic layer and whole-profile diagnostics at one valid time; IFS parcel and diagnostic time-series operations remain explicit unsupported boundaries. GEFS diagnostics are calculated independently per member before aggregation; deterministic datasets reuse the same normalized physics kernels.",
     inputSchema: diagnoseAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {

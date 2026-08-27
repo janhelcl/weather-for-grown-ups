@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
+import { IfsDiagnosticsService } from "../src/core/ifs-diagnostics.js";
 import {
   IfsPointsService,
   IfsPointsTimeSeriesService,
@@ -139,6 +140,57 @@ console.log(JSON.stringify({
     points: points.points.length,
     pointTimeSeriesSteps: pointsTimeSeries.series.length,
     transectSamples: transect.samples.length,
+    run: result.run,
+  },
+}, null, 2));
+
+
+const diagnosticsService = new IfsDiagnosticsService();
+const layerDiagnostics = await diagnosticsService.getLayerDiagnostics({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: result.run,
+  validTime: result.validTime,
+  lowerPressureHpa: 850,
+  upperPressureHpa: 500,
+  diagnostics: [
+    "temperature_lapse_rate",
+    "wind_shear",
+    "potential_temperature_gradient",
+  ],
+});
+assert.equal(layerDiagnostics.model, "ifs_0p25");
+assert.equal(layerDiagnostics.run, result.run);
+assert(layerDiagnostics.layer.depthGpm > 0);
+for (const diagnostic of layerDiagnostics.diagnostics) {
+  assert(Object.values(diagnostic.values).every((value) => Number.isFinite(value)));
+}
+
+const profileDiagnostics = await diagnosticsService.getProfileDiagnostics({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: result.run,
+  validTime: result.validTime,
+  pressureLevelsHpa: [925, 850, 700, 600, 500, 400, 300],
+  diagnostics: [
+    "freezing_level_crossings",
+    "temperature_inversion_layers",
+  ],
+});
+assert.equal(profileDiagnostics.model, "ifs_0p25");
+assert.equal(profileDiagnostics.run, result.run);
+assert.equal(profileDiagnostics.levels.length, 7);
+assert(profileDiagnostics.levels.every((level) =>
+  Number.isFinite(level.temperatureC) && Number.isFinite(level.geopotentialHeightGpm)));
+assert(profileDiagnostics.diagnostics.some((diagnostic) => diagnostic.id === "freezing_level_crossings"));
+assert(profileDiagnostics.diagnostics.some((diagnostic) => diagnostic.id === "temperature_inversion_layers"));
+
+console.log(JSON.stringify({
+  diagnostics: {
+    layer: layerDiagnostics.diagnostics.map((diagnostic) => diagnostic.id),
+    layerDepthGpm: layerDiagnostics.layer.depthGpm,
+    profile: profileDiagnostics.diagnostics.map((diagnostic) => diagnostic.id),
+    sampledPressureLevelsHpa: profileDiagnostics.sampledPressureLevelsHpa,
     run: result.run,
   },
 }, null, 2));
