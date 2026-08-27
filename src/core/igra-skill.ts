@@ -5,7 +5,10 @@ import {
   type IgraForecastSkillQueryInput,
   type IgraForecastSkillResult,
 } from "../schema/igra-skill.js";
-import type { IgraForecastVerificationResult } from "../schema/igra-verification.js";
+import type {
+  IgraForecastVerificationResult,
+  IgraVerificationVariable,
+} from "../schema/igra-verification.js";
 import {
   IgraForecastVerificationService,
 } from "./igra-verification.js";
@@ -21,10 +24,10 @@ export interface IgraAtomicForecastVerifier {
     longitude: number;
     validTime: string;
     leadHours: number;
-    variables: string[];
+    variables: IgraVerificationVariable[];
     pressureLevelsHpa: number[];
     stationId?: string;
-    maxStationDistanceKm: number;
+    maxStationDistanceKm?: number;
     gfsGrid?: "0p25" | "0p50";
   }): Promise<IgraForecastVerificationResult>;
 }
