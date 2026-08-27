@@ -4,6 +4,7 @@ import { GefsMemberBundleService } from "./core/gefs-member-bundle.js";
 import { GefsPointsBundleTimeSeriesService } from "./core/gefs-points-bundle-timeseries.js";
 import { GefsPointsBundleService } from "./core/gefs-points-bundle.js";
 import { GefsTransectService } from "./core/gefs-transect.js";
+import { HistoricalAreaSummaryService } from "./core/history-area-summary.js";
 import { HistoricalIndexBackfillService } from "./core/history-backfill.js";
 import { HistoricalDiagnosticTimeSeriesService } from "./core/history-diagnostic-timeseries.js";
 import { HistoricalDiagnosticsService } from "./core/history-diagnostics.js";
@@ -25,6 +26,7 @@ import {
 import { handleGetGefsFieldsPointsTimeSeries } from "./mcp-gefs-points-bundle-timeseries-tool.js";
 import { handleGetGefsFieldsPoints } from "./mcp-gefs-points-bundle-tool.js";
 import { handleGetGefsTransect } from "./mcp-gefs-transect-tool.js";
+import { handleGetGfsHistoricalAreaSummary } from "./mcp-history-area-tool.js";
 import {
   handleGetGfsHistoricalDiagnosticTimeSeries,
   handleGetGfsHistoricalLayerDiagnostics,
@@ -73,6 +75,10 @@ import {
 } from "./schema/gefs-points-bundle.js";
 import { gefsTransectQuerySchema, gefsTransectResultSchema } from "./schema/gefs-transect.js";
 import { historicalTimeSeriesQuerySchema } from "./schema/history.js";
+import {
+  historicalAreaSummaryQuerySchema,
+  historicalAreaSummaryResultSchema,
+} from "./schema/history-area-summary.js";
 import {
   historicalDiagnosticTimeSeriesQuerySchema,
   historicalDiagnosticTimeSeriesResultSchema,
@@ -129,6 +135,7 @@ import { historicalForecastVerificationResultSchema } from "./schema/history-ver
 export function createMcpServer() {
   const server = createBaseMcpServer();
   const historicalTimeSeriesService = new HistoricalTimeSeriesService();
+  const historicalAreaSummaryService = new HistoricalAreaSummaryService();
   const historicalFieldsService = new HistoricalFieldsService();
   const historicalFieldsTimeSeriesService = new HistoricalFieldsTimeSeriesService({
     fieldsGetter: historicalFieldsService,
@@ -161,6 +168,13 @@ export function createMcpServer() {
   const pointsTimeSeriesService = new GefsPointsBundleTimeSeriesService({ pointsGetter: pointsService });
   const transectService = new GefsTransectService({ pointsGetter: pointsService });
   const areaService = new GefsAreaSummaryService();
+
+  server.registerTool("get_gfs_historical_area_summary", {
+    title: "Get historical GFS area statistics",
+    description: "Summarize one raw historical GFS Grid 4 pressure variable or non-isobaric field over a bounded 0.5° box using one native NCEI NCSS grid subset. Returns unweighted grid-point mean/min/max plus optional spatial percentiles, threshold fractions, and representative extrema locations. Pressure levels and height-above-ground fields use NCSS vertical subsetting; no point-query fan-out is performed. This is model-analysis data, not direct observations or homogeneous climatology.",
+    inputSchema: historicalAreaSummaryQuerySchema,
+    outputSchema: historicalAreaSummaryResultSchema,
+  }, async (query) => handleGetGfsHistoricalAreaSummary(historicalAreaSummaryService, query));
 
   server.registerTool("get_gfs_historical_timeseries", {
     title: "Get historical GFS analysis time series",

@@ -120,6 +120,8 @@ WFG exposes deterministic **GFS 0.25°** and ensemble **GEFS 0.5°** while prese
 
 GEFS also supports control `c00` plus perturbed members `p01`–`p30`, native three-hour output through `f384`, mixed pressure/non-isobaric field bundles, and opt-in member payloads for auditability.
 
+Historical **GFS Grid 4 0.5° analysis** is exposed as a third dataset through the `history-*` CLI and explicit historical MCP tools. It now covers profiles, time series, diagnostics, parcels, multi-point queries, multi-point time series, transects and native bbox area statistics while preserving analysis-time semantics and NCEI provenance.
+
 ## The design rule
 
 > **Unify operations and physics; preserve model semantics.**
@@ -198,7 +200,8 @@ WFG selects only the GRIB messages needed for a query, caches immutable upstream
 - GFS uses NOAA NOMADS where geographic subsetting is useful and NOAA AWS Open Data for reusable selected-message slices.
 - GEFS uses NOAA AWS Open Data `.idx` inventories and byte-range access per member.
 - The npm package ships with a GRIB2 decoder; native `wgrib2` remains an optional compatibility/debug path.
-- NOMADS requests share a cross-process courtesy limiter; AWS Open Data paths do not use the NOMADS scripted-access limiter.
+- Historical GFS analysis uses NOAA NCEI THREDDS/NCSS: grid-as-point for point/profile operations and native bbox/grid subsets for area statistics.
+- NOAA/NCEI scripted archive requests share the cross-process courtesy limiter; AWS Open Data paths do not use it.
 
 ## Documentation
 

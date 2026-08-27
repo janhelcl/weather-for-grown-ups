@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { HistoricalProfileService, parseHistoricalProfileCsv } from "../src/core/history.js";
 import {
+  buildNceiGfsAnalysisAreaUrl,
   buildNceiGfsAnalysisDatasetPath,
   buildNceiGfsAnalysisPointUrl,
   type HistoricalAnalysisDataSource,
@@ -188,6 +189,43 @@ describe("NCEI historical GFS access", () => {
     expect(url.searchParams.get("longitude")).toBe("14.43");
     expect(url.searchParams.get("time")).toBe("all");
     expect(url.searchParams.get("accept")).toBe("csv");
+  });
+
+  it("builds one native NCSS bbox request with exact vertical-coordinate selection", () => {
+    const url = new URL(buildNceiGfsAnalysisAreaUrl({
+      analysisTime: new Date("2017-05-09T12:00:00Z"),
+      westLongitude: 12,
+      eastLongitude: 18,
+      southLatitude: 48,
+      northLatitude: 51,
+      variables: ["Temperature_isobaric"],
+      verticalCoordinate: 85000,
+      horizontalStride: 2,
+    }));
+    expect(url.pathname).toContain("/thredds/ncss/grid/model-gfs-g4-anl-files-old/201705/20170509/");
+    expect(url.searchParams.get("var")).toBe("Temperature_isobaric");
+    expect(url.searchParams.get("west")).toBe("12");
+    expect(url.searchParams.get("east")).toBe("18");
+    expect(url.searchParams.get("south")).toBe("48");
+    expect(url.searchParams.get("north")).toBe("51");
+    expect(url.searchParams.get("vertCoord")).toBe("85000");
+    expect(url.searchParams.get("horizStride")).toBe("2");
+    expect(url.searchParams.has("latitude")).toBe(false);
+    expect(url.searchParams.has("longitude")).toBe(false);
+    expect(url.searchParams.get("accept")).toBe("csv");
+  });
+
+  it("omits optional bbox subsetting parameters when they are not needed", () => {
+    const url = new URL(buildNceiGfsAnalysisAreaUrl({
+      analysisTime: new Date("2017-05-09T12:00:00Z"),
+      westLongitude: 12,
+      eastLongitude: 18,
+      southLatitude: 48,
+      northLatitude: 51,
+      variables: ["Pressure_surface"],
+    }));
+    expect(url.searchParams.has("vertCoord")).toBe(false);
+    expect(url.searchParams.has("horizStride")).toBe(false);
   });
 
   it("parses Pa pressure coordinates and normalizes 0-360 longitudes", () => {
