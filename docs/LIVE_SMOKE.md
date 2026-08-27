@@ -44,6 +44,16 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 
 `npm run test:live:history` exercises a fixed 2017 NOAA NCEI Grid 4 analysis profile through THREDDS NCSS. It verifies the historical archive path, point/profile response parsing, 0.5° grid provenance, normalized temperature/humidity/wind/height fields, and the historical-analysis result contract without depending on current GFS publication timing.
 
+### GFS operational transport parity
+
+`npm run test:live:gfs-operational-parity` compares a recent same-run GFS profile through NOMADS and NOAA AWS for both `0p25` and `0p50`. It is a transport/decoder parity contract for current operational data; it says nothing about the historical archives.
+
+### GFS operational/archive equivalence
+
+`npm run test:live:gfs-archive-equivalence` is archive-only. For each GFS grid it searches selected ages across the NOAA AWS rolling retention window for a run that is also exposed by the matching archive, then compares profile variables, mixed fields, time ranges, multi-point state, layer/profile/parcel diagnostics and area statistics. Source-selectable operational state is read from AWS; the bounded operational area path remains NOMADS-backed. The 0.25° archive is NCAR/GDEX d084001 and the 0.5° archive is NOAA NCEI Grid 4.
+
+The script never substitutes NOMADS-vs-AWS when archive overlap is absent. Instead it emits `archiveStatus: "not_tested_no_overlap"` for that grid. A successful process therefore means either strict numeric/semantic archive parity was exercised or the script explicitly reported that parity could not be tested because upstream overlap was unavailable; inspect the structured summary when archive proof matters.
+
 ### GEFS
 
 `npm run test:live:gefs` currently chains bounded live checks for:

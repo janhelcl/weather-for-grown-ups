@@ -44,6 +44,15 @@ describe("CLI public surface", () => {
     }
   });
 
+  it("exposes GFS grid selection on the canonical forecast-capable commands", () => {
+    const program = createCliProgram();
+
+    for (const name of ["query", "diagnose", "compare-runs", "compare-datasets"]) {
+      const command = program.commands.find((candidate) => candidate.name() === name);
+      expect(command?.options.some((option) => option.long === "--grid")).toBe(true);
+    }
+  });
+
   it("keeps index maintenance behind one neutral admin command", () => {
     const index = createCliProgram().commands.find((command) => command.name() === "index");
     expect(index?.commands.map((command) => command.name())).toEqual(["build", "backfill"]);

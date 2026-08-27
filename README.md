@@ -8,7 +8,7 @@ Weather is the canonical agent tutorial: give the model a tool, ask for tomorrow
 
 One TypeScript core powers equal CLI and MCP surfaces. No need to teach your agent how to wrestle GRIB files first.
 
-Current release: **v0.1.0**.
+Current release: **v0.2.0**.
 
 ## Quick start
 
@@ -98,9 +98,9 @@ WFG does not contain turbine power curves, wake models, availability assumptions
 
 ## Current model support
 
-WFG exposes deterministic **GFS 0.25°** and ensemble **GEFS 0.5°** while preserving their different semantics.
+WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default) and ensemble **GEFS 0.5°** while preserving their different semantics.
 
-| Operation | GFS 0.25° | GEFS 0.5° |
+| Operation | GFS 0.25° / 0.5° | GEFS 0.5° |
 | --- | --- | --- |
 | Catalog and search | ✅ | ✅ |
 | Pressure profiles | ✅ deterministic | ✅ member distributions |
@@ -122,7 +122,7 @@ GEFS also supports control `c00` plus perturbed members `p01`–`p30`, native th
 
 Historical **GFS Grid 4 0.5° analysis** is exposed as the third public dataset, `gfs-analysis`, through the same `query` / `diagnose` CLI operations and `query_atmosphere` / `diagnose_atmosphere` MCP tools. It covers profiles, time series, diagnostics, parcels, multi-point queries, multi-point time series, transects and native bbox area statistics while preserving analysis-time semantics and NCEI provenance.
 
-Historical **GFS forecasts** do not add another public dataset. Keep `dataset: "gfs"` and provide an explicit old forecast run; WFG transparently switches to NOAA NCEI's 0.5° Grid 4 forecast archive and reports `gfs_grid4_forecast_0p5_archive` in result metadata. The archive uses native 3-hour output through +192 h and begins on 2006-10-10. This works across unified state queries and layer/profile/parcel diagnostics while keeping run, valid time, lead and archive provenance explicit.
+Historical **GFS forecasts** do not add another public dataset. Keep `dataset: "gfs"`, provide an explicit old forecast run, and select `forecast.grid` when needed. `0p25` routes to the NCAR/GDEX d084001 0.25° archive (`gfs_0p25_forecast_archive`), available from 2015-01-15 with native 3-hour output through +240 h and 12-hour output from +252 h through +384 h. `0p50` routes to NOAA NCEI Grid 4 (`gfs_grid4_forecast_0p5_archive`), beginning 2006-10-10 with native 3-hour output through +192 h. Direct online archive availability can vary. Both paths preserve run, valid time, lead, grid and archive provenance across unified state queries and layer/profile/parcel diagnostics.
 
 ## The design rule
 
@@ -185,6 +185,7 @@ An old forecast keeps `gfs` and selects the historical initialization:
 ```bash
 wfg query \
   --dataset gfs \
+  --grid 0p25 \
   --run 2019-12-24T12:00:00Z \
   --lat 50.08 --lon 14.43 \
   --at 2019-12-26T18:00:00Z \
@@ -255,7 +256,7 @@ WFG selects only the GRIB messages needed for a query, caches immutable upstream
 - GEFS uses NOAA AWS Open Data `.idx` inventories and byte-range access per member.
 - The npm package ships with a GRIB2 decoder; native `wgrib2` remains an optional compatibility/debug path.
 - Historical GFS analysis uses NOAA NCEI THREDDS/NCSS: grid-as-point for point/profile operations and native bbox/grid subsets for area statistics.
-- Historical GFS forecasts use exact NCEI Grid 4 forecast files through the same NCSS subset strategy; direct online availability varies and older files may require NCEI HAS retrieval.
+- Historical GFS forecasts keep the public `gfs` identity and route by grid: 0.25° uses NCAR/GDEX d084001 through THREDDS/NCSS, while 0.5° uses NOAA NCEI Grid 4 through THREDDS/NCSS. Direct online availability varies; older Grid 4 files may require NCEI HAS retrieval.
 - NOAA/NCEI scripted archive requests share the cross-process courtesy limiter; AWS Open Data paths do not use it.
 
 ## Documentation
