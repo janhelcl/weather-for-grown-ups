@@ -16,6 +16,7 @@ import { HistoricalAreaSummaryService } from "./history-area-summary.js";
 
 export type AtmosphericAreaSummaryRequest =
   | { model: "gfs_0p25"; query: AreaSummaryQueryInput }
+  | { model: "gfs_0p50"; query: AreaSummaryQueryInput }
   | { model: "gefs_0p50"; query: GefsAreaSummaryQueryInput }
   | { model: "gfs_grid4_analysis_0p5"; query: HistoricalAreaSummaryQueryInput };
 
@@ -45,6 +46,8 @@ export class AtmosphericAreaSummaryService {
     switch (request.model) {
       case "gfs_0p25":
         return this.gfs.summarize(request.query);
+      case "gfs_0p50":
+        return this.gfs.summarize({ ...request.query, grid: "0p50" });
       case "gefs_0p50":
         return this.gefs.summarize(request.query);
       case "gfs_grid4_analysis_0p5":

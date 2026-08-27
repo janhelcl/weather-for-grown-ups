@@ -1,4 +1,5 @@
 import * as z from "zod/v4";
+import { operationalGfsModelIdSchema } from "./gfs-grid.js";
 import {
   gefsEnsembleTimeSeriesQuerySchema,
   gefsEnsembleTimeSeriesResultSchema,
@@ -10,7 +11,7 @@ import { timeSeriesResultSchema } from "./result.js";
 
 export const atmosphericTimeSeriesRequestSchema = z.union([
   z.object({
-    model: z.literal("gfs_0p25"),
+    model: operationalGfsModelIdSchema,
     query: timeSeriesQuerySchema,
   }),
   z.object({

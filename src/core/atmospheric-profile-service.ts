@@ -51,8 +51,9 @@ export class AtmosphericProfileService {
   private route(request: ReturnType<typeof atmosphericProfileRequestSchema.parse>) {
     switch (request.model) {
       case "gfs_0p25":
-      case "gfs_0p50":
         return this.gfs.getProfile(request.query);
+      case "gfs_0p50":
+        return this.gfs.getProfile({ ...request.query, grid: "0p50" });
       case "gefs_0p50":
         return this.gefs.getProfile(request.query);
       case "gfs_grid4_analysis_0p5":

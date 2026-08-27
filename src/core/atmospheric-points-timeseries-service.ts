@@ -14,6 +14,7 @@ import type { PointsTimeSeriesResult } from "./types.js";
 
 export type AtmosphericPointsTimeSeriesRequest =
   | { model: "gfs_0p25"; query: PointsTimeSeriesQueryInput }
+  | { model: "gfs_0p50"; query: PointsTimeSeriesQueryInput }
   | { model: "gefs_0p50"; query: GefsPointsTimeSeriesQueryInput }
   | { model: "gfs_grid4_analysis_0p5"; query: HistoricalPointsTimeSeriesQueryInput };
 
@@ -45,6 +46,8 @@ export class AtmosphericPointsTimeSeriesService {
     switch (request.model) {
       case "gfs_0p25":
         return this.gfs.getPointsTimeSeries(request.query);
+      case "gfs_0p50":
+        return this.gfs.getPointsTimeSeries({ ...request.query, grid: "0p50" });
       case "gefs_0p50":
         return this.gefs.getPointsTimeSeries(request.query);
       case "gfs_grid4_analysis_0p5":
