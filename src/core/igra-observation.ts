@@ -64,7 +64,7 @@ export class IgraObservationProfileService {
     this.source = options.source ?? new NceiIgraSource({
       cacheDir: join(cacheDir, "igra"),
       limiter,
-      now: options.now,
+      ...(options.now === undefined ? {} : { now: options.now }),
     });
     this.now = options.now ?? (() => new Date());
   }
