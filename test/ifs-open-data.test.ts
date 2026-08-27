@@ -69,7 +69,7 @@ describe("ECMWF IFS Open Data source", () => {
           headers: { "retry-after": "0" },
         });
       }
-      if (url.includes("ai4edataeuwest.blob.core.windows.net")) {
+      if (url.includes("storage.googleapis.com/ecmwf-open-data")) {
         return new Response(
           '{"date":"20260827","time":"1200","step":"6","levtype":"pl","levelist":"850","param":"t","_offset":0,"_length":10}',
           { status: 200 },
@@ -82,7 +82,7 @@ describe("ECMWF IFS Open Data source", () => {
       { key: "t@850", param: "t", levtype: "pl", levelist: 850 },
     ])).resolves.toBe(true);
     expect(fetchFn.mock.calls.some(([input]) =>
-      String(input).includes("ai4edataeuwest.blob.core.windows.net"))).toBe(true);
+      String(input).includes("storage.googleapis.com/ecmwf-open-data"))).toBe(true);
   });
 
   it("treats missing objects and missing selected inventory as unavailable", async () => {
