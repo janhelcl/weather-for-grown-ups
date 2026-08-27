@@ -1,0 +1,26 @@
+name: PR ARL archive debug
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: pr-arl-debug-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect NOAA ARL GFS 0.25 archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== dataset root ==='
+          aws s3 ls s3://noaa-oar-arl-hysplit-pds/gfs0p25/ --no-sign-request | tail -n 12
+          echo '=== 2026 ==='
+          aws s3 ls s3://noaa-oar-arl-hysplit-pds/gfs0p25/2026/ --no-sign-request | tail -n 30
+          echo '=== August 2026, if month nested ==='
+          aws s3 ls s3://noaa-oar-arl-hysplit-pds/gfs0p25/2026/08/ --no-sign-request | tail -n 40 || true
