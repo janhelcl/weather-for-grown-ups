@@ -58,6 +58,43 @@ describe("IFS composed spatiotemporal operations", () => {
     expect(getProfile.mock.calls.every(([input]) => input.run === run.toISOString())).toBe(true);
   });
 
+  it("uses an explicit run without invoking latest-run discovery", async () => {
+    const getProfile = vi.fn(async (input: IfsPointQueryInput) => profileFor(input));
+    const resolveLatestRunForRange = vi.fn(async () => run);
+    const timeSeries = new IfsTimeSeriesService({
+      profileGetter: { getProfile },
+      latestRangeRunProvider: { resolveLatestRunForRange },
+    });
+
+    const result = await timeSeries.getTimeSeries({
+      latitude: 50.08,
+      longitude: 14.43,
+      run: run.toISOString(),
+      startTime: "2026-08-27T12:00:00Z",
+      endTime: "2026-08-27T15:00:00Z",
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+      maxSteps: 2,
+    });
+
+    expect(result.series.map((step) => step.forecastHour)).toEqual([0, 3]);
+    expect(resolveLatestRunForRange).not.toHaveBeenCalled();
+
+    const resolveLatestRun = vi.fn(async () => run);
+    const points = new IfsPointsService({
+      profileGetter: { getProfile },
+      latestRunProvider: { resolveLatestRun },
+    });
+    const pointResult = await points.getPoints({
+      points: [{ latitude: 50.08, longitude: 14.43 }],
+      run: run.toISOString(),
+      validTime: "2026-08-27T15:00:00Z",
+      fields: ["temperature_2m"],
+    });
+    expect(pointResult.forecastHour).toBe(3);
+    expect(resolveLatestRun).not.toHaveBeenCalled();
+  });
+
   it("resolves one run for many points and preserves per-point samples", async () => {
     let calls = 0;
     const getProfile = vi.fn(async (input: IfsPointQueryInput) => {
