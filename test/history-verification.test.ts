@@ -7,6 +7,7 @@ import {
 import type { HistoricalProfileResult } from "../src/schema/history-result.js";
 import type { ArchivedGfsForecastDataSource } from "../src/sources/ncei-gfs-forecast-history.js";
 import {
+  buildNceiGfsForecastAreaUrl,
   buildNceiGfsForecastDatasetPath,
   buildNceiGfsForecastPointUrl,
 } from "../src/sources/ncei-gfs-forecast-history.js";
@@ -74,6 +75,23 @@ describe("NCEI archived GFS forecast access", () => {
     expect(url.searchParams.get("time")).toBe("all");
     expect(url.searchParams.get("accept")).toBe("csv");
   });
+
+  it("builds an NCSS area subset against the exact archived forecast file", () => {
+    const url = new URL(buildNceiGfsForecastAreaUrl({
+      runTime: new Date("2019-12-24T12:00:00Z"),
+      forecastHour: 54,
+      westLongitude: 12,
+      eastLongitude: 18,
+      southLatitude: 48,
+      northLatitude: 51,
+      variables: ["Temperature_isobaric"],
+      verticalCoordinate: 85000,
+    }));
+    expect(url.pathname).toContain("/model-gfs-004-files-old/201912/20191224/gfs_4_20191224_1200_054.grb2");
+    expect(url.searchParams.get("north")).toBe("51");
+    expect(url.searchParams.get("west")).toBe("12");
+    expect(url.searchParams.get("vertCoord")).toBe("85000");
+  });
 });
 
 describe("ArchivedGfsForecastProfileService", () => {
@@ -107,6 +125,23 @@ describe("ArchivedGfsForecastProfileService", () => {
       geopotentialHeightGpm: 1490,
     });
   });
+
+  it("accepts native 3-hour Grid 4 forecast steps outside analysis-cycle hours", async () => {
+    const service = new ArchivedGfsForecastProfileService({
+      source: mockForecastSource(),
+      now: () => new Date("2026-08-26T12:00:00Z"),
+    });
+    const result = await service.getArchivedForecastProfile({
+      runTime: new Date("2017-05-07T12:00:00Z"),
+      forecastHour: 51,
+      latitude: 50.08,
+      longitude: 14.43,
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    });
+    expect(result.validTime).toBe("2017-05-09T15:00:00.000Z");
+    expect(result.forecastHour).toBe(51);
+  });
 });
 
 describe("HistoricalForecastVerificationService", () => {
@@ -119,6 +154,7 @@ describe("HistoricalForecastVerificationService", () => {
       validTime: "2017-05-09T12:00:00.000Z",
       requestedPoint: { latitude: 50.08, longitude: 14.43 },
       gridPoint: { latitude: 50, longitude: 14.5 },
+      selection: { variables: ["temperature", "wind"] as const, pressureLevelsHpa: [850] as const },
       levels: [{
         pressureHpa: 850,
         temperatureC: 10,
