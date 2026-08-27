@@ -12,6 +12,27 @@ export interface IfsIndexSelector {
   levelist?: number;
 }
 
+export const IFS_HTTP_MAX_ATTEMPTS = 4;
+export const IFS_HTTP_INITIAL_BACKOFF_MS = 750;
+
+export async function fetchIfsWithRetry(
+  fetchFn: typeof fetch,
+  input: string | URL | Request,
+  init?: RequestInit,
+): Promise<Response> {
+  let lastResponse: Response | undefined;
+  for (let attempt = 0; attempt < IFS_HTTP_MAX_ATTEMPTS; attempt += 1) {
+    const response = await fetchFn(input, init);
+    if (!isRetryableStatus(response.status) || attempt === IFS_HTTP_MAX_ATTEMPTS - 1) return response;
+    lastResponse = response;
+    const retryAfterMs = retryAfterMilliseconds(response.headers.get("retry-after"));
+    const delayMs = retryAfterMs ?? IFS_HTTP_INITIAL_BACKOFF_MS * 2 ** attempt;
+    await sleep(delayMs);
+  }
+  if (lastResponse !== undefined) return lastResponse;
+  throw new Error("ECMWF IFS retry loop completed without a response");
+}
+
 export interface IfsAvailabilityProbe {
   isForecastAvailable(
     run: Date,
@@ -80,7 +101,7 @@ export class IfsOpenDataRunProbe implements IfsAvailabilityProbe {
     selectors: readonly IfsIndexSelector[],
   ): Promise<boolean> {
     const url = buildIfsOpenDataForecastIndexUrl(run, forecastHour);
-    const response = await this.fetchFn(url, {
+    const response = await fetchIfsWithRetry(this.fetchFn, url, {
       headers: { "user-agent": "weather-for-grown-ups/0.2" },
     });
     if (response.status === 404) return false;
@@ -100,6 +121,23 @@ export class IfsOpenDataRunProbe implements IfsAvailabilityProbe {
       throw error;
     }
   }
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status === 503 || (status >= 500 && status <= 599);
+}
+
+function retryAfterMilliseconds(value: string | null): number | undefined {
+  if (value === null) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return undefined;
+  return Math.max(0, timestamp - Date.now());
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function yyyymmdd(date: Date): string {
