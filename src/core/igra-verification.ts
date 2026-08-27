@@ -21,7 +21,7 @@ const HOUR_MS = 60 * 60 * 1_000;
 const CAVEAT =
   "Radiosonde verification compares a point observation profile with a model grid-cell forecast; no vertical interpolation is performed, and sounding drift/instrument or station changes can affect comparability" as const;
 
-type Level = IgraObservationProfileResult["levels"][number];
+type Level = { pressureHpa: number };
 
 export interface IgraObservationProfileGetter {
   getProfile(input: IgraObservationProfileQuery): Promise<IgraObservationProfileResult>;
