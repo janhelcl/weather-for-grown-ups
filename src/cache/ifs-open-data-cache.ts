@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   buildIfsOpenDataForecastIndexUrl,
   buildIfsOpenDataForecastUrl,
+  fetchIfsWithRetry,
   parseIfsOpenDataIndex,
   selectIfsIndexEntries,
   type IfsIndexSelector,
@@ -30,7 +31,7 @@ export class IfsOpenDataSubsetCache implements IfsSelectionSource {
   constructor(
     private readonly rootDir: string,
     private readonly fetchFn: typeof fetch = globalThis.fetch,
-    private readonly rangeConcurrency = 6,
+    private readonly rangeConcurrency = 3,
   ) {}
 
   async fetchSelection(request: IfsSelectionRequest): Promise<IfsSubsetFile> {
@@ -90,7 +91,7 @@ export class IfsOpenDataSubsetCache implements IfsSelectionSource {
       // ECMWF Open Data forecast files are immutable once published.
     }
 
-    const response = await this.fetchFn(url, {
+    const response = await fetchIfsWithRetry(this.fetchFn, url, {
       headers: { "user-agent": "weather-for-grown-ups/0.2" },
     });
     if (!response.ok) {
@@ -106,7 +107,7 @@ export class IfsOpenDataSubsetCache implements IfsSelectionSource {
   private async fetchRange(url: string, start: number, length: number): Promise<Uint8Array> {
     const end = start + length - 1;
     const rangeValue = `bytes=${start}-${end}`;
-    const response = await this.fetchFn(url, {
+    const response = await fetchIfsWithRetry(this.fetchFn, url, {
       headers: {
         range: rangeValue,
         "user-agent": "weather-for-grown-ups/0.2",
