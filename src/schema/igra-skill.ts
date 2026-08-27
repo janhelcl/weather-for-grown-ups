@@ -1,4 +1,9 @@
 import * as z from "zod/v4";
+import {
+  MAX_FORECAST_SKILL_EVALUATIONS,
+  MAX_FORECAST_SKILL_LEADS,
+  MAX_FORECAST_SKILL_VALID_TIMES,
+} from "./forecast-skill.js";
 import { gfsGridSchema } from "./gfs-grid.js";
 import {
   historicalAnalysisTimeSchema,
@@ -11,10 +16,9 @@ import {
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 import { gridPointSchema } from "./result.js";
 
-export const MAX_IGRA_SKILL_VALID_TIMES = 8;
-export const MAX_IGRA_SKILL_LEADS = 3;
-export const MAX_IGRA_SKILL_EVALUATIONS =
-  MAX_IGRA_SKILL_VALID_TIMES * MAX_IGRA_SKILL_LEADS;
+export const MAX_IGRA_SKILL_VALID_TIMES = MAX_FORECAST_SKILL_VALID_TIMES;
+export const MAX_IGRA_SKILL_LEADS = MAX_FORECAST_SKILL_LEADS;
+export const MAX_IGRA_SKILL_EVALUATIONS = MAX_FORECAST_SKILL_EVALUATIONS;
 
 export const igraForecastSkillQuerySchema = z.object({
   ...pointCoordinateSchema.shape,
