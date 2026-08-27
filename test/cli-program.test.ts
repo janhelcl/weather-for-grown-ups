@@ -69,6 +69,11 @@ describe("CLI public surface", () => {
 
   it("keeps index maintenance behind one neutral admin command", () => {
     const index = createCliProgram().commands.find((command) => command.name() === "index");
-    expect(index?.commands.map((command) => command.name())).toEqual(["build", "backfill"]);
+    expect(index?.commands.map((command) => command.name())).toEqual([
+      "build",
+      "backfill",
+      "verification-backfill",
+      "verification-summary",
+    ]);
   });
 });
