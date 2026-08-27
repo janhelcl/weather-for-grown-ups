@@ -139,6 +139,33 @@ describe("atmospheric diagnostic time-series dispatch", () => {
     expect(getDiagnosticTimeSeries).toHaveBeenCalledOnce();
   });
 
+  it("forces the 0.5 grid for deterministic diagnostic time series", async () => {
+    const gfs50Result: DiagnosticTimeSeriesResult = { ...gfsResult, model: "gfs_0p50" };
+    const getDiagnosticTimeSeries = vi.fn(async (query: any) =>
+      query.grid === "0p50" ? gfs50Result : gfsResult
+    );
+    const service = new AtmosphericDiagnosticTimeSeriesService({
+      gfs: { getDiagnosticTimeSeries },
+      gefs: { getDiagnosticTimeSeries: async () => gefsResult },
+    });
+    const result = await service.getDiagnosticTimeSeries({
+      model: "gfs_0p50",
+      query: {
+        latitude: 50.08,
+        longitude: 14.43,
+        run: gfsResult.run,
+        startTime: gfsResult.requestedStartTime,
+        endTime: gfsResult.requestedEndTime,
+        diagnostic: gfsResult.diagnostic,
+        source: "s3",
+      },
+    });
+    expect(result.model).toBe("gfs_0p50");
+    expect(getDiagnosticTimeSeries).toHaveBeenCalledWith(
+      expect.objectContaining({ grid: "0p50" }),
+    );
+  });
+
   it("routes historical analysis requests without forecast-shaped fields", async () => {
     const getDiagnosticTimeSeries = vi.fn(async () => historicalResult);
     const service = new AtmosphericDiagnosticTimeSeriesService({

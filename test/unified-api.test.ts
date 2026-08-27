@@ -147,6 +147,53 @@ describe("unified atmospheric routing", () => {
     expect(historicalMixed.result).toEqual({ route: "history-fields" });
   });
 
+  it("preserves explicit operational 0.5 identity through the unified wrapper", async () => {
+    const gfsProfile = {
+      getProfile: vi.fn(async (query: any) => ({
+        model: "gfs_0p50",
+        route: "gfs-0p50",
+        grid: query.grid,
+      })),
+    };
+    const service = new UnifiedAtmosphereQueryService({ gfsProfile: gfsProfile as any });
+    const result = await service.query({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      forecast: { run: "latest", grid: "0p50" },
+      source: "s3",
+    });
+    expect(result.internalDatasetId).toBe("gfs_0p50");
+    expect((result.result as any).grid).toBe("0p50");
+    expect(gfsProfile.getProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ grid: "0p50" }),
+    );
+  });
+
+  it("preserves explicit 0.25 archive identity through the unified wrapper", async () => {
+    const archivedGfs = {
+      query: vi.fn(async () => ({
+        model: "gfs_0p25_forecast_archive",
+        route: "archive-0p25",
+      })),
+    };
+    const service = new UnifiedAtmosphereQueryService({
+      archivedGfs: archivedGfs as any,
+      now: () => new Date("2026-08-27T12:00:00Z"),
+    });
+    const result = await service.query({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-24T06:00:00Z" },
+      selection,
+      forecast: { run: "2026-08-24T00:00:00Z", grid: "0p25" },
+      source: "archive",
+    });
+    expect(result.internalDatasetId).toBe("gfs_0p25_forecast_archive");
+    expect((result.result as any).route).toBe("archive-0p25");
+  });
+
   it("routes old explicit GFS runs through the archive without changing dataset=gfs", async () => {
     const gfsProfile = { getProfile: vi.fn(async () => ({ route: "operational-gfs" })) };
     const archivedGfs = {

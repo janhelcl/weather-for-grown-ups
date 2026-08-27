@@ -83,6 +83,31 @@ describe("atmospheric profile diagnostics dispatch", () => {
     expect(getProfileDiagnostics).toHaveBeenCalledOnce();
   });
 
+  it("forces the 0.5 grid for deterministic profile diagnostics", async () => {
+    const gfs50Result: ProfileDiagnosticsResult = { ...gfsResult, model: "gfs_0p50" };
+    const getProfileDiagnostics = vi.fn(async (query: any) =>
+      query.grid === "0p50" ? gfs50Result : gfsResult
+    );
+    const service = new AtmosphericProfileDiagnosticsService({
+      gfs: { getProfileDiagnostics },
+      gefs: { getProfileDiagnostics: async () => gefsResult },
+    });
+    const result = await service.getProfileDiagnostics({
+      model: "gfs_0p50",
+      query: {
+        latitude: 50.08,
+        longitude: 14.43,
+        run: gfsResult.run,
+        validTime: gfsResult.validTime,
+        pressureLevelsHpa: [850, 500],
+        diagnostics: ["freezing_level_crossings"],
+        source: "s3",
+      },
+    });
+    expect(result.model).toBe("gfs_0p50");
+    expect(getProfileDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ grid: "0p50" }));
+  });
+
   it("routes ensemble requests to GEFS", async () => {
     const getProfileDiagnostics = vi.fn(async () => gefsResult);
     const service = new AtmosphericProfileDiagnosticsService({
