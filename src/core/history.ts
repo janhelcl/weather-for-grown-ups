@@ -19,6 +19,7 @@ import {
   type HistoricalProfileQueryInput,
 } from "../schema/history.js";
 import type { HistoricalProfileResult } from "../schema/history-result.js";
+import { isoDateTimeSchema } from "../schema/query.js";
 import {
   NCEI_GFS_GRID4_ANALYSIS_START,
   NceiGfsHistorySource,
