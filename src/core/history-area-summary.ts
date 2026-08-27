@@ -78,9 +78,9 @@ export class HistoricalAreaSummaryService {
       ? HISTORICAL_AREA_PRESSURE_CATALOG[query.variable!]
       : HISTORICAL_AREA_FIELD_CATALOG[query.field];
 
-    const verticalCoordinate = definition.verticalCoordinate?.({
-      pressureLevelHpa: query.pressureLevelHpa,
-    });
+    const verticalCoordinate = definition.verticalCoordinate?.(
+      query.pressureLevelHpa === undefined ? {} : { pressureLevelHpa: query.pressureLevelHpa },
+    );
     const response = await this.source.fetchArea({
       analysisTime,
       ...bbox,
