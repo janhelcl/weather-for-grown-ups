@@ -33,6 +33,37 @@ describe("unified IGRA verification schema", () => {
     })).toThrow(/IGRA verification supports only/);
   });
 
+  it("accepts bounded IGRA skill ranges and rejects oversized evaluation products", () => {
+    const request = verifyAtmosphericForecastSchema.parse({
+      referenceDataset: "igra",
+      geometry: point,
+      time: {
+        from: "2026-08-01T00:00:00Z",
+        to: "2026-08-10T12:00:00Z",
+        hoursUtc: [0, 12],
+        maxValidTimes: 8,
+      },
+      leadHours: [24, 48, 72],
+      variables: ["temperature", "wind"],
+      pressureLevelsHpa: [850, 700],
+    });
+    expect(request.time).toMatchObject({ maxValidTimes: 8 });
+    expect(request.leadHours).toEqual([24, 48, 72]);
+
+    expect(() => verifyAtmosphericForecastSchema.parse({
+      referenceDataset: "igra",
+      geometry: point,
+      time: {
+        from: "2026-08-01T00:00:00Z",
+        to: "2026-08-10T12:00:00Z",
+        maxValidTimes: 8,
+      },
+      leadHours: [24, 48, 72, 96],
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    })).toThrow();
+  });
+
   it("does not leak IGRA-specific controls into the legacy analysis reference", () => {
     expect(() => verifyAtmosphericForecastSchema.parse({
       referenceDataset: "gfs-analysis",
@@ -92,5 +123,44 @@ describe("UnifiedForecastVerificationService", () => {
       maxStationDistanceKm: 100,
     }));
     expect(analysis.verify).not.toHaveBeenCalled();
+  });
+
+  it("routes IGRA time ranges to the skill aggregator", async () => {
+    const analysis = { verify: vi.fn() };
+    const igra = { verify: vi.fn() };
+    const skill = { summarize: vi.fn(async (query) => ({ route: "skill", query })) };
+    const service = new UnifiedForecastVerificationService(
+      analysis as any,
+      igra as any,
+      skill as any,
+    );
+
+    const result = await service.verify({
+      referenceDataset: "igra",
+      geometry: point,
+      time: {
+        from: "2026-08-01T00:00:00Z",
+        to: "2026-08-10T12:00:00Z",
+        hoursUtc: [12],
+        maxValidTimes: 4,
+      },
+      leadHours: [24, 48],
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+      stationId: "EZM00011520",
+    });
+
+    expect(result.datasets).toEqual(["gfs", "igra"]);
+    expect((result.result as any).route).toBe("skill");
+    expect(skill.summarize).toHaveBeenCalledWith(expect.objectContaining({
+      startTime: "2026-08-01T00:00:00Z",
+      endTime: "2026-08-10T12:00:00Z",
+      cycleHoursUtc: [12],
+      maxValidTimes: 4,
+      leadHours: [24, 48],
+      stationId: "EZM00011520",
+    }));
+    expect(analysis.verify).not.toHaveBeenCalled();
+    expect(igra.verify).not.toHaveBeenCalled();
   });
 });
