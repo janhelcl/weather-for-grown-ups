@@ -194,12 +194,16 @@ function registerCompareDatasetsCommand(program: Command): void {
 function registerVerifyCommand(program: Command): void {
   program
     .command("verify")
-    .description("Verify an archived GFS forecast against GFS analysis or an IGRA radiosonde")
+    .description("Verify archived GFS forecasts against GFS analysis or IGRA radiosondes")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
-    .requiredOption("--at <iso>", "Historical valid time")
-    .requiredOption("--lead-hours <number>", "Forecast lead in hours (0-192, multiple of 6)", Number)
+    .option("--at <iso>", "One historical valid time")
+    .option("--from <iso>", "Skill-summary range start; IGRA only")
+    .option("--to <iso>", "Skill-summary range end; IGRA only")
+    .requiredOption("--lead-hours <number|list>", "Forecast lead(s) in hours; multiples of 6")
     .option("--reference <gfs-analysis|igra>", "Verification reference", "gfs-analysis")
+    .option("--hours <list>", "Skill-summary nominal UTC cycles", "0,12")
+    .option("--max-valid-times <number>", "Skill-summary sampling cap (max 8)", Number, 8)
     .option("--grid <0p25|0p50>", "GFS forecast grid; IGRA reference only")
     .option("--station <id>", "Explicit 11-character IGRA station ID")
     .option("--max-station-distance-km <number>", "Maximum IGRA station distance", Number)
@@ -207,16 +211,30 @@ function registerVerifyCommand(program: Command): void {
     .option("--levels <list>", "Pressure levels in hPa", DEFAULT_LEVELS)
     .option("--json", "Output JSON")
     .action(async (options) => {
+      const hasInstant = options.at !== undefined;
+      const hasRange = options.from !== undefined || options.to !== undefined;
+      if (hasInstant === hasRange) {
+        throw new Error("Choose exactly one verification time form: --at, or --from plus --to");
+      }
+      if (hasRange && (options.from === undefined || options.to === undefined)) {
+        throw new Error("Skill-summary verification requires both --from and --to");
+      }
+
       const referenceDataset = String(options.reference);
+      if (hasRange && referenceDataset !== "igra") {
+        throw new Error("Skill-summary verification currently requires --reference igra");
+      }
       const defaultVariables = referenceDataset === "igra"
         ? DEFAULT_IGRA_VERIFICATION_VARIABLES
         : DEFAULT_UNIFIED_VARIABLES;
-      const result = await new UnifiedForecastVerificationService().verify({
-        forecastDataset: "gfs",
-        referenceDataset: referenceDataset as "gfs-analysis" | "igra",
-        geometry: { type: "point", latitude: options.lat, longitude: options.lon },
-        time: { at: options.at },
-        leadHours: options.leadHours,
+      const leads = parseNumbers(options.leadHours);
+      if (hasInstant && leads.length !== 1) {
+        throw new Error("Atomic verification requires exactly one --lead-hours value");
+      }
+
+      const common = {
+        forecastDataset: "gfs" as const,
+        geometry: { type: "point" as const, latitude: options.lat, longitude: options.lon },
         variables: parseStrings(options.vars ?? defaultVariables),
         pressureLevelsHpa: parseLevels(options.levels),
         ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
@@ -224,7 +242,28 @@ function registerVerifyCommand(program: Command): void {
         ...(options.maxStationDistanceKm === undefined
           ? {}
           : { maxStationDistanceKm: options.maxStationDistanceKm }),
-      });
+      };
+
+      const request = hasInstant
+        ? {
+            ...common,
+            referenceDataset: referenceDataset as "gfs-analysis" | "igra",
+            time: { at: options.at },
+            leadHours: leads[0]!,
+          }
+        : {
+            ...common,
+            referenceDataset: "igra" as const,
+            time: {
+              from: options.from,
+              to: options.to,
+              hoursUtc: parseNumbers(options.hours) as Array<0 | 6 | 12 | 18>,
+              maxValidTimes: options.maxValidTimes,
+            },
+            leadHours: leads,
+          };
+
+      const result = await new UnifiedForecastVerificationService().verify(request);
       printResult(result, Boolean(options.json));
     });
 }
