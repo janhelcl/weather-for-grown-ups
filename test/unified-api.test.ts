@@ -102,12 +102,14 @@ describe("unified atmospheric routing", () => {
   it("routes the same point operation by dataset without changing the public shape", async () => {
     const gfsProfile = { getProfile: vi.fn(async () => ({ route: "gfs-profile" })) };
     const gefsBundle = { getBundle: vi.fn(async () => ({ route: "gefs-bundle" })) };
+    const ifsProfile = { getProfile: vi.fn(async () => ({ route: "ifs-profile" })) };
     const historyProfile = { getHistoricalProfile: vi.fn(async () => ({ route: "history-profile" })) };
     const historyFields = { getHistoricalFields: vi.fn(async () => ({ route: "history-fields" })) };
 
     const service = new UnifiedAtmosphereQueryService({
       gfsProfile: gfsProfile as any,
       gefsBundle: gefsBundle as any,
+      ifsProfile: ifsProfile as any,
       historyProfile: historyProfile as any,
       historyFields: historyFields as any,
     });
@@ -129,6 +131,21 @@ describe("unified atmospheric routing", () => {
     });
     expect(gefs.result).toEqual({ route: "gefs-bundle" });
     expect(gefsBundle.getBundle).toHaveBeenCalledOnce();
+
+    const ifs = await service.query({
+      dataset: "ifs",
+      ...base,
+      forecast: { run: "latest" },
+    });
+    expect(ifs.result).toEqual({ route: "ifs-profile" });
+    expect(ifs.internalDatasetId).toBe("ifs_0p25");
+    expect(ifs.kind).toBe("deterministic");
+    expect(ifsProfile.getProfile).toHaveBeenCalledWith(expect.objectContaining({
+      run: "latest",
+      validTime: "2026-08-28T12:00:00Z",
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    }));
 
     const historicalPressure = await service.query({
       dataset: "gfs-analysis",
@@ -291,6 +308,7 @@ describe("unified catalog", () => {
     expect(temperature?.support.map((support) => support.dataset)).toEqual([
       "gfs",
       "gefs",
+      "ifs",
       "gfs-analysis",
     ]);
   });
@@ -311,6 +329,25 @@ describe("unified catalog branch coverage", () => {
       match.support.every((support) => support.dataset === "gefs"))).toBe(true);
   });
 
+  it("discovers IFS canonical pressure and field support", () => {
+    const pressure = searchAtmosphereCatalog({
+      datasets: ["ifs"],
+      sections: ["variables"],
+      search: "temperature",
+      limit: 10,
+    });
+    expect(pressure.matches.find((match) => match.id === "temperature")?.support)
+      .toEqual([{ dataset: "ifs", semantics: "deterministic ECMWF IFS 0.25° operational forecast" }]);
+
+    const fields = searchAtmosphereCatalog({
+      datasets: ["ifs"],
+      sections: ["fields"],
+      search: "wind 10m",
+      limit: 10,
+    });
+    expect(fields.matches.some((match) => match.id === "wind_10m")).toBe(true);
+  });
+
   it("filters historical instantaneous raw fields and truncates deterministically", () => {
     const result = searchAtmosphereCatalog({
       datasets: ["gfs-analysis"],
@@ -328,7 +365,7 @@ describe("unified catalog branch coverage", () => {
 
   it("returns zero matches for an impossible unified search", () => {
     const result = searchAtmosphereCatalog({
-      datasets: ["gfs", "gefs", "gfs-analysis"],
+      datasets: ["gfs", "gefs", "ifs", "gfs-analysis"],
       search: "definitely impossible atmospheric token",
     });
 
