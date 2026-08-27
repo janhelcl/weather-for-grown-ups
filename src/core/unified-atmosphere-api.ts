@@ -4,6 +4,7 @@ import {
   ArchivedGfsForecastQueryService,
   shouldUseArchivedGfsForecast,
 } from "./archived-gfs-query.js";
+import { ArchivedGfsForecastDiagnosticService } from "./archived-gfs-diagnostics.js";
 import { AtmosphericDiagnosticTimeSeriesService } from "./atmospheric-diagnostic-timeseries-service.js";
 import { AtmosphericLayerDiagnosticsService } from "./atmospheric-layer-diagnostics-service.js";
 import { AtmosphericParcelDiagnosticsService } from "./atmospheric-parcel-diagnostics-service.js";
@@ -436,6 +437,8 @@ export interface UnifiedAtmosphereDiagnosticServiceOptions {
   profile?: AtmosphericProfileDiagnosticsService;
   parcel?: AtmosphericParcelDiagnosticsService;
   timeSeries?: AtmosphericDiagnosticTimeSeriesService;
+  archivedGfs?: Pick<ArchivedGfsForecastDiagnosticService, "diagnose">;
+  now?: () => Date;
 }
 
 export class UnifiedAtmosphereDiagnosticService {
@@ -443,19 +446,25 @@ export class UnifiedAtmosphereDiagnosticService {
   private readonly profile: AtmosphericProfileDiagnosticsService;
   private readonly parcel: AtmosphericParcelDiagnosticsService;
   private readonly timeSeries: AtmosphericDiagnosticTimeSeriesService;
+  private readonly archivedGfs: Pick<ArchivedGfsForecastDiagnosticService, "diagnose">;
+  private readonly now: () => Date;
 
   constructor(options: UnifiedAtmosphereDiagnosticServiceOptions = {}) {
     this.layer = options.layer ?? new AtmosphericLayerDiagnosticsService();
     this.profile = options.profile ?? new AtmosphericProfileDiagnosticsService();
     this.parcel = options.parcel ?? new AtmosphericParcelDiagnosticsService();
     this.timeSeries = options.timeSeries ?? new AtmosphericDiagnosticTimeSeriesService();
+    this.archivedGfs = options.archivedGfs ?? new ArchivedGfsForecastDiagnosticService();
+    this.now = options.now ?? (() => new Date());
   }
 
   async diagnose(input: DiagnoseAtmosphereInput): Promise<UnifiedAtmosphereResult> {
     const request = diagnoseAtmosphereSchema.parse(input);
-    const result = "at" in request.time
-      ? await this.instant(request)
-      : await this.range(request);
+    const result = shouldUseArchivedGfsForecast(request, this.now())
+      ? await this.archivedGfs.diagnose(request)
+      : "at" in request.time
+        ? await this.instant(request)
+        : await this.range(request);
     return wrapResult(request, result);
   }
 
