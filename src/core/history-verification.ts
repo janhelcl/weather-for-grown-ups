@@ -63,6 +63,7 @@ export class HistoricalForecastVerificationService {
     });
     const forecast = await this.forecastGetter.getArchivedForecastProfile({
       runTime: forecastRun,
+      grid: "0p50",
       forecastHour: query.leadHours,
       latitude: query.latitude,
       longitude: query.longitude,
@@ -70,6 +71,9 @@ export class HistoricalForecastVerificationService {
       pressureLevelsHpa: query.pressureLevelsHpa,
     });
 
+    if (forecast.model !== "gfs_grid4_forecast_0p5_archive") {
+      throw new Error("Historical Grid 4 verification requires the 0.5-degree forecast archive");
+    }
     if (forecast.validTime !== analysis.analysisTime) {
       throw new Error("Archived GFS forecast valid time does not match verification analysis time");
     }
