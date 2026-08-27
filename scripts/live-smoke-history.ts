@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { HistoricalTimeSeriesService } from "../src/core/history-time-series.js";
+import { HistoricalForecastSkillService } from "../src/core/history-skill.js";
 import { HistoricalForecastVerificationService } from "../src/core/history-verification.js";
 import { HistoricalProfileService } from "../src/core/history.js";
 
@@ -83,6 +84,35 @@ for (const level of verification.pressureLevels) {
   for (const change of level.changes) assert(Number.isFinite(change.delta));
 }
 
+const skillService = new HistoricalForecastSkillService({ verifier: verificationService });
+const skill = await skillService.summarize({
+  latitude: 50.08,
+  longitude: 14.43,
+  startTime: "2019-12-26T18:00:00Z",
+  endTime: "2019-12-26T18:00:00Z",
+  cycleHoursUtc: [18],
+  leadHours: [54],
+  variables: ["temperature", "relative_humidity", "wind", "geopotential_height"],
+  pressureLevelsHpa: [850, 700],
+  maxValidTimes: 1,
+});
+
+assert.equal(skill.model, "gfs_grid4_analysis_skill_summary_0p5");
+assert.equal(skill.comparison, "analysis_minus_forecast");
+assert.deepEqual(skill.availability, {
+  requestedEvaluations: 1,
+  successfulEvaluations: 1,
+  failedEvaluations: 0,
+  successRate: 1,
+});
+assert(skill.statistics.length > 0);
+for (const statistic of skill.statistics) {
+  assert.equal(statistic.count, 1);
+  assert(Number.isFinite(statistic.bias));
+  assert(Number.isFinite(statistic.mae));
+  assert(Number.isFinite(statistic.rmse));
+}
+
 console.log(JSON.stringify({
   profile: {
     analysisTime: result.analysisTime,
@@ -105,6 +135,12 @@ console.log(JSON.stringify({
     pressureLevels: verification.pressureLevels,
     forecastDataset: verification.forecast.dataset,
     analysisDataset: verification.analysis.dataset,
+  },
+  skill: {
+    period: skill.period,
+    leadHours: skill.leadHours,
+    availability: skill.availability,
+    statistics: skill.statistics,
   },
   caveat: result.caveat,
 }, null, 2));
