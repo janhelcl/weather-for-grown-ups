@@ -13,6 +13,7 @@ import {
   type HistoricalGfsFieldId,
 } from "../schema/history-fields.js";
 import type { HistoricalProfileQueryInput } from "../schema/history.js";
+import { isoDateTimeSchema } from "../schema/query.js";
 import type { HistoricalProfileResult } from "../schema/history-result.js";
 import {
   NCEI_GFS_GRID4_ANALYSIS_START,
@@ -83,12 +84,16 @@ export interface HistoricalFieldsServiceOptions {
   source?: HistoricalAnalysisDataSource;
   profileGetter?: HistoricalFieldsProfileGetter;
   now?: () => Date;
+  allowNonAnalysisCycle?: boolean;
+  minimumTime?: Date;
 }
 
 export class HistoricalFieldsService {
   private readonly source: HistoricalAnalysisDataSource;
   private readonly profileGetter: HistoricalFieldsProfileGetter;
   private readonly now: () => Date;
+  private readonly allowNonAnalysisCycle: boolean;
+  private readonly minimumTime: Date;
 
   constructor(options: HistoricalFieldsServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
@@ -98,14 +103,23 @@ export class HistoricalFieldsService {
       limiter,
     });
     this.now = options.now ?? (() => new Date());
-    this.profileGetter = options.profileGetter ?? new HistoricalProfileService({ source: this.source, now: this.now });
+    this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
+    this.minimumTime = options.minimumTime ?? NCEI_GFS_GRID4_ANALYSIS_START;
+    this.profileGetter = options.profileGetter ?? new HistoricalProfileService({
+      source: this.source,
+      now: this.now,
+      allowNonAnalysisCycle: this.allowNonAnalysisCycle,
+      minimumTime: this.minimumTime,
+    });
   }
 
   async getHistoricalFields(input: HistoricalFieldsQueryInput): Promise<HistoricalFieldsResult> {
-    const query = historicalFieldsQuerySchema.parse(input);
+    const query = this.allowNonAnalysisCycle
+      ? historicalFieldsQuerySchema.safeExtend({ analysisTime: isoDateTimeSchema }).parse(input)
+      : historicalFieldsQuerySchema.parse(input);
     const analysisTime = new Date(query.analysisTime);
-    if (analysisTime < NCEI_GFS_GRID4_ANALYSIS_START) {
-      throw new Error(`NCEI GFS Grid 4 analysis history begins at ${NCEI_GFS_GRID4_ANALYSIS_START.toISOString()}`);
+    if (analysisTime < this.minimumTime) {
+      throw new Error(`NCEI GFS Grid 4 history begins at ${this.minimumTime.toISOString()} for this data source`);
     }
     if (analysisTime > this.now()) throw new Error("Historical GFS analysisTime must not be in the future");
 

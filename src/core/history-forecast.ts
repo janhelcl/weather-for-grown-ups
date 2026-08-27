@@ -6,9 +6,7 @@ import {
   type HistoricalGfsVariableId,
 } from "../schema/history.js";
 import type { HistoricalProfileResult } from "../schema/history-result.js";
-import {
-  historicalVerificationLeadHoursSchema,
-} from "../schema/history-verification.js";
+import { archivedGfsForecastHourSchema } from "../schema/history-forecast.js";
 import {
   NCEI_GFS_GRID4_FORECAST_START,
   NceiGfsForecastHistorySource,
@@ -34,6 +32,10 @@ export interface ArchivedGfsForecastProfileResult {
   validTime: string;
   requestedPoint: GridPoint;
   gridPoint: GridPoint;
+  selection: {
+    variables: readonly HistoricalGfsVariableId[];
+    pressureLevelsHpa: readonly number[];
+  };
   levels: HistoricalProfileResult["levels"];
   source: {
     provider: "NOAA NCEI";
@@ -69,7 +71,7 @@ export class ArchivedGfsForecastProfileService {
 
   async getArchivedForecastProfile(query: ArchivedGfsForecastProfileQuery): Promise<ArchivedGfsForecastProfileResult> {
     historicalAnalysisTimeSchema.parse(query.runTime.toISOString());
-    const forecastHour = historicalVerificationLeadHoursSchema.parse(query.forecastHour);
+    const forecastHour = archivedGfsForecastHourSchema.parse(query.forecastHour);
     if (query.runTime < NCEI_GFS_GRID4_FORECAST_START) {
       throw new Error(
         `NCEI GFS Grid 4 forecast history begins at ${NCEI_GFS_GRID4_FORECAST_START.toISOString()}`,
@@ -88,7 +90,12 @@ export class ArchivedGfsForecastProfileService {
         variables: request.variables,
       }),
     };
-    const normalizer = new HistoricalProfileService({ source: adapter, now: this.now });
+    const normalizer = new HistoricalProfileService({
+      source: adapter,
+      now: this.now,
+      allowNonAnalysisCycle: true,
+      minimumTime: NCEI_GFS_GRID4_FORECAST_START,
+    });
     const profile = await normalizer.getHistoricalProfile({
       latitude: query.latitude,
       longitude: query.longitude,
@@ -104,6 +111,10 @@ export class ArchivedGfsForecastProfileService {
       validTime: validTime.toISOString(),
       requestedPoint: profile.requestedPoint,
       gridPoint: profile.gridPoint,
+      selection: {
+        variables: [...query.variables],
+        pressureLevelsHpa: [...query.pressureLevelsHpa],
+      },
       levels: profile.levels,
       source: profile.source,
     };

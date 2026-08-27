@@ -15,6 +15,7 @@ import {
   type HistoricalAreaSummaryQueryInput,
   type HistoricalAreaSummaryResult,
 } from "../schema/history-area-summary.js";
+import { isoDateTimeSchema } from "../schema/query.js";
 import {
   NCEI_GFS_GRID4_ANALYSIS_START,
   NceiGfsHistorySource,
@@ -30,11 +31,15 @@ export interface HistoricalAreaSummaryServiceOptions {
   cooldownMs?: number;
   source?: HistoricalAnalysisAreaDataSource;
   now?: () => Date;
+  allowNonAnalysisCycle?: boolean;
+  minimumTime?: Date;
 }
 
 export class HistoricalAreaSummaryService {
   private readonly source: HistoricalAnalysisAreaDataSource;
   private readonly now: () => Date;
+  private readonly allowNonAnalysisCycle: boolean;
+  private readonly minimumTime: Date;
 
   constructor(options: HistoricalAreaSummaryServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
@@ -47,14 +52,18 @@ export class HistoricalAreaSummaryService {
       limiter,
     });
     this.now = options.now ?? (() => new Date());
+    this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
+    this.minimumTime = options.minimumTime ?? NCEI_GFS_GRID4_ANALYSIS_START;
   }
 
   async summarize(input: HistoricalAreaSummaryQueryInput): Promise<HistoricalAreaSummaryResult> {
-    const query = historicalAreaSummaryQuerySchema.parse(input);
+    const query = this.allowNonAnalysisCycle
+      ? historicalAreaSummaryQuerySchema.safeExtend({ analysisTime: isoDateTimeSchema }).parse(input)
+      : historicalAreaSummaryQuerySchema.parse(input);
     const analysisTime = new Date(query.analysisTime);
-    if (analysisTime < NCEI_GFS_GRID4_ANALYSIS_START) {
+    if (analysisTime < this.minimumTime) {
       throw new Error(
-        `NCEI GFS Grid 4 analysis history begins at ${NCEI_GFS_GRID4_ANALYSIS_START.toISOString()}`,
+        `NCEI GFS Grid 4 history begins at ${this.minimumTime.toISOString()} for this data source`,
       );
     }
     if (analysisTime > this.now()) {

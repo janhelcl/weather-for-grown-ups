@@ -19,6 +19,7 @@ import {
   type HistoricalProfileQueryInput,
 } from "../schema/history.js";
 import type { HistoricalProfileResult } from "../schema/history-result.js";
+import { isoDateTimeSchema } from "../schema/query.js";
 import {
   NCEI_GFS_GRID4_ANALYSIS_START,
   NceiGfsHistorySource,
@@ -121,11 +122,15 @@ export interface HistoricalProfileServiceOptions {
   cooldownMs?: number;
   source?: HistoricalAnalysisDataSource;
   now?: () => Date;
+  allowNonAnalysisCycle?: boolean;
+  minimumTime?: Date;
 }
 
 export class HistoricalProfileService {
   private readonly source: HistoricalAnalysisDataSource;
   private readonly now: () => Date;
+  private readonly allowNonAnalysisCycle: boolean;
+  private readonly minimumTime: Date;
 
   constructor(options: HistoricalProfileServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
@@ -138,14 +143,18 @@ export class HistoricalProfileService {
       limiter,
     });
     this.now = options.now ?? (() => new Date());
+    this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
+    this.minimumTime = options.minimumTime ?? NCEI_GFS_GRID4_ANALYSIS_START;
   }
 
   async getHistoricalProfile(input: HistoricalProfileQueryInput): Promise<HistoricalProfileResult> {
-    const query = historicalProfileQuerySchema.parse(input);
+    const query = this.allowNonAnalysisCycle
+      ? historicalProfileQuerySchema.safeExtend({ analysisTime: isoDateTimeSchema }).parse(input)
+      : historicalProfileQuerySchema.parse(input);
     const analysisTime = new Date(query.analysisTime);
-    if (analysisTime < NCEI_GFS_GRID4_ANALYSIS_START) {
+    if (analysisTime < this.minimumTime) {
       throw new Error(
-        `NCEI GFS Grid 4 analysis history begins at ${NCEI_GFS_GRID4_ANALYSIS_START.toISOString()}`,
+        `NCEI GFS Grid 4 history begins at ${this.minimumTime.toISOString()} for this data source`,
       );
     }
     if (analysisTime > this.now()) {

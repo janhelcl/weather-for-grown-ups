@@ -15,6 +15,18 @@ export interface ArchivedGfsForecastRequest {
   variables: readonly string[];
 }
 
+export interface ArchivedGfsForecastAreaRequest {
+  runTime: Date;
+  forecastHour: number;
+  westLongitude: number;
+  eastLongitude: number;
+  southLatitude: number;
+  northLatitude: number;
+  variables: readonly string[];
+  verticalCoordinate?: number;
+  horizontalStride?: number;
+}
+
 export interface ArchivedGfsForecastResponse {
   csv: string;
   dataset: string;
@@ -25,13 +37,17 @@ export interface ArchivedGfsForecastDataSource {
   fetch(request: ArchivedGfsForecastRequest): Promise<ArchivedGfsForecastResponse>;
 }
 
+export interface ArchivedGfsForecastAreaDataSource {
+  fetchArea(request: ArchivedGfsForecastAreaRequest): Promise<ArchivedGfsForecastResponse>;
+}
+
 export interface NceiGfsForecastHistorySourceOptions {
   cacheDir: string;
   limiter: Pick<FileRateLimiter, "run">;
   fetchFn?: typeof fetch;
 }
 
-export class NceiGfsForecastHistorySource implements ArchivedGfsForecastDataSource {
+export class NceiGfsForecastHistorySource implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
   private readonly fetchFn: typeof fetch;
 
   constructor(private readonly options: NceiGfsForecastHistorySourceOptions) {
@@ -40,7 +56,20 @@ export class NceiGfsForecastHistorySource implements ArchivedGfsForecastDataSour
 
   async fetch(request: ArchivedGfsForecastRequest): Promise<ArchivedGfsForecastResponse> {
     const dataset = buildNceiGfsForecastDatasetPath(request.runTime, request.forecastHour);
-    const url = buildNceiGfsForecastPointUrl(request);
+    return this.fetchCsv(buildNceiGfsForecastPointUrl(request), dataset, request.runTime, request.forecastHour);
+  }
+
+  async fetchArea(request: ArchivedGfsForecastAreaRequest): Promise<ArchivedGfsForecastResponse> {
+    const dataset = buildNceiGfsForecastDatasetPath(request.runTime, request.forecastHour);
+    return this.fetchCsv(buildNceiGfsForecastAreaUrl(request), dataset, request.runTime, request.forecastHour);
+  }
+
+  private async fetchCsv(
+    url: string,
+    dataset: string,
+    runTime: Date,
+    forecastHour: number,
+  ): Promise<ArchivedGfsForecastResponse> {
     await mkdir(this.options.cacheDir, { recursive: true });
     const cachePath = join(
       this.options.cacheDir,
@@ -61,7 +90,7 @@ export class NceiGfsForecastHistorySource implements ArchivedGfsForecastDataSour
       });
       if (response.status === 404) {
         throw new Error(
-          `NCEI archived GFS forecast is not available online for run ${request.runTime.toISOString()} f${formatForecastHour(request.forecastHour)} (${dataset}). Older forecast data may require NCEI HAS retrieval.`,
+          `NCEI archived GFS forecast is not available online for run ${runTime.toISOString()} f${formatForecastHour(forecastHour)} (${dataset}). Older forecast data may require NCEI HAS retrieval.`,
         );
       }
       if (!response.ok) {
@@ -92,6 +121,26 @@ export function buildNceiGfsForecastPointUrl(request: ArchivedGfsForecastRequest
     time: "all",
     accept: "csv",
   });
+  return `${NCEI_GFS_HISTORY_BASE_URL}/${dataset}?${query.toString()}`;
+}
+
+export function buildNceiGfsForecastAreaUrl(request: ArchivedGfsForecastAreaRequest): string {
+  const dataset = buildNceiGfsForecastDatasetPath(request.runTime, request.forecastHour);
+  const query = new URLSearchParams({
+    var: request.variables.join(","),
+    north: String(request.northLatitude),
+    south: String(request.southLatitude),
+    east: String(request.eastLongitude),
+    west: String(request.westLongitude),
+    time: "all",
+    accept: "csv",
+  });
+  if (request.verticalCoordinate !== undefined) {
+    query.set("vertCoord", String(request.verticalCoordinate));
+  }
+  if (request.horizontalStride !== undefined) {
+    query.set("horizStride", String(request.horizontalStride));
+  }
   return `${NCEI_GFS_HISTORY_BASE_URL}/${dataset}?${query.toString()}`;
 }
 

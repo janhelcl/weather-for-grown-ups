@@ -147,6 +147,47 @@ describe("unified atmospheric routing", () => {
     expect(historicalMixed.result).toEqual({ route: "history-fields" });
   });
 
+  it("routes old explicit GFS runs through the archive without changing dataset=gfs", async () => {
+    const gfsProfile = { getProfile: vi.fn(async () => ({ route: "operational-gfs" })) };
+    const archivedGfs = {
+      query: vi.fn(async () => ({
+        model: "gfs_grid4_forecast_0p5_archive",
+        route: "archived-gfs",
+      })),
+    };
+    const service = new UnifiedAtmosphereQueryService({
+      gfsProfile: gfsProfile as any,
+      archivedGfs: archivedGfs as any,
+      now: () => new Date("2026-08-27T12:00:00Z"),
+    });
+
+    const archived = await service.query({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2017-05-09T12:00:00Z" },
+      selection,
+      forecast: { run: "2017-05-07T12:00:00Z" },
+    });
+    expect(archived.dataset).toBe("gfs");
+    expect(archived.internalDatasetId).toBe("gfs_grid4_forecast_0p5_archive");
+    expect(archived.result).toEqual({
+      model: "gfs_grid4_forecast_0p5_archive",
+      route: "archived-gfs",
+    });
+    expect(archivedGfs.query).toHaveBeenCalledOnce();
+    expect(gfsProfile.getProfile).not.toHaveBeenCalled();
+
+    const recent = await service.query({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-21T12:00:00Z" },
+      selection,
+      forecast: { run: "2026-08-20T12:00:00Z" },
+    });
+    expect(recent.internalDatasetId).toBe("gfs_0p25");
+    expect(recent.result).toEqual({ route: "operational-gfs" });
+  });
+
   it("routes time range semantics to forecast or analysis implementations", async () => {
     const gfsTimeSeries = { getTimeSeries: vi.fn(async () => ({ route: "gfs-series" })) };
     const gefsTimeSeries = { getTimeSeries: vi.fn(async () => ({ route: "gefs-series" })) };
@@ -570,6 +611,58 @@ describe("unified geometry routing coverage", () => {
       aggregate,
       limits: { maxGridPoints: 1000 },
     })).result).toEqual({ route: "history-area" });
+  });
+});
+
+describe("unified archived forecast diagnostic routing", () => {
+  it("keeps dataset=gfs while routing old explicit runs to archived diagnostics", async () => {
+    const operational = { getLayerDiagnostics: vi.fn(async () => ({ route: "operational" })) };
+    const archivedGfs = {
+      diagnose: vi.fn(async () => ({
+        model: "gfs_grid4_forecast_0p5_archive",
+        route: "archive-diagnostic",
+      })),
+    };
+    const service = new UnifiedAtmosphereDiagnosticService({
+      layer: operational as any,
+      archivedGfs: archivedGfs as any,
+      now: () => new Date("2026-08-27T12:00:00Z"),
+    });
+
+    const archived = await service.diagnose({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2017-05-09T12:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+      forecast: { run: "2017-05-07T12:00:00Z" },
+    });
+    expect(archived.dataset).toBe("gfs");
+    expect(archived.internalDatasetId).toBe("gfs_grid4_forecast_0p5_archive");
+    expect(archived.result).toEqual({
+      model: "gfs_grid4_forecast_0p5_archive",
+      route: "archive-diagnostic",
+    });
+    expect(archivedGfs.diagnose).toHaveBeenCalledOnce();
+    expect(operational.getLayerDiagnostics).not.toHaveBeenCalled();
+
+    await service.diagnose({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-21T12:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+      forecast: { run: "2026-08-20T12:00:00Z" },
+    });
+    expect(operational.getLayerDiagnostics).toHaveBeenCalledOnce();
   });
 });
 
