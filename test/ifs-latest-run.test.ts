@@ -31,7 +31,7 @@ describe("IFS latest run resolution", () => {
       probe: { isForecastAvailable },
       now: () => new Date("2026-08-27T18:00:00Z"),
     });
-    const validTime = new Date("2026-09-02T00:00:00Z");
+    const validTime = new Date("2026-09-03T00:00:00Z");
     const run = await resolver.resolveLatestRun(validTime, selectors);
     expect([0, 12]).toContain(run.getUTCHours());
     expect(isForecastAvailable).toHaveBeenCalled();
