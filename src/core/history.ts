@@ -121,11 +121,13 @@ export interface HistoricalProfileServiceOptions {
   cooldownMs?: number;
   source?: HistoricalAnalysisDataSource;
   now?: () => Date;
+  allowNonAnalysisCycle?: boolean;
 }
 
 export class HistoricalProfileService {
   private readonly source: HistoricalAnalysisDataSource;
   private readonly now: () => Date;
+  private readonly allowNonAnalysisCycle: boolean;
 
   constructor(options: HistoricalProfileServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
@@ -138,10 +140,13 @@ export class HistoricalProfileService {
       limiter,
     });
     this.now = options.now ?? (() => new Date());
+    this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
   }
 
   async getHistoricalProfile(input: HistoricalProfileQueryInput): Promise<HistoricalProfileResult> {
-    const query = historicalProfileQuerySchema.parse(input);
+    const query = this.allowNonAnalysisCycle
+      ? historicalProfileQuerySchema.safeExtend({ analysisTime: isoDateTimeSchema }).parse(input)
+      : historicalProfileQuerySchema.parse(input);
     const analysisTime = new Date(query.analysisTime);
     if (analysisTime < NCEI_GFS_GRID4_ANALYSIS_START) {
       throw new Error(
