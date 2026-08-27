@@ -64,7 +64,7 @@ describe("IFS canonical point profile", () => {
       .toBeCloseTo(60);
     expect(result.source).toMatchObject({
       provider: "ECMWF Open Data",
-      access: "s3_range",
+      access: "indexed_http_range",
       product: "ifs_0p25_oper_fc",
       horizontalGridDegrees: 0.25,
       cacheHit: false,
