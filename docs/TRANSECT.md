@@ -7,11 +7,11 @@ Selecting `dataset=gefs` gives ensemble-native mixed-field transects; selecting 
 ## CLI
 
 ```bash
-wfg transect \
-  --model gfs \
+wfg query \
+  --dataset gfs \
   --start 50.08,14.43 \
   --end 47.27,11.40 \
-  --valid 2026-08-24T12:00:00Z \
+  --at 2026-08-24T12:00:00Z \
   --vars temperature,relative_humidity,wind \
   --levels 1000,925,850,700,500 \
   --samples 21 \
