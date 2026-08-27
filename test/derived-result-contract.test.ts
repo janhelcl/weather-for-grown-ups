@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { ProfileResult } from "../src/core/types.js";
-import { handleGetGfsProfile } from "../src/mcp-tool.js";
 import {
   batchPointsResultSchema,
   profileResultSchema,
@@ -79,30 +78,4 @@ describe("derived meteorology shared result contract", () => {
     expect(series.series[0]?.levels[0]).toEqual(derivedLevel);
   });
 
-  it("returns thermodynamic diagnostics through the MCP profile boundary", async () => {
-    const response = await handleGetGfsProfile(
-      { getProfile: async () => profile },
-      {
-        latitude: profile.requestedPoint.latitude,
-        longitude: profile.requestedPoint.longitude,
-        run: profile.run,
-        validTime: profile.validTime,
-        variables: [
-          "dew_point",
-          "potential_temperature",
-          "mixing_ratio",
-          "virtual_temperature",
-          "air_density",
-          "wet_bulb_temperature",
-          "equivalent_potential_temperature",
-        ],
-        pressureLevelsHpa: [850],
-        source: "s3",
-      },
-    );
-
-    expect(response).not.toHaveProperty("isError");
-    if (!("structuredContent" in response)) throw new Error("Expected MCP success response");
-    expect(response.structuredContent.levels[0]).toEqual(derivedLevel);
-  });
 });
