@@ -129,6 +129,29 @@ describe("GfsGefsComparisonService", () => {
     expect(result.deterministicGfs.model).toBe("gfs_0p50");
   });
 
+  it("identifies deterministic GFS below the GEFS member range", async () => {
+    const service = new GfsGefsComparisonService({
+      profileGetter: { getProfile: async () => gfsResult(5) },
+      ensembleGetter: { getEnsemble: async () => gefsResult([7, 8, 9]) },
+      alignedRunProvider: {
+        resolveLatestAlignedRun: async () => new Date("2026-08-23T12:00:00Z"),
+      },
+    });
+    const result = await service.compare({
+      latitude: 50.08,
+      longitude: 14.43,
+      run: "2026-08-23T12:00:00Z",
+      validTime: "2026-08-23T18:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["c00", "p01", "p02"],
+      quantiles: [0.5],
+    });
+    expect(result.comparison.rangePosition).toBe("below_member_min");
+    expect(result.comparison.outsideMemberRange).toBe(true);
+    expect(result.comparison.membersBelowDeterministic).toBe(0);
+  });
+
   it("reports an undefined standardized difference when selected members have zero spread", async () => {
     const service = new GfsGefsComparisonService({
       profileGetter: { getProfile: async () => gfsResult(5) },

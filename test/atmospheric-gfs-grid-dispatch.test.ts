@@ -7,6 +7,7 @@ import { ParcelDiagnosticsService } from "../src/core/parcel-diagnostics.js";
 import type { ProfileResult } from "../src/core/types.js";
 import { AtmosphericBatchPointsService } from "../src/core/atmospheric-batch-points-service.js";
 import { AtmosphericPointsTimeSeriesService } from "../src/core/atmospheric-points-timeseries-service.js";
+import { AtmosphericRunComparisonService } from "../src/core/atmospheric-run-comparison-service.js";
 import { AtmosphericTransectService } from "../src/core/atmospheric-transect-service.js";
 
 describe("model-neutral GFS 0.5 geometry dispatch", () => {
@@ -189,5 +190,63 @@ describe("model-neutral GFS 0.5 diagnostic dispatch", () => {
     expect(seenGrid).toBe("0p50");
     expect(result.model).toBe("gfs_0p50");
     expect(result.parcel.capeJkg).toBeGreaterThan(0);
+  });
+});
+
+
+describe("model-neutral run-comparison dispatch", () => {
+  const query = {
+    latitude: 50,
+    longitude: 14,
+    anchorRun: "2026-08-27T00:00:00Z",
+    validTime: "2026-08-27T12:00:00Z",
+    variables: ["temperature"] as const,
+    pressureLevelsHpa: [850],
+    cycles: 2,
+  };
+
+  it("injects 0p50 for deterministic GFS 0.5 run comparison", async () => {
+    const compareRuns = vi.fn(async (input: any) => ({ route: "gfs", input }));
+    const service = new AtmosphericRunComparisonService({
+      gfs: { compareRuns } as any,
+      gefs: { compareRuns: vi.fn() } as any,
+    });
+    const result: any = await service.compareRuns({ model: "gfs_0p50", query });
+    expect(result.route).toBe("gfs");
+    expect(compareRuns).toHaveBeenCalledWith(expect.objectContaining({ grid: "0p50" }));
+  });
+
+  it("preserves the legacy 0p25 query shape for deterministic run comparison", async () => {
+    const compareRuns = vi.fn(async (input: any) => ({ route: "gfs", input }));
+    const service = new AtmosphericRunComparisonService({
+      gfs: { compareRuns } as any,
+      gefs: { compareRuns: vi.fn() } as any,
+    });
+    await service.compareRuns({ model: "gfs_0p25", query });
+    expect(compareRuns.mock.calls[0]?.[0]).not.toHaveProperty("grid");
+  });
+
+  it("keeps GEFS run comparison on the ensemble implementation", async () => {
+    const compareRuns = vi.fn(async (input: any) => ({ route: "gefs", input }));
+    const service = new AtmosphericRunComparisonService({
+      gfs: { compareRuns: vi.fn() } as any,
+      gefs: { compareRuns } as any,
+    });
+    const result: any = await service.compareRuns({
+      model: "gefs_0p50",
+      query: {
+        latitude: 50,
+        longitude: 14,
+        anchorRun: "2026-08-27T00:00:00Z",
+        validTime: "2026-08-27T12:00:00Z",
+        variable: "temperature",
+        pressureLevelHpa: 850,
+        members: ["c00", "p01"],
+        quantiles: [0.5],
+        cycles: 2,
+      },
+    });
+    expect(result.route).toBe("gefs");
+    expect(compareRuns).toHaveBeenCalledOnce();
   });
 });
