@@ -38,7 +38,7 @@ export class UnifiedRunComparisonService {
         longitude: request.geometry.longitude,
         anchorRun: request.anchorRun,
         ...(request.gfsGrid === undefined ? {} : { grid: request.gfsGrid }),
-        validTime: instantTime.at,
+        validTime: request.time.at,
         ...(request.selection.variables === undefined ? {} : { variables: request.selection.variables }),
         ...(request.selection.pressureLevelsHpa === undefined
           ? {}
@@ -57,7 +57,7 @@ export class UnifiedRunComparisonService {
       latitude: request.geometry.latitude,
       longitude: request.geometry.longitude,
       anchorRun: request.anchorRun,
-      validTime: instantTime.at,
+      validTime: request.time.at,
       variable: request.selection.variables![0],
       pressureLevelHpa: request.selection.pressureLevelsHpa![0],
       ...(request.ensemble?.members === undefined ? {} : { members: request.ensemble.members }),
@@ -81,7 +81,7 @@ export class UnifiedDatasetComparisonService {
       longitude: request.geometry.longitude,
       run: request.run,
       ...(request.gfsGrid === undefined ? {} : { gfsGrid: request.gfsGrid }),
-      validTime: instantTime.at,
+      validTime: request.time.at,
       variable: request.variable,
       pressureLevelHpa: request.pressureLevelHpa,
       ...(request.members === undefined ? {} : { members: request.members }),
