@@ -138,6 +138,32 @@ In particular:
 
 The [architecture guide](docs/ARCHITECTURE.md) goes deeper into the shared core, model adapters, member-first computation, source strategy, caching, and public surfaces.
 
+## Preferred unified API
+
+New integrations should use the dataset-oriented query vocabulary documented in [UNIFIED_API.md](docs/UNIFIED_API.md).
+
+Normal atmospheric access is expressed as:
+
+```text
+dataset × geometry × time × selection
+```
+
+with short dataset IDs `gfs`, `gefs`, and `gfs-analysis`. The same query structure therefore works for a deterministic forecast, an ensemble forecast, or an archived analysis while each result preserves its native deterministic/ensemble and forecast/analysis semantics.
+
+The preferred MCP vocabulary is intentionally small:
+
+- `search_catalog`
+- `query_atmosphere`
+- `diagnose_atmosphere`
+- `compare_runs`
+- `compare_datasets`
+- `verify_forecast`
+- `find_analogs`
+
+The CLI mirrors the same concepts with `catalog --dataset ...`, `query`, `diagnose`, `compare-runs`, `compare-datasets`, `verify`, and `analogs`.
+
+Existing model-native GFS/GEFS/history commands and MCP tools remain available as backward-compatible aliases.
+
 ## CLI
 
 The CLI is operation-oriented. Where an operation has a unified command, it uses `--model gfs|gefs`; model-native aliases remain explicit where they make the contract clearer.
