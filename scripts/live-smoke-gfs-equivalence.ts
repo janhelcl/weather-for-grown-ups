@@ -205,21 +205,12 @@ async function verifyGrid(grid: Grid, plan: ComparisonPlan) {
 }
 
 async function comparisonPlan(grid: Grid): Promise<ComparisonPlan> {
-  if (grid === "0p50") {
-    return {
-      leftSource: "s3",
-      rightSource: "archive",
-      mode: "historical_archive",
-      archiveStatus: "available",
-    };
-  }
-
   const candidate = candidateRun(3);
   const run = candidate.toISOString();
   const validTime = new Date(candidate.getTime() + 6 * HOUR_MS).toISOString();
   try {
-    await minimalPoint("0p25", "archive", run, validTime);
-    console.log("[0p25] true GDEX archive is available; testing S3 vs archive");
+    await minimalPoint(grid, "archive", run, validTime);
+    console.log(`[${grid}] historical archive overlap is available; testing S3 vs archive`);
     return {
       leftSource: "s3",
       rightSource: "archive",
@@ -228,9 +219,9 @@ async function comparisonPlan(grid: Grid): Promise<ComparisonPlan> {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!isUpstreamArchiveAvailabilityError(message)) throw error;
+    if (!isUpstreamArchiveAvailabilityError(grid, message)) throw error;
     console.log(
-      `[0p25] GDEX archive unavailable (${message}); testing NOMADS vs NOAA AWS trailing-30-day retention instead`,
+      `[${grid}] archive overlap unavailable (${message}); testing NOMADS vs NOAA AWS trailing-30-day retention instead`,
     );
     return {
       leftSource: "nomads",
@@ -255,8 +246,11 @@ function candidateRun(daysAgo: number): Date {
   ));
 }
 
-function isUpstreamArchiveAvailabilityError(message: string): boolean {
-  return /NCAR\/GDEX historical GFS 0\.25 (?:request failed: HTTP (?:502|503|504)|forecast is not available for run)/.test(message);
+function isUpstreamArchiveAvailabilityError(grid: Grid, message: string): boolean {
+  if (grid === "0p25") {
+    return /NCAR\/GDEX historical GFS 0\.25 (?:request failed: HTTP (?:502|503|504)|forecast is not available for run)/.test(message);
+  }
+  return /NCEI archived GFS forecast (?:request failed: HTTP (?:500|502|503|504)|is not available online for run)/.test(message);
 }
 
 async function findOverlapRun(
