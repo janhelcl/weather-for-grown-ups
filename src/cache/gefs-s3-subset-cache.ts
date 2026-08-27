@@ -11,7 +11,12 @@ import {
   type ByteRange,
   type NonIsobaricGribSelector,
 } from "../grib/index.js";
-import { buildGefsS3ForecastIndexUrl, buildGefsS3ForecastUrl } from "../sources/gefs-s3.js";
+import {
+  buildGefsS3ForecastIndexUrl,
+  buildGefsS3ForecastUrl,
+  gefsAtmosProductForSelection,
+  type GefsAtmosProduct,
+} from "../sources/gefs-s3.js";
 
 export interface GefsMemberDataRequest {
   run: Date;
@@ -28,6 +33,7 @@ export interface GefsMemberSelectionDataRequest {
   variableCodes: GfsCode[];
   pressureLevelsHpa: number[];
   fields?: NonIsobaricGribSelector[];
+  product?: GefsAtmosProduct;
 }
 
 export interface GefsSubsetFile {
@@ -58,6 +64,7 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
       [request.variableCode],
       [request.pressureLevelHpa],
       [],
+      "pgrb2a_0p50",
     );
   }
 
@@ -65,12 +72,17 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
     const variableCodes = [...new Set(request.variableCodes)].sort();
     const pressureLevelsHpa = [...new Set(request.pressureLevelsHpa)].sort((a, b) => a - b);
     const fields = canonicalFields(request.fields ?? []);
+    const product = request.product ?? gefsAtmosProductForSelection(
+      variableCodes.length > 0 || pressureLevelsHpa.length > 0,
+      request.forecastHour,
+    );
     return this.fetchCached(
-      selectionSubsetKey({ ...request, variableCodes, pressureLevelsHpa, fields }),
+      selectionSubsetKey({ ...request, variableCodes, pressureLevelsHpa, fields, product }),
       request,
       variableCodes,
       pressureLevelsHpa,
       fields,
+      product,
     );
   }
 
@@ -80,6 +92,7 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
     variableCodes: GfsCode[],
     pressureLevelsHpa: number[],
     fields: NonIsobaricGribSelector[],
+    product: GefsAtmosProduct,
   ): Promise<GefsSubsetFile> {
     await mkdir(this.rootDir, { recursive: true });
     const path = join(this.rootDir, `${key}.grib2`);
@@ -91,7 +104,7 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
       return { ...result, cacheHit: true };
     }
 
-    const operation = this.download(request, variableCodes, pressureLevelsHpa, fields, path)
+    const operation = this.download(request, variableCodes, pressureLevelsHpa, fields, product, path)
       .finally(() => this.inFlight.delete(key));
     this.inFlight.set(key, operation);
     return operation;
@@ -102,10 +115,11 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
     variableCodes: GfsCode[],
     pressureLevelsHpa: number[],
     fields: NonIsobaricGribSelector[],
+    product: GefsAtmosProduct,
     path: string,
   ): Promise<GefsSubsetFile> {
-    const gribUrl = buildGefsS3ForecastUrl(request.run, request.forecastHour, request.member);
-    const indexUrl = buildGefsS3ForecastIndexUrl(request.run, request.forecastHour, request.member);
+    const gribUrl = buildGefsS3ForecastUrl(request.run, request.forecastHour, request.member, product);
+    const indexUrl = buildGefsS3ForecastIndexUrl(request.run, request.forecastHour, request.member, product);
     const records = parseGribIndex(await this.fetchIndex(indexUrl));
     const ranges = mergeByteRanges(
       selectPressureByteRanges(records, variableCodes, pressureLevelsHpa),
@@ -193,6 +207,10 @@ function selectionSubsetKey(request: GefsMemberSelectionDataRequest): string {
     member: request.member,
     variableCodes: request.variableCodes,
     pressureLevelsHpa: request.pressureLevelsHpa,
+    product: request.product ?? gefsAtmosProductForSelection(
+      request.variableCodes.length > 0 || request.pressureLevelsHpa.length > 0,
+      request.forecastHour,
+    ),
     ...(fields.length === 0 ? {} : {
       fields: fields.map((field) => ({
         id: field.id,

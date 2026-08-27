@@ -30,6 +30,7 @@ import { summarizeNumericDistribution } from "./ensemble-statistics.js";
 import { DEFAULT_GEFS_MEMBER_CONCURRENCY } from "./gefs-ensemble.js";
 import { GefsLatestRunResolver, type GefsLatestRunProvider } from "./gefs-latest-run.js";
 import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
+import { gefsAtmosProductForSelection, gefsAtmosProductGridDegrees, type GefsAtmosProduct } from "../sources/gefs-s3.js";
 
 export interface GefsAreaGridDecoder {
   readonly engine?: GribDecoderName;
@@ -83,26 +84,27 @@ export class GefsAreaSummaryService {
       southLatitude: query.southLatitude,
       northLatitude: query.northLatitude,
     };
-    const estimatedGridPoints = estimateGefsGridPoints(box);
-    if (estimatedGridPoints > query.maxGridPoints) {
-      throw new Error(`Requested bbox is approximately ${estimatedGridPoints} GEFS grid points, exceeding maxGridPoints=${query.maxGridPoints}`);
-    }
     const members = sortGefsMembers(query.members);
-    const estimatedMemberGridPoints = estimatedGridPoints * members.length;
-    if (estimatedMemberGridPoints > query.maxMemberGridPoints) {
-      throw new Error(`Requested bbox × member selection is approximately ${estimatedMemberGridPoints} member-grid points, exceeding maxMemberGridPoints=${query.maxMemberGridPoints}`);
-    }
-
     const validTime = new Date(query.validTime);
     const quantiles = [...query.quantiles].sort((a, b) => a - b);
     const run = query.run === "latest"
       ? await this.latestRunProvider.resolveLatestRun(validTime, members)
       : parseGefsRun(query.run);
     const forecastHour = gefsForecastHour(run, validTime);
+    const product = gefsAtmosProductForSelection(query.field === undefined, forecastHour);
+    const horizontalGridDegrees = gefsAtmosProductGridDegrees(product);
+    const estimatedGridPoints = estimateGefsGridPoints(box, horizontalGridDegrees);
+    if (estimatedGridPoints > query.maxGridPoints) {
+      throw new Error(`Requested bbox is approximately ${estimatedGridPoints} GEFS grid points at ${horizontalGridDegrees}°, exceeding maxGridPoints=${query.maxGridPoints}`);
+    }
+    const estimatedMemberGridPoints = estimatedGridPoints * members.length;
+    if (estimatedMemberGridPoints > query.maxMemberGridPoints) {
+      throw new Error(`Requested bbox × member selection is approximately ${estimatedMemberGridPoints} member-grid points at ${horizontalGridDegrees}°, exceeding maxMemberGridPoints=${query.maxMemberGridPoints}`);
+    }
 
     const memberComputations = query.field === undefined
-      ? await this.summarizePressureMembers(query, box, run, forecastHour, members)
-      : await this.summarizeFieldMembers(query, box, run, forecastHour, members);
+      ? await this.summarizePressureMembers(query, box, run, forecastHour, members, product)
+      : await this.summarizeFieldMembers(query, box, run, forecastHour, members, product);
 
     const outputDefinition = query.field === undefined
       ? pressureOutput(query.variable!)
@@ -139,7 +141,8 @@ export class GefsAreaSummaryService {
         provider: "NOAA AWS Open Data" as const,
         access: "s3_range" as const,
         decoder: this.gridDecoder.engine ?? "wgrib2",
-        product: "pgrb2a_0p50" as const,
+        product,
+        horizontalGridDegrees,
         allCacheHit: memberComputations.every((member) => member.cacheHit),
       },
     };
@@ -152,6 +155,7 @@ export class GefsAreaSummaryService {
     run: Date,
     forecastHour: number,
     members: GefsMember[],
+    product: GefsAtmosProduct,
   ): Promise<MemberAreaComputation[]> {
     const variable = VARIABLE_CATALOG[query.variable!] as RawVariableDefinition;
     return mapConcurrent(members, this.concurrency, async (member) => {
@@ -162,6 +166,7 @@ export class GefsAreaSummaryService {
         variableCodes: [variable.gfsCode],
         pressureLevelsHpa: [query.pressureLevelHpa!],
         fields: [],
+        product,
       });
       const rawPoints = await this.gridDecoder.extractBox(file.path, box);
       const points = normalizePoints(rawPoints, (value) => normalizePressureValue(variable, value));
@@ -176,6 +181,7 @@ export class GefsAreaSummaryService {
     run: Date,
     forecastHour: number,
     members: GefsMember[],
+    product: GefsAtmosProduct,
   ): Promise<MemberAreaComputation[]> {
     const definition = GEFS_PGRB2A_FIELD_CATALOG[query.field!] as RawGefsFieldDefinition;
     const selector: AreaMessageSelector = {
@@ -191,6 +197,7 @@ export class GefsAreaSummaryService {
         variableCodes: [],
         pressureLevelsHpa: [],
         fields: [definition],
+        product,
       });
       const extracted = await this.gridDecoder.extractSelectedMessage(file.path, box, selector);
       const points = normalizePoints(extracted.points, (value) => normalizeFieldValue(definition, value));
@@ -200,9 +207,9 @@ export class GefsAreaSummaryService {
   }
 }
 
-export function estimateGefsGridPoints(box: AreaBox): number {
-  const longitudePoints = Math.ceil((box.eastLongitude - box.westLongitude) / GEFS_GRID_SPACING_DEG) + 2;
-  const latitudePoints = Math.ceil((box.northLatitude - box.southLatitude) / GEFS_GRID_SPACING_DEG) + 2;
+export function estimateGefsGridPoints(box: AreaBox, gridSpacingDeg = GEFS_GRID_SPACING_DEG): number {
+  const longitudePoints = Math.ceil((box.eastLongitude - box.westLongitude) / gridSpacingDeg) + 2;
+  const latitudePoints = Math.ceil((box.northLatitude - box.southLatitude) / gridSpacingDeg) + 2;
   return Math.max(0, longitudePoints) * Math.max(0, latitudePoints);
 }
 

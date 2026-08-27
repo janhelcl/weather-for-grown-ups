@@ -17,12 +17,13 @@ import {
 } from "./gefs-latest-run.js";
 import { GefsPointsBundleService } from "./gefs-points-bundle.js";
 import { gefsForecastHour, nativeGefsValidTimesInRange, parseGefsRun } from "./gefs-time.js";
+import { gefsAtmosProductForSelection, type GefsAtmosProduct } from "../sources/gefs-s3.js";
 import { mapConcurrent } from "./concurrency.js";
 
 export const DEFAULT_GEFS_POINTS_BUNDLE_TIME_STEP_CONCURRENCY = 2;
 
 export interface GefsPointsBundleGetter {
-  getPoints(query: GefsPointsBundleQueryInput): Promise<GefsPointsBundleResult>;
+  getPoints(query: GefsPointsBundleQueryInput, productOverride?: GefsAtmosProduct): Promise<GefsPointsBundleResult>;
 }
 
 export interface GefsPointsBundleTimeSeriesServiceOptions {
@@ -80,7 +81,8 @@ export class GefsPointsBundleTimeSeriesService {
     // Validate both range bounds against the selected cycle before any member
     // downloads. nativeGefsValidTimesInRange already enforces native cadence.
     gefsForecastHour(run, startTime);
-    gefsForecastHour(run, endTime);
+    const endForecastHour = gefsForecastHour(run, endTime);
+    const product = gefsAtmosProductForSelection(selection.variables.length > 0, endForecastHour);
 
     const batches = await mapConcurrent(times, this.stepConcurrency, async (validTime) =>
       this.pointsGetter.getPoints({
@@ -96,7 +98,7 @@ export class GefsPointsBundleTimeSeriesService {
         quantiles,
         includeMembers: query.includeMembers,
         maxMemberSamples: query.maxMemberSamples,
-      }),
+      }, product),
     );
 
     const first = batches[0];
@@ -118,6 +120,7 @@ export class GefsPointsBundleTimeSeriesService {
         members,
         quantiles,
         includeMembers: query.includeMembers,
+        product,
       });
     }
 
@@ -145,7 +148,8 @@ export class GefsPointsBundleTimeSeriesService {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
         decoder: first.source.decoder,
-        product: "pgrb2a_0p50",
+        product: first.source.product,
+        horizontalGridDegrees: first.source.horizontalGridDegrees,
         allCacheHit: batches.every((batch) => batch.source.allCacheHit),
       },
     });
@@ -165,6 +169,7 @@ function assertBatchInvariant(
     members: readonly string[];
     quantiles: readonly number[];
     includeMembers: boolean;
+    product: GefsAtmosProduct;
   },
 ): void {
   const expectedValidIso = expected.validTime.toISOString();
@@ -180,9 +185,10 @@ function assertBatchInvariant(
     batch.source.provider !== "NOAA AWS Open Data"
     || batch.source.access !== "s3_range"
     || batch.source.decoder !== expected.first.source.decoder
-    || batch.source.product !== "pgrb2a_0p50"
+    || batch.source.product !== expected.product
+    || batch.source.horizontalGridDegrees !== expected.first.source.horizontalGridDegrees
   ) {
-    throw new Error("GEFS multi-point bundle time series require the NOAA AWS S3 pgrb2a byte-range source");
+    throw new Error("GEFS multi-point bundle time series require one stable NOAA AWS product and grid");
   }
   if (
     !sameArray(batch.selection.variables, expected.variables)

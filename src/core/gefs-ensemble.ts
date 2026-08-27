@@ -23,6 +23,11 @@ import { mapConcurrent } from "./concurrency.js";
 import { summarizeNumericDistribution, thresholdGteSummary } from "./ensemble-statistics.js";
 import { GefsLatestRunResolver, type GefsLatestRunProvider } from "./gefs-latest-run.js";
 import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
+import {
+  gefsAtmosProductForSelection,
+  gefsAtmosProductGridDegrees,
+  type GefsAtmosProduct,
+} from "../sources/gefs-s3.js";
 
 export const DEFAULT_GEFS_MEMBER_CONCURRENCY = 6;
 
@@ -69,7 +74,10 @@ export class GefsEnsembleService {
     this.concurrency = options.concurrency ?? DEFAULT_GEFS_MEMBER_CONCURRENCY;
   }
 
-  async getEnsemble(input: GefsEnsembleQueryInput): Promise<GefsEnsembleResult> {
+  async getEnsemble(
+    input: GefsEnsembleQueryInput,
+    productOverride?: GefsAtmosProduct,
+  ): Promise<GefsEnsembleResult> {
     const query = gefsEnsembleQuerySchema.parse(input);
     const validTime = new Date(query.validTime);
     const members = sortGefsMembers(query.members);
@@ -84,10 +92,11 @@ export class GefsEnsembleService {
     const variable = query.variable === undefined
       ? undefined
       : VARIABLE_CATALOG[query.variable] as RawVariableDefinition;
+    const product = productOverride ?? gefsAtmosProductForSelection(field === undefined, forecastHour);
 
     const samples = await mapConcurrent(members, this.concurrency, async (member) =>
       field
-        ? this.sampleFieldMember(member, run, forecastHour, query.latitude, query.longitude, field)
+        ? this.sampleFieldMember(member, run, forecastHour, query.latitude, query.longitude, field, product)
         : this.samplePressureMember(
             member,
             run,
@@ -151,7 +160,8 @@ export class GefsEnsembleService {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
         decoder: this.decoder.engine ?? "wgrib2",
-        product: "pgrb2a_0p50",
+        product,
+        horizontalGridDegrees: gefsAtmosProductGridDegrees(product),
         allCacheHit: samples.every((sample) => sample.cacheHit),
       },
     });
@@ -195,6 +205,7 @@ export class GefsEnsembleService {
     latitude: number,
     longitude: number,
     field: RawGefsFieldDefinition,
+    product: GefsAtmosProduct,
   ): Promise<EnsembleSample> {
     const file = await this.fieldSource.fetchSelection({
       run,
@@ -203,6 +214,7 @@ export class GefsEnsembleService {
       variableCodes: [],
       pressureLevelsHpa: [],
       fields: [field],
+      product,
     });
     const decoded = await this.decoder.extractPoint(file.path, longitude, latitude);
     const value = decoded.find((candidate) =>

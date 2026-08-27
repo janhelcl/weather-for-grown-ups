@@ -9,7 +9,7 @@ WFG's public API is organized around a small operation vocabulary and three atmo
 | Public ID | Internal dataset | Role | Result semantics |
 | --- | --- | --- | --- |
 | `gfs` | `gfs_0p25` / `gfs_0p50` operational; grid-matched 0.25° GDEX or 0.5° NCEI archive for old explicit runs | forecast | deterministic |
-| `gefs` | `gefs_0p50` | forecast | member-first ensemble |
+| `gefs` | `gefs_0p50` model contract; 0.5° pressure/mixed source plus 0.25° selected-field source through f240 | forecast | member-first ensemble |
 | `gfs-analysis` | `gfs_grid4_analysis_0p5` | historical analysis | deterministic analyzed state |
 
 The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a fourth public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently.
@@ -164,6 +164,8 @@ Non-isobaric fields:
 
 Where the dataset supports it, the two may be mixed in one request.
 
+For `gefs`, source resolution follows selection semantics rather than adding another public dataset. Field-only requests use the 0.25° selected-field product through `f240`. Any pressure-level selection, including a mixed pressure/field bundle, uses the 0.5° pressure product. A field-only time range that extends beyond `f240` uses 0.5° for the entire range so sampling resolution cannot change between steps.
+
 ## MCP tools
 
 The compact public vocabulary is:
@@ -296,7 +298,7 @@ Unified state/diagnostic operations return a common envelope:
 `result` remains dataset-native.
 
 - GFS carries deterministic values and forecast metadata; `forecast.grid` selects 0.25° or 0.5° operational data and the matching historical forecast archive while retaining the public `gfs` ID.
-- GEFS carries member-derived distributions and optional members.
+- GEFS carries member-derived distributions and optional members. The stable `gefs_0p50` internal model identity denotes the pressure/profile contract; `result.source.product` and `result.source.horizontalGridDegrees` expose whether an eligible field-only query used `pgrb2s` 0.25° or the `pgrb2a` 0.5° source.
 - historical GFS analysis carries deterministic analyzed values and NCEI provenance.
 
 This is deliberate: the API unifies **how the question is expressed**, not the physical meaning of the answer.

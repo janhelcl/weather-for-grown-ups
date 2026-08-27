@@ -29,6 +29,7 @@ describe("GEFS raw non-isobaric ensemble", () => {
     });
 
     expect(fieldSource.fetchSelection).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(fieldSource.fetchSelection).mock.calls.every(([request]) => request.product === "pgrb2s_0p25")).toBe(true);
     expect(result.selection).toMatchObject({
       field: "temperature_2m",
       gfsCode: "TMP",
@@ -39,7 +40,11 @@ describe("GEFS raw non-isobaric ensemble", () => {
     expect(result.members.map((member) => member.value)).toEqual([0, 2]);
     expect(result.summary.mean).toBe(1);
     expect(result.summary.threshold).toMatchObject({ count: 1, fraction: 0.5, interpretation: "raw_member_fraction_not_calibrated_probability" });
-    expect(result.source.allCacheHit).toBe(false);
+    expect(result.source).toMatchObject({
+      product: "pgrb2s_0p25",
+      horizontalGridDegrees: 0.25,
+      allCacheHit: false,
+    });
   });
 
   it("preserves accumulation interval semantics in normalized output", async () => {

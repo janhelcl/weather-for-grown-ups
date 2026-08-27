@@ -48,6 +48,7 @@ function batchFor(points: readonly { latitude: number; longitude: number }[], in
       access: "s3_range",
       decoder: "wgrib2",
       product: "pgrb2a_0p50",
+      horizontalGridDegrees: 0.5,
       memberFiles: [
         { member: "c00", cacheHit: true },
         { member: "p01", cacheHit: true },

@@ -87,6 +87,7 @@ describe("GEFS area statistics", () => {
       endTime: "2026-08-24T06:00:00.000Z",
     });
     expect(result.statistics.mean.mean).toBe(2);
+    expect(result.source).toMatchObject({ product: "pgrb2s_0p25", horizontalGridDegrees: 0.25 });
   });
 
   it("preserves instantaneous field semantics", async () => {
@@ -169,6 +170,7 @@ describe("GEFS area statistics", () => {
       members: ["c00", "p01"] as const,
     };
     expect(estimateGefsGridPoints(box)).toBeGreaterThan(0);
+    expect(estimateGefsGridPoints(box, 0.25)).toBeGreaterThan(estimateGefsGridPoints(box, 0.5));
 
     const service = new GefsAreaSummaryService({
       source: { fetchSelection: vi.fn(async () => { throw new Error("should not fetch"); }) },

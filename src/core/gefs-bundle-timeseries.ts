@@ -21,11 +21,15 @@ import {
   nativeGefsValidTimesInRange,
   parseGefsRun,
 } from "./gefs-time.js";
+import {
+  gefsAtmosProductForSelection,
+  type GefsAtmosProduct,
+} from "../sources/gefs-s3.js";
 
 export const DEFAULT_GEFS_BUNDLE_TIME_STEP_CONCURRENCY = 2;
 
 export interface GefsMemberBundleGetter {
-  getBundle(query: GefsMemberBundleQueryInput): Promise<GefsMemberBundleResult>;
+  getBundle(query: GefsMemberBundleQueryInput, productOverride?: GefsAtmosProduct): Promise<GefsMemberBundleResult>;
 }
 
 export interface GefsBundleTimeSeriesServiceOptions {
@@ -73,7 +77,8 @@ export class GefsBundleTimeSeriesService {
       ? await this.latestRunRangeProvider.resolveLatestRunRange(startTime, endTime, members)
       : parseGefsRun(query.run);
     gefsForecastHour(run, startTime);
-    gefsForecastHour(run, endTime);
+    const endForecastHour = gefsForecastHour(run, endTime);
+    const product = gefsAtmosProductForSelection(selection.variables.length > 0, endForecastHour);
 
     const results = await mapConcurrent(times, this.stepConcurrency, async (validTime) =>
       this.bundleGetter.getBundle({
@@ -85,7 +90,7 @@ export class GefsBundleTimeSeriesService {
         members,
         quantiles,
         includeMembers: query.includeMembers,
-      }),
+      }, product),
     );
 
     const first = results[0];
@@ -95,6 +100,12 @@ export class GefsBundleTimeSeriesService {
       const expectedTime = times[index];
       if (!expectedTime) throw new Error("GEFS bundle time-series internal time alignment failed");
       assertInvariant(result, expectedRun, expectedTime, first.gridPoint);
+      if (
+        result.source.product !== first.source.product
+        || result.source.horizontalGridDegrees !== first.source.horizontalGridDegrees
+      ) {
+        throw new Error("GEFS bundle time series changed source product or horizontal grid within one range");
+      }
       if (query.includeMembers && result.members === undefined) {
         throw new Error("GEFS bundle time-series member payload was requested but omitted by the bundle service");
       }
@@ -122,7 +133,8 @@ export class GefsBundleTimeSeriesService {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
         decoder: results[0]!.source.decoder,
-        product: "pgrb2a_0p50",
+        product: first.source.product,
+        horizontalGridDegrees: first.source.horizontalGridDegrees,
         allCacheHit: results.every((result) => result.source.allCacheHit),
       },
     });

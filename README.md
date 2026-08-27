@@ -98,9 +98,9 @@ WFG does not contain turbine power curves, wake models, availability assumptions
 
 ## Current model support
 
-WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default) and ensemble **GEFS 0.5°** while preserving their different semantics.
+WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default) plus member-first **GEFS**. GEFS pressure/profile data use the 0.5° atmospheric product; eligible field-only queries use the 0.25° selected-field product through `f240`, with 0.5° retained for mixed pressure/field queries and later leads.
 
-| Operation | GFS 0.25° / 0.5° | GEFS 0.5° |
+| Operation | GFS 0.25° / 0.5° | GEFS |
 | --- | --- | --- |
 | Catalog and search | ✅ | ✅ |
 | Pressure profiles | ✅ deterministic | ✅ member distributions |
@@ -118,7 +118,7 @@ WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default) and ensemble
 | Scalar ensemble distribution | — | ✅ |
 | Aligned GFS-vs-GEFS comparison | ✅ | ✅ |
 
-GEFS also supports control `c00` plus perturbed members `p01`–`p30`, native three-hour output through `f384`, mixed pressure/non-isobaric field bundles, and opt-in member payloads for auditability.
+GEFS also supports control `c00` plus perturbed members `p01`–`p30`, native three-hour output through `f384`, mixed pressure/non-isobaric field bundles, and opt-in member payloads for auditability. Field-only requests automatically use NOAA's `pgrb2s` 0.25° selected-field product through `f240`; pressure-level and mixed requests use `pgrb2a` 0.5°, and field ranges extending beyond `f240` stay on 0.5° for the whole range. Result provenance reports the actual product and horizontal grid.
 
 Historical **GFS Grid 4 0.5° analysis** is exposed as the third public dataset, `gfs-analysis`, through the same `query` / `diagnose` CLI operations and `query_atmosphere` / `diagnose_atmosphere` MCP tools. It covers profiles, time series, diagnostics, parcels, multi-point queries, multi-point time series, transects and native bbox area statistics while preserving analysis-time semantics and NCEI provenance.
 
@@ -259,7 +259,7 @@ The HTTP server defaults to `127.0.0.1:3000`, serves MCP at `/mcp`, and exposes 
 WFG selects only the GRIB messages needed for a query, caches immutable upstream slices, decodes locally, and performs physical transforms and aggregation in the TypeScript core.
 
 - GFS uses NOAA NOMADS where geographic subsetting is useful and NOAA AWS Open Data for reusable selected-message slices.
-- GEFS uses NOAA AWS Open Data `.idx` inventories and byte-range access per member.
+- GEFS uses NOAA AWS Open Data `.idx` inventories and byte-range access per member. Pressure/mixed selections use `pgrb2a` 0.5°; eligible field-only selections use `pgrb2s` 0.25° through `f240`.
 - The npm package ships with a GRIB2 decoder; native `wgrib2` remains an optional compatibility/debug path.
 - Historical GFS analysis uses NOAA NCEI THREDDS/NCSS: grid-as-point for point/profile operations and native bbox/grid subsets for area statistics.
 - Historical GFS forecasts keep the public `gfs` identity and route by grid: 0.25° uses NCAR/GDEX d084001 through THREDDS/NCSS, while 0.5° uses NOAA NCEI Grid 4 through THREDDS/NCSS. Direct online availability varies; older Grid 4 files may require NCEI HAS retrieval.

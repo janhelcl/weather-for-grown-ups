@@ -17,6 +17,10 @@ export function getGefsCatalog() {
   return {
     model: "gefs_0p50" as const,
     product: "pgrb2a_0p50" as const,
+    fieldProducts: [
+      { product: "pgrb2s_0p25" as const, horizontalGridDegrees: 0.25 as const, maxForecastHour: 240 },
+      { product: "pgrb2a_0p50" as const, horizontalGridDegrees: 0.5 as const, maxForecastHour: 384 },
+    ],
     members: 31,
     levelType: "isobaric_hpa" as const,
     availabilityNote:
@@ -80,7 +84,7 @@ export function getGefsCatalog() {
       outputs: [...definition.outputs],
     })),
     fieldSemanticsNote:
-      "GEFS non-isobaric fields have product-specific vertical and temporal semantics. CAPE/CIN here are the pgrb2a 180-0 hPa above-ground layer; precipitation is accumulated and total cloud cover is interval-averaged.",
+      "Field-only GEFS queries use the selected-field pgrb2s 0.25° product through f240 and fall back to pgrb2a 0.5° beyond f240. Mixed pressure/field queries stay on pgrb2a 0.5° so every value shares one grid. CAPE/CIN use the 180-0 hPa above-ground layer; precipitation is accumulated and total cloud cover is interval-averaged.",
     fields: Object.values(GEFS_PGRB2A_FIELD_CATALOG).map((definition) =>
       definition.kind === "raw"
         ? {
@@ -92,6 +96,8 @@ export function getGefsCatalog() {
             sourceUnit: definition.sourceUnit,
             description: definition.description,
             outputs: [...definition.outputs],
+            horizontalGridDegrees: [0.25, 0.5] as const,
+            highResolutionThroughForecastHour: 240,
           }
         : {
             id: definition.id,
@@ -101,6 +107,8 @@ export function getGefsCatalog() {
             dependencies: [...definition.dependencies],
             description: definition.description,
             outputs: [...definition.outputs],
+            horizontalGridDegrees: [0.25, 0.5] as const,
+            highResolutionThroughForecastHour: 240,
           },
     ),
   };

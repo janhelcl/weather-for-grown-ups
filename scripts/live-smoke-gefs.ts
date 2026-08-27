@@ -57,6 +57,23 @@ assert.equal(result.summary.threshold.interpretation, "raw_member_fraction_not_c
 assert.equal(result.source.provider, "NOAA AWS Open Data");
 assert.equal(result.source.access, "s3_range");
 assert.equal(result.source.product, "pgrb2a_0p50");
+assert.equal(result.source.horizontalGridDegrees, 0.5);
+
+const surfaceField = await ensembleService.getEnsemble({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: run.toISOString(),
+  validTime: endTime.toISOString(),
+  field: "temperature_2m",
+  members: [...members],
+  quantiles: [0.1, 0.5, 0.9],
+});
+
+assert.equal(surfaceField.model, "gefs_0p50");
+assert.equal(surfaceField.source.product, "pgrb2s_0p25");
+assert.equal(surfaceField.source.horizontalGridDegrees, 0.25);
+assert.equal(surfaceField.selection.field, "temperature_2m");
+assert(surfaceField.members.every((sample) => Number.isFinite(sample.value)));
 
 const batchPoints = await batchPointsService.getPoints({
   points: [

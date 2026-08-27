@@ -23,6 +23,11 @@ import {
 import { DEFAULT_GEFS_MEMBER_CONCURRENCY, type GefsPointDecoder } from "./gefs-ensemble.js";
 import { GefsLatestRunResolver, type GefsLatestRunProvider } from "./gefs-latest-run.js";
 import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
+import {
+  gefsAtmosProductForSelection,
+  gefsAtmosProductGridDegrees,
+  type GefsAtmosProduct,
+} from "../sources/gefs-s3.js";
 
 export const DEFAULT_GEFS_POINT_DECODE_CONCURRENCY = 4;
 
@@ -63,7 +68,10 @@ export class GefsPointsBundleService {
     this.decodeConcurrency = options.decodeConcurrency ?? DEFAULT_GEFS_POINT_DECODE_CONCURRENCY;
   }
 
-  async getPoints(input: GefsPointsBundleQueryInput): Promise<GefsPointsBundleResult> {
+  async getPoints(
+    input: GefsPointsBundleQueryInput,
+    productOverride?: GefsAtmosProduct,
+  ): Promise<GefsPointsBundleResult> {
     const query = gefsPointsBundleQuerySchema.parse(input);
     const validTime = new Date(query.validTime);
     const members = sortGefsMembers(query.members);
@@ -83,6 +91,10 @@ export class GefsPointsBundleService {
       ? await this.latestRunProvider.resolveLatestRun(validTime, members)
       : parseGefsRun(query.run);
     const forecastHour = gefsForecastHour(run, validTime);
+    const product = productOverride ?? gefsAtmosProductForSelection(
+      selection.rawPressureVariables.length > 0,
+      forecastHour,
+    );
 
     const memberFiles = await mapConcurrent(members, this.memberConcurrency, async (member): Promise<FetchedMemberFile> => {
       const file = await this.source.fetchSelection({
@@ -92,6 +104,7 @@ export class GefsPointsBundleService {
         variableCodes: selection.rawPressureVariables.map(({ definition }) => definition.gfsCode),
         pressureLevelsHpa: [...selection.pressureLevelsHpa],
         fields: [...selection.rawFields],
+        product,
       });
       return { member, path: file.path, cacheHit: file.cacheHit };
     });
@@ -145,7 +158,8 @@ export class GefsPointsBundleService {
         provider: "NOAA AWS Open Data",
         access: "s3_range",
         decoder: this.decoder.engine ?? "wgrib2",
-        product: "pgrb2a_0p50",
+        product,
+        horizontalGridDegrees: gefsAtmosProductGridDegrees(product),
         memberFiles: memberFiles.map(({ member, cacheHit }) => ({ member, cacheHit })),
         allCacheHit: memberFiles.every((file) => file.cacheHit),
       },

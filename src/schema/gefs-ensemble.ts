@@ -133,7 +133,8 @@ export const gefsEnsembleResultSchema = z.object({
     provider: z.literal("NOAA AWS Open Data"),
     access: z.literal("s3_range"),
     decoder: z.enum(["gribberish", "wgrib2"]),
-    product: z.literal("pgrb2a_0p50"),
+    product: z.enum(["pgrb2a_0p50", "pgrb2s_0p25"]),
+    horizontalGridDegrees: z.union([z.literal(0.25), z.literal(0.5)]),
     allCacheHit: z.boolean(),
   }),
 });

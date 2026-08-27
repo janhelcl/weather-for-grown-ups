@@ -163,7 +163,7 @@ Run selection is query-aware.
 
 GFS and GEFS use explicit 00/06/12/18Z initialization cycles. Multi-time operations resolve one cycle capable of satisfying the complete requested range and then keep that cycle fixed. GFS grid selection is orthogonal to run selection: `0p25` is the default and `0p50` is explicit. An old explicit run keeps the public `gfs` identity and routes to the matching historical forecast archive rather than changing datasets.
 
-GEFS v0.1.0 uses the operational atmospheric `pgrb2a` 0.5° product, control `c00` plus `p01`–`p30`, native three-hour output and a WFG contract through `f384`.
+GEFS uses control `c00` plus `p01`–`p30` on a native three-hour cadence through `f384`. Pressure-level and mixed pressure/field operations use `pgrb2a` 0.5°. Field-only operations select `pgrb2s` 0.25° through `f240`, then fall back to `pgrb2a` 0.5°. Multi-time field operations choose one product from the complete range and keep that grid fixed.
 
 Historical Grid 4 analysis has no forecast initialization/lead axis: its native time coordinate is the exact 00/06/12/18 UTC analysis cycle. Shared operation dispatch preserves that distinction instead of synthesizing run or forecast-hour fields.
 
@@ -185,7 +185,7 @@ Historical analysis uses NOAA NCEI Grid 4 through THREDDS/NCSS. Point/profile op
 
 ### GEFS
 
-GEFS uses member-specific NOAA AWS `pgrb2a` objects and `.idx` byte ranges. Immutable selected-message slices are cached locally, then decoded and sampled/derived locally.
+GEFS uses member-specific NOAA AWS `pgrb2a` 0.5° and `pgrb2s` 0.25° objects with `.idx` byte ranges. The source adapter selects the product from pressure-vs-field semantics and forecast horizon; the chosen product and `horizontalGridDegrees` are retained in result provenance. Immutable selected-message slices are cached locally with product-aware keys, then decoded and sampled/derived locally.
 
 Member work is bounded-concurrent. Multi-point and transect operations deliberately reuse upstream member slices rather than multiplying upstream transfer by point count.
 
