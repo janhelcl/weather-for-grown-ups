@@ -4,6 +4,14 @@ import {
 } from "@mattnucc/gribberish";
 
 export const IFS_OPEN_DATA_BASE_URL = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com";
+export const IFS_OPEN_DATA_MIRRORS = [
+  { id: "aws", baseUrl: IFS_OPEN_DATA_BASE_URL },
+  { id: "azure", baseUrl: "https://ai4edataeuwest.blob.core.windows.net/ecmwf" },
+  { id: "google", baseUrl: "https://storage.googleapis.com/ecmwf-open-data" },
+  { id: "ecmwf", baseUrl: "https://data.ecmwf.int/forecasts" },
+] as const;
+
+export type IfsOpenDataMirror = (typeof IFS_OPEN_DATA_MIRRORS)[number];
 
 export interface IfsIndexSelector {
   key: string;
@@ -41,15 +49,19 @@ export interface IfsAvailabilityProbe {
   ): Promise<boolean>;
 }
 
-export function buildIfsOpenDataForecastUrl(run: Date, forecastHour: number): string {
+export function buildIfsOpenDataForecastUrl(run: Date, forecastHour: number, baseUrl = IFS_OPEN_DATA_BASE_URL): string {
   const date = yyyymmdd(run);
   const hour = run.getUTCHours().toString().padStart(2, "0");
   const step = `${forecastHour}h`;
-  return `${IFS_OPEN_DATA_BASE_URL}/${date}/${hour}z/ifs/0p25/oper/${date}${hour}0000-${step}-oper-fc.grib2`;
+  return `${baseUrl}/${date}/${hour}z/ifs/0p25/oper/${date}${hour}0000-${step}-oper-fc.grib2`;
 }
 
-export function buildIfsOpenDataForecastIndexUrl(run: Date, forecastHour: number): string {
-  return buildIfsOpenDataForecastUrl(run, forecastHour).replace(/\.grib2$/, ".index");
+export function buildIfsOpenDataForecastIndexUrl(
+  run: Date,
+  forecastHour: number,
+  baseUrl = IFS_OPEN_DATA_BASE_URL,
+): string {
+  return buildIfsOpenDataForecastUrl(run, forecastHour, baseUrl).replace(/\.grib2$/, ".index");
 }
 
 export function parseIfsOpenDataIndex(text: string): GribIndexEntry[] {
@@ -100,26 +112,29 @@ export class IfsOpenDataRunProbe implements IfsAvailabilityProbe {
     forecastHour: number,
     selectors: readonly IfsIndexSelector[],
   ): Promise<boolean> {
-    const url = buildIfsOpenDataForecastIndexUrl(run, forecastHour);
-    const response = await fetchIfsWithRetry(this.fetchFn, url, {
-      headers: { "user-agent": "weather-for-grown-ups/0.2" },
-    });
-    if (response.status === 404) return false;
-    if (!response.ok) {
-      throw new Error(
-        `ECMWF IFS run discovery failed: HTTP ${response.status} ${response.statusText} for ${url}`,
-      );
-    }
-    const entries = parseIfsOpenDataIndex(await response.text());
-    try {
-      selectIfsIndexEntries(entries, selectors);
-      return true;
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith("ECMWF IFS index is missing requested fields:")) {
-        return false;
+    for (const mirror of IFS_OPEN_DATA_MIRRORS) {
+      const url = buildIfsOpenDataForecastIndexUrl(run, forecastHour, mirror.baseUrl);
+      const response = await fetchIfsWithRetry(this.fetchFn, url, {
+        headers: { "user-agent": "weather-for-grown-ups/0.2" },
+      });
+      if (response.status === 404 || isRetryableStatus(response.status)) continue;
+      if (!response.ok) {
+        throw new Error(
+          `ECMWF IFS run discovery failed: HTTP ${response.status} ${response.statusText} for ${url}`,
+        );
       }
-      throw error;
+      const entries = parseIfsOpenDataIndex(await response.text());
+      try {
+        selectIfsIndexEntries(entries, selectors);
+        return true;
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith("ECMWF IFS index is missing requested fields:")) {
+          continue;
+        }
+        throw error;
+      }
     }
+    return false;
   }
 }
 
