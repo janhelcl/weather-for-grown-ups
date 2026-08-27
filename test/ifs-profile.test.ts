@@ -70,4 +70,68 @@ describe("IFS canonical point profile", () => {
       cacheHit: false,
     });
   });
+
+  it("normalizes the remaining first-slice field units in a field-only query", async () => {
+    const fetchSelection = vi.fn(async () => ({ path: "ifs-fields", cacheHit: true }));
+    const values: DecodedValue[] = [
+      { code: "sp", surface: true, value: 101325, gridPoint },
+      { code: "2d", heightAboveGroundM: 2, value: 285, gridPoint },
+      { code: "100u", heightAboveGroundM: 100, value: 5, gridPoint },
+      { code: "100v", heightAboveGroundM: 100, value: 12, gridPoint },
+      { code: "tcwv", namedVertical: "entire atmosphere", value: 22, gridPoint },
+      { code: "lcc", namedVertical: "low cloud layer", value: 0.1, gridPoint },
+      { code: "mcc", namedVertical: "middle cloud layer", value: 0.2, gridPoint },
+      { code: "hcc", namedVertical: "high cloud layer", value: 0.3, gridPoint },
+    ];
+    const service = new IfsProfileService({
+      source: { fetchSelection },
+      decoder: { extractPoint: vi.fn(async () => values) },
+    });
+
+    const result = await service.getProfile({
+      latitude: 50,
+      longitude: 14,
+      run: "2026-08-27T12:00:00Z",
+      validTime: "2026-08-27T18:00:00Z",
+      fields: [
+        "surface_pressure",
+        "dew_point_2m",
+        "wind_100m",
+        "precipitable_water",
+        "low_cloud_cover",
+        "middle_cloud_cover",
+        "high_cloud_cover",
+      ],
+    });
+
+    expect(result.levels).toEqual([]);
+    expect(result.fields?.find((field) => field.id === "surface_pressure")?.values.pressurePa).toBe(101325);
+    expect(result.fields?.find((field) => field.id === "dew_point_2m")?.values.dewPointC).toBeCloseTo(11.85);
+    expect(result.fields?.find((field) => field.id === "wind_100m")?.values.windSpeedMs).toBe(13);
+    expect(result.fields?.find((field) => field.id === "precipitable_water")?.values.precipitableWaterKgM2).toBe(22);
+    expect(result.fields?.find((field) => field.id === "low_cloud_cover")?.values.cloudCoverPct).toBeCloseTo(10);
+    expect(result.fields?.find((field) => field.id === "middle_cloud_cover")?.values.cloudCoverPct).toBeCloseTo(20);
+    expect(result.fields?.find((field) => field.id === "high_cloud_cover")?.values.cloudCoverPct).toBeCloseTo(30);
+    expect(result.source.cacheHit).toBe(true);
+  });
+
+  it("rejects selected fields that resolve to different IFS grid cells", async () => {
+    const service = new IfsProfileService({
+      source: { fetchSelection: vi.fn(async () => ({ path: "ifs-drift", cacheHit: false })) },
+      decoder: {
+        extractPoint: vi.fn(async () => [
+          { code: "2t", heightAboveGroundM: 2, value: 290, gridPoint },
+          { code: "2d", heightAboveGroundM: 2, value: 285, gridPoint: { latitude: 50.25, longitude: 14.5 } },
+        ]),
+      },
+    });
+
+    await expect(service.getProfile({
+      latitude: 50,
+      longitude: 14,
+      run: "2026-08-27T12:00:00Z",
+      validTime: "2026-08-27T18:00:00Z",
+      fields: ["temperature_2m", "dew_point_2m"],
+    })).rejects.toThrow("inconsistent grid points");
+  });
 });
