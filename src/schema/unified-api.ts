@@ -3,7 +3,7 @@ import { LAYER_DIAGNOSTIC_IDS } from "../catalog/layer-diagnostics.js";
 import { PARCEL_DEFINITION_IDS } from "../catalog/parcel-diagnostics.js";
 import { PROFILE_DIAGNOSTIC_IDS } from "../catalog/profile-diagnostics.js";
 import { areaThresholdSchema } from "./area-summary.js";
-import { gfsGridSchema } from "./gfs-grid.js";
+import { gfsGridWithDefaultSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 
 export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "gefs", "gfs-analysis"] as const;
@@ -164,7 +164,7 @@ export const atmosphericForecastOptionsSchema = z.object({
   run: z.string().min(1).default("latest").describe(
     "Forecast initialization: latest, latest_complete where supported, or an explicit ISO cycle",
   ),
-  grid: gfsGridSchema.describe("GFS horizontal grid: 0p25 (default) or 0p50; ignored for GEFS"),
+  grid: gfsGridWithDefaultSchema.describe("GFS horizontal grid: 0p25 (default) or 0p50; ignored for GEFS"),
 });
 
 export const atmosphericEnsembleOptionsSchema = z.object({

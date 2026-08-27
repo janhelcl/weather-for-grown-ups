@@ -31,7 +31,7 @@ type NomadsRequest = NomadsAreaRequest;
 export function buildNomadsPointUrl(request: NomadsPointRequest): string {
   return buildNomadsUrl({
     run: request.run,
-    grid: request.grid,
+    ...(request.grid === undefined ? {} : { grid: request.grid }),
     forecastHour: request.forecastHour,
     westLongitude: Math.max(-180, request.longitude - 0.5),
     eastLongitude: Math.min(180, request.longitude + 0.5),

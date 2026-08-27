@@ -60,7 +60,10 @@ export class LatestRunResolver implements LatestRunProvider {
     const firstCandidate = floorToGfsCycle(new Date(nowMs));
     for (let offset = 0; offset < this.lookbackCycles; offset += 1) {
       const candidate = new Date(firstCandidate.getTime() - offset * GFS_CYCLE_MS);
-      if (await this.probe.isRunComplete(candidate, grid)) return candidate;
+      const complete = grid === "0p50"
+        ? await this.probe.isRunComplete(candidate, grid)
+        : await this.probe.isRunComplete(candidate);
+      if (complete) return candidate;
     }
 
     throw new Error(`Could not find a complete GFS run in the last ${this.lookbackCycles} cycles`);
@@ -118,7 +121,9 @@ export class LatestRunResolver implements LatestRunProvider {
       if (error instanceof Error && error.message.includes("<= 384")) return false;
       throw error;
     }
-    return this.probe.isForecastAvailable(candidate, fh, requirement.selection, grid);
+    return grid === "0p50"
+      ? this.probe.isForecastAvailable(candidate, fh, requirement.selection, grid)
+      : this.probe.isForecastAvailable(candidate, fh, requirement.selection);
   }
 
   private async isTimeRangeAvailable(
@@ -140,8 +145,16 @@ export class LatestRunResolver implements LatestRunProvider {
     const last = forecastHours.at(-1);
     if (first === undefined || last === undefined) return false;
 
-    if (!await this.probe.isForecastAvailable(candidate, first, requirement.selection, grid)) return false;
-    if (last !== first && !await this.probe.isForecastAvailable(candidate, last, requirement.selection, grid)) return false;
+    const firstAvailable = grid === "0p50"
+      ? await this.probe.isForecastAvailable(candidate, first, requirement.selection, grid)
+      : await this.probe.isForecastAvailable(candidate, first, requirement.selection);
+    if (!firstAvailable) return false;
+    if (last !== first) {
+      const lastAvailable = grid === "0p50"
+        ? await this.probe.isForecastAvailable(candidate, last, requirement.selection, grid)
+        : await this.probe.isForecastAvailable(candidate, last, requirement.selection);
+      if (!lastAvailable) return false;
+    }
     return true;
   }
 }
@@ -174,4 +187,24 @@ function requirementKey(requirement: LatestRunRequirement | undefined): string {
         endTime: requirement.endTime.toISOString(),
         selection,
       });
+}
+
+
+export function resolveLatestRunForGrid(
+  provider: LatestRunProvider,
+  requirement: LatestRunRequirement,
+  grid?: GfsGrid,
+): Promise<Date> {
+  return grid === "0p50"
+    ? provider.resolveLatestRun(requirement, grid)
+    : provider.resolveLatestRun(requirement);
+}
+
+export function resolveLatestCompleteRunForGrid(
+  provider: LatestRunProvider,
+  grid?: GfsGrid,
+): Promise<Date> {
+  return grid === "0p50"
+    ? provider.resolveLatestRun(undefined, grid)
+    : provider.resolveLatestRun();
 }

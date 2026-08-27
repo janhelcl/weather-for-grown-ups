@@ -37,7 +37,7 @@ const pointShape = pointCoordinateSchema.shape;
 export const diagnosticTimeSeriesQuerySchema = z.object({
   ...pointShape,
   run: runSelectorSchema,
-  grid: gfsGridSchema,
+  grid: gfsGridSchema.optional(),
   startTime: isoDateTimeSchema.describe("Inclusive start of requested valid-time range"),
   endTime: isoDateTimeSchema.describe("Inclusive end of requested valid-time range"),
   diagnostic: diagnosticTimeSeriesSelectionSchema,

@@ -15,7 +15,7 @@ export const transectQuerySchema = z.object({
   start: pointCoordinateSchema.describe("Transect start coordinate"),
   end: pointCoordinateSchema.describe("Transect end coordinate"),
   run: runSelectorSchema,
-  grid: gfsGridSchema,
+  grid: gfsGridSchema.optional(),
   validTime: isoDateTimeSchema.describe("Forecast valid time shared by all transect samples"),
   variables: z.array(variableIdSchema).min(1).describe("Pressure-level variables or deterministic derived variables"),
   pressureLevelsHpa: z.array(pressureLevelSchema).min(1).describe("Published GFS pressure surfaces included at every transect sample"),
