@@ -22,6 +22,7 @@ import {
 } from "../derived/thermodynamics.js";
 import { deriveWind } from "../derived/wind.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
+import { operationalGfsModelId } from "../schema/gfs-grid.js";
 import {
   profileQuerySchema,
   type ProfileQueryInput,
@@ -31,7 +32,12 @@ import {
 import { NomadsProfileSource, S3ProfileSource } from "../sources/profile-source.js";
 import type { ProfileDataSource } from "../sources/types.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
-import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
+import {
+  LatestRunResolver,
+  resolveLatestCompleteRunForGrid,
+  resolveLatestRunForGrid,
+  type LatestRunProvider,
+} from "./latest-run.js";
 import type {
   DecodedValue,
   FieldTemporalResult,
@@ -92,7 +98,7 @@ export class ProfileService {
     const variables = expandRequestedVariables(requestedVariables);
     const fields = expandRequestedFields(requestedFields);
     const run = query.run === "latest"
-      ? await this.latestRunProvider.resolveLatestRun({
+      ? await resolveLatestRunForGrid(this.latestRunProvider, {
           type: "valid_time",
           validTime,
           selection: {
@@ -100,15 +106,17 @@ export class ProfileService {
             pressureLevelsHpa,
             fields,
           },
-        })
+        }, query.grid)
       : query.run === "latest_complete"
-        ? await this.latestRunProvider.resolveLatestRun()
+        ? await resolveLatestCompleteRunForGrid(this.latestRunProvider, query.grid)
         : parseGfsRun(query.run);
-    const fh = forecastHour(run, validTime);
+    const effectiveGrid = query.grid ?? "0p25";
+    const fh = forecastHour(run, validTime, effectiveGrid);
     const source = this.sources[query.source];
 
     const cached = await source.fetch({
       run,
+      ...(query.grid === undefined ? {} : { grid: query.grid }),
       forecastHour: fh,
       latitude: query.latitude,
       longitude: query.longitude,
@@ -142,7 +150,7 @@ export class ProfileService {
     );
 
     return {
-      model: "gfs_0p25",
+      model: operationalGfsModelId(effectiveGrid),
       run: run.toISOString(),
       validTime: validTime.toISOString(),
       forecastHour: fh,

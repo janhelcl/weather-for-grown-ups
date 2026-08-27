@@ -12,7 +12,12 @@ import {
   parseGfsRun,
   validTimeForForecastHour,
 } from "./forecast-hour.js";
-import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
+import {
+  LatestRunResolver,
+  resolveLatestCompleteRunForGrid,
+  resolveLatestRunForGrid,
+  type LatestRunProvider,
+} from "./latest-run.js";
 import type { BatchPointsResult, PointsTimeSeriesResult } from "./types.js";
 
 export const DEFAULT_POINTS_TIME_SERIES_CONCURRENCY = 4;
@@ -57,7 +62,7 @@ export class PointsTimeSeriesService {
     const pressureLevelsHpa = query.pressureLevelsHpa ?? [];
 
     const run = query.run === "latest"
-      ? await this.latestRunProvider.resolveLatestRun({
+      ? await resolveLatestRunForGrid(this.latestRunProvider, {
           type: "time_range",
           startTime,
           endTime,
@@ -66,12 +71,12 @@ export class PointsTimeSeriesService {
             pressureLevelsHpa,
             fields,
           },
-        })
+        }, query.grid)
       : query.run === "latest_complete"
-        ? await this.latestRunProvider.resolveLatestRun()
+        ? await resolveLatestCompleteRunForGrid(this.latestRunProvider, query.grid)
         : parseGfsRun(query.run);
 
-    const forecastHours = nativeForecastHoursInRange(run, startTime, endTime);
+    const forecastHours = nativeForecastHoursInRange(run, startTime, endTime, query.grid);
     if (forecastHours.length > query.maxSteps) {
       throw new Error(
         `Requested time range contains ${forecastHours.length} native GFS outputs, exceeding maxSteps=${query.maxSteps}. Narrow the range or raise maxSteps.`,
@@ -91,6 +96,7 @@ export class PointsTimeSeriesService {
       async (forecastHourValue) => this.batchPointsGetter.getPoints({
         points: query.points,
         run: run.toISOString(),
+        ...(query.grid === undefined ? {} : { grid: query.grid }),
         validTime: validTimeForForecastHour(run, forecastHourValue).toISOString(),
         ...(query.variables === undefined ? {} : { variables: query.variables }),
         ...(query.pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa: query.pressureLevelsHpa }),
@@ -140,7 +146,7 @@ export class PointsTimeSeriesService {
     }
 
     return {
-      model: "gfs_0p25",
+      model: first.model,
       run: run.toISOString(),
       requestedStartTime: startTime.toISOString(),
       requestedEndTime: endTime.toISOString(),

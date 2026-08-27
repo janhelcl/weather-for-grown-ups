@@ -1,8 +1,10 @@
 import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
 import type { RawVariableDefinition } from "../catalog/variables.js";
+import type { GfsGrid } from "../schema/gfs-grid.js";
 
 export interface NomadsPointRequest {
   run: Date;
+  grid?: GfsGrid;
   forecastHour: number;
   latitude: number;
   longitude: number;
@@ -13,6 +15,7 @@ export interface NomadsPointRequest {
 
 export interface NomadsAreaRequest {
   run: Date;
+  grid?: GfsGrid;
   forecastHour: number;
   westLongitude: number;
   eastLongitude: number;
@@ -28,6 +31,7 @@ type NomadsRequest = NomadsAreaRequest;
 export function buildNomadsPointUrl(request: NomadsPointRequest): string {
   return buildNomadsUrl({
     run: request.run,
+    ...(request.grid === undefined ? {} : { grid: request.grid }),
     forecastHour: request.forecastHour,
     westLongitude: Math.max(-180, request.longitude - 0.5),
     eastLongitude: Math.min(180, request.longitude + 0.5),
@@ -48,9 +52,12 @@ function buildNomadsUrl(request: NomadsRequest): string {
   const runHour = request.run.getUTCHours().toString().padStart(2, "0");
   const forecastHour = request.forecastHour.toString().padStart(3, "0");
 
+  const grid = request.grid ?? "0p25";
   const params = new URLSearchParams({
     dir: `/gfs.${runDate}/${runHour}/atmos`,
-    file: `gfs.t${runHour}z.pgrb2.0p25.f${forecastHour}`,
+    file: grid === "0p50"
+      ? `gfs.t${runHour}z.pgrb2full.0p50.f${forecastHour}`
+      : `gfs.t${runHour}z.pgrb2.0p25.f${forecastHour}`,
     subregion: "",
     toplat: request.northLatitude.toString(),
     bottomlat: request.southLatitude.toString(),
@@ -72,7 +79,7 @@ function buildNomadsUrl(request: NomadsRequest): string {
   for (const level of pressureLevels) params.set(`lev_${level}_mb`, "on");
   for (const level of nonIsobaricLevels) params.set(`lev_${level}`, "on");
 
-  return `https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl?${params.toString()}`;
+  return `https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_${grid}.pl?${params.toString()}`;
 }
 
 function yyyymmdd(date: Date): string {

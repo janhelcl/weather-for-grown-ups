@@ -8,6 +8,7 @@ import type { BatchPointsResult } from "./types.js";
 
 export type AtmosphericBatchPointsRequest =
   | { model: "gfs_0p25"; query: BatchPointsQueryInput }
+  | { model: "gfs_0p50"; query: BatchPointsQueryInput }
   | { model: "gefs_0p50"; query: GefsBatchPointsQueryInput }
   | { model: "gfs_grid4_analysis_0p5"; query: HistoricalPointsQueryInput };
 
@@ -37,6 +38,8 @@ export class AtmosphericBatchPointsService {
     switch (request.model) {
       case "gfs_0p25":
         return this.gfs.getPoints(request.query);
+      case "gfs_0p50":
+        return this.gfs.getPoints({ ...request.query, grid: "0p50" });
       case "gefs_0p50":
         return this.gefs.getPoints(request.query);
       case "gfs_grid4_analysis_0p5":

@@ -33,7 +33,6 @@ const WATER_VAPOR_TO_DRY_AIR_GAS_CONSTANT_RATIO = 0.622;
 
 type HistoricalRawVariableId = Exclude<
   HistoricalGfsVariableId,
-  | "specific_humidity"
   | "wind"
   | "dew_point"
   | "potential_temperature"
@@ -83,6 +82,11 @@ const RAW_HISTORY_VARIABLES: Record<HistoricalRawVariableId, RawHistoryVariable>
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.geopotentialHeightGpm = value; },
   },
+  specific_humidity: {
+    ncssName: "Specific_humidity_isobaric",
+    pressureAxisGroup: "full_profile",
+    apply: (level, value) => { level.specificHumidityKgKg = value; },
+  },
   vertical_velocity: {
     ncssName: "Vertical_velocity_pressure_isobaric",
     pressureAxisGroup: "vertical_velocity",
@@ -117,6 +121,16 @@ const DERIVED_DEPENDENCIES: Partial<Record<HistoricalGfsVariableId, readonly His
   equivalent_potential_temperature: ["temperature", "relative_humidity"],
 };
 
+const NATIVE_SPECIFIC_HUMIDITY_DEPENDENCIES: Partial<
+  Record<HistoricalGfsVariableId, readonly HistoricalRawVariableId[]>
+> = {
+  mixing_ratio: ["specific_humidity"],
+  virtual_temperature: ["temperature", "specific_humidity"],
+  air_density: ["temperature", "specific_humidity"],
+  wet_bulb_temperature: ["temperature", "specific_humidity"],
+  equivalent_potential_temperature: ["temperature", "specific_humidity"],
+};
+
 export interface HistoricalProfileServiceOptions {
   cacheDir?: string;
   cooldownMs?: number;
@@ -124,6 +138,7 @@ export interface HistoricalProfileServiceOptions {
   now?: () => Date;
   allowNonAnalysisCycle?: boolean;
   minimumTime?: Date;
+  nativeSpecificHumidity?: boolean;
 }
 
 export class HistoricalProfileService {
@@ -131,6 +146,7 @@ export class HistoricalProfileService {
   private readonly now: () => Date;
   private readonly allowNonAnalysisCycle: boolean;
   private readonly minimumTime: Date;
+  private readonly nativeSpecificHumidity: boolean;
 
   constructor(options: HistoricalProfileServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
@@ -145,6 +161,7 @@ export class HistoricalProfileService {
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
     this.minimumTime = options.minimumTime ?? NCEI_GFS_GRID4_ANALYSIS_START;
+    this.nativeSpecificHumidity = options.nativeSpecificHumidity ?? false;
   }
 
   async getHistoricalProfile(input: HistoricalProfileQueryInput): Promise<HistoricalProfileResult> {
@@ -161,7 +178,7 @@ export class HistoricalProfileService {
       throw new Error("Historical GFS analysisTime must not be in the future");
     }
 
-    const rawVariables = expandHistoricalVariables(query.variables);
+    const rawVariables = expandHistoricalVariables(query.variables, this.nativeSpecificHumidity);
     const groups = groupHistoricalVariablesByPressureAxis(rawVariables);
     const responses: HistoricalAnalysisResponse[] = [];
     const mergedLevels = new Map<number, ProfileLevel>();
@@ -218,14 +235,24 @@ export class HistoricalProfileService {
   }
 }
 
-function expandHistoricalVariables(ids: readonly HistoricalGfsVariableId[]): HistoricalRawVariableId[] {
+function expandHistoricalVariables(
+  ids: readonly HistoricalGfsVariableId[],
+  nativeSpecificHumidity: boolean,
+): HistoricalRawVariableId[] {
   const result = new Set<HistoricalRawVariableId>();
   for (const id of ids) {
+    if (id === "specific_humidity" && !nativeSpecificHumidity) {
+      for (const dependency of DERIVED_DEPENDENCIES[id] ?? []) result.add(dependency);
+      continue;
+    }
     if (id in RAW_HISTORY_VARIABLES) {
       result.add(id as HistoricalRawVariableId);
       continue;
     }
-    for (const dependency of DERIVED_DEPENDENCIES[id] ?? []) result.add(dependency);
+    const dependencies = nativeSpecificHumidity
+      ? NATIVE_SPECIFIC_HUMIDITY_DEPENDENCIES[id] ?? DERIVED_DEPENDENCIES[id] ?? []
+      : DERIVED_DEPENDENCIES[id] ?? [];
+    for (const dependency of dependencies) result.add(dependency);
   }
   return [...result];
 }
@@ -272,6 +299,7 @@ export function parseHistoricalProfileCsv(
   const headers = parseCsvLine(lines[0]!).map(normalizeHeader);
   const pressureIndex = findHeaderIndex(headers, [
     "vertCoord",
+    "alt",
     "isobaric",
     "isobaric1",
     "isobaric2",

@@ -37,6 +37,7 @@ export class LayerDiagnosticsService {
       latitude: query.latitude,
       longitude: query.longitude,
       run: query.run,
+      ...(query.grid === undefined ? {} : { grid: query.grid }),
       validTime: query.validTime,
       variables,
       pressureLevelsHpa: [query.lowerPressureHpa, query.upperPressureHpa],
@@ -50,7 +51,7 @@ export class LayerDiagnosticsService {
     );
 
     return {
-      model: "gfs_0p25",
+      model: profile.model,
       run: profile.run,
       validTime: profile.validTime,
       forecastHour: profile.forecastHour,

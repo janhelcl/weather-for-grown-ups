@@ -33,6 +33,7 @@ export interface HistoricalAreaSummaryServiceOptions {
   now?: () => Date;
   allowNonAnalysisCycle?: boolean;
   minimumTime?: Date;
+  gridSpacingDegrees?: number;
 }
 
 export class HistoricalAreaSummaryService {
@@ -40,6 +41,7 @@ export class HistoricalAreaSummaryService {
   private readonly now: () => Date;
   private readonly allowNonAnalysisCycle: boolean;
   private readonly minimumTime: Date;
+  private readonly gridSpacingDegrees: number;
 
   constructor(options: HistoricalAreaSummaryServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
@@ -54,6 +56,7 @@ export class HistoricalAreaSummaryService {
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
     this.minimumTime = options.minimumTime ?? NCEI_GFS_GRID4_ANALYSIS_START;
+    this.gridSpacingDegrees = options.gridSpacingDegrees ?? GRID_SPACING_DEG;
   }
 
   async summarize(input: HistoricalAreaSummaryQueryInput): Promise<HistoricalAreaSummaryResult> {
@@ -76,7 +79,7 @@ export class HistoricalAreaSummaryService {
       southLatitude: query.southLatitude,
       northLatitude: query.northLatitude,
     };
-    const estimatedGridPoints = estimateHistoricalGridPoints(bbox);
+    const estimatedGridPoints = estimateHistoricalGridPoints(bbox, this.gridSpacingDegrees);
     if (estimatedGridPoints > query.maxGridPoints) {
       throw new Error(
         `Requested bbox is approximately ${estimatedGridPoints} historical GFS grid points, exceeding maxGridPoints=${query.maxGridPoints}`,
@@ -152,12 +155,12 @@ export function estimateHistoricalGridPoints(box: {
   eastLongitude: number;
   southLatitude: number;
   northLatitude: number;
-}): number {
+}, gridSpacingDegrees = GRID_SPACING_DEG): number {
   const longitudePoints = Math.ceil(
-    (box.eastLongitude - box.westLongitude) / GRID_SPACING_DEG,
+    (box.eastLongitude - box.westLongitude) / gridSpacingDegrees,
   ) + 2;
   const latitudePoints = Math.ceil(
-    (box.northLatitude - box.southLatitude) / GRID_SPACING_DEG,
+    (box.northLatitude - box.southLatitude) / gridSpacingDegrees,
   ) + 2;
   return Math.max(0, longitudePoints) * Math.max(0, latitudePoints);
 }
@@ -187,6 +190,7 @@ export function parseHistoricalAreaCsv(
         header.startsWith("isobaric")
         || header.startsWith("height_above_ground")
         || header === "vertCoord"
+        || header === "alt"
       );
   if (variableIndex < 0) {
     throw new Error(

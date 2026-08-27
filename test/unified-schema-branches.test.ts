@@ -118,6 +118,24 @@ describe("unified atmospheric schema capability branches", () => {
     })).toThrow("aggregate is only valid for area geometry");
   });
 
+  it("accepts GFS 0.5 but rejects non-GFS use of the grid selector", () => {
+    expect(queryAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: pressureSelection,
+      forecast: { run: "latest", grid: "0p50" },
+    }).forecast?.grid).toBe("0p50");
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "gefs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: pressureSelection,
+      forecast: { run: "latest", grid: "0p50" },
+    })).toThrow("forecast.grid is only configurable for the gfs dataset");
+  });
+
   it("accepts either scalar area selection form and rejects area ranges", () => {
     const geometry = {
       type: "area" as const,

@@ -37,8 +37,9 @@ export class GfsS3SubsetCache {
   }
 
   private async download(request: ProfileDataRequest, path: string): Promise<ProfileSourceFile> {
-    const gribUrl = buildGfsS3ForecastUrl(request.run, request.forecastHour);
-    const indexUrl = buildGfsS3ForecastIndexUrl(request.run, request.forecastHour);
+    const grid = request.grid ?? "0p25";
+    const gribUrl = buildGfsS3ForecastUrl(request.run, request.forecastHour, grid);
+    const indexUrl = buildGfsS3ForecastIndexUrl(request.run, request.forecastHour, grid);
     const indexText = await this.fetchIndex(indexUrl);
     const records = parseGribIndex(indexText);
     const pressureRanges = selectPressureByteRanges(
@@ -113,6 +114,7 @@ function subsetKey(request: ProfileDataRequest): string {
   const canonical = JSON.stringify({
     run: request.run.toISOString(),
     forecastHour: request.forecastHour,
+    grid: request.grid ?? "0p25",
     variables: [...new Set(request.variables.map((variable) => variable.gfsCode))].sort(),
     pressureLevelsHpa: [...new Set(request.pressureLevelsHpa)].sort((a, b) => b - a),
     fields: [...new Set((request.fields ?? []).map((field) => field.id))].sort(),

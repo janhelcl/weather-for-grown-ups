@@ -1,5 +1,6 @@
 import * as z from "zod/v4";
 import { diagnosticTimeSeriesSelectionSchema } from "./diagnostic-time-series.js";
+import { operationalGfsModelIdSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema } from "./query.js";
 import {
   gridPointSchema,
@@ -49,7 +50,7 @@ export const diagnosticTimeSeriesStepSchema = z.discriminatedUnion("kind", [
 ]);
 
 export const diagnosticTimeSeriesResultSchema = z.object({
-  model: z.literal("gfs_0p25"),
+  model: operationalGfsModelIdSchema,
   run: isoDateTimeSchema,
   requestedStartTime: isoDateTimeSchema,
   requestedEndTime: isoDateTimeSchema,

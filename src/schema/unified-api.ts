@@ -3,6 +3,7 @@ import { LAYER_DIAGNOSTIC_IDS } from "../catalog/layer-diagnostics.js";
 import { PARCEL_DEFINITION_IDS } from "../catalog/parcel-diagnostics.js";
 import { PROFILE_DIAGNOSTIC_IDS } from "../catalog/profile-diagnostics.js";
 import { areaThresholdSchema } from "./area-summary.js";
+import { gfsGridWithDefaultSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 
 export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "gefs", "gfs-analysis"] as const;
@@ -163,6 +164,7 @@ export const atmosphericForecastOptionsSchema = z.object({
   run: z.string().min(1).default("latest").describe(
     "Forecast initialization: latest, latest_complete where supported, or an explicit ISO cycle",
   ),
+  grid: gfsGridWithDefaultSchema.describe("GFS horizontal grid: 0p25 (default) or 0p50; ignored for GEFS"),
 });
 
 export const atmosphericEnsembleOptionsSchema = z.object({
@@ -199,7 +201,7 @@ export const queryAtmosphereSchema = z.object({
   selection: atmosphericSelectionSchema,
   forecast: atmosphericForecastOptionsSchema.optional(),
   ensemble: atmosphericEnsembleOptionsSchema.optional(),
-  source: z.enum(["nomads", "s3"]).optional().describe("GFS-only source override"),
+  source: z.enum(["nomads", "s3", "archive"]).optional().describe("GFS-only source override; archive forces the resolution-matched historical backend"),
   aggregate: atmosphericAggregationSchema,
   limits: atmosphericLimitsSchema,
 }).superRefine(validateCommonAtmosphericRequest);
@@ -238,7 +240,7 @@ export const diagnoseAtmosphereSchema = z.object({
   diagnostic: atmosphericDiagnosticSelectionSchema,
   forecast: atmosphericForecastOptionsSchema.optional(),
   ensemble: atmosphericEnsembleOptionsSchema.optional(),
-  source: z.enum(["nomads", "s3"]).optional().describe("GFS-only source override"),
+  source: z.enum(["nomads", "s3", "archive"]).optional().describe("GFS-only source override; archive forces the resolution-matched historical backend"),
 }).superRefine((request, context) => {
   validateDatasetModifiers(request, context);
   if ("from" in request.time && request.ensemble?.includeMembers === true) {
@@ -254,6 +256,8 @@ export const unifiedAtmosphereResultSchema = z.object({
   dataset: publicAtmosphericDatasetSchema,
   internalDatasetId: z.enum([
     "gfs_0p25",
+    "gfs_0p50",
+    "gfs_0p25_forecast_archive",
     "gefs_0p50",
     "gfs_grid4_analysis_0p5",
     "gfs_grid4_forecast_0p5_archive",
@@ -324,6 +328,13 @@ function validateDatasetModifiers(
       code: "custom",
       path: ["time", "hoursUtc"],
       message: "hoursUtc is only valid for gfs-analysis ranges",
+    });
+  }
+  if (request.dataset !== "gfs" && request.forecast?.grid !== undefined && request.forecast.grid !== "0p25") {
+    context.addIssue({
+      code: "custom",
+      path: ["forecast", "grid"],
+      message: "forecast.grid is only configurable for the gfs dataset",
     });
   }
   if (request.dataset !== "gefs" && request.ensemble !== undefined) {

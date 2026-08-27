@@ -1,5 +1,6 @@
 export const ATMOSPHERIC_DATASET_IDS = [
   "gfs_0p25",
+  "gfs_0p50",
   "gefs_0p50",
   "gfs_grid4_analysis_0p5",
 ] as const;
@@ -44,6 +45,28 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "deterministic",
     role: "forecast",
     horizontalGridDegrees: 0.25,
+    maxForecastHour: 384,
+    operations: [
+      "profile",
+      "timeseries",
+      "layer_diagnostics",
+      "profile_diagnostics",
+      "diagnostic_timeseries",
+      "parcel_diagnostics",
+      "points",
+      "points_timeseries",
+      "transect",
+      "area_summary",
+      "run_comparison",
+      "aligned_model_comparison",
+    ],
+  },
+  gfs_0p50: {
+    id: "gfs_0p50",
+    family: "gfs",
+    kind: "deterministic",
+    role: "forecast",
+    horizontalGridDegrees: 0.5,
     maxForecastHour: 384,
     operations: [
       "profile",
@@ -117,12 +140,13 @@ export function datasetSupportsOperation(
  * original operational models so callers that truly mean "forecast models" do
  * not silently start iterating historical analysis datasets.
  */
-export const ATMOSPHERIC_MODEL_IDS = ["gfs_0p25", "gefs_0p50"] as const;
+export const ATMOSPHERIC_MODEL_IDS = ["gfs_0p25", "gfs_0p50", "gefs_0p50"] as const;
 export type AtmosphericModelId = (typeof ATMOSPHERIC_MODEL_IDS)[number];
 export type AtmosphericModelKind = AtmosphericDatasetKind;
 export type AtmosphericModelDefinition = AtmosphericDatasetDefinition;
 export const ATMOSPHERIC_MODEL_CATALOG: Record<AtmosphericModelId, AtmosphericDatasetDefinition> = {
   gfs_0p25: ATMOSPHERIC_DATASET_CATALOG.gfs_0p25,
+  gfs_0p50: ATMOSPHERIC_DATASET_CATALOG.gfs_0p50,
   gefs_0p50: ATMOSPHERIC_DATASET_CATALOG.gefs_0p50,
 };
 

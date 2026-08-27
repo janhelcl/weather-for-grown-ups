@@ -47,9 +47,11 @@ describe("atmospheric dataset capability catalog", () => {
     expect(datasetSupportsOperation("gfs_grid4_analysis_0p5", "ensemble_distribution")).toBe(false);
   });
 
-  it("keeps the old model registry vocabulary limited to operational forecast models", () => {
-    expect(Object.keys(ATMOSPHERIC_MODEL_CATALOG)).toEqual(["gfs_0p25", "gefs_0p50"]);
+  it("keeps the model registry vocabulary limited to operational forecast models", () => {
+    expect(Object.keys(ATMOSPHERIC_MODEL_CATALOG)).toEqual(["gfs_0p25", "gfs_0p50", "gefs_0p50"]);
     expect(modelSupportsOperation("gfs_0p25", "points")).toBe(true);
+    expect(modelSupportsOperation("gfs_0p50", "run_comparison")).toBe(true);
+    expect(modelSupportsOperation("gfs_0p50", "aligned_model_comparison")).toBe(true);
     expect(modelSupportsOperation("gefs_0p50", "ensemble_distribution")).toBe(true);
   });
 });

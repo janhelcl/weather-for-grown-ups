@@ -147,6 +147,53 @@ describe("unified atmospheric routing", () => {
     expect(historicalMixed.result).toEqual({ route: "history-fields" });
   });
 
+  it("preserves explicit operational 0.5 identity through the unified wrapper", async () => {
+    const gfsProfile = {
+      getProfile: vi.fn(async (query: any) => ({
+        model: "gfs_0p50",
+        route: "gfs-0p50",
+        grid: query.grid,
+      })),
+    };
+    const service = new UnifiedAtmosphereQueryService({ gfsProfile: gfsProfile as any });
+    const result = await service.query({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      forecast: { run: "latest", grid: "0p50" },
+      source: "s3",
+    });
+    expect(result.internalDatasetId).toBe("gfs_0p50");
+    expect((result.result as any).grid).toBe("0p50");
+    expect(gfsProfile.getProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ grid: "0p50" }),
+    );
+  });
+
+  it("preserves explicit 0.25 archive identity through the unified wrapper", async () => {
+    const archivedGfs = {
+      query: vi.fn(async () => ({
+        model: "gfs_0p25_forecast_archive",
+        route: "archive-0p25",
+      })),
+    };
+    const service = new UnifiedAtmosphereQueryService({
+      archivedGfs: archivedGfs as any,
+      now: () => new Date("2026-08-27T12:00:00Z"),
+    });
+    const result = await service.query({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-24T06:00:00Z" },
+      selection,
+      forecast: { run: "2026-08-24T00:00:00Z", grid: "0p25" },
+      source: "archive",
+    });
+    expect(result.internalDatasetId).toBe("gfs_0p25_forecast_archive");
+    expect((result.result as any).route).toBe("archive-0p25");
+  });
+
   it("routes old explicit GFS runs through the archive without changing dataset=gfs", async () => {
     const gfsProfile = { getProfile: vi.fn(async () => ({ route: "operational-gfs" })) };
     const archivedGfs = {
@@ -318,6 +365,63 @@ describe("unified specialized operations", () => {
     expect(gefs.compareRuns).toHaveBeenCalledOnce();
   });
 
+  it("rejects a GFS grid selector on GEFS run comparison", async () => {
+    const service = new UnifiedRunComparisonService(
+      { compareRuns: vi.fn() } as any,
+      { compareRuns: vi.fn() } as any,
+    );
+    await expect(service.compare({
+      dataset: "gefs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      gfsGrid: "0p50",
+      cycles: 2,
+    })).rejects.toThrow("gfsGrid is only valid for GFS run comparison");
+  });
+
+  it("rejects ensemble controls on deterministic GFS run comparison", async () => {
+    const service = new UnifiedRunComparisonService(
+      { compareRuns: vi.fn() } as any,
+      { compareRuns: vi.fn() } as any,
+    );
+    await expect(service.compare({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      ensemble: { members: ["c00", "p01"] },
+    })).rejects.toThrow("ensemble controls are only valid for gefs");
+  });
+
+  it("rejects GEFS run comparison selections outside one raw pressure variable", async () => {
+    const service = new UnifiedRunComparisonService(
+      { compareRuns: vi.fn() } as any,
+      { compareRuns: vi.fn() } as any,
+    );
+
+    await expect(service.compare({
+      dataset: "gefs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { fields: ["temperature_2m"] },
+    })).rejects.toThrow(
+      "GEFS run comparison currently requires exactly one raw pressure variable at one pressure level",
+    );
+
+    await expect(service.compare({
+      dataset: "gefs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: {
+        variables: ["temperature", "u_wind"],
+        pressureLevelsHpa: [850],
+      },
+    })).rejects.toThrow(
+      "GEFS run comparison currently requires exactly one raw pressure variable at one pressure level",
+    );
+  });
+
   it("passes explicit GEFS comparison controls without member-trajectory semantics", async () => {
     const gfs = { compareRuns: vi.fn() };
     const gefs = { compareRuns: vi.fn(async (query) => ({ route: "gefs-runs", query })) };
@@ -384,10 +488,12 @@ describe("unified specialized operations", () => {
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       selection: { fields: ["temperature_2m"] },
+      gfsGrid: "0p50",
       cycles: 2,
     });
     expect(gfs.compareRuns).toHaveBeenCalledWith(expect.objectContaining({
       fields: ["temperature_2m"],
+      grid: "0p50",
       cycles: 2,
     }));
 
@@ -398,13 +504,26 @@ describe("unified specialized operations", () => {
       time: { at: "2026-08-28T12:00:00Z" },
       variable: "temperature",
       pressureLevelHpa: 850,
+      gfsGrid: "0p50",
       members: ["c00", "p01"],
       quantiles: [0.25, 0.75],
     });
     expect(compare.compare).toHaveBeenCalledWith(expect.objectContaining({
+      gfsGrid: "0p50",
       members: ["c00", "p01"],
       quantiles: [0.25, 0.75],
     }));
+  });
+
+  it("rejects historical verification leads off the native six-hour analysis cadence", async () => {
+    const service = new UnifiedForecastVerificationService({ verify: vi.fn() } as any);
+    await expect(service.verify({
+      geometry: point,
+      time: { at: "2017-05-09T12:00:00Z" },
+      leadHours: 5,
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    })).rejects.toThrow("leadHours must be a multiple of 6");
   });
 
   it("maps generic dataset comparison, verification and analog operations to existing primitives", async () => {

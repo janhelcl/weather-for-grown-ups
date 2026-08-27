@@ -40,6 +40,7 @@ export class ParcelDiagnosticsService {
       latitude: query.latitude,
       longitude: query.longitude,
       run: query.run,
+      ...(query.grid === undefined ? {} : { grid: query.grid }),
       validTime: query.validTime,
       variables: [...definition.pressureDependencies],
       pressureLevelsHpa,
@@ -52,7 +53,7 @@ export class ParcelDiagnosticsService {
     const parcel = deriveParcelComputation(query.parcel, surface, sampledEnvironment);
 
     return {
-      model: "gfs_0p25",
+      model: profile.model,
       run: profile.run,
       validTime: profile.validTime,
       forecastHour: profile.forecastHour,

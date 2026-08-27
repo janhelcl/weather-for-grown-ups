@@ -28,6 +28,14 @@ describe("buildNomadsPointUrl", () => {
     expect(url.searchParams.get("lev_700_mb")).toBe("on");
   });
 
+  it("uses the NOMADS full-product filename required by the 0.5° filter", () => {
+    const url = new URL(buildNomadsPointUrl(request({ grid: "0p50" })));
+
+    expect(url.pathname).toBe("/cgi-bin/filter_gfs_0p50.pl");
+    expect(url.searchParams.get("dir")).toBe("/gfs.20260819/06/atmos");
+    expect(url.searchParams.get("file")).toBe("gfs.t06z.pgrb2full.0p50.f006");
+  });
+
   it("pads run and forecast hours", () => {
     const f0 = new URL(buildNomadsPointUrl(request({ run: new Date("2026-08-19T00:00:00Z"), forecastHour: 0 })));
     const f123 = new URL(buildNomadsPointUrl(request({ run: new Date("2026-08-19T18:00:00Z"), forecastHour: 123 })));

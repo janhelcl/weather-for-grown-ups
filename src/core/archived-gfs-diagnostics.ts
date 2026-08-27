@@ -5,9 +5,11 @@ import {
   deriveParcelComputation,
   type ParcelEnvironmentLevel,
 } from "../derived/parcel-diagnostics.js";
+import type { ArchivedGfsModelId } from "../schema/gfs-grid.js";
 import type { DiagnoseAtmosphereRequest, QueryAtmosphereRequest } from "../schema/unified-api.js";
 import type { NonIsobaricFieldResult, ProfileLevel } from "./types.js";
 import {
+  ARCHIVED_GFS_0P25_FORECAST_MODEL,
   ARCHIVED_GFS_FORECAST_MODEL,
   ArchivedGfsForecastQueryService,
   archivedGfsForecastHoursInRange,
@@ -19,10 +21,10 @@ import {
 } from "./pressure-diagnostics.js";
 
 const ARCHIVE_DIAGNOSTIC_CAVEAT =
-  "Diagnostics are derived from archived GFS Grid 4 forecasts; model versions changed over time and this is not a homogeneous reforecast dataset" as const;
+  "Diagnostics are derived from archived GFS forecasts; model versions changed over time and this is not a homogeneous reforecast dataset" as const;
 
 interface ArchivedPointState {
-  model: typeof ARCHIVED_GFS_FORECAST_MODEL;
+  model: ArchivedGfsModelId;
   run: string;
   validTime: string;
   forecastHour: number;
@@ -31,8 +33,8 @@ interface ArchivedPointState {
   levels?: ProfileLevel[];
   fields?: NonIsobaricFieldResult[];
   source: {
-    provider: "NOAA NCEI";
-    access: "ncei_thredds_ncss";
+    provider: "NOAA NCEI" | "NCAR GDEX";
+    access: "ncei_thredds_ncss" | "gdex_thredds_ncss";
     dataset: string;
     cacheHit: boolean;
   };
@@ -57,8 +59,8 @@ export class ArchivedGfsForecastDiagnosticService {
     if (selector === undefined || selector === "latest" || selector === "latest_complete") {
       throw new Error("Archived GFS forecast diagnostics require an explicit forecast.run cycle");
     }
-    if (request.source !== undefined) {
-      throw new Error("source override is only available for operational GFS; archived forecasts use NOAA NCEI");
+    if (request.source !== undefined && request.source !== "archive") {
+      throw new Error("source override is only available for operational GFS; archived forecasts accept source=archive only");
     }
     const run = parseGfsRun(selector);
     return "at" in request.time
@@ -80,7 +82,7 @@ export class ArchivedGfsForecastDiagnosticService {
       });
       const levels = requiredLevels(state);
       return {
-        model: ARCHIVED_GFS_FORECAST_MODEL,
+        model: state.model,
         run: state.run,
         validTime: state.validTime,
         forecastHour: state.forecastHour,
@@ -106,7 +108,7 @@ export class ArchivedGfsForecastDiagnosticService {
       });
       const levels = requiredLevels(state);
       return {
-        model: ARCHIVED_GFS_FORECAST_MODEL,
+        model: state.model,
         run: state.run,
         validTime: state.validTime,
         forecastHour: state.forecastHour,
@@ -160,7 +162,7 @@ export class ArchivedGfsForecastDiagnosticService {
     const parcel = deriveParcelComputation(diagnostic.parcel, surface, environment);
 
     return {
-      model: ARCHIVED_GFS_FORECAST_MODEL,
+      model: state.model,
       run: state.run,
       validTime: state.validTime,
       forecastHour: state.forecastHour,
@@ -183,7 +185,12 @@ export class ArchivedGfsForecastDiagnosticService {
     }
     const startTime = new Date(request.time.from);
     const endTime = new Date(request.time.to);
-    const forecastHours = archivedGfsForecastHoursInRange(run, startTime, endTime);
+    const forecastHours = archivedGfsForecastHoursInRange(
+      run,
+      startTime,
+      endTime,
+      request.forecast?.grid ?? "0p25",
+    );
     const maxSteps = request.time.maxSteps ?? 65;
     if (forecastHours.length > maxSteps) {
       throw new Error(
@@ -207,7 +214,7 @@ export class ArchivedGfsForecastDiagnosticService {
     }
 
     return {
-      model: ARCHIVED_GFS_FORECAST_MODEL,
+      model: first.model,
       run: run.toISOString(),
       requestedStartTime: startTime.toISOString(),
       requestedEndTime: endTime.toISOString(),
@@ -218,8 +225,8 @@ export class ArchivedGfsForecastDiagnosticService {
       gridPoint: first.gridPoint,
       diagnostic: request.diagnostic,
       source: {
-        provider: "NOAA NCEI",
-        access: "ncei_thredds_ncss",
+        provider: first.source.provider,
+        access: first.source.access,
         composition: "serial_native_forecast_steps",
       },
       series,
@@ -241,13 +248,20 @@ export class ArchivedGfsForecastDiagnosticService {
       },
       time: { at: validTime },
       selection,
-      forecast: { run: request.forecast!.run },
+      forecast: {
+        run: request.forecast!.run,
+        grid: request.forecast?.grid ?? "0p25",
+      },
+      source: "archive",
     } as QueryAtmosphereRequest);
     if (
       typeof result !== "object"
       || result === null
       || !("model" in result)
-      || (result as { model?: unknown }).model !== ARCHIVED_GFS_FORECAST_MODEL
+      || ![
+        ARCHIVED_GFS_FORECAST_MODEL,
+        ARCHIVED_GFS_0P25_FORECAST_MODEL,
+      ].includes((result as { model?: unknown }).model as any)
     ) {
       throw new Error("Archived GFS diagnostic state query returned an unexpected result");
     }

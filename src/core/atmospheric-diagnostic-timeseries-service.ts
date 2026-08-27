@@ -57,6 +57,8 @@ export class AtmosphericDiagnosticTimeSeriesService {
     switch (request.model) {
       case "gfs_0p25":
         return this.gfs.getDiagnosticTimeSeries(request.query);
+      case "gfs_0p50":
+        return this.gfs.getDiagnosticTimeSeries({ ...request.query, grid: "0p50" });
       case "gefs_0p50":
         return this.gefs.getDiagnosticTimeSeries(request.query);
       case "gfs_grid4_analysis_0p5":

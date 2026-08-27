@@ -6,18 +6,31 @@ import {
   type HistoricalGfsVariableId,
 } from "../schema/history.js";
 import type { HistoricalProfileResult } from "../schema/history-result.js";
-import { archivedGfsForecastHourSchema } from "../schema/history-forecast.js";
+import {
+  archivedGfs025ForecastHourSchema,
+  archivedGfsForecastHourSchema,
+} from "../schema/history-forecast.js";
+import {
+  archivedGfsModelId,
+  type ArchivedGfsModelId,
+  type GfsGrid,
+} from "../schema/gfs-grid.js";
 import {
   NCEI_GFS_GRID4_FORECAST_START,
   NceiGfsForecastHistorySource,
   type ArchivedGfsForecastDataSource,
 } from "../sources/ncei-gfs-forecast-history.js";
+import {
+  RDA_GFS_0P25_FORECAST_START,
+  RdaGfsForecastHistorySource,
+} from "../sources/rda-gfs-forecast-history.js";
 import type { HistoricalAnalysisDataSource } from "../sources/ncei-gfs-history.js";
 import { HistoricalProfileService } from "./history.js";
 import type { GridPoint } from "./types.js";
 
 export interface ArchivedGfsForecastProfileQuery {
   runTime: Date;
+  grid?: GfsGrid;
   forecastHour: number;
   latitude: number;
   longitude: number;
@@ -26,7 +39,7 @@ export interface ArchivedGfsForecastProfileQuery {
 }
 
 export interface ArchivedGfsForecastProfileResult {
-  model: "gfs_grid4_forecast_0p5_archive";
+  model: ArchivedGfsModelId;
   runTime: string;
   forecastHour: number;
   validTime: string;
@@ -38,8 +51,8 @@ export interface ArchivedGfsForecastProfileResult {
   };
   levels: HistoricalProfileResult["levels"];
   source: {
-    provider: "NOAA NCEI";
-    access: "ncei_thredds_ncss";
+    provider: "NOAA NCEI" | "NCAR GDEX";
+    access: "ncei_thredds_ncss" | "gdex_thredds_ncss";
     dataset: string;
     cacheHit: boolean;
   };
@@ -49,11 +62,13 @@ export interface ArchivedGfsForecastProfileServiceOptions {
   cacheDir?: string;
   cooldownMs?: number;
   source?: ArchivedGfsForecastDataSource;
+  rdaSource?: ArchivedGfsForecastDataSource;
   now?: () => Date;
 }
 
 export class ArchivedGfsForecastProfileService {
-  private readonly source: ArchivedGfsForecastDataSource;
+  private readonly nceiSource: ArchivedGfsForecastDataSource;
+  private readonly rdaSource: ArchivedGfsForecastDataSource;
   private readonly now: () => Date;
 
   constructor(options: ArchivedGfsForecastProfileServiceOptions = {}) {
@@ -62,8 +77,12 @@ export class ArchivedGfsForecastProfileService {
       join(cacheDir, "state"),
       options.cooldownMs ?? DEFAULT_NOMADS_COOLDOWN_MS,
     );
-    this.source = options.source ?? new NceiGfsForecastHistorySource({
+    this.nceiSource = options.source ?? new NceiGfsForecastHistorySource({
       cacheDir: join(cacheDir, "ncei-forecast-history"),
+      limiter,
+    });
+    this.rdaSource = options.rdaSource ?? new RdaGfsForecastHistorySource({
+      cacheDir: join(cacheDir, "rda-forecast-history"),
       limiter,
     });
     this.now = options.now ?? (() => new Date());
@@ -71,18 +90,25 @@ export class ArchivedGfsForecastProfileService {
 
   async getArchivedForecastProfile(query: ArchivedGfsForecastProfileQuery): Promise<ArchivedGfsForecastProfileResult> {
     historicalAnalysisTimeSchema.parse(query.runTime.toISOString());
-    const forecastHour = archivedGfsForecastHourSchema.parse(query.forecastHour);
-    if (query.runTime < NCEI_GFS_GRID4_FORECAST_START) {
+    const grid = query.grid ?? "0p50";
+    const forecastHour = grid === "0p50"
+      ? archivedGfsForecastHourSchema.parse(query.forecastHour)
+      : archivedGfs025ForecastHourSchema.parse(query.forecastHour);
+    const minimumTime = grid === "0p50"
+      ? NCEI_GFS_GRID4_FORECAST_START
+      : RDA_GFS_0P25_FORECAST_START;
+    if (query.runTime < minimumTime) {
       throw new Error(
-        `NCEI GFS Grid 4 forecast history begins at ${NCEI_GFS_GRID4_FORECAST_START.toISOString()}`,
+        `GFS ${grid} forecast history begins at ${minimumTime.toISOString()} for this archive`,
       );
     }
+    const source = grid === "0p50" ? this.nceiSource : this.rdaSource;
 
     const validTime = new Date(query.runTime.getTime() + forecastHour * 60 * 60 * 1_000);
     if (validTime > this.now()) throw new Error("Archived GFS forecast validTime must not be in the future");
 
     const adapter: HistoricalAnalysisDataSource = {
-      fetch: async (request) => this.source.fetch({
+      fetch: async (request) => source.fetch({
         runTime: query.runTime,
         forecastHour,
         latitude: request.latitude,
@@ -94,7 +120,8 @@ export class ArchivedGfsForecastProfileService {
       source: adapter,
       now: this.now,
       allowNonAnalysisCycle: true,
-      minimumTime: NCEI_GFS_GRID4_FORECAST_START,
+      minimumTime,
+      nativeSpecificHumidity: grid === "0p25",
     });
     const profile = await normalizer.getHistoricalProfile({
       latitude: query.latitude,
@@ -105,7 +132,7 @@ export class ArchivedGfsForecastProfileService {
     });
 
     return {
-      model: "gfs_grid4_forecast_0p5_archive",
+      model: archivedGfsModelId(grid),
       runTime: query.runTime.toISOString(),
       forecastHour,
       validTime: validTime.toISOString(),
@@ -116,7 +143,12 @@ export class ArchivedGfsForecastProfileService {
         pressureLevelsHpa: [...query.pressureLevelsHpa],
       },
       levels: profile.levels,
-      source: profile.source,
+      source: {
+        provider: grid === "0p50" ? "NOAA NCEI" : "NCAR GDEX",
+        access: grid === "0p50" ? "ncei_thredds_ncss" : "gdex_thredds_ncss",
+        dataset: profile.source.dataset,
+        cacheHit: profile.source.cacheHit,
+      },
     };
   }
 }

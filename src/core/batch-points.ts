@@ -8,7 +8,12 @@ import {
 } from "../schema/query.js";
 import { mapConcurrent } from "./concurrency.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
-import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
+import {
+  LatestRunResolver,
+  resolveLatestCompleteRunForGrid,
+  resolveLatestRunForGrid,
+  type LatestRunProvider,
+} from "./latest-run.js";
 import { ProfileService } from "./profile.js";
 import type { BatchPointsResult, ProfileResult } from "./types.js";
 
@@ -43,7 +48,7 @@ export class BatchPointsService {
     const pressureLevelsHpa = query.pressureLevelsHpa ?? [];
 
     const run = query.run === "latest"
-      ? await this.latestRunProvider.resolveLatestRun({
+      ? await resolveLatestRunForGrid(this.latestRunProvider, {
           type: "valid_time",
           validTime,
           selection: {
@@ -51,11 +56,11 @@ export class BatchPointsService {
             pressureLevelsHpa,
             fields,
           },
-        })
+        }, query.grid)
       : query.run === "latest_complete"
-        ? await this.latestRunProvider.resolveLatestRun()
+        ? await resolveLatestCompleteRunForGrid(this.latestRunProvider, query.grid)
         : parseGfsRun(query.run);
-    const fh = forecastHour(run, validTime);
+    const fh = forecastHour(run, validTime, query.grid);
 
     const profiles = await mapConcurrent(
       query.points,
@@ -77,7 +82,7 @@ export class BatchPointsService {
     }
 
     return {
-      model: "gfs_0p25",
+      model: profiles[0]!.model,
       run: run.toISOString(),
       validTime: validTime.toISOString(),
       forecastHour: fh,
@@ -107,6 +112,7 @@ function profileQuery(
     latitude: point.latitude,
     longitude: point.longitude,
     run: run.toISOString(),
+    ...(query.grid === undefined ? {} : { grid: query.grid }),
     validTime: validTime.toISOString(),
     ...(query.variables === undefined ? {} : { variables: query.variables }),
     ...(query.pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa: query.pressureLevelsHpa }),

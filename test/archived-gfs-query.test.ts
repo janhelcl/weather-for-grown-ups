@@ -39,7 +39,7 @@ describe("archived GFS unified routing policy", () => {
       geometry: { type: "point", latitude: 50, longitude: 14 },
       time: { at: "2017-05-09T12:00:00Z" },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     });
     const recent = queryAtmosphereSchema.parse({
       dataset: "gfs",
@@ -50,6 +50,28 @@ describe("archived GFS unified routing policy", () => {
     });
     expect(shouldUseArchivedGfsForecast(old, now)).toBe(true);
     expect(shouldUseArchivedGfsForecast(recent, now)).toBe(false);
+  });
+
+  it("lets explicit source selection override rolling-window archive routing", () => {
+    const now = new Date("2026-08-27T12:00:00Z");
+    const recentRun = "2026-08-24T00:00:00Z";
+    const oldRun = "2017-05-07T12:00:00Z";
+
+    expect(shouldUseArchivedGfsForecast({
+      dataset: "gfs",
+      forecast: { run: recentRun, grid: "0p25" },
+      source: "archive",
+    }, now)).toBe(true);
+    expect(shouldUseArchivedGfsForecast({
+      dataset: "gfs",
+      forecast: { run: oldRun, grid: "0p25" },
+      source: "s3",
+    }, now)).toBe(false);
+    expect(shouldUseArchivedGfsForecast({
+      dataset: "gfs",
+      forecast: { run: oldRun, grid: "0p50" },
+      source: "nomads",
+    }, now)).toBe(false);
   });
 
   it("does not archive non-GFS or symbolic run selectors", () => {
@@ -94,6 +116,16 @@ describe("archived GFS unified routing policy", () => {
     )).toThrow("No native archived GFS Grid 4 forecast outputs");
   });
 
+  it("enumerates 0.25 archive cadence through the 3h-to-12h transition", () => {
+    const run = new Date("2026-08-20T00:00:00Z");
+    expect(archivedGfsForecastHoursInRange(
+      run,
+      new Date("2026-08-30T00:00:00Z"),
+      new Date("2026-08-31T00:00:00Z"),
+      "0p25",
+    )).toEqual([240, 252, 264]);
+  });
+
   it("enumerates native Grid 4 outputs at 3-hour cadence through +192h", () => {
     const run = new Date("2017-05-07T12:00:00Z");
     expect(archivedGfsForecastHoursInRange(
@@ -121,7 +153,7 @@ describe("ArchivedGfsForecastQueryService", () => {
       geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
       time: { at: "2017-05-09T15:00:00Z" },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     });
 
     const result = await service.query(request) as any;
@@ -135,6 +167,52 @@ describe("ArchivedGfsForecastQueryService", () => {
     expect(profile.getArchivedForecastProfile).toHaveBeenCalledWith(expect.objectContaining({
       forecastHour: 51,
     }));
+  });
+
+  it("preserves 0.25 archive identity, provenance and caveat", async () => {
+    const getArchivedForecastProfile = vi.fn(async (query: any) => ({
+      model: "gfs_0p25_forecast_archive" as const,
+      runTime: query.runTime.toISOString(),
+      forecastHour: query.forecastHour,
+      validTime: new Date(query.runTime.getTime() + query.forecastHour * 3_600_000).toISOString(),
+      requestedPoint: { latitude: query.latitude, longitude: query.longitude },
+      gridPoint: { latitude: 50, longitude: 14 },
+      selection: {
+        variables: query.variables,
+        pressureLevelsHpa: query.pressureLevelsHpa,
+      },
+      levels: [{ pressureHpa: 850, temperatureC: 10 }],
+      source: {
+        provider: "NCAR GDEX" as const,
+        access: "gdex_thredds_ncss" as const,
+        dataset: "d084001",
+        cacheHit: true,
+      },
+    }));
+    const service = new ArchivedGfsForecastQueryService({
+      profile: { getArchivedForecastProfile },
+      now: () => new Date("2026-08-27T12:00:00Z"),
+    });
+    const result = await service.query(queryAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-24T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      forecast: { run: "2026-08-24T00:00:00Z", grid: "0p25" },
+      source: "archive",
+    })) as any;
+
+    expect(result).toMatchObject({
+      model: "gfs_0p25_forecast_archive",
+      source: {
+        provider: "NCAR GDEX",
+        access: "gdex_thredds_ncss",
+      },
+    });
+    expect(result.caveat).toContain("NCAR GDEX 0.25-degree");
+    expect(getArchivedForecastProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ grid: "0p25", forecastHour: 6 }),
+    );
   });
 
   it("builds range, multi-point and transect products from the same archive point primitive", async () => {
@@ -153,7 +231,7 @@ describe("ArchivedGfsForecastQueryService", () => {
         maxSteps: 3,
       },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     })) as any;
     expect(range.series.map((step: any) => step.forecastHour)).toEqual([0, 3, 6]);
 
@@ -168,7 +246,7 @@ describe("ArchivedGfsForecastQueryService", () => {
       },
       time: { at: "2017-05-07T18:00:00Z" },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     })) as any;
     expect(points.points).toHaveLength(2);
 
@@ -182,7 +260,7 @@ describe("ArchivedGfsForecastQueryService", () => {
       },
       time: { at: "2017-05-07T18:00:00Z" },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     })) as any;
     expect(transect.samples).toHaveLength(4);
     expect(transect.samples[0].fraction).toBe(0);
@@ -216,7 +294,7 @@ describe("ArchivedGfsForecastQueryService", () => {
         maxSteps: 2,
       },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     }))).rejects.toThrow("exceeding maxSteps=2");
   });
 
@@ -240,7 +318,7 @@ describe("ArchivedGfsForecastQueryService", () => {
         maxSteps: 2,
       },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
     };
 
     const result = await service.query(queryAtmosphereSchema.parse({
@@ -266,7 +344,7 @@ describe("ArchivedGfsForecastQueryService", () => {
       geometry: { type: "point", latitude: 50, longitude: 14 },
       time: { at: "2017-05-07T18:00:00Z" },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      forecast: { run: "2017-05-07T12:00:00Z" },
+      forecast: { run: "2017-05-07T12:00:00Z", grid: "0p50" },
       source: "s3",
     });
     await expect(service.query(request)).rejects.toThrow(

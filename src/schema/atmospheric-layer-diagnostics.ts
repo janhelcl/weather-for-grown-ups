@@ -1,4 +1,5 @@
 import * as z from "zod/v4";
+import { operationalGfsModelIdSchema } from "./gfs-grid.js";
 import {
   gefsLayerDiagnosticsQuerySchema,
   gefsLayerDiagnosticsResultSchema,
@@ -12,7 +13,7 @@ import { layerDiagnosticsResultSchema } from "./result.js";
 
 export const atmosphericLayerDiagnosticsRequestSchema = z.union([
   z.object({
-    model: z.literal("gfs_0p25"),
+    model: operationalGfsModelIdSchema,
     query: layerDiagnosticsQuerySchema,
   }),
   z.object({

@@ -27,13 +27,18 @@ import {
 } from "../schema/area-summary.js";
 import type { AreaSummaryResult } from "../schema/area-summary-result.js";
 import {
-  GFS_GRID_SPACING_DEG,
+  gfsGridSpacingDegrees,
   type RawVariableId,
 } from "../schema/query.js";
 import { buildNomadsAreaUrl } from "../sources/nomads.js";
 import { computeAreaDistribution } from "./area-distribution.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
-import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
+import {
+  LatestRunResolver,
+  resolveLatestCompleteRunForGrid,
+  resolveLatestRunForGrid,
+  type LatestRunProvider,
+} from "./latest-run.js";
 import type {
   FieldTemporalResult,
   GribDecoderName,
@@ -94,7 +99,7 @@ export class AreaSummaryService {
       southLatitude: query.southLatitude,
       northLatitude: query.northLatitude,
     };
-    const estimatedGridPoints = estimateGridPoints(box);
+    const estimatedGridPoints = estimateGridPoints(box, query.grid ?? "0p25");
     if (estimatedGridPoints > query.maxGridPoints) {
       throw new Error(`Requested bbox is approximately ${estimatedGridPoints} GFS grid points, exceeding maxGridPoints=${query.maxGridPoints}`);
     }
@@ -116,10 +121,11 @@ export class AreaSummaryService {
 
     const validTime = new Date(query.validTime);
     const variable = VARIABLE_CATALOG[variableId] as RawVariableDefinition;
-    const run = await this.resolveRun(query.run, validTime, [variable], [pressureLevelHpa], []);
-    const fh = forecastHour(run, validTime);
+    const run = await this.resolveRun(query.run, validTime, [variable], [pressureLevelHpa], [], query.grid);
+    const fh = forecastHour(run, validTime, query.grid ?? "0p25");
     const url = buildNomadsAreaUrl({
       run,
+      ...(query.grid === undefined ? {} : { grid: query.grid }),
       forecastHour: fh,
       ...box,
       variables: [variable],
@@ -143,7 +149,7 @@ export class AreaSummaryService {
     }
 
     return {
-      model: "gfs_0p25",
+      model: query.grid === "0p50" ? "gfs_0p50" : "gfs_0p25",
       run: run.toISOString(),
       validTime: validTime.toISOString(),
       forecastHour: fh,
@@ -173,10 +179,11 @@ export class AreaSummaryService {
     if (definition.kind !== "raw") throw new Error(`Internal area-summary validation error: ${fieldId} is derived`);
 
     const validTime = new Date(query.validTime);
-    const run = await this.resolveRun(query.run, validTime, [], [], [definition]);
-    const fh = forecastHour(run, validTime);
+    const run = await this.resolveRun(query.run, validTime, [], [], [definition], query.grid);
+    const fh = forecastHour(run, validTime, query.grid ?? "0p25");
     const url = buildNomadsAreaUrl({
       run,
+      ...(query.grid === undefined ? {} : { grid: query.grid }),
       forecastHour: fh,
       ...box,
       variables: [],
@@ -205,7 +212,7 @@ export class AreaSummaryService {
     }
 
     return {
-      model: "gfs_0p25",
+      model: query.grid === "0p50" ? "gfs_0p50" : "gfs_0p25",
       run: run.toISOString(),
       validTime: validTime.toISOString(),
       forecastHour: fh,
@@ -231,9 +238,10 @@ export class AreaSummaryService {
     variables: RawVariableDefinition[],
     pressureLevelsHpa: number[],
     fields: RawNonIsobaricFieldDefinition[],
+    grid: "0p25" | "0p50" = "0p25",
   ): Promise<Date> {
     return selector === "latest"
-      ? this.latestRunProvider.resolveLatestRun({
+      ? resolveLatestRunForGrid(this.latestRunProvider, {
           type: "valid_time",
           validTime,
           selection: {
@@ -241,16 +249,17 @@ export class AreaSummaryService {
             pressureLevelsHpa,
             fields,
           },
-        })
+        }, grid)
       : selector === "latest_complete"
-        ? this.latestRunProvider.resolveLatestRun()
+        ? resolveLatestCompleteRunForGrid(this.latestRunProvider, grid)
         : parseGfsRun(selector);
   }
 }
 
-export function estimateGridPoints(box: AreaBox): number {
-  const longitudePoints = Math.ceil((box.eastLongitude - box.westLongitude) / GFS_GRID_SPACING_DEG) + 2;
-  const latitudePoints = Math.ceil((box.northLatitude - box.southLatitude) / GFS_GRID_SPACING_DEG) + 2;
+export function estimateGridPoints(box: AreaBox, grid: "0p25" | "0p50" = "0p25"): number {
+  const spacing = gfsGridSpacingDegrees(grid);
+  const longitudePoints = Math.ceil((box.eastLongitude - box.westLongitude) / spacing) + 2;
+  const latitudePoints = Math.ceil((box.northLatitude - box.southLatitude) / spacing) + 2;
   return Math.max(0, longitudePoints) * Math.max(0, latitudePoints);
 }
 

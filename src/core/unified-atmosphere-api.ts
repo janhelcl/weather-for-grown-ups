@@ -1,3 +1,4 @@
+import { operationalGfsModelId } from "../schema/gfs-grid.js";
 import { AreaSummaryService } from "./area-summary.js";
 import {
   ARCHIVED_GFS_FORECAST_MODEL,
@@ -172,6 +173,7 @@ export class UnifiedAtmosphereQueryService {
       const query = profileQuerySchema.parse({
         ...point,
         run,
+        grid: request.forecast?.grid ?? "0p25",
         validTime: request.time.at,
         ...gfsSelection(request),
         ...(request.source === undefined ? {} : { source: request.source }),
@@ -183,6 +185,7 @@ export class UnifiedAtmosphereQueryService {
       const query = gefsMemberBundleQuerySchema.parse({
         ...point,
         run,
+        grid: request.forecast?.grid ?? "0p25",
         validTime: request.time.at,
         selection: gefsSelection(request),
         ...ensembleOptions(request),
@@ -219,6 +222,7 @@ export class UnifiedAtmosphereQueryService {
       const query = timeSeriesQuerySchema.parse({
         ...point,
         run,
+        grid: request.forecast?.grid ?? "0p25",
         startTime: request.time.from,
         endTime: request.time.to,
         ...gfsSelection(request),
@@ -232,6 +236,7 @@ export class UnifiedAtmosphereQueryService {
       const query = gefsBundleTimeSeriesQuerySchema.parse({
         ...point,
         run,
+        grid: request.forecast?.grid ?? "0p25",
         startTime: request.time.from,
         endTime: request.time.to,
         selection: gefsSelection(request),
@@ -275,6 +280,7 @@ export class UnifiedAtmosphereQueryService {
       return this.gfsPoints.getPoints(batchPointsQuerySchema.parse({
         points: request.geometry.points,
         run,
+        grid: request.forecast?.grid ?? "0p25",
         validTime: request.time.at,
         ...gfsSelection(request),
       }));
@@ -308,6 +314,7 @@ export class UnifiedAtmosphereQueryService {
       return this.gfsPointsTimeSeries.getPointsTimeSeries(pointsTimeSeriesQuerySchema.parse({
         points: request.geometry.points,
         run,
+        grid: request.forecast?.grid ?? "0p25",
         startTime: request.time.from,
         endTime: request.time.to,
         ...gfsSelection(request),
@@ -355,6 +362,7 @@ export class UnifiedAtmosphereQueryService {
         start: request.geometry.start,
         end: request.geometry.end,
         run,
+        grid: request.forecast?.grid ?? "0p25",
         validTime: request.time.at,
         variables: request.selection.variables,
         pressureLevelsHpa: request.selection.pressureLevelsHpa,
@@ -402,6 +410,7 @@ export class UnifiedAtmosphereQueryService {
       return this.gfsArea.summarize(areaSummaryQuerySchema.parse({
         ...bbox,
         run,
+        grid: request.forecast?.grid ?? "0p25",
         validTime: request.time.at,
         ...scalar,
         ...aggregate,
@@ -471,7 +480,9 @@ export class UnifiedAtmosphereDiagnosticService {
   private instant(request: DiagnoseAtmosphereRequest): Promise<unknown> {
     if (!("at" in request.time)) throw new Error("Internal routing error: expected instant diagnostic");
     const common = instantDiagnosticCommon(request);
-    const model = publicDatasetMetadata(request.dataset).internalDatasetId;
+    const model = request.dataset === "gfs"
+      ? operationalGfsModelId(request.forecast?.grid ?? "0p25")
+      : publicDatasetMetadata(request.dataset).internalDatasetId;
 
     if (request.diagnostic.kind === "layer") {
       return this.layer.getLayerDiagnostics({
@@ -493,7 +504,9 @@ export class UnifiedAtmosphereDiagnosticService {
 
   private range(request: DiagnoseAtmosphereRequest): Promise<unknown> {
     if (!("from" in request.time)) throw new Error("Internal routing error: expected diagnostic range");
-    const model = publicDatasetMetadata(request.dataset).internalDatasetId;
+    const model = request.dataset === "gfs"
+      ? operationalGfsModelId(request.forecast?.grid ?? "0p25")
+      : publicDatasetMetadata(request.dataset).internalDatasetId;
     const common = {
       latitude: request.geometry.latitude,
       longitude: request.geometry.longitude,
@@ -509,6 +522,7 @@ export class UnifiedAtmosphereDiagnosticService {
         query: {
           ...common,
           run: request.forecast?.run ?? "latest",
+          grid: request.forecast?.grid ?? "0p25",
           ...(request.source === undefined ? {} : { source: request.source }),
         },
       } as any);
@@ -597,6 +611,7 @@ function datasetDiagnosticQuery(request: DiagnoseAtmosphereRequest, common: Reco
     return {
       ...common,
       run: request.forecast?.run ?? "latest",
+      grid: request.forecast?.grid ?? "0p25",
       ...(request.source === undefined ? {} : { source: request.source }),
     };
   }
@@ -624,8 +639,10 @@ function wrapResult(
 ): UnifiedAtmosphereResult {
   const metadata = publicDatasetMetadata(request.dataset);
   const internalDatasetId = isArchivedGfsForecastResult(result)
-    ? ARCHIVED_GFS_FORECAST_MODEL
-    : metadata.internalDatasetId;
+    ? (result as { model: "gfs_0p25_forecast_archive" | "gfs_grid4_forecast_0p5_archive" }).model
+    : isOperationalGfsResult(result)
+      ? (result as { model: "gfs_0p25" | "gfs_0p50" }).model
+      : metadata.internalDatasetId;
   return unifiedAtmosphereResultSchema.parse({
     dataset: request.dataset,
     internalDatasetId,
@@ -638,9 +655,20 @@ function wrapResult(
 }
 
 
+function isOperationalGfsResult(result: unknown): boolean {
+  return typeof result === "object"
+    && result !== null
+    && "model" in result
+    && ((result as { model?: unknown }).model === "gfs_0p25"
+      || (result as { model?: unknown }).model === "gfs_0p50");
+}
+
 function isArchivedGfsForecastResult(result: unknown): boolean {
   return typeof result === "object"
     && result !== null
     && "model" in result
-    && (result as { model?: unknown }).model === ARCHIVED_GFS_FORECAST_MODEL;
+    && (
+      (result as { model?: unknown }).model === ARCHIVED_GFS_FORECAST_MODEL
+      || (result as { model?: unknown }).model === "gfs_0p25_forecast_archive"
+    );
 }

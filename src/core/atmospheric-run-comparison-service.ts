@@ -9,6 +9,7 @@ import { GefsRunComparisonService } from "./gefs-run-comparison.js";
 
 export type AtmosphericRunComparisonRequest =
   | { model: "gfs_0p25"; query: RunComparisonQueryInput }
+  | { model: "gfs_0p50"; query: RunComparisonQueryInput }
   | { model: "gefs_0p50"; query: GefsRunComparisonQueryInput };
 
 export type AtmosphericRunComparisonResult = RunComparisonResult | GefsRunComparisonResult;
@@ -31,6 +32,8 @@ export class AtmosphericRunComparisonService {
     switch (request.model) {
       case "gfs_0p25":
         return this.gfs.compareRuns(request.query);
+      case "gfs_0p50":
+        return this.gfs.compareRuns({ ...request.query, grid: "0p50" });
       case "gefs_0p50":
         return this.gefs.compareRuns(request.query);
     }

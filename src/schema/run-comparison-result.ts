@@ -1,4 +1,5 @@
 import * as z from "zod/v4";
+import { operationalGfsModelIdSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, nonIsobaricFieldIdSchema } from "./query.js";
 import {
   gridPointSchema,
@@ -58,7 +59,7 @@ export const runComparisonTransitionSchema = z.object({
 });
 
 export const runComparisonResultSchema = z.object({
-  model: z.literal("gfs_0p25"),
+  model: operationalGfsModelIdSchema,
   validTime: isoDateTimeSchema,
   requestedPoint: gridPointSchema,
   gridPoint: gridPointSchema,

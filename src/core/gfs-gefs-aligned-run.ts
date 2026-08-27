@@ -1,4 +1,5 @@
 import type { GefsMember } from "../catalog/gefs.js";
+import type { GfsGrid } from "../schema/gfs-grid.js";
 import { GfsS3RunProbe, type RunAvailabilityProbe } from "../sources/gfs-s3.js";
 import { GefsS3RunProbe, type GefsAvailabilityProbe } from "../sources/gefs-s3.js";
 import {
@@ -14,6 +15,7 @@ export interface GfsGefsAlignedRunProvider {
     variableCode: string,
     pressureLevelHpa: number,
     members: readonly GefsMember[],
+    gfsGrid?: GfsGrid,
   ): Promise<Date>;
 }
 
@@ -42,6 +44,7 @@ export class GfsGefsAlignedRunResolver implements GfsGefsAlignedRunProvider {
     variableCode: string,
     pressureLevelHpa: number,
     members: readonly GefsMember[],
+    gfsGrid: GfsGrid = "0p25",
   ): Promise<Date> {
     const anchorTime = new Date(Math.min(this.now().getTime(), validTime.getTime()));
     const anchor = latestGefsCycleAtOrBefore(anchorTime);
@@ -53,11 +56,17 @@ export class GfsGefsAlignedRunResolver implements GfsGefsAlignedRunProvider {
       if (forecastHour > GEFS_MAX_FORECAST_HOUR) break;
 
       const [gfsAvailable, gefsAvailable] = await Promise.all([
-        this.gfsProbe.isForecastAvailable(run, forecastHour, {
-          variableCodes: [variableCode],
-          pressureLevelsHpa: [pressureLevelHpa],
-          fields: [],
-        }),
+        gfsGrid === "0p50"
+          ? this.gfsProbe.isForecastAvailable(run, forecastHour, {
+              variableCodes: [variableCode],
+              pressureLevelsHpa: [pressureLevelHpa],
+              fields: [],
+            }, gfsGrid)
+          : this.gfsProbe.isForecastAvailable(run, forecastHour, {
+              variableCodes: [variableCode],
+              pressureLevelsHpa: [pressureLevelHpa],
+              fields: [],
+            }),
         this.gefsProbe.areMembersAvailable(run, forecastHour, members),
       ]);
       if (gfsAvailable && gefsAvailable) return run;

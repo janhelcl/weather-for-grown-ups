@@ -1,4 +1,5 @@
 import * as z from "zod/v4";
+import { operationalGfsModelIdSchema } from "./gfs-grid.js";
 import {
   gefsProfileDiagnosticsQuerySchema,
   gefsProfileDiagnosticsResultSchema,
@@ -12,7 +13,7 @@ import { profileDiagnosticsResultSchema } from "./result.js";
 
 export const atmosphericProfileDiagnosticsRequestSchema = z.union([
   z.object({
-    model: z.literal("gfs_0p25"),
+    model: operationalGfsModelIdSchema,
     query: profileDiagnosticsQuerySchema,
   }),
   z.object({
