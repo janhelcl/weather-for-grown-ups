@@ -55,16 +55,18 @@ Environmental vertical resolution is controlled entirely by `pressureLevelsHpa`.
 CLI:
 
 ```bash
-wfg history-parcel \
+wfg diagnose \
+  --dataset gfs-analysis \
   --lat 50.08 \
   --lon 14.43 \
   --at 2017-05-09T12:00:00Z \
+  --kind parcel \
   --levels 1000,975,950,925,900,850,800,750,700,650,600,550,500,450,400,350,300 \
   --parcel surface_2m \
   --json
 ```
 
-MCP tool: `get_gfs_historical_parcel`.
+MCP tool: `diagnose_atmosphere`.
 
 The returned result includes the exact analysis time, requested and sampled Grid 4 point, pressure levels used, complete normalized environmental profile, parcel computation, exact NCEI dataset path and cache status.
 
@@ -73,19 +75,21 @@ The returned result includes the exact analysis time, requested and sampled Grid
 CLI:
 
 ```bash
-wfg history-parcel-timeseries \
+wfg diagnose \
+  --dataset gfs-analysis \
   --lat 50.08 \
   --lon 14.43 \
   --from 2017-05-09T00:00:00Z \
   --to 2017-05-15T23:59:59Z \
   --cycles 12 \
+  --kind parcel \
   --levels 1000,975,950,925,900,850,800,750,700,650,600,550,500,450,400,350,300 \
   --parcel most_unstable_300hpa \
   --max-steps 7 \
   --json
 ```
 
-MCP tool: `get_gfs_historical_parcel_timeseries`.
+MCP tool: `diagnose_atmosphere`.
 
 The time-series primitive uses the same guardrails as the rest of interactive History:
 
