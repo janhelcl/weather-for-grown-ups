@@ -1,4 +1,5 @@
 import * as z from "zod/v4";
+import { gfsGridSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 import {
   atmosphericEnsembleOptionsSchema,
@@ -12,10 +13,14 @@ export const compareAtmosphericRunsSchema = z.object({
   time: z.object({ at: isoDateTimeSchema }),
   selection: atmosphericSelectionSchema,
   anchorRun: z.string().min(1).default("latest"),
+  gfsGrid: gfsGridSchema.optional(),
   cycles: z.number().int().min(2).max(6).default(3),
   ensemble: atmosphericEnsembleOptionsSchema.optional(),
   thresholdGte: z.number().optional(),
 }).superRefine((request, context) => {
+  if (request.dataset === "gefs" && request.gfsGrid !== undefined) {
+    context.addIssue({ code: "custom", path: ["gfsGrid"], message: "gfsGrid is only valid for GFS run comparison" });
+  }
   if (request.dataset !== "gefs" && request.ensemble !== undefined) {
     context.addIssue({ code: "custom", path: ["ensemble"], message: "ensemble controls are only valid for gefs" });
   }
@@ -40,6 +45,7 @@ export const compareAtmosphericDatasetsSchema = z.object({
   variable: z.string().min(1),
   pressureLevelHpa: z.number().positive(),
   run: z.string().min(1).default("latest"),
+  gfsGrid: gfsGridSchema.optional(),
   members: z.array(z.string().min(1)).min(2).max(31).optional(),
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
 });

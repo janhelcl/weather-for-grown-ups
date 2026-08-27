@@ -50,6 +50,7 @@ export class GfsGefsComparisonService {
           variable.gfsCode,
           query.pressureLevelHpa,
           members,
+          query.gfsGrid,
         )
       : parseGefsRun(query.run);
     const forecastHour = gefsForecastHour(run, validTime);
@@ -60,6 +61,7 @@ export class GfsGefsComparisonService {
         latitude: query.latitude,
         longitude: query.longitude,
         run: runIso,
+        ...(query.gfsGrid === undefined ? {} : { grid: query.gfsGrid }),
         validTime: query.validTime,
         variables: [query.variable],
         pressureLevelsHpa: [query.pressureLevelHpa],
@@ -114,7 +116,7 @@ export class GfsGefsComparisonService {
         unit: output.unit,
       },
       deterministicGfs: {
-        model: "gfs_0p25",
+        model: gfs.model,
         gridPoint: gfs.gridPoint,
         value: deterministicValue,
         source: gfs.source,

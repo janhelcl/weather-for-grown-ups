@@ -206,6 +206,7 @@ export const MAX_RUN_COMPARISON_CYCLES = 6;
 
 export const runComparisonQuerySchema = z.object({
   ...pointSchema,
+  grid: gfsGridSchema.optional(),
   anchorRun: runSelectorSchema.describe("Newest run in the comparison; earlier runs are consecutive six-hour GFS cycles"),
   validTime: isoDateTimeSchema.describe("One forecast valid time compared across model cycles"),
   ...atmosphericSelectionSchema,

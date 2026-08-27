@@ -7,7 +7,13 @@ import {
 } from "../schema/query.js";
 import { mapConcurrent } from "./concurrency.js";
 import { parseGfsRun } from "./forecast-hour.js";
-import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
+import type { OperationalGfsModelId } from "../schema/gfs-grid.js";
+import {
+  LatestRunResolver,
+  resolveLatestCompleteRunForGrid,
+  resolveLatestRunForGrid,
+  type LatestRunProvider,
+} from "./latest-run.js";
 import { ProfileService } from "./profile.js";
 import type {
   FieldTemporalResult,
@@ -61,7 +67,7 @@ export interface RunComparisonTransition {
 }
 
 export interface RunComparisonResult {
-  model: "gfs_0p25";
+  model: OperationalGfsModelId;
   validTime: string;
   requestedPoint: GridPoint;
   gridPoint: GridPoint;
@@ -114,7 +120,7 @@ export class RunComparisonService {
     const pressureLevelsHpa = query.pressureLevelsHpa ?? [];
 
     const anchorRun = query.anchorRun === "latest"
-      ? await this.latestRunProvider.resolveLatestRun({
+      ? await resolveLatestRunForGrid(this.latestRunProvider, {
           type: "valid_time",
           validTime,
           selection: {
@@ -122,9 +128,9 @@ export class RunComparisonService {
             pressureLevelsHpa,
             fields,
           },
-        })
+        }, query.grid)
       : query.anchorRun === "latest_complete"
-        ? await this.latestRunProvider.resolveLatestRun()
+        ? await resolveLatestCompleteRunForGrid(this.latestRunProvider, query.grid)
         : parseGfsRun(query.anchorRun);
 
     const runs = Array.from({ length: query.cycles }, (_, index) =>
@@ -139,6 +145,7 @@ export class RunComparisonService {
             latitude: query.latitude,
             longitude: query.longitude,
             run: run.toISOString(),
+            ...(query.grid === undefined ? {} : { grid: query.grid }),
             validTime: validTime.toISOString(),
             ...(query.variables === undefined ? {} : { variables: query.variables }),
             ...(query.pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa: query.pressureLevelsHpa }),
@@ -177,7 +184,7 @@ export class RunComparisonService {
     }));
 
     return {
-      model: "gfs_0p25",
+      model: first.model,
       validTime: validTime.toISOString(),
       requestedPoint: { latitude: query.latitude, longitude: query.longitude },
       gridPoint: first.gridPoint,

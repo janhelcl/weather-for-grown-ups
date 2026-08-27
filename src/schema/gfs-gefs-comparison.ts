@@ -1,6 +1,7 @@
 import * as z from "zod/v4";
 import { GEFS_MEMBERS, isSupportedGefsPressureSelection } from "../catalog/gefs.js";
 import { gefsMemberSchema, gefsPressureVariableSchema } from "./gefs-ensemble.js";
+import { gfsGridSchema, operationalGfsModelIdSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 
 export const gfsGefsComparisonRunSelectorSchema = z.union([
@@ -12,6 +13,7 @@ export const gfsGefsComparisonRunSelectorSchema = z.union([
 
 export const gfsGefsComparisonQuerySchema = z.object({
   ...pointCoordinateSchema.shape,
+  gfsGrid: gfsGridSchema.optional(),
   run: gfsGefsComparisonRunSelectorSchema,
   validTime: isoDateTimeSchema.describe("Forecast valid time on the native three-hour GEFS cadence"),
   variable: gefsPressureVariableSchema.describe("Raw pressure-level variable supported by both deterministic GFS and GEFS pgrb2a"),
@@ -49,7 +51,7 @@ export const gfsGefsComparisonResultSchema = z.object({
   requestedPoint: pointCoordinateSchema,
   selection: comparisonSelectionSchema,
   deterministicGfs: z.object({
-    model: z.literal("gfs_0p25"),
+    model: operationalGfsModelIdSchema,
     gridPoint: pointCoordinateSchema,
     value: z.number(),
     source: z.object({
