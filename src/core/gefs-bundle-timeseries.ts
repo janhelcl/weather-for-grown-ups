@@ -21,6 +21,10 @@ import {
   nativeGefsValidTimesInRange,
   parseGefsRun,
 } from "./gefs-time.js";
+import {
+  gefsAtmosProductForSelection,
+  type GefsAtmosProduct,
+} from "../sources/gefs-s3.js";
 
 export const DEFAULT_GEFS_BUNDLE_TIME_STEP_CONCURRENCY = 2;
 
