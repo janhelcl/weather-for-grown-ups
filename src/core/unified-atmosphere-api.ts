@@ -1,4 +1,9 @@
 import { AreaSummaryService } from "./area-summary.js";
+import {
+  ARCHIVED_GFS_FORECAST_MODEL,
+  ArchivedGfsForecastQueryService,
+  shouldUseArchivedGfsForecast,
+} from "./archived-gfs-query.js";
 import { AtmosphericDiagnosticTimeSeriesService } from "./atmospheric-diagnostic-timeseries-service.js";
 import { AtmosphericLayerDiagnosticsService } from "./atmospheric-layer-diagnostics-service.js";
 import { AtmosphericParcelDiagnosticsService } from "./atmospheric-parcel-diagnostics-service.js";
@@ -76,6 +81,8 @@ export interface UnifiedAtmosphereQueryServiceOptions {
   historyPointsTimeSeries?: Pick<HistoricalPointsTimeSeriesService, "getPointsTimeSeries">;
   historyTransect?: Pick<HistoricalTransectService, "getTransect">;
   historyArea?: Pick<HistoricalAreaSummaryService, "summarize">;
+  archivedGfs?: Pick<ArchivedGfsForecastQueryService, "query">;
+  now?: () => Date;
 }
 
 export class UnifiedAtmosphereQueryService {
@@ -99,6 +106,8 @@ export class UnifiedAtmosphereQueryService {
   private readonly historyPointsTimeSeries: Pick<HistoricalPointsTimeSeriesService, "getPointsTimeSeries">;
   private readonly historyTransect: Pick<HistoricalTransectService, "getTransect">;
   private readonly historyArea: Pick<HistoricalAreaSummaryService, "summarize">;
+  private readonly archivedGfs: Pick<ArchivedGfsForecastQueryService, "query">;
+  private readonly now: () => Date;
 
   constructor(options: UnifiedAtmosphereQueryServiceOptions = {}) {
     this.gfsProfile = options.gfsProfile ?? new ProfileService();
@@ -121,6 +130,8 @@ export class UnifiedAtmosphereQueryService {
     this.historyPointsTimeSeries = options.historyPointsTimeSeries ?? new HistoricalPointsTimeSeriesService();
     this.historyTransect = options.historyTransect ?? new HistoricalTransectService();
     this.historyArea = options.historyArea ?? new HistoricalAreaSummaryService();
+    this.now = options.now ?? (() => new Date());
+    this.archivedGfs = options.archivedGfs ?? new ArchivedGfsForecastQueryService({ now: this.now });
   }
 
   async query(input: QueryAtmosphereInput): Promise<UnifiedAtmosphereResult> {
@@ -130,6 +141,9 @@ export class UnifiedAtmosphereQueryService {
   }
 
   private route(request: QueryAtmosphereRequest): Promise<unknown> {
+    if (shouldUseArchivedGfsForecast(request, this.now())) {
+      return this.archivedGfs.query(request);
+    }
     switch (request.geometry.type) {
       case "point":
         return "at" in request.time
@@ -600,13 +614,24 @@ function wrapResult(
   result: unknown,
 ): UnifiedAtmosphereResult {
   const metadata = publicDatasetMetadata(request.dataset);
+  const internalDatasetId = isArchivedGfsForecastResult(result)
+    ? ARCHIVED_GFS_FORECAST_MODEL
+    : metadata.internalDatasetId;
   return unifiedAtmosphereResultSchema.parse({
     dataset: request.dataset,
-    internalDatasetId: metadata.internalDatasetId,
+    internalDatasetId,
     role: metadata.role,
     kind: metadata.kind,
     geometryType: request.geometry.type,
     timeType: "at" in request.time ? "instant" : "range",
     result,
   });
+}
+
+
+function isArchivedGfsForecastResult(result: unknown): boolean {
+  return typeof result === "object"
+    && result !== null
+    && "model" in result
+    && (result as { model?: unknown }).model === ARCHIVED_GFS_FORECAST_MODEL;
 }
