@@ -43,7 +43,7 @@ assert(result.fields?.some((field) => field.id === "wind_10m"));
 assert(result.fields?.some((field) => field.id === "wind_100m"));
 assert(result.fields?.some((field) => field.id === "precipitable_water"));
 assert.equal(result.source.provider, "ECMWF Open Data");
-assert.equal(result.source.access, "s3_range");
+assert.equal(result.source.access, "indexed_http_range");
 assert.equal(result.source.product, "ifs_0p25_oper_fc");
 assert.equal(result.source.horizontalGridDegrees, 0.25);
 
