@@ -365,6 +365,21 @@ describe("unified specialized operations", () => {
     expect(gefs.compareRuns).toHaveBeenCalledOnce();
   });
 
+  it("rejects a GFS grid selector on GEFS run comparison", async () => {
+    const service = new UnifiedRunComparisonService(
+      { compareRuns: vi.fn() } as any,
+      { compareRuns: vi.fn() } as any,
+    );
+    await expect(service.compare({
+      dataset: "gefs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      gfsGrid: "0p50",
+      cycles: 2,
+    })).rejects.toThrow("gfsGrid is only valid for GFS run comparison");
+  });
+
   it("passes explicit GEFS comparison controls without member-trajectory semantics", async () => {
     const gfs = { compareRuns: vi.fn() };
     const gefs = { compareRuns: vi.fn(async (query) => ({ route: "gefs-runs", query })) };

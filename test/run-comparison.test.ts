@@ -193,6 +193,22 @@ describe("RunComparisonService", () => {
     expect(resolveLatestRun).toHaveBeenCalledWith();
   });
 
+  it("uses grid-aware complete-run discovery for 0.5 run comparison", async () => {
+    const resolveLatestRun = vi.fn(async () => new Date(anchorRun));
+    const getProfile = vi.fn(async (query: ProfileQueryInput) => profileFor(query, 5, 180));
+    const service = new RunComparisonService({
+      latestRunProvider: { resolveLatestRun },
+      profileGetter: { getProfile },
+    });
+    await service.compareRuns({
+      ...baseQuery,
+      anchorRun: "latest_complete",
+      grid: "0p50",
+      cycles: 2,
+    });
+    expect(resolveLatestRun).toHaveBeenCalledWith(undefined, "0p50");
+  });
+
   it("does not discover a run when anchorRun is explicit", async () => {
     const resolveLatestRun = vi.fn(async () => new Date(anchorRun));
     const getProfile = vi.fn(async (query: ProfileQueryInput) => profileFor(query, 5, 180));
