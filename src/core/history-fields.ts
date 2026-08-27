@@ -86,6 +86,7 @@ export interface HistoricalFieldsServiceOptions {
   now?: () => Date;
   allowNonAnalysisCycle?: boolean;
   minimumTime?: Date;
+  nativeSpecificHumidity?: boolean;
 }
 
 export class HistoricalFieldsService {
@@ -110,6 +111,7 @@ export class HistoricalFieldsService {
       now: this.now,
       allowNonAnalysisCycle: this.allowNonAnalysisCycle,
       minimumTime: this.minimumTime,
+      nativeSpecificHumidity: options.nativeSpecificHumidity ?? false,
     });
   }
 
@@ -204,7 +206,9 @@ export function parseHistoricalFieldsCsv(
   const headers = parseCsvLine(lines[0]!).map(normalizeHeader);
   const latitudeIndex = findHeaderIndex(headers, ["latitude", "lat"]);
   const longitudeIndex = findHeaderIndex(headers, ["longitude", "lon"]);
-  const heightIndex = headers.findIndex((header) => header.startsWith("height_above_ground"));
+  const heightIndex = headers.findIndex(
+    (header) => header.startsWith("height_above_ground") || header === "alt",
+  );
   const columnIndexes = new Map<string, number>();
   for (const definition of definitions) {
     if (columnIndexes.has(definition.ncssName)) continue;

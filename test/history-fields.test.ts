@@ -111,6 +111,59 @@ describe("historical mixed fields", () => {
     expect(dataSource.fetch).toHaveBeenCalledTimes(6);
   });
 
+  it("accepts the generic GDEX alt axis for height-above-ground point fields", () => {
+    const gdexTemperatureCsv = [
+      'time,alt[unit="m"],station,latitude[unit="degrees_north"],longitude[unit="degrees_east"],Temperature_height_above_ground[unit="K"]',
+      '2026-08-24T06:00:00Z,2,GridPointRequestedAt[50.000N_14.000E],50.000,14.000,288.15',
+      '2026-08-24T06:00:00Z,80,GridPointRequestedAt[50.000N_14.000E],50.000,14.000,286.15',
+    ].join("\n");
+    const parsed = parseHistoricalFieldsCsv(
+      gdexTemperatureCsv,
+      [{
+        id: "temperature_2m",
+        ncssName: "Temperature_height_above_ground",
+        group: "temperature_hag",
+        heightM: 2,
+        transform: (value: number) => value - 273.15,
+      }] as never,
+      { latitude: 50.08, longitude: 14.43 },
+    );
+    expect(parsed.gridPoint).toEqual({ latitude: 50, longitude: 14 });
+    expect(parsed.values.get("temperature_2m")).toBeCloseTo(15, 8);
+  });
+
+  it("propagates native-specific-humidity capability to mixed pressure profiles", async () => {
+    const pressureCsv = [
+      'time,alt[unit="Pa"],station,latitude[unit="degrees_north"],longitude[unit="degrees_east"],Specific_humidity_isobaric[unit="kg/kg"],Temperature_isobaric[unit="K"]',
+      '2026-08-24T06:00:00Z,85000,GridPointRequestedAt[50.000N_14.000E],50.000,14.000,0.01,285.15',
+    ].join("\n");
+    const fetch = vi.fn(async (request: any) => {
+      if (request.variables.includes("Pressure_surface")) {
+        return { csv: scalarCsv, dataset, cacheHit: true };
+      }
+      return { csv: pressureCsv, dataset, cacheHit: true };
+    });
+    const service = new HistoricalFieldsService({
+      source: { fetch },
+      now: () => new Date("2026-08-27T12:00:00Z"),
+      allowNonAnalysisCycle: true,
+      minimumTime: new Date("2015-01-15T00:00:00Z"),
+      nativeSpecificHumidity: true,
+    });
+    const result = await service.getHistoricalFields({
+      latitude: 50,
+      longitude: 14,
+      analysisTime: "2026-08-24T06:00:00Z",
+      variables: ["specific_humidity"],
+      pressureLevelsHpa: [850],
+      fields: ["surface_pressure"],
+    });
+    expect(result.levels?.[0]?.specificHumidityKgKg).toBe(0.01);
+    expect(fetch).toHaveBeenCalledWith(expect.objectContaining({
+      variables: ["Specific_humidity_isobaric"],
+    }));
+  });
+
   it("supports a mixed pressure plus non-isobaric analysis request", async () => {
     const getHistoricalProfile = vi.fn(async () => profile());
     const service = new HistoricalFieldsService({

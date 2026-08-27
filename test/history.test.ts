@@ -155,6 +155,41 @@ describe("HistoricalProfileService", () => {
     expect(result.levels[0]?.virtualTemperatureC).toBeCloseTo(13.728, 2);
   });
 
+  it("keeps default specific humidity reconstruction for sources without native SPFH", async () => {
+    const source = mockSource();
+    const service = new HistoricalProfileService({ source });
+    const result = await service.getHistoricalProfile({
+      latitude: 50,
+      longitude: 14,
+      analysisTime: "2017-05-09T00:00:00Z",
+      variables: ["specific_humidity"],
+      pressureLevelsHpa: [850],
+    });
+    expect(source.fetch).toHaveBeenCalledWith(expect.objectContaining({
+      variables: ["Temperature_isobaric", "Relative_humidity_isobaric"],
+    }));
+    expect(result.levels[0]?.specificHumidityKgKg).toBeGreaterThan(0);
+  });
+
+  it("falls back to ordinary derived dependencies when native SPFH is enabled but not needed", async () => {
+    const source = mockSource();
+    const service = new HistoricalProfileService({
+      source,
+      nativeSpecificHumidity: true,
+    });
+    const result = await service.getHistoricalProfile({
+      latitude: 50,
+      longitude: 14,
+      analysisTime: "2017-05-09T00:00:00Z",
+      variables: ["dew_point"],
+      pressureLevelsHpa: [850],
+    });
+    expect(source.fetch).toHaveBeenCalledWith(expect.objectContaining({
+      variables: ["Temperature_isobaric", "Relative_humidity_isobaric"],
+    }));
+    expect(result.levels[0]?.dewPointC).toBeDefined();
+  });
+
   it("rejects non-cycle times, pre-archive dates, and future analyses", async () => {
     const service = new HistoricalProfileService({
       source: mockSource(),

@@ -449,6 +449,7 @@ export class ArchivedGfsForecastQueryService {
         now: this.now,
         allowNonAnalysisCycle: true,
         minimumTime: archiveMinimumTime(grid),
+        nativeSpecificHumidity: grid === "0p25",
       });
       const result = await service.getHistoricalFields({
         latitude: point.latitude,

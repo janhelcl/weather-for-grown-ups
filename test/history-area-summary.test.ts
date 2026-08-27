@@ -87,6 +87,23 @@ describe("parseHistoricalAreaCsv", () => {
     expect(points[1]).toEqual({ latitude: 50, longitude: -10, value: 12 });
   });
 
+  it("accepts the generic GDEX alt vertical coordinate for bbox subsets", () => {
+    const gdexCsv = [
+      'latitude,longitude,time,alt[unit="Pa"],Temperature_isobaric[unit="K"]',
+      '50,14,t,85000,283.15',
+      '50,14.25,t,85000,285.15',
+    ].join("\n");
+    const points = parseHistoricalAreaCsv(
+      gdexCsv,
+      HISTORICAL_AREA_PRESSURE_CATALOG.temperature,
+      85000,
+    );
+    expect(points).toEqual([
+      { latitude: 50, longitude: 14, value: 10 },
+      { latitude: 50, longitude: 14.25, value: 12 },
+    ]);
+  });
+
   it("rejects NCSS nearest-level substitution instead of silently accepting it", () => {
     expect(() => parseHistoricalAreaCsv(
       temperatureCsv.replaceAll("85000", "90000"),

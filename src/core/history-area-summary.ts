@@ -190,6 +190,7 @@ export function parseHistoricalAreaCsv(
         header.startsWith("isobaric")
         || header.startsWith("height_above_ground")
         || header === "vertCoord"
+        || header === "alt"
       );
   if (variableIndex < 0) {
     throw new Error(
