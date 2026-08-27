@@ -6,11 +6,13 @@ import {
 } from "../schema/atmospheric-profile.js";
 import type { GefsEnsembleProfileQueryInput, GefsEnsembleProfileResult } from "../schema/gefs-ensemble-profile.js";
 import type { HistoricalProfileQueryInput } from "../schema/history.js";
+import type { IfsPointQueryInput, IfsProfileResult } from "../schema/ifs.js";
 import type { HistoricalProfileResult } from "../schema/history-result.js";
 import type { ProfileQueryInput } from "../schema/query.js";
 import type { ProfileResult } from "./types.js";
 import { GefsEnsembleProfileService } from "./gefs-ensemble-profile.js";
 import { HistoricalProfileService } from "./history.js";
+import { IfsProfileService } from "./ifs-profile.js";
 import { ProfileService } from "./profile.js";
 
 export interface DeterministicProfileGetter {
@@ -21,6 +23,10 @@ export interface EnsembleProfileGetter {
   getProfile(query: GefsEnsembleProfileQueryInput): Promise<GefsEnsembleProfileResult>;
 }
 
+export interface IfsProfileGetter {
+  getProfile(query: IfsPointQueryInput): Promise<IfsProfileResult>;
+}
+
 export interface HistoricalProfileGetter {
   getHistoricalProfile(query: HistoricalProfileQueryInput): Promise<HistoricalProfileResult>;
 }
@@ -28,17 +34,20 @@ export interface HistoricalProfileGetter {
 export interface AtmosphericProfileServiceOptions {
   gfs?: DeterministicProfileGetter;
   gefs?: EnsembleProfileGetter;
+  ifs?: IfsProfileGetter;
   history?: HistoricalProfileGetter;
 }
 
 export class AtmosphericProfileService {
   private readonly gfs: DeterministicProfileGetter;
   private readonly gefs: EnsembleProfileGetter;
+  private readonly ifs: IfsProfileGetter;
   private readonly history: HistoricalProfileGetter;
 
   constructor(options: AtmosphericProfileServiceOptions = {}) {
     this.gfs = options.gfs ?? new ProfileService();
     this.gefs = options.gefs ?? new GefsEnsembleProfileService();
+    this.ifs = options.ifs ?? new IfsProfileService();
     this.history = options.history ?? new HistoricalProfileService();
   }
 
@@ -56,6 +65,8 @@ export class AtmosphericProfileService {
         return this.gfs.getProfile({ ...request.query, grid: "0p50" });
       case "gefs_0p50":
         return this.gefs.getProfile(request.query);
+      case "ifs_0p25":
+        return this.ifs.getProfile(request.query);
       case "gfs_grid4_analysis_0p5":
         return this.history.getHistoricalProfile(request.query);
     }
