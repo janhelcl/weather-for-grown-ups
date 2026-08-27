@@ -41,13 +41,13 @@ describe("IFS canonical point profile", () => {
     expect(result.model).toBe("ifs_0p25");
     expect(result.levels[0]).toMatchObject({
       pressureHpa: 850,
-      temperatureC: 6.85,
       uWindMs: 3,
       vWindMs: 4,
       windSpeedMs: 5,
       relativeHumidityPct: 50,
       specificHumidityKgKg: 0.005,
     });
+    expect(result.levels[0]?.temperatureC).toBeCloseTo(6.85);
     expect(result.levels[0]?.dewPointC).toBeTypeOf("number");
     expect(result.fields?.find((field) => field.id === "temperature_2m")?.values.temperatureC)
       .toBeCloseTo(16.85);
