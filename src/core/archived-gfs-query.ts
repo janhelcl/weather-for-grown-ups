@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { DEFAULT_NOMADS_COOLDOWN_MS, FileRateLimiter } from "../cache/file-rate-limiter.js";
 import type { HistoricalGfsFieldId } from "../schema/history-fields.js";
 import type { HistoricalGfsVariableId } from "../schema/history.js";
-import { historicalAreaSummaryQuerySchema } from "../schema/history-area-summary.js";
 import { archivedGfsForecastHourSchema } from "../schema/history-forecast.js";
 import type { QueryAtmosphereRequest } from "../schema/unified-api.js";
 import {
@@ -352,7 +351,7 @@ export class ArchivedGfsForecastQueryService {
           variable: request.selection.variables![0],
           pressureLevelHpa: request.selection.pressureLevelsHpa![0],
         };
-    const query = historicalAreaSummaryQuerySchema.parse({
+    const result = await service.summarize({
       westLongitude: request.geometry.westLongitude,
       eastLongitude: request.geometry.eastLongitude,
       southLatitude: request.geometry.southLatitude,
@@ -361,8 +360,7 @@ export class ArchivedGfsForecastQueryService {
       ...scalar,
       ...(request.aggregate ?? {}),
       ...(request.limits?.maxGridPoints === undefined ? {} : { maxGridPoints: request.limits.maxGridPoints }),
-    });
-    const result = await service.summarize(query);
+    } as any);
     const { model: _model, analysisTime: _analysisTime, caveat: _caveat, ...rest } = result;
     return {
       model: ARCHIVED_GFS_FORECAST_MODEL,
