@@ -163,7 +163,7 @@ export const atmosphericForecastOptionsSchema = z.object({
   run: z.string().min(1).default("latest").describe(
     "Forecast initialization: latest, latest_complete where supported, or an explicit ISO cycle",
   ),
-}).default({ run: "latest" });
+});
 
 export const atmosphericEnsembleOptionsSchema = z.object({
   members: z.array(z.string().min(1)).min(2).max(31).optional(),
