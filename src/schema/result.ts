@@ -3,6 +3,7 @@ import {
   NON_ISOBARIC_NAMED_LAYER_IDS,
   NON_ISOBARIC_NAMED_LEVEL_IDS,
 } from "../catalog/non-isobaric-fields.js";
+import { operationalGfsModelIdSchema } from "./gfs-grid.js";
 import {
   isoDateTimeSchema,
   layerDiagnosticIdSchema,
@@ -72,7 +73,7 @@ export const nonIsobaricFieldResultSchema = z.object({
 export const gridPointSchema = z.object({ latitude: z.number(), longitude: z.number() });
 
 export const profileResultSchema = z.object({
-  model: z.literal("gfs_0p25"),
+  model: operationalGfsModelIdSchema,
   run: isoDateTimeSchema,
   validTime: isoDateTimeSchema,
   forecastHour: z.number(),
@@ -89,7 +90,7 @@ export const layerDiagnosticResultSchema = z.object({
 });
 
 export const layerDiagnosticsResultSchema = z.object({
-  model: z.literal("gfs_0p25"),
+  model: operationalGfsModelIdSchema,
   run: isoDateTimeSchema,
   validTime: isoDateTimeSchema,
   forecastHour: z.number(),
@@ -147,7 +148,7 @@ export const profileDiagnosticResultSchema = z.discriminatedUnion("id", [
 ]);
 
 export const profileDiagnosticsResultSchema = z.object({
-  model: z.literal("gfs_0p25"),
+  model: operationalGfsModelIdSchema,
   run: isoDateTimeSchema,
   validTime: isoDateTimeSchema,
   forecastHour: z.number(),
@@ -211,7 +212,7 @@ export const parcelComputationSchema = z.object({
 });
 
 export const parcelDiagnosticsResultSchema = z.object({
-  model: z.literal("gfs_0p25"),
+  model: operationalGfsModelIdSchema,
   run: isoDateTimeSchema,
   validTime: isoDateTimeSchema,
   forecastHour: z.number(),
@@ -231,7 +232,7 @@ export const batchPointResultSchema = z.object({
 });
 
 export const batchPointsResultSchema = z.object({
-  model: z.literal("gfs_0p25"),
+  model: operationalGfsModelIdSchema,
   run: isoDateTimeSchema,
   validTime: isoDateTimeSchema,
   forecastHour: z.number(),
@@ -245,7 +246,7 @@ export const batchPointsResultSchema = z.object({
 });
 
 export const timeSeriesResultSchema = z.object({
-  model: z.literal("gfs_0p25"),
+  model: operationalGfsModelIdSchema,
   run: isoDateTimeSchema,
   requestedStartTime: isoDateTimeSchema,
   requestedEndTime: isoDateTimeSchema,
@@ -262,7 +263,7 @@ export const timeSeriesResultSchema = z.object({
 });
 
 export const pointsTimeSeriesResultSchema = z.object({
-  model: z.literal("gfs_0p25"),
+  model: operationalGfsModelIdSchema,
   run: isoDateTimeSchema,
   requestedStartTime: isoDateTimeSchema,
   requestedEndTime: isoDateTimeSchema,
@@ -280,7 +281,7 @@ export const pointsTimeSeriesResultSchema = z.object({
 });
 
 export const areaSummaryResultSchema = z.object({
-  model: z.literal("gfs_0p25"),
+  model: operationalGfsModelIdSchema,
   run: isoDateTimeSchema,
   validTime: isoDateTimeSchema,
   forecastHour: z.number(),
@@ -327,7 +328,7 @@ export const areaSummaryResultSchema = z.object({
 });
 
 export const latestGfsRunResultSchema = z.object({
-  model: z.literal("gfs_0p25"),
+  model: operationalGfsModelIdSchema,
   run: isoDateTimeSchema,
   completeness: z.literal("f384"),
   discoverySource: z.literal("NOAA AWS Open Data"),

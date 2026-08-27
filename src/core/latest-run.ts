@@ -3,6 +3,7 @@ import {
   type ForecastAvailabilitySelection,
   type RunAvailabilityProbe,
 } from "../sources/gfs-s3.js";
+import type { GfsGrid } from "../schema/gfs-grid.js";
 import {
   forecastHour,
   nativeForecastHoursInRange,
@@ -26,7 +27,7 @@ export type LatestRunRequirement =
     };
 
 export interface LatestRunProvider {
-  resolveLatestRun(requirement?: LatestRunRequirement): Promise<Date>;
+  resolveLatestRun(requirement?: LatestRunRequirement, grid?: GfsGrid): Promise<Date>;
 }
 
 export class LatestRunResolver implements LatestRunProvider {
@@ -39,27 +40,27 @@ export class LatestRunResolver implements LatestRunProvider {
     private readonly lookbackCycles = DEFAULT_LATEST_RUN_LOOKBACK_CYCLES,
   ) {}
 
-  async resolveLatestRun(requirement?: LatestRunRequirement): Promise<Date> {
+  async resolveLatestRun(requirement?: LatestRunRequirement, grid: GfsGrid = "0p25"): Promise<Date> {
     const nowMs = this.now();
-    const cacheKey = requirementKey(requirement);
+    const cacheKey = `${grid}:${requirementKey(requirement)}`;
     const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > nowMs) {
       return new Date(cached.run.getTime());
     }
 
     const run = requirement === undefined
-      ? await this.resolveLatestCompleteRun(nowMs)
-      : await this.resolveLatestAvailableRun(nowMs, requirement);
+      ? await this.resolveLatestCompleteRun(nowMs, grid)
+      : await this.resolveLatestAvailableRun(nowMs, requirement, grid);
 
     this.cache.set(cacheKey, { run, expiresAt: nowMs + this.ttlMs });
     return new Date(run.getTime());
   }
 
-  private async resolveLatestCompleteRun(nowMs: number): Promise<Date> {
+  private async resolveLatestCompleteRun(nowMs: number, grid: GfsGrid): Promise<Date> {
     const firstCandidate = floorToGfsCycle(new Date(nowMs));
     for (let offset = 0; offset < this.lookbackCycles; offset += 1) {
       const candidate = new Date(firstCandidate.getTime() - offset * GFS_CYCLE_MS);
-      if (await this.probe.isRunComplete(candidate)) return candidate;
+      if (await this.probe.isRunComplete(candidate, grid)) return candidate;
     }
 
     throw new Error(`Could not find a complete GFS run in the last ${this.lookbackCycles} cycles`);
@@ -68,6 +69,7 @@ export class LatestRunResolver implements LatestRunProvider {
   private async resolveLatestAvailableRun(
     nowMs: number,
     requirement: LatestRunRequirement,
+    grid: GfsGrid,
   ): Promise<Date> {
     const latestEligibleTime = requirement.type === "valid_time"
       ? requirement.validTime
@@ -80,7 +82,7 @@ export class LatestRunResolver implements LatestRunProvider {
     if (requirement.type === "valid_time") {
       // All GFS cycles differ by six hours, so native-cadence validity is invariant
       // while walking backward. Fail early with the normal forecast-hour error.
-      forecastHour(firstCandidate, requirement.validTime);
+      forecastHour(firstCandidate, requirement.validTime, grid);
     } else {
       if (requirement.endTime.getTime() < requirement.startTime.getTime()) {
         throw new Error("endTime must be at or after startTime");
@@ -94,8 +96,8 @@ export class LatestRunResolver implements LatestRunProvider {
     for (let offset = 0; offset < this.lookbackCycles; offset += 1) {
       const candidate = new Date(firstCandidate.getTime() - offset * GFS_CYCLE_MS);
       const available = requirement.type === "valid_time"
-        ? await this.isValidTimeAvailable(candidate, requirement)
-        : await this.isTimeRangeAvailable(candidate, requirement);
+        ? await this.isValidTimeAvailable(candidate, requirement, grid)
+        : await this.isTimeRangeAvailable(candidate, requirement, grid);
       if (available) return candidate;
     }
 
@@ -107,26 +109,28 @@ export class LatestRunResolver implements LatestRunProvider {
   private async isValidTimeAvailable(
     candidate: Date,
     requirement: Extract<LatestRunRequirement, { type: "valid_time" }>,
+    grid: GfsGrid,
   ): Promise<boolean> {
     let fh: number;
     try {
-      fh = forecastHour(candidate, requirement.validTime);
+      fh = forecastHour(candidate, requirement.validTime, grid);
     } catch (error) {
       if (error instanceof Error && error.message.includes("<= 384")) return false;
       throw error;
     }
-    return this.probe.isForecastAvailable(candidate, fh, requirement.selection);
+    return this.probe.isForecastAvailable(candidate, fh, requirement.selection, grid);
   }
 
   private async isTimeRangeAvailable(
     candidate: Date,
     requirement: Extract<LatestRunRequirement, { type: "time_range" }>,
+    grid: GfsGrid,
   ): Promise<boolean> {
     if (requirement.endTime.getTime() > candidate.getTime() + 384 * 3_600_000) return false;
 
     let forecastHours: number[];
     try {
-      forecastHours = nativeForecastHoursInRange(candidate, requirement.startTime, requirement.endTime);
+      forecastHours = nativeForecastHoursInRange(candidate, requirement.startTime, requirement.endTime, grid);
     } catch (error) {
       if (error instanceof Error && error.message.includes("No native GFS forecast outputs")) return false;
       throw error;
@@ -136,8 +140,8 @@ export class LatestRunResolver implements LatestRunProvider {
     const last = forecastHours.at(-1);
     if (first === undefined || last === undefined) return false;
 
-    if (!await this.probe.isForecastAvailable(candidate, first, requirement.selection)) return false;
-    if (last !== first && !await this.probe.isForecastAvailable(candidate, last, requirement.selection)) return false;
+    if (!await this.probe.isForecastAvailable(candidate, first, requirement.selection, grid)) return false;
+    if (last !== first && !await this.probe.isForecastAvailable(candidate, last, requirement.selection, grid)) return false;
     return true;
   }
 }

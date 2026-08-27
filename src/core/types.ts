@@ -9,6 +9,7 @@ import type {
   FreezingLevelCrossing,
   TemperatureInversionLayer,
 } from "../derived/profile-diagnostics.js";
+import type { OperationalGfsModelId } from "../schema/gfs-grid.js";
 import type { RawVariableId } from "../schema/query.js";
 import type { ProfileAccessMethod, ProfileProvider } from "../sources/types.js";
 
@@ -97,7 +98,7 @@ export interface SourceProvenance {
 }
 
 export interface ProfileResult {
-  model: "gfs_0p25";
+  model: OperationalGfsModelId;
   run: string;
   validTime: string;
   forecastHour: number;
@@ -114,7 +115,7 @@ export interface LayerDiagnosticResult {
 }
 
 export interface LayerDiagnosticsResult {
-  model: "gfs_0p25";
+  model: OperationalGfsModelId;
   run: string;
   validTime: string;
   forecastHour: number;
@@ -137,7 +138,7 @@ export type ProfileDiagnosticResult =
   | { id: "temperature_inversion_layers"; layers: TemperatureInversionLayer[] };
 
 export interface ProfileDiagnosticsResult {
-  model: "gfs_0p25";
+  model: OperationalGfsModelId;
   run: string;
   validTime: string;
   forecastHour: number;
@@ -150,7 +151,7 @@ export interface ProfileDiagnosticsResult {
 }
 
 export interface ParcelDiagnosticsResult {
-  model: "gfs_0p25";
+  model: OperationalGfsModelId;
   run: string;
   validTime: string;
   forecastHour: number;
@@ -170,7 +171,7 @@ export interface BatchPointResult {
 }
 
 export interface BatchPointsResult {
-  model: "gfs_0p25";
+  model: OperationalGfsModelId;
   run: string;
   validTime: string;
   forecastHour: number;
@@ -192,7 +193,7 @@ export interface TimeSeriesStep {
 }
 
 export interface TimeSeriesResult {
-  model: "gfs_0p25";
+  model: OperationalGfsModelId;
   run: string;
   requestedStartTime: string;
   requestedEndTime: string;
@@ -210,7 +211,7 @@ export interface PointsTimeSeriesStep {
 }
 
 export interface PointsTimeSeriesResult {
-  model: "gfs_0p25";
+  model: OperationalGfsModelId;
   run: string;
   requestedStartTime: string;
   requestedEndTime: string;
@@ -223,7 +224,7 @@ export interface PointsTimeSeriesResult {
 }
 
 export interface AreaSummaryResult {
-  model: "gfs_0p25";
+  model: OperationalGfsModelId;
   run: string;
   validTime: string;
   forecastHour: number;

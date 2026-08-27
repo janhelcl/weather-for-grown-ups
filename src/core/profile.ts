@@ -22,6 +22,7 @@ import {
 } from "../derived/thermodynamics.js";
 import { deriveWind } from "../derived/wind.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
+import { operationalGfsModelId } from "../schema/gfs-grid.js";
 import {
   profileQuerySchema,
   type ProfileQueryInput,
@@ -100,15 +101,16 @@ export class ProfileService {
             pressureLevelsHpa,
             fields,
           },
-        })
+        }, query.grid)
       : query.run === "latest_complete"
-        ? await this.latestRunProvider.resolveLatestRun()
+        ? await this.latestRunProvider.resolveLatestRun(undefined, query.grid)
         : parseGfsRun(query.run);
-    const fh = forecastHour(run, validTime);
+    const fh = forecastHour(run, validTime, query.grid);
     const source = this.sources[query.source];
 
     const cached = await source.fetch({
       run,
+      grid: query.grid,
       forecastHour: fh,
       latitude: query.latitude,
       longitude: query.longitude,
@@ -142,7 +144,7 @@ export class ProfileService {
     );
 
     return {
-      model: "gfs_0p25",
+      model: operationalGfsModelId(query.grid),
       run: run.toISOString(),
       validTime: validTime.toISOString(),
       forecastHour: fh,
