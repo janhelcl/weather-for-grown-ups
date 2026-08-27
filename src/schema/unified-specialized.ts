@@ -1,5 +1,6 @@
 import * as z from "zod/v4";
 import { gfsGridSchema } from "./gfs-grid.js";
+import { IGRA_VERIFICATION_VARIABLE_IDS } from "./igra-verification.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 import {
   atmosphericEnsembleOptionsSchema,
@@ -52,7 +53,7 @@ export const compareAtmosphericDatasetsSchema = z.object({
 
 export const verifyAtmosphericForecastSchema = z.object({
   forecastDataset: z.literal("gfs").default("gfs"),
-  referenceDataset: z.literal("gfs-analysis").default("gfs-analysis"),
+  referenceDataset: z.enum(["gfs-analysis", "igra"]).default("gfs-analysis"),
   geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
   time: z.object({ at: isoDateTimeSchema }),
   leadHours: z.number().int().min(0).max(192).refine(
@@ -61,6 +62,32 @@ export const verifyAtmosphericForecastSchema = z.object({
   ),
   variables: z.array(z.string().min(1)).min(1),
   pressureLevelsHpa: z.array(z.number().positive()).min(1),
+  gfsGrid: gfsGridSchema.optional(),
+  stationId: z.string().regex(/^[A-Z0-9]{11}$/).optional(),
+  maxStationDistanceKm: z.number().positive().max(1_000).optional(),
+}).superRefine((request, context) => {
+  if (request.referenceDataset === "gfs-analysis") {
+    for (const key of ["gfsGrid", "stationId", "maxStationDistanceKm"] as const) {
+      if (request[key] !== undefined) {
+        context.addIssue({
+          code: "custom",
+          path: [key],
+          message: `${key} is only valid when referenceDataset=igra`,
+        });
+      }
+    }
+    return;
+  }
+
+  const supported = new Set<string>(IGRA_VERIFICATION_VARIABLE_IDS);
+  const unsupported = request.variables.filter((variable) => !supported.has(variable));
+  if (unsupported.length > 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["variables"],
+      message: `IGRA verification supports only ${IGRA_VERIFICATION_VARIABLE_IDS.join(", ")}; unsupported: ${unsupported.join(", ")}`,
+    });
+  }
 });
 
 export const findAtmosphericAnalogsSchema = z.object({
@@ -76,7 +103,7 @@ export const findAtmosphericAnalogsSchema = z.object({
 
 export const unifiedSpecializedResultSchema = z.object({
   operation: z.enum(["compare_runs", "compare_datasets", "verify_forecast", "find_analogs"]),
-  datasets: z.array(publicAtmosphericDatasetSchema).min(1),
+  datasets: z.array(z.union([publicAtmosphericDatasetSchema, z.literal("igra")])).min(1),
   result: z.unknown(),
 });
 
