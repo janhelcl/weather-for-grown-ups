@@ -4,9 +4,11 @@ WFG exposes NOAA's Global Ensemble Forecast System as a **model-native ensemble*
 
 GEFS shares model-independent meteorological kernels with GFS where scientifically valid, while member identities, distributions, spatial statistics and run semantics remain explicit.
 
-## v0.1.0 contract
+## GEFS source contract
 
-- product: operational atmospheric `pgrb2a` 0.5°;
+- pressure/profile product: operational atmospheric `pgrb2a` 0.5°;
+- selected-field product: `pgrb2s` 0.25° for field-only requests through `f240`;
+- fallback/mixed-field rule: `pgrb2a` 0.5° for mixed pressure/field requests and field-only leads after `f240`;
 - members: control `c00` plus perturbed `p01`–`p30`;
 - cycles: 00/06/12/18Z;
 - WFG forecast horizon: `f000`–`f384`;
@@ -18,7 +20,7 @@ GEFS shares model-independent meteorological kernels with GFS where scientifical
 
 ## Current GEFS capabilities
 
-v0.1.0 includes:
+The current implementation includes:
 
 - searchable GEFS catalog and source semantics;
 - scalar raw field distributions;
@@ -277,13 +279,13 @@ See [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md).
 
 ## Run selection and consistency
 
-`latest` resolves once for the complete query. Multi-time operations keep one cycle fixed across every valid step. Member sets and quantiles remain fixed too.
+`latest` resolves once for the complete query. Multi-time operations keep one cycle fixed across every valid step. Member sets and quantiles remain fixed too. Field-only ranges also pin one source product and grid: a range wholly within `f240` may use `pgrb2s` 0.25°, while any range extending beyond `f240` uses `pgrb2a` 0.5° throughout rather than changing grid mid-series.
 
 Within point/profile operations, selected fields for one member must resolve consistently to one model grid point, and selected members must resolve consistently for the sampled location. Spatial-temporal compositions additionally guard against grid drift where their contracts require stable sampling.
 
 ## Data access and caching
 
-GEFS uses NOAA AWS Open Data. WFG caches `.idx` inventories, selects only required byte ranges, stores immutable selected-message slices and performs decoding, sampling, derivation and aggregation locally.
+GEFS uses NOAA AWS Open Data. WFG selects between member-specific `pgrb2a` 0.5° and `pgrb2s` 0.25° objects according to the query contract, caches `.idx` inventories, selects only required byte ranges, stores immutable selected-message slices and performs decoding, sampling, derivation and aggregation locally. Cache identity includes the source product, so 0.25° and 0.5° slices cannot collide.
 
 Mixed bundles merge dependencies so one member query does not need a separate upstream object transfer per requested normalized output. Multi-point and transect operations reuse those member slices across coordinates.
 
