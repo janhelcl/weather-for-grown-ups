@@ -37,7 +37,7 @@ export class LayerDiagnosticsService {
       latitude: query.latitude,
       longitude: query.longitude,
       run: query.run,
-      grid: query.grid,
+      ...(query.grid === undefined ? {} : { grid: query.grid }),
       validTime: query.validTime,
       variables,
       pressureLevelsHpa: [query.lowerPressureHpa, query.upperPressureHpa],

@@ -53,7 +53,7 @@ export class TransectService {
     const batch = await this.batchPointsGetter.getPoints({
       points,
       run: query.run,
-      grid: query.grid,
+      ...(query.grid === undefined ? {} : { grid: query.grid }),
       validTime: query.validTime,
       variables: query.variables,
       pressureLevelsHpa: query.pressureLevelsHpa,

@@ -33,7 +33,12 @@ import {
 import { buildNomadsAreaUrl } from "../sources/nomads.js";
 import { computeAreaDistribution } from "./area-distribution.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
-import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
+import {
+  LatestRunResolver,
+  resolveLatestCompleteRunForGrid,
+  resolveLatestRunForGrid,
+  type LatestRunProvider,
+} from "./latest-run.js";
 import type {
   FieldTemporalResult,
   GribDecoderName,
@@ -94,7 +99,7 @@ export class AreaSummaryService {
       southLatitude: query.southLatitude,
       northLatitude: query.northLatitude,
     };
-    const estimatedGridPoints = estimateGridPoints(box, query.grid);
+    const estimatedGridPoints = estimateGridPoints(box, query.grid ?? "0p25");
     if (estimatedGridPoints > query.maxGridPoints) {
       throw new Error(`Requested bbox is approximately ${estimatedGridPoints} GFS grid points, exceeding maxGridPoints=${query.maxGridPoints}`);
     }
@@ -117,10 +122,10 @@ export class AreaSummaryService {
     const validTime = new Date(query.validTime);
     const variable = VARIABLE_CATALOG[variableId] as RawVariableDefinition;
     const run = await this.resolveRun(query.run, validTime, [variable], [pressureLevelHpa], [], query.grid);
-    const fh = forecastHour(run, validTime, query.grid);
+    const fh = forecastHour(run, validTime, query.grid ?? "0p25");
     const url = buildNomadsAreaUrl({
       run,
-      grid: query.grid,
+      ...(query.grid === undefined ? {} : { grid: query.grid }),
       forecastHour: fh,
       ...box,
       variables: [variable],
@@ -175,10 +180,10 @@ export class AreaSummaryService {
 
     const validTime = new Date(query.validTime);
     const run = await this.resolveRun(query.run, validTime, [], [], [definition], query.grid);
-    const fh = forecastHour(run, validTime, query.grid);
+    const fh = forecastHour(run, validTime, query.grid ?? "0p25");
     const url = buildNomadsAreaUrl({
       run,
-      grid: query.grid,
+      ...(query.grid === undefined ? {} : { grid: query.grid }),
       forecastHour: fh,
       ...box,
       variables: [],
@@ -236,7 +241,7 @@ export class AreaSummaryService {
     grid: "0p25" | "0p50" = "0p25",
   ): Promise<Date> {
     return selector === "latest"
-      ? this.latestRunProvider.resolveLatestRun({
+      ? resolveLatestRunForGrid(this.latestRunProvider, {
           type: "valid_time",
           validTime,
           selection: {
@@ -246,7 +251,7 @@ export class AreaSummaryService {
           },
         }, grid)
       : selector === "latest_complete"
-        ? this.latestRunProvider.resolveLatestRun(undefined, grid)
+        ? resolveLatestCompleteRunForGrid(this.latestRunProvider, grid)
         : parseGfsRun(selector);
   }
 }

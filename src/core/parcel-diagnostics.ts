@@ -40,7 +40,7 @@ export class ParcelDiagnosticsService {
       latitude: query.latitude,
       longitude: query.longitude,
       run: query.run,
-      grid: query.grid,
+      ...(query.grid === undefined ? {} : { grid: query.grid }),
       validTime: query.validTime,
       variables: [...definition.pressureDependencies],
       pressureLevelsHpa,

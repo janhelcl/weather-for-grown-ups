@@ -32,7 +32,12 @@ import {
 import { NomadsProfileSource, S3ProfileSource } from "../sources/profile-source.js";
 import type { ProfileDataSource } from "../sources/types.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
-import { LatestRunResolver, type LatestRunProvider } from "./latest-run.js";
+import {
+  LatestRunResolver,
+  resolveLatestCompleteRunForGrid,
+  resolveLatestRunForGrid,
+  type LatestRunProvider,
+} from "./latest-run.js";
 import type {
   DecodedValue,
   FieldTemporalResult,
@@ -93,7 +98,7 @@ export class ProfileService {
     const variables = expandRequestedVariables(requestedVariables);
     const fields = expandRequestedFields(requestedFields);
     const run = query.run === "latest"
-      ? await this.latestRunProvider.resolveLatestRun({
+      ? await resolveLatestRunForGrid(this.latestRunProvider, {
           type: "valid_time",
           validTime,
           selection: {
@@ -103,14 +108,15 @@ export class ProfileService {
           },
         }, query.grid)
       : query.run === "latest_complete"
-        ? await this.latestRunProvider.resolveLatestRun(undefined, query.grid)
+        ? await resolveLatestCompleteRunForGrid(this.latestRunProvider, query.grid)
         : parseGfsRun(query.run);
-    const fh = forecastHour(run, validTime, query.grid);
+    const effectiveGrid = query.grid ?? "0p25";
+    const fh = forecastHour(run, validTime, effectiveGrid);
     const source = this.sources[query.source];
 
     const cached = await source.fetch({
       run,
-      grid: query.grid,
+      ...(query.grid === undefined ? {} : { grid: query.grid }),
       forecastHour: fh,
       latitude: query.latitude,
       longitude: query.longitude,
@@ -144,7 +150,7 @@ export class ProfileService {
     );
 
     return {
-      model: operationalGfsModelId(query.grid),
+      model: operationalGfsModelId(effectiveGrid),
       run: run.toISOString(),
       validTime: validTime.toISOString(),
       forecastHour: fh,
