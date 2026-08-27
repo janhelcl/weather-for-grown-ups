@@ -65,7 +65,7 @@ for (const grid of ["0p25", "0p50"] as const) {
 }
 console.log(JSON.stringify({
   checkedAt: new Date().toISOString(),
-  contract: "operational_s3_vs_historical_archive",
+  contract: "operational_vs_historical_archive",
   summaries,
 }, null, 2));
 
