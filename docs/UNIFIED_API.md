@@ -8,7 +8,7 @@ WFG's public API is organized around a small operation vocabulary and three atmo
 
 | Public ID | Internal dataset | Role | Result semantics |
 | --- | --- | --- | --- |
-| `gfs` | `gfs_0p25` operational; `gfs_grid4_forecast_0p5_archive` for old explicit runs | forecast | deterministic |
+| `gfs` | `gfs_0p25` / `gfs_0p50` operational; grid-matched 0.25° GDEX or 0.5° NCEI archive for old explicit runs | forecast | deterministic |
 | `gefs` | `gefs_0p50` | forecast | member-first ensemble |
 | `gfs-analysis` | `gfs_grid4_analysis_0p5` | historical analysis | deterministic analyzed state |
 
@@ -133,11 +133,11 @@ For `gfs-analysis`, a range may select native analysis cycles:
 The caller always asks for an atmospheric state valid at a time. Dataset-native time semantics stay in the result:
 
 - forecasts retain initialization/run and lead;
-- an old explicit GFS run transparently resolves to the NCEI Grid 4 forecast archive when it is outside the operational rolling window;
+- an old explicit GFS run transparently resolves to the archive matching `forecast.grid`: NCAR/GDEX d084001 for `0p25`, NOAA NCEI Grid 4 for `0p50`;
 - historical analysis retains analysis time;
 - WFG never invents a forecast run/lead for analysis data.
 
-Archived Grid 4 forecasts use their native historical semantics: 0.5° resolution, 3-hourly output from f000 through f192, with the archive record beginning 2006-10-10. Direct NCEI online availability varies; a requested old file can require NCEI HAS retrieval and therefore fail clearly rather than being substituted with another product.
+Archived forecasts preserve grid-native historical semantics. The 0.25° NCAR/GDEX d084001 archive begins 2015-01-15 and exposes 3-hour output through f240 followed by 12-hour output from f252 through f384. The 0.5° NOAA NCEI Grid 4 archive begins 2006-10-10 and exposes 3-hour output through f192. Direct online availability can vary; unavailable archive files fail clearly rather than being substituted with a different grid or product.
 
 ### Selection
 
@@ -213,7 +213,8 @@ What GFS predicted in the past uses the same `gfs` dataset with an explicit old 
     "longitude": 14.43
   },
   "forecast": {
-    "run": "2019-12-24T12:00:00Z"
+    "run": "2019-12-24T12:00:00Z",
+    "grid": "0p25"
   },
   "time": {
     "at": "2019-12-26T18:00:00Z"
@@ -225,7 +226,7 @@ What GFS predicted in the past uses the same `gfs` dataset with an explicit old 
 }
 ```
 
-This means “what did the 2019-12-24 12Z GFS run predict for 2019-12-26 18Z?” The result keeps `dataset: "gfs"` but exposes `internalDatasetId: "gfs_grid4_forecast_0p5_archive"` and NCEI provenance.
+This means “what did the 2019-12-24 12Z GFS 0.25° run predict for 2019-12-26 18Z?” The result keeps `dataset: "gfs"` but exposes `internalDatasetId: "gfs_0p25_forecast_archive"` and NCAR/GDEX provenance. Select `grid: "0p50"` to query the NCEI Grid 4 archive instead.
 
 The same atmospheric question against historical analysis:
 
@@ -290,7 +291,7 @@ Unified state/diagnostic operations return a common envelope:
 
 `result` remains dataset-native.
 
-- GFS carries deterministic values and forecast metadata; old explicit runs may resolve to the 0.5° NCEI Grid 4 forecast archive while retaining the public `gfs` ID.
+- GFS carries deterministic values and forecast metadata; `forecast.grid` selects 0.25° or 0.5° operational data and the matching historical forecast archive while retaining the public `gfs` ID.
 - GEFS carries member-derived distributions and optional members.
 - historical GFS analysis carries deterministic analyzed values and NCEI provenance.
 
@@ -369,6 +370,7 @@ Historical forecast: keep the dataset as GFS and select the old initialization.
 ```bash
 wfg query \
   --dataset gfs \
+  --grid 0p25 \
   --run 2019-12-24T12:00:00Z \
   --lat 50.08 --lon 14.43 \
   --at 2019-12-26T18:00:00Z \
@@ -377,7 +379,7 @@ wfg query \
   --json
 ```
 
-The same routing applies to `wfg diagnose`: an old explicit `--run` derives layer, profile, parcel, or diagnostic time-series products from archived forecast state.
+The same routing applies to `wfg diagnose`: `--grid 0p25|0p50` selects the deterministic GFS grid, and an old explicit `--run` derives layer, profile, parcel, or diagnostic time-series products from the matching archived forecast state.
 
 Historical analysis: change the dataset and time.
 
@@ -433,7 +435,7 @@ Examples:
 
 - current operational GFS transects expose pressure-level selection but not the full mixed-field selection available to GEFS/history transects;
 - historical NCEI operations have tighter point/sample/time bounds because archive access is file/NCSS oriented and NOAA-paced;
-- archived GFS forecasts use native Grid 4 3-hour steps through +192 h and only the variables/fields available in that historical product;
+- archived GFS forecasts preserve grid-native cadence and inventory: 0.25° GDEX uses 3-hour steps through +240 h then 12-hour steps through +384 h, while 0.5° Grid 4 uses 3-hour steps through +192 h;
 - historical analysis does not expose forecast accumulation products as if they were instantaneous analysis state;
 - ensemble-only controls are rejected for deterministic datasets;
 - forecast run controls are rejected for `gfs-analysis`.
