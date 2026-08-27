@@ -3,6 +3,7 @@ import { GfsGefsComparisonService } from "./gfs-gefs-comparison.js";
 import { HistoricalIndexService } from "./history-index.js";
 import { HistoricalForecastVerificationService } from "./history-verification.js";
 import { IgraForecastVerificationService } from "./igra-verification.js";
+import { IgraForecastSkillService } from "./igra-skill.js";
 import { RunComparisonService } from "./run-comparison.js";
 import { gefsRunComparisonQuerySchema } from "../schema/gefs-run-comparison.js";
 import { gfsGefsComparisonQuerySchema } from "../schema/gfs-gefs-comparison.js";
@@ -96,16 +97,44 @@ export class UnifiedForecastVerificationService {
       new HistoricalForecastVerificationService(),
     private readonly igraService: Pick<IgraForecastVerificationService, "verify"> =
       new IgraForecastVerificationService(),
+    private readonly igraSkillService: Pick<IgraForecastSkillService, "summarize"> =
+      new IgraForecastSkillService(),
   ) {}
 
   async verify(input: VerifyAtmosphericForecastInput): Promise<UnifiedSpecializedResult> {
     const request = verifyAtmosphericForecastSchema.parse(input);
 
+    if (Array.isArray(request.leadHours)) {
+      const rangeTime = request.time as {
+        from: string;
+        to: string;
+        hoursUtc: Array<0 | 6 | 12 | 18>;
+        maxValidTimes: number;
+      };
+      const result = await this.igraSkillService.summarize({
+        latitude: request.geometry.latitude,
+        longitude: request.geometry.longitude,
+        startTime: rangeTime.from,
+        endTime: rangeTime.to,
+        cycleHoursUtc: rangeTime.hoursUtc,
+        maxValidTimes: rangeTime.maxValidTimes,
+        leadHours: request.leadHours,
+        variables: request.variables as any,
+        pressureLevelsHpa: request.pressureLevelsHpa,
+        ...(request.gfsGrid === undefined ? {} : { gfsGrid: request.gfsGrid }),
+        ...(request.stationId === undefined ? {} : { stationId: request.stationId }),
+        maxStationDistanceKm: request.maxStationDistanceKm,
+      });
+      return wrap("verify_forecast", ["gfs", "igra"], result);
+    }
+
+    const instantTime = request.time as { at: string };
+
     if (request.referenceDataset === "igra") {
       const result = await this.igraService.verify({
         latitude: request.geometry.latitude,
         longitude: request.geometry.longitude,
-        validTime: request.time.at,
+        validTime: instantTime.at,
         leadHours: request.leadHours,
         variables: request.variables as any,
         pressureLevelsHpa: request.pressureLevelsHpa,
@@ -121,7 +150,7 @@ export class UnifiedForecastVerificationService {
     const result = await this.analysisService.verify(historicalForecastVerificationQuerySchema.parse({
       latitude: request.geometry.latitude,
       longitude: request.geometry.longitude,
-      validTime: request.time.at,
+      validTime: instantTime.at,
       leadHours: request.leadHours,
       variables: request.variables,
       pressureLevelsHpa: request.pressureLevelsHpa,

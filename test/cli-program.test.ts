@@ -61,6 +61,10 @@ describe("CLI public surface", () => {
     expect(options).toContain("--station");
     expect(options).toContain("--max-station-distance-km");
     expect(options).toContain("--grid");
+    expect(options).toContain("--from");
+    expect(options).toContain("--to");
+    expect(options).toContain("--hours");
+    expect(options).toContain("--max-valid-times");
   });
 
   it("keeps index maintenance behind one neutral admin command", () => {

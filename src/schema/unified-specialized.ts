@@ -1,6 +1,16 @@
 import * as z from "zod/v4";
 import { gfsGridSchema } from "./gfs-grid.js";
-import { IGRA_VERIFICATION_VARIABLE_IDS } from "./igra-verification.js";
+import { historicalCycleHourUtcSchema } from "./history.js";
+import { historicalVerificationLeadHoursSchema } from "./history-verification.js";
+import {
+  MAX_IGRA_SKILL_EVALUATIONS,
+  MAX_IGRA_SKILL_LEADS,
+  MAX_IGRA_SKILL_VALID_TIMES,
+} from "./igra-skill.js";
+import {
+  IGRA_VERIFICATION_VARIABLE_IDS,
+  igraVerificationVariableSchema,
+} from "./igra-verification.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 import {
   atmosphericEnsembleOptionsSchema,
@@ -51,15 +61,12 @@ export const compareAtmosphericDatasetsSchema = z.object({
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
 });
 
-export const verifyAtmosphericForecastSchema = z.object({
+const verifyAtmosphericForecastCaseSchema = z.object({
   forecastDataset: z.literal("gfs").default("gfs"),
   referenceDataset: z.enum(["gfs-analysis", "igra"]).default("gfs-analysis"),
   geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
   time: z.object({ at: isoDateTimeSchema }),
-  leadHours: z.number().int().min(0).max(192).refine(
-    (value) => value % 6 === 0,
-    "leadHours must be a multiple of 6",
-  ),
+  leadHours: historicalVerificationLeadHoursSchema,
   variables: z.array(z.string().min(1)).min(1),
   pressureLevelsHpa: z.array(z.number().positive()).min(1),
   gfsGrid: gfsGridSchema.optional(),
@@ -89,6 +96,59 @@ export const verifyAtmosphericForecastSchema = z.object({
     });
   }
 });
+
+const verifyAtmosphericForecastSkillSchema = z.object({
+  forecastDataset: z.literal("gfs").default("gfs"),
+  referenceDataset: z.literal("igra"),
+  geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
+  time: z.object({
+    from: isoDateTimeSchema,
+    to: isoDateTimeSchema,
+    hoursUtc: z.array(historicalCycleHourUtcSchema).min(1).max(4).default([0, 12]),
+    maxValidTimes: z.number().int().min(1).max(MAX_IGRA_SKILL_VALID_TIMES)
+      .default(MAX_IGRA_SKILL_VALID_TIMES),
+  }),
+  leadHours: z.array(historicalVerificationLeadHoursSchema).min(1).max(MAX_IGRA_SKILL_LEADS),
+  variables: z.array(igraVerificationVariableSchema).min(1),
+  pressureLevelsHpa: z.array(z.number().positive()).min(1),
+  gfsGrid: gfsGridSchema.optional(),
+  stationId: z.string().regex(/^[A-Z0-9]{11}$/).optional(),
+  maxStationDistanceKm: z.number().positive().max(1_000).default(250),
+}).superRefine((request, context) => {
+  if (new Date(request.time.to) < new Date(request.time.from)) {
+    context.addIssue({
+      code: "custom",
+      path: ["time", "to"],
+      message: "time.to must be greater than or equal to time.from",
+    });
+  }
+  if (new Set(request.time.hoursUtc).size !== request.time.hoursUtc.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["time", "hoursUtc"],
+      message: "time.hoursUtc must not contain duplicates",
+    });
+  }
+  if (new Set(request.leadHours).size !== request.leadHours.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["leadHours"],
+      message: "leadHours must not contain duplicates",
+    });
+  }
+  if (request.time.maxValidTimes * request.leadHours.length > MAX_IGRA_SKILL_EVALUATIONS) {
+    context.addIssue({
+      code: "custom",
+      path: ["time", "maxValidTimes"],
+      message: `IGRA skill summary is bounded to ${MAX_IGRA_SKILL_EVALUATIONS} forecast evaluations`,
+    });
+  }
+});
+
+export const verifyAtmosphericForecastSchema = z.union([
+  verifyAtmosphericForecastCaseSchema,
+  verifyAtmosphericForecastSkillSchema,
+]);
 
 export const findAtmosphericAnalogsSchema = z.object({
   dataset: z.literal("gfs-analysis").default("gfs-analysis"),

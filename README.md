@@ -126,6 +126,8 @@ Historical **GFS forecasts** do not add another public dataset. Keep `dataset: "
 
 Forecast verification can use either the later `gfs-analysis` model state or a real **NOAA IGRA v2.2 radiosonde** reference. IGRA remains a verification reference rather than a fourth gridded atmospheric dataset: WFG selects a nearby or explicit sounding station, samples the archived GFS forecast at the sounding location, and compares only pressure levels that were actually observed. No vertical interpolation is hidden inside the verification result.
 
+The same `verify_forecast` operation also supports **bounded radiosonde skill summaries**. Use a time range plus up to three lead times; WFG samples at most eight nominal sounding times (24 forecast evaluations maximum), keeps failed cases explicit, and returns count, signed bias, MAE and RMSE by lead × pressure × observed field. Wind-direction errors use shortest signed angular differences.
+
 ## The design rule
 
 > **Unify operations and physics; preserve model semantics.**

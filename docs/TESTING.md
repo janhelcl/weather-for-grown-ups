@@ -85,7 +85,7 @@ The live suite covers the bundled decoder against real GFS/GEFS data, determinis
 
 It runs weekly on Monday at 05:17 UTC plus manual dispatch, never as a normal PR/main gate.
 
-`npm run test:live:igra` exercises the real IGRA station list, current station ZIP format, exact sounding parser, station provenance, and GDEX archived forecast comparison. Archive equivalence never falls back to operational transport parity. When no same-run overlap exists inside the AWS retention window it reports `archiveStatus: "not_tested_no_overlap"`; that is an explicit “not tested”, not evidence of archive equivalence. See [LIVE_SMOKE.md](LIVE_SMOKE.md) for exact current scripts, pacing and failure triage.
+`npm run test:live:igra` exercises the real IGRA station list, current station ZIP format, exact sounding parser, station provenance, and GDEX archived forecast comparison. `npm run test:live:igra-skill` then exercises the bounded range form over two recent 12Z soundings and +24/+48 h leads, requiring successful aggregated skill statistics while allowing individual case failures to remain explicit. Archive equivalence never falls back to operational transport parity. When no same-run overlap exists inside the AWS retention window it reports `archiveStatus: "not_tested_no_overlap"`; that is an explicit “not tested”, not evidence of archive equivalence. See [LIVE_SMOKE.md](LIVE_SMOKE.md) for exact current scripts, pacing and failure triage.
 
 ## Meteorology reference validation
 

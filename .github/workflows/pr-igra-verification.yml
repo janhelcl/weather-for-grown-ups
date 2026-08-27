@@ -18,3 +18,5 @@ jobs:
         run: docker build --target live-test -t weather-for-grown-ups:live-test .
       - name: Verify recent GFS archive against Praha-Libus radiosonde
         run: docker run --rm weather-for-grown-ups:live-test npm run test:live:igra
+      - name: Summarize recent GFS skill against Praha-Libus radiosondes
+        run: docker run --rm weather-for-grown-ups:live-test npm run test:live:igra-skill

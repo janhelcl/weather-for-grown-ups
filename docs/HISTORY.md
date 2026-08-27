@@ -319,6 +319,8 @@ With `referenceDataset: "gfs-analysis"`, verification is against **GFS analysis,
 
 With `referenceDataset: "igra"`, verification instead uses **NOAA IGRA v2.2 radiosonde observations**. WFG selects a nearby or explicit station, retrieves the exact nominal sounding, samples the archived GFS forecast at the sounding launch location, and compares only requested pressure levels that are present exactly in the sounding. It does not vertically interpolate sparse observations. The result reports matched and missing levels, station distance, sounding coordinates, source file and observation-minus-forecast changes. This is a point-observation-versus-model-grid comparison; balloon drift, instrument changes and station relocations remain explicit caveats.
 
+For a bounded skill summary, use a historical range and several lead times in the same `verify_forecast` operation. WFG enumerates the selected nominal UTC cycles, samples at most eight times evenly across the period, and permits at most three leads (24 forecast evaluations total). Each successful atomic comparison contributes to lead × pressure × field statistics: sample count, signed bias, MAE and RMSE. Failed or unavailable soundings remain in the evaluation list, so a field with `count: 5` is never presented as if it had eight observations. Circular wind-direction metrics aggregate shortest signed angular errors.
+
 ## Data access and caching
 
 WFG uses NCEI's THREDDS NetCDF Subset Service (NCSS). Point/profile queries use grid-as-point mode, requesting selected pressure profiles without downloading full historical GRIB files. Area summaries use NCSS geographic bbox/grid subsets and aggregate the returned cells locally. Compatible point-profile variables are bundled together; variables using different historical pressure axes are fetched separately and merged locally.
@@ -335,5 +337,5 @@ Historical analysis is now substantially integrated into the common engine. Natu
 
 1. anomaly and percentile calculations against a deliberately chosen homogeneous reanalysis/climatology source;
 2. optional seasonal or impact-specific analog filters built on top of the generic model-state metric;
-3. multi-lead verification summaries once archive caching/indexing makes them efficient;
+3. broader station-network and seasonal skill aggregation once a dedicated verification index makes larger samples efficient;
 4. an alternative official bulk analysis transport if NOAA exposes one that preserves the same Grid 4 analysis semantics.
