@@ -1,0 +1,21 @@
+name: PR RDA debug
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: pr-rda-debug-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect GDEX NCSS CSV profile shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://tds.gdex.ucar.edu/thredds/ncss/grid/files/g/d084001/2026/20260824/gfs.0p25.2026082400.f006.grib2?var=Temperature_isobaric&latitude=50&longitude=14&time=all&accept=csv'
+          curl --fail --show-error --silent --max-time 60 "$url" | head -n 12
