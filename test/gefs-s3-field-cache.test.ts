@@ -46,6 +46,37 @@ describe("GEFS non-isobaric subset cache", () => {
     expect(second.cacheHit).toBe(true);
     expect(second.path).toBe(first.path);
     expect(fetchFn).toHaveBeenCalledTimes(3); // one cached index + two exact field messages
+    expect(String(fetchFn.mock.calls[0]?.[0])).toContain("/atmos/pgrb2sp25/");
+    expect(String(fetchFn.mock.calls[0]?.[0])).toContain(".pgrb2s.0p25.f003.idx");
+  });
+
+  it("keeps mixed pressure-and-field selections on the 0.5 product", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wfg-gefs-mixed-fields-"));
+    roots.push(root);
+    const index = [
+      "1:0:d=2026082312:TMP:850 mb:3 hour fcst:",
+      "2:100:d=2026082312:TMP:2 m above ground:3 hour fcst:",
+    ].join("\n");
+    const fetchFn = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith(".idx")) return new Response(index, { status: 200 });
+      expect(init?.headers).toEqual(expect.objectContaining({ range: expect.stringMatching(/^bytes=/) }));
+      return new Response(new TextEncoder().encode("GRIB"), { status: 206 });
+    }) as typeof fetch;
+    const cache = new GefsS3SubsetCache(root, fetchFn);
+    const temperature2m = GEFS_PGRB2A_FIELD_CATALOG.temperature_2m;
+    if (temperature2m.kind !== "raw") throw new Error("expected raw fixture");
+
+    await cache.fetchSelection({
+      run: new Date("2026-08-23T12:00:00Z"),
+      forecastHour: 3,
+      member: "c00",
+      variableCodes: ["TMP"],
+      pressureLevelsHpa: [850],
+      fields: [temperature2m],
+    });
+
+    expect(String(fetchFn.mock.calls[0]?.[0])).toContain("/atmos/pgrb2ap5/");
+    expect(String(fetchFn.mock.calls[0]?.[0])).toContain(".pgrb2a.0p50.f003.idx");
   });
 
   it("rejects an empty pressure-and-field selection before writing a subset", async () => {
