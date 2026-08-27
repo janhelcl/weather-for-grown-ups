@@ -175,8 +175,10 @@ The compact public vocabulary is:
 | `diagnose_atmosphere` | Layer, profile and parcel meteorology |
 | `compare_runs` | Compare consecutive forecast initialization cycles |
 | `compare_datasets` | Compare aligned datasets; currently GFS against GEFS |
-| `verify_forecast` | Compare an archived forecast with a later reference state |
+| `verify_forecast` | Compare an archived GFS forecast with later GFS analysis or an IGRA radiosonde |
 | `find_analogs` | Search materialized historical atmospheric analogs |
+
+`verify_forecast` has two reference semantics. The default `referenceDataset: "gfs-analysis"` preserves the original same-grid analysis-minus-forecast comparison. `referenceDataset: "igra"` uses NOAA IGRA v2.2 radiosonde observations: an explicit `stationId` may be supplied or WFG chooses the nearest station covering the requested year within `maxStationDistanceKm`; the forecast is sampled at the sounding location and only exact observed pressure levels are compared. IGRA therefore appears as a verification reference, not as a `query_atmosphere` dataset.
 
 Index materialization/backfill is an administrative concern and is intentionally CLI-only through `wfg index build` and `wfg index backfill`; it is not part of the normal MCP weather-tool catalog.
 
