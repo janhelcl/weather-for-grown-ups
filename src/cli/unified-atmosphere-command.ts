@@ -59,6 +59,7 @@ function registerQueryCommand(program: Command): void {
     .option("--levels <list>", "Comma-separated pressure levels in hPa")
     .option("--fields <list>", "Comma-separated non-isobaric fields")
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
+    .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--source <nomads|s3>", "Operational GFS source override")
     .option("--members <list>", "GEFS members (c00,p01..p30)")
     .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
@@ -99,6 +100,7 @@ function registerDiagnoseCommand(program: Command): void {
     .option("--diagnostics <list>", "Layer/profile diagnostic IDs")
     .option("--parcel <surface_2m|mixed_layer_100hpa|most_unstable_300hpa>", "Parcel definition")
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
+    .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--source <nomads|s3>", "Operational GFS source override")
     .option("--members <list>", "GEFS members (c00,p01..p30)")
     .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
@@ -123,6 +125,7 @@ function registerCompareRunsCommand(program: Command): void {
     .option("--levels <list>", "Pressure levels in hPa", "850")
     .option("--fields <list>", "GFS-only non-isobaric fields")
     .option("--anchor-run <iso|latest>", "Newest initialization cycle to compare", "latest")
+    .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--cycles <number>", "Number of consecutive cycles", Number, 3)
     .option("--members <list>", "GEFS members (c00,p01..p30)")
     .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
@@ -140,6 +143,7 @@ function registerCompareRunsCommand(program: Command): void {
         time: { at: options.at },
         selection,
         anchorRun: options.anchorRun,
+        ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
         cycles: options.cycles,
         ...(options.members === undefined && options.quantiles === undefined
           ? {}
@@ -165,6 +169,7 @@ function registerCompareDatasetsCommand(program: Command): void {
     .requiredOption("--var <id>", "Raw pressure-level variable")
     .requiredOption("--level <hpa>", "Pressure level in hPa", Number)
     .option("--run <iso|latest>", "Shared aligned initialization", "latest")
+    .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--members <list>", "GEFS members (c00,p01..p30)")
     .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
     .option("--json", "Output JSON")
@@ -176,6 +181,7 @@ function registerCompareDatasetsCommand(program: Command): void {
         variable: options.var,
         pressureLevelHpa: options.level,
         run: options.run,
+        ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
         ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
         ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
       });
@@ -247,9 +253,7 @@ export function buildUnifiedQuery(options: Record<string, any>): QueryAtmosphere
     geometry,
     time,
     selection,
-    ...(dataset === "gfs-analysis" || options.run === undefined
-      ? {}
-      : { forecast: { run: String(options.run) } }),
+    ...forecastInput(dataset, options),
     ...(options.source === undefined ? {} : { source: options.source }),
     ...ensembleInput(options),
     ...aggregateInput(options),
@@ -300,9 +304,7 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
     geometry: { type: "point", latitude: options.lat, longitude: options.lon },
     time,
     diagnostic,
-    ...(dataset === "gfs-analysis" || options.run === undefined
-      ? {}
-      : { forecast: { run: String(options.run) } }),
+    ...forecastInput(dataset, options),
     ...(options.source === undefined ? {} : { source: options.source }),
     ...ensembleInput(options),
   };
@@ -383,6 +385,19 @@ function parseSelection(options: Record<string, any>): QueryAtmosphereInput["sel
     variables: parseStrings(options.vars ?? DEFAULT_UNIFIED_VARIABLES),
     pressureLevelsHpa: parseLevels(options.levels ?? DEFAULT_LEVELS),
     ...(fields === undefined ? {} : { fields }),
+  };
+}
+
+function forecastInput(
+  dataset: PublicAtmosphericDataset,
+  options: Record<string, any>,
+): Pick<QueryAtmosphereInput, "forecast"> | {} {
+  if (dataset === "gfs-analysis" || (options.run === undefined && options.grid === undefined)) return {};
+  return {
+    forecast: {
+      ...(options.run === undefined ? {} : { run: String(options.run) }),
+      ...(options.grid === undefined ? {} : { grid: options.grid }),
+    },
   };
 }
 
