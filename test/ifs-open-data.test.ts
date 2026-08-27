@@ -60,6 +60,31 @@ describe("ECMWF IFS Open Data source", () => {
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 
+  it("fails over from a throttled AWS mirror to another ECMWF replica", async () => {
+    const fetchFn = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("ecmwf-forecasts.s3.eu-central-1.amazonaws.com")) {
+        return new Response("Slow Down", {
+          status: 503,
+          headers: { "retry-after": "0" },
+        });
+      }
+      if (url.includes("ai4edataeuwest.blob.core.windows.net")) {
+        return new Response(
+          '{"date":"20260827","time":"1200","step":"6","levtype":"pl","levelist":"850","param":"t","_offset":0,"_length":10}',
+          { status: 200 },
+        );
+      }
+      return new Response("", { status: 404 });
+    }) as typeof fetch;
+    const probe = new IfsOpenDataRunProbe(fetchFn);
+    await expect(probe.isForecastAvailable(run, 6, [
+      { key: "t@850", param: "t", levtype: "pl", levelist: 850 },
+    ])).resolves.toBe(true);
+    expect(fetchFn.mock.calls.some(([input]) =>
+      String(input).includes("ai4edataeuwest.blob.core.windows.net"))).toBe(true);
+  });
+
   it("treats missing objects and missing selected inventory as unavailable", async () => {
     const notFound = new IfsOpenDataRunProbe(vi.fn(async () => new Response("", { status: 404 })) as typeof fetch);
     await expect(notFound.isForecastAvailable(run, 6, [
