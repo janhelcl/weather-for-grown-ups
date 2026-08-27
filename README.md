@@ -122,6 +122,8 @@ GEFS also supports control `c00` plus perturbed members `p01`–`p30`, native th
 
 Historical **GFS Grid 4 0.5° analysis** is exposed as the third public dataset, `gfs-analysis`, through the same `query` / `diagnose` CLI operations and `query_atmosphere` / `diagnose_atmosphere` MCP tools. It covers profiles, time series, diagnostics, parcels, multi-point queries, multi-point time series, transects and native bbox area statistics while preserving analysis-time semantics and NCEI provenance.
 
+Historical **GFS forecasts** do not add another public dataset. Keep `dataset: "gfs"` and provide an explicit old forecast run; WFG transparently switches to NOAA NCEI's 0.5° Grid 4 forecast archive and reports `gfs_grid4_forecast_0p5_archive` in result metadata. The archive uses native 3-hour output through +192 h and begins on 2006-10-10. This works across unified state queries and layer/profile/parcel diagnostics while keeping run, valid time, lead and archive provenance explicit.
+
 ## The design rule
 
 > **Unify operations and physics; preserve model semantics.**
@@ -148,7 +150,7 @@ Normal atmospheric access is expressed as:
 dataset × geometry × time × selection
 ```
 
-with short dataset IDs `gfs`, `gefs`, and `gfs-analysis`. The same query structure therefore works for a deterministic forecast, an ensemble forecast, or an archived analysis while each result preserves its native deterministic/ensemble and forecast/analysis semantics.
+with short dataset IDs `gfs`, `gefs`, and `gfs-analysis`. The same query structure therefore works for a deterministic forecast, an ensemble forecast, an archived GFS forecast, or an archived analysis while each result preserves its native deterministic/ensemble and forecast/analysis semantics. An archived forecast remains `gfs`; the explicit old `forecast.run` selects the historical state.
 
 The MCP vocabulary is intentionally small:
 
@@ -173,6 +175,19 @@ wfg query \
   --dataset gfs \
   --lat 50.08 --lon 14.43 \
   --at 2026-08-24T12:00:00Z \
+  --vars temperature,relative_humidity,wind \
+  --levels 1000,925,850,700,500 \
+  --json
+```
+
+An old forecast keeps `gfs` and selects the historical initialization:
+
+```bash
+wfg query \
+  --dataset gfs \
+  --run 2017-05-07T12:00:00Z \
+  --lat 50.08 --lon 14.43 \
+  --at 2017-05-09T12:00:00Z \
   --vars temperature,relative_humidity,wind \
   --levels 1000,925,850,700,500 \
   --json
@@ -240,6 +255,7 @@ WFG selects only the GRIB messages needed for a query, caches immutable upstream
 - GEFS uses NOAA AWS Open Data `.idx` inventories and byte-range access per member.
 - The npm package ships with a GRIB2 decoder; native `wgrib2` remains an optional compatibility/debug path.
 - Historical GFS analysis uses NOAA NCEI THREDDS/NCSS: grid-as-point for point/profile operations and native bbox/grid subsets for area statistics.
+- Historical GFS forecasts use exact NCEI Grid 4 forecast files through the same NCSS subset strategy; direct online availability varies and older files may require NCEI HAS retrieval.
 - NOAA/NCEI scripted archive requests share the cross-process courtesy limiter; AWS Open Data paths do not use it.
 
 ## Documentation
