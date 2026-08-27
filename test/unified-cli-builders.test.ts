@@ -34,6 +34,32 @@ describe("unified CLI request builders", () => {
     });
   });
 
+  it("builds an ECMWF IFS point query without a GFS grid or source override", () => {
+    const request = buildUnifiedQuery({
+      dataset: "ifs",
+      lat: 50.08,
+      lon: 14.43,
+      at: "2026-08-28T12:00:00Z",
+      vars: "temperature,wind",
+      levels: "850,500",
+      fields: "temperature_2m,wind_10m",
+      run: "latest",
+    });
+
+    expect(queryAtmosphereSchema.parse(request)).toMatchObject({
+      dataset: "ifs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: {
+        variables: ["temperature", "wind"],
+        pressureLevelsHpa: [850, 500],
+        fields: ["temperature_2m", "wind_10m"],
+      },
+      forecast: { run: "latest" },
+    });
+    expect(request).not.toHaveProperty("source");
+  });
+
   it("builds historical multi-point field ranges without forecast metadata", () => {
     const request = buildUnifiedQuery({
       dataset: "gfs-analysis",

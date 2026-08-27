@@ -136,6 +136,52 @@ describe("unified atmospheric schema capability branches", () => {
     })).toThrow("forecast.grid is only configurable for the gfs dataset");
   });
 
+  it("accepts the first IFS point slice and rejects unsupported IFS shapes explicitly", () => {
+    expect(queryAtmosphereSchema.parse({
+      dataset: "ifs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: {
+        variables: ["temperature", "wind"],
+        pressureLevelsHpa: [850, 500],
+        fields: ["temperature_2m"],
+      },
+      forecast: { run: "latest" },
+    }).dataset).toBe("ifs");
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "ifs",
+      geometry: point,
+      time: {
+        from: "2026-08-28T00:00:00Z",
+        to: "2026-08-28T12:00:00Z",
+      },
+      selection: pressureSelection,
+    })).toThrow("IFS currently supports point geometry at one valid time");
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "ifs",
+      geometry: {
+        type: "points",
+        points: [{ latitude: 50, longitude: 14 }],
+      },
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: pressureSelection,
+    })).toThrow("IFS currently supports point geometry at one valid time");
+
+    expect(() => diagnoseAtmosphereSchema.parse({
+      dataset: "ifs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+    })).toThrow("IFS diagnostics are not implemented");
+  });
+
   it("accepts either scalar area selection form and rejects area ranges", () => {
     const geometry = {
       type: "area" as const,

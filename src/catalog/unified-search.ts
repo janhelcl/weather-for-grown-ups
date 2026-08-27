@@ -1,5 +1,6 @@
 import { getGefsCatalog } from "./gefs-catalog.js";
 import { getGfsPressureCatalog } from "./catalog.js";
+import { getIfsCatalog } from "./ifs.js";
 import { LAYER_DIAGNOSTIC_CATALOG } from "./layer-diagnostics.js";
 import { NON_ISOBARIC_FIELD_CATALOG } from "./non-isobaric-fields.js";
 import { PARCEL_DIAGNOSTIC_CATALOG } from "./parcel-diagnostics.js";
@@ -52,6 +53,7 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
   const entries = [
     ...(datasets.has("gfs") ? gfsEntries() : []),
     ...(datasets.has("gefs") ? gefsEntries() : []),
+    ...(datasets.has("ifs") ? ifsEntries() : []),
     ...(datasets.has("gfs-analysis") ? historyEntries() : []),
   ].filter((entry) => {
     if (!sections.has(entry.section)) return false;
@@ -185,6 +187,33 @@ function gefsEntries(): CatalogEntry[] {
   ];
 }
 
+function ifsEntries(): CatalogEntry[] {
+  const catalog = getIfsCatalog();
+  return [
+    ...catalog.variables.map((definition) => ({
+      dataset: "ifs" as const,
+      section: "variables" as const,
+      id: definition.id,
+      classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
+      kind: definition.kind,
+      description: definition.description,
+      verticalSemantics: definition.levelType,
+      outputs: definition.outputs.map((output) => ({ ...output })),
+    })),
+    ...catalog.fields.map((definition) => ({
+      dataset: "ifs" as const,
+      section: "fields" as const,
+      id: definition.id,
+      classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
+      kind: definition.kind,
+      description: definition.description,
+      verticalSemantics: definition.verticalSemantics,
+      temporalSemantics: definition.temporalSemantics,
+      outputs: definition.outputs.map((output) => ({ ...output })),
+    })),
+  ];
+}
+
 function historyEntries(): CatalogEntry[] {
   const variables = HISTORICAL_GFS_VARIABLE_IDS.map((id) => {
     const definition = VARIABLE_CATALOG[id];
@@ -274,6 +303,7 @@ function diagnosticEntry(
 function preferredRepresentative(entries: CatalogEntry[]): CatalogEntry {
   return entries.find((entry) => entry.dataset === "gfs")
     ?? entries.find((entry) => entry.dataset === "gefs")
+    ?? entries.find((entry) => entry.dataset === "ifs")
     ?? entries[0]!;
 }
 
@@ -283,6 +313,8 @@ function supportSemantics(dataset: PublicAtmosphericDataset): string {
       return "deterministic operational forecast";
     case "gefs":
       return "member-first ensemble forecast distribution";
+    case "ifs":
+      return "deterministic ECMWF IFS 0.25° operational forecast";
     case "gfs-analysis":
       return "deterministic historical model analysis; field availability may vary by model era";
   }

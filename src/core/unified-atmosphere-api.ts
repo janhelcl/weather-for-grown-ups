@@ -25,6 +25,7 @@ import { HistoricalPointsService } from "./history-points.js";
 import { HistoricalTimeSeriesService } from "./history-time-series.js";
 import { HistoricalTransectService } from "./history-transect.js";
 import { HistoricalProfileService } from "./history.js";
+import { IfsProfileService } from "./ifs-profile.js";
 import { PointsTimeSeriesService } from "./points-time-series.js";
 import { ProfileService } from "./profile.js";
 import { TimeSeriesService } from "./time-series.js";
@@ -43,6 +44,7 @@ import { historicalPointsTimeSeriesQuerySchema } from "../schema/history-points-
 import { historicalPointsQuerySchema } from "../schema/history-points.js";
 import { historicalTransectQuerySchema } from "../schema/history-transect.js";
 import { historicalProfileQuerySchema, historicalTimeSeriesQuerySchema } from "../schema/history.js";
+import { ifsPointQuerySchema } from "../schema/ifs.js";
 import {
   batchPointsQuerySchema,
   pointsTimeSeriesQuerySchema,
@@ -75,6 +77,7 @@ export interface UnifiedAtmosphereQueryServiceOptions {
   gefsPointsTimeSeries?: Pick<GefsPointsBundleTimeSeriesService, "getPointsTimeSeries">;
   gefsTransect?: Pick<GefsTransectService, "getTransect">;
   gefsArea?: Pick<GefsAreaSummaryService, "summarize">;
+  ifsProfile?: Pick<IfsProfileService, "getProfile">;
   historyProfile?: Pick<HistoricalProfileService, "getHistoricalProfile">;
   historyFields?: Pick<HistoricalFieldsService, "getHistoricalFields">;
   historyTimeSeries?: Pick<HistoricalTimeSeriesService, "getHistoricalTimeSeries">;
@@ -100,6 +103,7 @@ export class UnifiedAtmosphereQueryService {
   private readonly gefsPointsTimeSeries: Pick<GefsPointsBundleTimeSeriesService, "getPointsTimeSeries">;
   private readonly gefsTransect: Pick<GefsTransectService, "getTransect">;
   private readonly gefsArea: Pick<GefsAreaSummaryService, "summarize">;
+  private readonly ifsProfile: Pick<IfsProfileService, "getProfile">;
   private readonly historyProfile: Pick<HistoricalProfileService, "getHistoricalProfile">;
   private readonly historyFields: Pick<HistoricalFieldsService, "getHistoricalFields">;
   private readonly historyTimeSeries: Pick<HistoricalTimeSeriesService, "getHistoricalTimeSeries">;
@@ -124,6 +128,7 @@ export class UnifiedAtmosphereQueryService {
     this.gefsPointsTimeSeries = options.gefsPointsTimeSeries ?? new GefsPointsBundleTimeSeriesService();
     this.gefsTransect = options.gefsTransect ?? new GefsTransectService();
     this.gefsArea = options.gefsArea ?? new GefsAreaSummaryService();
+    this.ifsProfile = options.ifsProfile ?? new IfsProfileService();
     this.historyProfile = options.historyProfile ?? new HistoricalProfileService();
     this.historyFields = options.historyFields ?? new HistoricalFieldsService();
     this.historyTimeSeries = options.historyTimeSeries ?? new HistoricalTimeSeriesService();
@@ -191,6 +196,15 @@ export class UnifiedAtmosphereQueryService {
         ...ensembleOptions(request),
       });
       return this.gefsBundle.getBundle(query);
+    }
+
+    if (request.dataset === "ifs") {
+      return this.ifsProfile.getProfile(ifsPointQuerySchema.parse({
+        ...point,
+        run,
+        validTime: request.time.at,
+        ...gfsSelection(request),
+      }));
     }
 
     if ((request.selection.fields?.length ?? 0) > 0) {

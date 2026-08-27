@@ -26,31 +26,31 @@ The core is the product. CLI and MCP are adapters over it, not independent imple
 
 > **Unify operations and physics; preserve model semantics.**
 
-A common operation does not imply a common source inventory or a flattened result shape. Deterministic GFS forecasts return deterministic forecast states. Historical Grid 4 returns deterministic analyzed states. GEFS returns member-derived forecast distributions and structural ensemble summaries.
+A common operation does not imply a common source inventory or a flattened result shape. Deterministic GFS and IFS forecasts return deterministic forecast states. Historical Grid 4 returns deterministic analyzed states. GEFS returns member-derived forecast distributions and structural ensemble summaries.
 
-The engine is organized around **operation × dataset**. Point profiles, time series and meteorological diagnostics are operations; operational GFS, GEFS and historical GFS analysis are datasets with explicit role, grid, source and temporal semantics. Public CLI/MCP wrappers may remain dataset-specific when that gives agents a clearer schema, but they should delegate into the shared operation layer rather than grow independent implementations.
+The engine is organized around **operation × dataset**. Point profiles, time series and meteorological diagnostics are operations; operational GFS, GEFS, ECMWF IFS and historical GFS analysis are datasets with explicit role, grid, source and temporal semantics. Public CLI/MCP wrappers may remain dataset-specific when that gives agents a clearer schema, but they should delegate into the shared operation layer rather than grow independent implementations.
 
 Nonlinear diagnostics are evaluated on each GEFS member before aggregation. WFG does not calculate CAPE, lapse rate, inversion structure or another nonlinear quantity from an ensemble-mean profile and pretend it represents the members.
 
 ## Atmospheric dataset capability boundary
 
-`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `gefs`, and `gfs-analysis`.
+`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `gefs`, `ifs`, and `gfs-analysis`.
 
-| Operation | GFS 0.25° / 0.5° forecast | GEFS 0.5° forecast | GFS Grid 4 0.5° analysis |
-| --- | --- | --- | --- |
-| profile | ✅ deterministic | ✅ member distributions | ✅ analyzed state |
-| timeseries | ✅ forecast evolution | ✅ ensemble evolution | ✅ selected analysis cycles |
-| layer diagnostics | ✅ | ✅ member-first | ✅ same deterministic kernel |
-| profile diagnostics | ✅ | ✅ member-first | ✅ same deterministic kernel |
-| parcel diagnostics | ✅ | ✅ member-first | ✅ same parcel engine |
-| diagnostic time series | ✅ | ✅ | ✅ selected analysis cycles |
-| points | ✅ shared S3 slice | ✅ member slices reused | ✅ bounded serial NCSS points |
-| points time series | ✅ | ✅ | ✅ bounded cycle × point matrix |
-| transect | ✅ shared great-circle geometry | ✅ shared great-circle geometry | ✅ shared great-circle geometry |
-| area summary | ✅ NOMADS bbox | ✅ member-first | ✅ native NCEI NCSS bbox |
-| run comparison | ✅ | ✅ | — |
-| scalar ensemble distribution | — | ✅ | — |
-| aligned model comparison | ✅ GFS-vs-GEFS | ✅ GFS-vs-GEFS | ⏳ forecast/analysis comparison remains a history-native verification primitive |
+| Operation | GFS 0.25° / 0.5° forecast | GEFS forecast | IFS 0.25° forecast | GFS Grid 4 0.5° analysis |
+| --- | --- | --- | --- | --- |
+| profile | ✅ deterministic | ✅ member distributions | ✅ deterministic point/instant | ✅ analyzed state |
+| timeseries | ✅ forecast evolution | ✅ ensemble evolution | ⏳ | ✅ selected analysis cycles |
+| layer diagnostics | ✅ | ✅ member-first | ⏳ | ✅ same deterministic kernel |
+| profile diagnostics | ✅ | ✅ member-first | ⏳ | ✅ same deterministic kernel |
+| parcel diagnostics | ✅ | ✅ member-first | ⏳ | ✅ same parcel engine |
+| diagnostic time series | ✅ | ✅ | ⏳ | ✅ selected analysis cycles |
+| points | ✅ shared S3 slice | ✅ member slices reused | ⏳ | ✅ bounded serial NCSS points |
+| points time series | ✅ | ✅ | ⏳ | ✅ bounded cycle × point matrix |
+| transect | ✅ shared great-circle geometry | ✅ shared great-circle geometry | ⏳ | ✅ shared great-circle geometry |
+| area summary | ✅ NOMADS bbox | ✅ member-first | ⏳ | ✅ native NCEI NCSS bbox |
+| run comparison | ✅ | ✅ | ⏳ | — |
+| scalar ensemble distribution | — | ✅ | — | — |
+| aligned model comparison | ✅ GFS-vs-GEFS | ✅ GFS-vs-GEFS | — | ⏳ forecast/analysis comparison remains a history-native verification primitive |
 
 The capability registry describes the shared **core operation** behind the compact public vocabulary. Historical analog search and archived forecast verification remain specialized composition primitives, while index build/backfill is CLI-only administration rather than a normal atmospheric query.
 
@@ -161,9 +161,9 @@ Both catalogs are searchable locally from CLI and MCP. Search itself performs no
 
 Run selection is query-aware.
 
-GFS and GEFS use explicit 00/06/12/18Z initialization cycles. Multi-time operations resolve one cycle capable of satisfying the complete requested range and then keep that cycle fixed. GFS grid selection is orthogonal to run selection: `0p25` is the default and `0p50` is explicit. An old explicit run keeps the public `gfs` identity and routes to the matching historical forecast archive rather than changing datasets.
+GFS, GEFS and IFS use explicit 00/06/12/18Z initialization cycles. Multi-time operations resolve one cycle capable of satisfying the complete requested range and then keep that cycle fixed. GFS grid selection is orthogonal to run selection: `0p25` is the default and `0p50` is explicit. An old explicit run keeps the public `gfs` identity and routes to the matching historical forecast archive rather than changing datasets.
 
-GEFS uses control `c00` plus `p01`–`p30` on a native three-hour cadence through `f384`. Pressure-level and mixed pressure/field operations use `pgrb2a` 0.5°. Field-only operations select `pgrb2s` 0.25° through `f240`, then fall back to `pgrb2a` 0.5°. Multi-time field operations choose one product from the complete range and keep that grid fixed.
+IFS Open Data uses deterministic 0.25° `oper` forecasts. Current Cycle 50r1 00/12Z runs publish 3-hourly through `f144` then 6-hourly through `f360`; 06/18Z runs publish 3-hourly through `f144`. `latest` is resolved against the requested field inventory, so partially published new cycles are not mistaken for selection-capable runs.\n\nGEFS uses control `c00` plus `p01`–`p30` on a native three-hour cadence through `f384`. Pressure-level and mixed pressure/field operations use `pgrb2a` 0.5°. Field-only operations select `pgrb2s` 0.25° through `f240`, then fall back to `pgrb2a` 0.5°. Multi-time field operations choose one product from the complete range and keep that grid fixed.
 
 Historical Grid 4 analysis has no forecast initialization/lead axis: its native time coordinate is the exact 00/06/12/18 UTC analysis cycle. Shared operation dispatch preserves that distinction instead of synthesizing run or forecast-hour fields.
 
