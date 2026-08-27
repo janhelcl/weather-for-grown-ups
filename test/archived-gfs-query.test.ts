@@ -52,6 +52,48 @@ describe("archived GFS unified routing policy", () => {
     expect(shouldUseArchivedGfsForecast(recent, now)).toBe(false);
   });
 
+  it("does not archive non-GFS or symbolic run selectors", () => {
+    const now = new Date("2026-08-27T12:00:00Z");
+    const analysis = queryAtmosphereSchema.parse({
+      dataset: "gfs-analysis",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2017-05-09T12:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    });
+    const latest = queryAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      forecast: { run: "latest" },
+    });
+    const latestComplete = queryAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      forecast: { run: "latest_complete" },
+    });
+
+    expect(shouldUseArchivedGfsForecast(analysis, now)).toBe(false);
+    expect(shouldUseArchivedGfsForecast(latest, now)).toBe(false);
+    expect(shouldUseArchivedGfsForecast(latestComplete, now)).toBe(false);
+  });
+
+  it("rejects invalid archived forecast ranges", () => {
+    const run = new Date("2017-05-07T12:00:00Z");
+    expect(() => archivedGfsForecastHoursInRange(
+      run,
+      new Date("2017-05-08T00:00:00Z"),
+      new Date("2017-05-07T00:00:00Z"),
+    )).toThrow("endTime must be at or after startTime");
+    expect(() => archivedGfsForecastHoursInRange(
+      run,
+      new Date("2017-05-16T00:00:00Z"),
+      new Date("2017-05-17T00:00:00Z"),
+    )).toThrow("No native archived GFS Grid 4 forecast outputs");
+  });
+
   it("enumerates native Grid 4 outputs at 3-hour cadence through +192h", () => {
     const run = new Date("2017-05-07T12:00:00Z");
     expect(archivedGfsForecastHoursInRange(
@@ -145,6 +187,73 @@ describe("ArchivedGfsForecastQueryService", () => {
     expect(transect.samples).toHaveLength(4);
     expect(transect.samples[0].fraction).toBe(0);
     expect(transect.samples[3].fraction).toBe(1);
+  });
+
+  it("enforces archive-only routing guards and range limits", async () => {
+    const service = new ArchivedGfsForecastQueryService({
+      profile: profileMock(),
+      now: () => new Date("2026-08-27T12:00:00Z"),
+    });
+
+    await expect(service.query({
+      dataset: "gefs",
+    } as any)).rejects.toThrow("only accepts dataset=gfs");
+
+    await expect(service.query(queryAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      forecast: { run: "latest" },
+    }))).rejects.toThrow("requires an explicit forecast.run cycle");
+
+    await expect(service.query(queryAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: {
+        from: "2017-05-07T12:00:00Z",
+        to: "2017-05-07T18:00:00Z",
+        maxSteps: 2,
+      },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      forecast: { run: "2017-05-07T12:00:00Z" },
+    }))).rejects.toThrow("exceeding maxSteps=2");
+  });
+
+  it("builds archived multi-point time-series matrices and enforces point-step limits", async () => {
+    const service = new ArchivedGfsForecastQueryService({
+      profile: profileMock(),
+      now: () => new Date("2026-08-27T12:00:00Z"),
+    });
+    const base = {
+      dataset: "gfs" as const,
+      geometry: {
+        type: "points" as const,
+        points: [
+          { latitude: 50.08, longitude: 14.43 },
+          { latitude: 49.2, longitude: 16.61 },
+        ],
+      },
+      time: {
+        from: "2017-05-07T12:00:00Z",
+        to: "2017-05-07T15:00:00Z",
+        maxSteps: 2,
+      },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      forecast: { run: "2017-05-07T12:00:00Z" },
+    };
+
+    const result = await service.query(queryAtmosphereSchema.parse({
+      ...base,
+      limits: { maxPointSteps: 4 },
+    })) as any;
+    expect(result.series).toHaveLength(2);
+    expect(result.series[0].points).toHaveLength(2);
+
+    await expect(service.query(queryAtmosphereSchema.parse({
+      ...base,
+      limits: { maxPointSteps: 3 },
+    }))).rejects.toThrow("exceeding maxPointSteps=3");
   });
 
   it("rejects operational source overrides for archived runs", async () => {
