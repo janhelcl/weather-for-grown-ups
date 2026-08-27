@@ -10,8 +10,17 @@ import type {
   IgraVerificationVariable,
 } from "../schema/igra-verification.js";
 import {
+  accumulateSkillPressureLevels,
+  enumerateNominalTimes,
+  evenlySampleTimes,
+  finalizeSkillStatistics,
+  type ForecastSkillAccumulator,
+} from "./forecast-skill.js";
+import {
   IgraForecastVerificationService,
 } from "./igra-verification.js";
+
+export { enumerateNominalTimes, evenlySampleTimes } from "./forecast-skill.js";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const MAX_RANGE_MS = 366 * DAY_MS;
@@ -61,7 +70,7 @@ export class IgraForecastSkillService {
     const eligible = enumerateNominalTimes(start, end, query.cycleHoursUtc);
     const sampled = evenlySampleTimes(eligible, query.maxValidTimes);
     const evaluations: IgraForecastSkillResult["evaluations"] = [];
-    const accumulators = new Map<string, SkillAccumulator>();
+    const accumulators = new Map<string, ForecastSkillAccumulator>();
     const stations = new Map<string, IgraForecastSkillResult["stations"][number]>();
 
     for (const validTime of sampled) {
@@ -97,7 +106,7 @@ export class IgraForecastSkillService {
               ? {}
               : { elevationM: result.station.elevationM }),
           });
-          accumulateResult(accumulators, result);
+          accumulateSkillPressureLevels(accumulators, result.leadHours, result.pressureLevels);
         } catch (error) {
           if (error instanceof z.ZodError) throw error;
           evaluations.push({
@@ -142,9 +151,7 @@ export class IgraForecastSkillService {
           ? 0
           : successfulEvaluations / evaluations.length,
       },
-      statistics: [...accumulators.values()]
-        .map(finalizeAccumulator)
-        .sort(compareStatistics),
+      statistics: finalizeSkillStatistics(accumulators),
       stations: [...stations.values()].sort((left, right) => left.id.localeCompare(right.id)),
       source: {
         forecastDataset: "gfs",
@@ -156,110 +163,3 @@ export class IgraForecastSkillService {
   }
 }
 
-interface SkillAccumulator {
-  leadHours: number;
-  pressureHpa: number;
-  field: string;
-  deltaKind: "linear" | "circular_degrees";
-  count: number;
-  sum: number;
-  sumAbs: number;
-  sumSquares: number;
-}
-
-function accumulateResult(
-  accumulators: Map<string, SkillAccumulator>,
-  result: IgraForecastVerificationResult,
-): void {
-  for (const pressure of result.pressureLevels) {
-    for (const change of pressure.changes) {
-      const key = [
-        result.leadHours,
-        pressure.pressureHpa,
-        change.field,
-        change.deltaKind,
-      ].join("|");
-      const current = accumulators.get(key) ?? {
-        leadHours: result.leadHours,
-        pressureHpa: pressure.pressureHpa,
-        field: change.field,
-        deltaKind: change.deltaKind,
-        count: 0,
-        sum: 0,
-        sumAbs: 0,
-        sumSquares: 0,
-      };
-      current.count += 1;
-      current.sum += change.delta;
-      current.sumAbs += Math.abs(change.delta);
-      current.sumSquares += change.delta * change.delta;
-      accumulators.set(key, current);
-    }
-  }
-}
-
-function finalizeAccumulator(
-  accumulator: SkillAccumulator,
-): IgraForecastSkillResult["statistics"][number] {
-  return {
-    leadHours: accumulator.leadHours,
-    pressureHpa: accumulator.pressureHpa,
-    field: accumulator.field,
-    deltaKind: accumulator.deltaKind,
-    count: accumulator.count,
-    bias: accumulator.sum / accumulator.count,
-    mae: accumulator.sumAbs / accumulator.count,
-    rmse: Math.sqrt(accumulator.sumSquares / accumulator.count),
-  };
-}
-
-function compareStatistics(
-  left: IgraForecastSkillResult["statistics"][number],
-  right: IgraForecastSkillResult["statistics"][number],
-): number {
-  return left.leadHours - right.leadHours
-    || right.pressureHpa - left.pressureHpa
-    || left.field.localeCompare(right.field);
-}
-
-export function enumerateNominalTimes(
-  start: Date,
-  end: Date,
-  cycleHoursUtc: readonly number[],
-): Date[] {
-  const hours = [...cycleHoursUtc].sort((left, right) => left - right);
-  const day = new Date(Date.UTC(
-    start.getUTCFullYear(),
-    start.getUTCMonth(),
-    start.getUTCDate(),
-  ));
-  const times: Date[] = [];
-
-  for (let cursor = day; cursor <= end; cursor = new Date(cursor.getTime() + DAY_MS)) {
-    for (const hour of hours) {
-      const candidate = new Date(Date.UTC(
-        cursor.getUTCFullYear(),
-        cursor.getUTCMonth(),
-        cursor.getUTCDate(),
-        hour,
-      ));
-      if (candidate >= start && candidate <= end) times.push(candidate);
-    }
-  }
-  return times;
-}
-
-export function evenlySampleTimes(
-  times: readonly Date[],
-  maximum: number,
-): Date[] {
-  if (times.length <= maximum) return [...times];
-  if (maximum === 1) return [times[Math.floor((times.length - 1) / 2)]!];
-
-  const sampled: Date[] = [];
-  for (let index = 0; index < maximum; index += 1) {
-    const sourceIndex = Math.round(index * (times.length - 1) / (maximum - 1));
-    sampled.push(times[sourceIndex]!);
-  }
-  return sampled;
-}
