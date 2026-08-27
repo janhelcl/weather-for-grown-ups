@@ -704,6 +704,12 @@ function datasetDiagnosticQuery(request: DiagnoseAtmosphereRequest, common: Reco
         : { includeMembers: request.ensemble.includeMembers }),
     };
   }
+  if (request.dataset === "ifs") {
+    return {
+      ...common,
+      run: request.forecast?.run ?? "latest",
+    };
+  }
   const { validTime, ...rest } = common;
   return {
     ...rest,
