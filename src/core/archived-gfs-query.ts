@@ -6,6 +6,7 @@ import type { HistoricalGfsVariableId } from "../schema/history.js";
 import { archivedGfsForecastHourSchema } from "../schema/history-forecast.js";
 import type { QueryAtmosphereRequest } from "../schema/unified-api.js";
 import {
+  NCEI_GFS_GRID4_FORECAST_START,
   NceiGfsForecastHistorySource,
   type ArchivedGfsForecastAreaDataSource,
   type ArchivedGfsForecastDataSource,
@@ -350,6 +351,7 @@ export class ArchivedGfsForecastQueryService {
       source: areaSource,
       now: this.now,
       allowNonAnalysisCycle: true,
+      minimumTime: NCEI_GFS_GRID4_FORECAST_START,
     });
     const scalar = (request.selection.fields?.length ?? 0) === 1
       ? { field: request.selection.fields![0] }
@@ -403,6 +405,7 @@ export class ArchivedGfsForecastQueryService {
         source: adapter,
         now: this.now,
         allowNonAnalysisCycle: true,
+        minimumTime: NCEI_GFS_GRID4_FORECAST_START,
       });
       const result = await service.getHistoricalFields({
         latitude: point.latitude,
