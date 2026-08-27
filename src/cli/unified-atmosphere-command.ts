@@ -3,6 +3,11 @@ import {
   UnifiedAtmosphereDiagnosticService,
   UnifiedAtmosphereQueryService,
 } from "../core/unified-atmosphere-api.js";
+import {
+  UnifiedAnalogService,
+  UnifiedDatasetComparisonService,
+  UnifiedForecastVerificationService,
+} from "../core/unified-specialized-api.js";
 import type {
   DiagnoseAtmosphereInput,
   PublicAtmosphericDataset,
@@ -23,6 +28,9 @@ const DEFAULT_UNIFIED_VARIABLES =
 export function registerUnifiedAtmosphereCommands(program: Command): void {
   registerQueryCommand(program);
   registerDiagnoseCommand(program);
+  registerCompareDatasetsCommand(program);
+  registerVerifyCommand(program);
+  registerAnalogsCommand(program);
 }
 
 function registerQueryCommand(program: Command): void {
@@ -97,6 +105,87 @@ function registerDiagnoseCommand(program: Command): void {
     .action(async (options) => {
       const request = buildUnifiedDiagnostic(options);
       const result = await new UnifiedAtmosphereDiagnosticService().diagnose(request);
+      printResult(result, Boolean(options.json));
+    });
+}
+
+function registerCompareDatasetsCommand(program: Command): void {
+  program
+    .command("compare-datasets")
+    .description("Compare aligned atmospheric datasets; currently deterministic GFS against GEFS")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--at <iso>", "Forecast valid time")
+    .requiredOption("--var <id>", "Raw pressure-level variable")
+    .requiredOption("--level <hpa>", "Pressure level in hPa", Number)
+    .option("--run <iso|latest>", "Shared aligned initialization", "latest")
+    .option("--members <list>", "GEFS members (c00,p01..p30)")
+    .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const result = await new UnifiedDatasetComparisonService().compare({
+        datasets: ["gfs", "gefs"],
+        geometry: { type: "point", latitude: options.lat, longitude: options.lon },
+        time: { at: options.at },
+        variable: options.var,
+        pressureLevelHpa: options.level,
+        run: options.run,
+        ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+        ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
+      });
+      printResult(result, Boolean(options.json));
+    });
+}
+
+function registerVerifyCommand(program: Command): void {
+  program
+    .command("verify")
+    .description("Verify an archived GFS forecast against later historical GFS analysis")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--at <iso>", "Historical valid time")
+    .requiredOption("--lead-hours <number>", "Forecast lead in hours (0-192, multiple of 6)", Number)
+    .option("--vars <list>", "Pressure-level variables", DEFAULT_UNIFIED_VARIABLES)
+    .option("--levels <list>", "Pressure levels in hPa", DEFAULT_LEVELS)
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const result = await new UnifiedForecastVerificationService().verify({
+        forecastDataset: "gfs",
+        referenceDataset: "gfs-analysis",
+        geometry: { type: "point", latitude: options.lat, longitude: options.lon },
+        time: { at: options.at },
+        leadHours: options.leadHours,
+        variables: parseStrings(options.vars),
+        pressureLevelsHpa: parseLevels(options.levels),
+      });
+      printResult(result, Boolean(options.json));
+    });
+}
+
+function registerAnalogsCommand(program: Command): void {
+  program
+    .command("analogs")
+    .description("Find historical atmospheric analogs in the local materialized index")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--at <iso>", "Target historical analysis time")
+    .option("--vars <list>", "Pressure-level variables", DEFAULT_UNIFIED_VARIABLES)
+    .option("--levels <list>", "Pressure levels in hPa", DEFAULT_LEVELS)
+    .option("--count <number>", "Number of analogs", Number, 5)
+    .option("--exclude-within-hours <number>", "Exclude candidates near target time", Number, 24)
+    .option("--no-fetch-target", "Do not fetch and materialize the target when missing")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const result = await new UnifiedAnalogService().find({
+        dataset: "gfs-analysis",
+        geometry: { type: "point", latitude: options.lat, longitude: options.lon },
+        time: { at: options.at },
+        variables: parseStrings(options.vars),
+        pressureLevelsHpa: parseLevels(options.levels),
+        count: options.count,
+        excludeWithinHours: options.excludeWithinHours,
+        fetchTargetIfMissing: options.fetchTarget,
+      });
       printResult(result, Boolean(options.json));
     });
 }
