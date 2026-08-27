@@ -8,6 +8,10 @@ describe("GEFS catalog", () => {
     const catalog = getGefsCatalog();
     expect(catalog.model).toBe("gefs_0p50");
     expect(catalog.product).toBe("pgrb2a_0p50");
+    expect(catalog.fieldProducts).toEqual([
+      { product: "pgrb2s_0p25", horizontalGridDegrees: 0.25, maxForecastHour: 240 },
+      { product: "pgrb2a_0p50", horizontalGridDegrees: 0.5, maxForecastHour: 384 },
+    ]);
     expect(catalog.variables.find((value) => value.id === "temperature")?.supportedPressureLevelsHpa).toContain(850);
     expect(catalog.variables.find((value) => value.id === "u_wind")?.supportedPressureLevelsHpa).toContain(300);
     expect(catalog.variables.find((value) => value.id === "dew_point")).toMatchObject({
@@ -27,6 +31,11 @@ describe("GEFS catalog", () => {
       gfsCode: "TCDC",
     });
     expect(catalog.fields.find((value) => value.id === "cape_180mb")?.level.gribLevel).toBe("180-0 mb above ground");
+    expect(catalog.fields.find((value) => value.id === "temperature_2m")).toMatchObject({
+      horizontalGridDegrees: [0.25, 0.5],
+      highResolutionThroughForecastHour: 240,
+    });
+    expect(catalog.fieldSemanticsNote).toContain("pgrb2s 0.25°");
   });
 
   it("exposes implemented GEFS parcel definitions with model-specific dependencies", () => {
