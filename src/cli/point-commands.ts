@@ -438,7 +438,8 @@ export function registerPointCommands(program: Command): void {
   program
     .command("compare-runs")
     .description("Compare one point/valid time across consecutive GFS or GEFS six-hour model cycles")
-    .option("--model <gfs|gefs>", "Atmospheric model family", "gfs")
+    .option("--model <gfs|gefs>", "Legacy atmospheric model selector", "gfs")
+    .option("--dataset <gfs|gefs>", "Unified atmospheric dataset selector")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .option("--anchor <iso|latest|latest_complete>", "Newest run in the comparison; GEFS accepts latest or an explicit cycle", "latest")
@@ -452,7 +453,7 @@ export function registerPointCommands(program: Command): void {
     .option("--cycles <number>", "Number of consecutive six-hour model cycles to compare (2-6)", Number, 3)
     .option("--json", "Output JSON")
     .action(async (options) => {
-      const model = parseAtmosphericModel(options.model);
+      const model = parseAtmosphericModel(options.dataset ?? options.model);
       const service = new AtmosphericRunComparisonService();
 
       if (model === "gfs") {

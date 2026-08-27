@@ -19,6 +19,11 @@ import {
 
 const EXPECTED_COMMANDS = [
   "catalog",
+  "query",
+  "diagnose",
+  "compare-datasets",
+  "verify",
+  "analogs",
   "latest",
   "profile",
   "points",
@@ -74,6 +79,12 @@ describe("CLI program registration", () => {
     expect(program.name()).toBe("wfg");
     expect(program.version()).toBe("0.1.0");
     expect(program.commands).toHaveLength(EXPECTED_COMMANDS.length);
+  });
+
+  it("exposes unified dataset-aware discovery without removing the legacy model selector", () => {
+    const command = createCliProgram().commands.find((candidate) => candidate.name() === "catalog");
+    expect(command?.options.some((option) => option.long === "--dataset")).toBe(true);
+    expect(command?.options.some((option) => option.long === "--model")).toBe(true);
   });
 
   it("keeps canonical shared operations model-selectable without multiplying commands", () => {

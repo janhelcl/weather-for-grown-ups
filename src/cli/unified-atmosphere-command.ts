@@ -1,0 +1,395 @@
+import type { Command } from "commander";
+import {
+  UnifiedAtmosphereDiagnosticService,
+  UnifiedAtmosphereQueryService,
+} from "../core/unified-atmosphere-api.js";
+import {
+  UnifiedAnalogService,
+  UnifiedDatasetComparisonService,
+  UnifiedForecastVerificationService,
+} from "../core/unified-specialized-api.js";
+import type {
+  DiagnoseAtmosphereInput,
+  PublicAtmosphericDataset,
+  QueryAtmosphereInput,
+} from "../schema/unified-api.js";
+import type { PointCoordinate } from "../schema/query.js";
+import {
+  DEFAULT_LEVELS,
+  collectPoint,
+  parseGefsMembers,
+  parseLevels,
+  parseNumbers,
+} from "./shared.js";
+
+const DEFAULT_UNIFIED_VARIABLES =
+  "temperature,relative_humidity,u_wind,v_wind,geopotential_height";
+
+export function registerUnifiedAtmosphereCommands(program: Command): void {
+  registerQueryCommand(program);
+  registerDiagnoseCommand(program);
+  registerCompareDatasetsCommand(program);
+  registerVerifyCommand(program);
+  registerAnalogsCommand(program);
+}
+
+function registerQueryCommand(program: Command): void {
+  program
+    .command("query")
+    .description("Query atmospheric state through dataset × geometry × time × selection")
+    .option("--dataset <gfs|gefs|gfs-analysis>", "Atmospheric dataset", "gfs")
+    .option("--lat <number>", "Point latitude", Number)
+    .option("--lon <number>", "Point longitude", Number)
+    .option("--point <lat,lon>", "Multi-point coordinate; repeat as needed", collectPoint)
+    .option("--start <lat,lon>", "Transect start")
+    .option("--end <lat,lon>", "Transect end")
+    .option("--samples <number>", "Transect sample count", Number)
+    .option("--west <number>", "Area west longitude", Number)
+    .option("--east <number>", "Area east longitude", Number)
+    .option("--south <number>", "Area south latitude", Number)
+    .option("--north <number>", "Area north latitude", Number)
+    .option("--at <iso>", "One atmospheric valid time")
+    .option("--from <iso>", "Inclusive valid-time range start")
+    .option("--to <iso>", "Inclusive valid-time range end")
+    .option("--cycles <list>", "gfs-analysis range only: UTC cycles such as 0,6,12,18")
+    .option("--max-steps <number>", "Maximum time steps", Number)
+    .option("--vars <list>", "Comma-separated pressure-level variables")
+    .option("--levels <list>", "Comma-separated pressure levels in hPa")
+    .option("--fields <list>", "Comma-separated non-isobaric fields")
+    .option("--run <iso|latest|latest_complete>", "Forecast initialization")
+    .option("--source <nomads|s3>", "Operational GFS source override")
+    .option("--members <list>", "GEFS members (c00,p01..p30)")
+    .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
+    .option("--include-members", "Include GEFS member payloads where supported")
+    .option("--percentiles <list>", "Area spatial percentiles, e.g. 10,50,90")
+    .option("--gte <number>", "Area fraction at or above this threshold", Number)
+    .option("--lte <number>", "Area fraction at or below this threshold", Number)
+    .option("--extrema", "Area representative min/max locations")
+    .option("--max-samples <number>", "Multi-point time-series sample guardrail", Number)
+    .option("--max-point-steps <number>", "Point × time-step guardrail", Number)
+    .option("--max-grid-points <number>", "Area grid-point guardrail", Number)
+    .option("--max-member-grid-points <number>", "GEFS area member × grid guardrail", Number)
+    .option("--max-member-samples <number>", "GEFS raw member payload guardrail", Number)
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const request = buildUnifiedQuery(options);
+      const result = await new UnifiedAtmosphereQueryService().query(request);
+      printResult(result, Boolean(options.json));
+    });
+}
+
+function registerDiagnoseCommand(program: Command): void {
+  program
+    .command("diagnose")
+    .description("Derive layer, profile, or parcel meteorology from any atmospheric dataset")
+    .option("--dataset <gfs|gefs|gfs-analysis>", "Atmospheric dataset", "gfs")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--kind <layer|profile|parcel>", "Diagnostic family")
+    .option("--at <iso>", "One atmospheric valid time")
+    .option("--from <iso>", "Inclusive valid-time range start")
+    .option("--to <iso>", "Inclusive valid-time range end")
+    .option("--cycles <list>", "gfs-analysis range only: UTC cycles such as 0,6,12,18")
+    .option("--max-steps <number>", "Maximum time steps", Number)
+    .option("--lower <hpa>", "Layer lower pressure surface", Number)
+    .option("--upper <hpa>", "Layer upper pressure surface", Number)
+    .option("--levels <list>", "Profile/parcel pressure levels in hPa", DEFAULT_LEVELS)
+    .option("--diagnostics <list>", "Layer/profile diagnostic IDs")
+    .option("--parcel <surface_2m|mixed_layer_100hpa|most_unstable_300hpa>", "Parcel definition")
+    .option("--run <iso|latest|latest_complete>", "Forecast initialization")
+    .option("--source <nomads|s3>", "Operational GFS source override")
+    .option("--members <list>", "GEFS members (c00,p01..p30)")
+    .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
+    .option("--include-members", "GEFS instant diagnostics only: include member payloads")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const request = buildUnifiedDiagnostic(options);
+      const result = await new UnifiedAtmosphereDiagnosticService().diagnose(request);
+      printResult(result, Boolean(options.json));
+    });
+}
+
+function registerCompareDatasetsCommand(program: Command): void {
+  program
+    .command("compare-datasets")
+    .description("Compare aligned atmospheric datasets; currently deterministic GFS against GEFS")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--at <iso>", "Forecast valid time")
+    .requiredOption("--var <id>", "Raw pressure-level variable")
+    .requiredOption("--level <hpa>", "Pressure level in hPa", Number)
+    .option("--run <iso|latest>", "Shared aligned initialization", "latest")
+    .option("--members <list>", "GEFS members (c00,p01..p30)")
+    .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const result = await new UnifiedDatasetComparisonService().compare({
+        datasets: ["gfs", "gefs"],
+        geometry: { type: "point", latitude: options.lat, longitude: options.lon },
+        time: { at: options.at },
+        variable: options.var,
+        pressureLevelHpa: options.level,
+        run: options.run,
+        ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+        ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
+      });
+      printResult(result, Boolean(options.json));
+    });
+}
+
+function registerVerifyCommand(program: Command): void {
+  program
+    .command("verify")
+    .description("Verify an archived GFS forecast against later historical GFS analysis")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--at <iso>", "Historical valid time")
+    .requiredOption("--lead-hours <number>", "Forecast lead in hours (0-192, multiple of 6)", Number)
+    .option("--vars <list>", "Pressure-level variables", DEFAULT_UNIFIED_VARIABLES)
+    .option("--levels <list>", "Pressure levels in hPa", DEFAULT_LEVELS)
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const result = await new UnifiedForecastVerificationService().verify({
+        forecastDataset: "gfs",
+        referenceDataset: "gfs-analysis",
+        geometry: { type: "point", latitude: options.lat, longitude: options.lon },
+        time: { at: options.at },
+        leadHours: options.leadHours,
+        variables: parseStrings(options.vars),
+        pressureLevelsHpa: parseLevels(options.levels),
+      });
+      printResult(result, Boolean(options.json));
+    });
+}
+
+function registerAnalogsCommand(program: Command): void {
+  program
+    .command("analogs")
+    .description("Find historical atmospheric analogs in the local materialized index")
+    .requiredOption("--lat <number>", "Latitude", Number)
+    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--at <iso>", "Target historical analysis time")
+    .option("--vars <list>", "Pressure-level variables", DEFAULT_UNIFIED_VARIABLES)
+    .option("--levels <list>", "Pressure levels in hPa", DEFAULT_LEVELS)
+    .option("--count <number>", "Number of analogs", Number, 5)
+    .option("--exclude-within-hours <number>", "Exclude candidates near target time", Number, 24)
+    .option("--no-fetch-target", "Do not fetch and materialize the target when missing")
+    .option("--json", "Output JSON")
+    .action(async (options) => {
+      const result = await new UnifiedAnalogService().find({
+        dataset: "gfs-analysis",
+        geometry: { type: "point", latitude: options.lat, longitude: options.lon },
+        time: { at: options.at },
+        variables: parseStrings(options.vars),
+        pressureLevelsHpa: parseLevels(options.levels),
+        count: options.count,
+        excludeWithinHours: options.excludeWithinHours,
+        fetchTargetIfMissing: options.fetchTarget,
+      });
+      printResult(result, Boolean(options.json));
+    });
+}
+
+export function buildUnifiedQuery(options: Record<string, any>): QueryAtmosphereInput {
+  const dataset = parseDataset(options.dataset);
+  const geometry = parseGeometry(options);
+  const time = parseTime(options);
+  const selection = parseSelection(options);
+
+  return {
+    dataset,
+    geometry,
+    time,
+    selection,
+    ...(dataset === "gfs-analysis" || options.run === undefined
+      ? {}
+      : { forecast: { run: String(options.run) } }),
+    ...(options.source === undefined ? {} : { source: options.source }),
+    ...ensembleInput(options),
+    ...aggregateInput(options),
+    ...limitsInput(options),
+  };
+}
+
+export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAtmosphereInput {
+  const dataset = parseDataset(options.dataset);
+  const time = parseTime(options);
+  const kind = String(options.kind).toLowerCase();
+
+  let diagnostic: DiagnoseAtmosphereInput["diagnostic"];
+  if (kind === "layer") {
+    if (options.lower === undefined || options.upper === undefined || options.diagnostics === undefined) {
+      throw new Error("Layer diagnostics require --lower, --upper and --diagnostics");
+    }
+    diagnostic = {
+      kind: "layer",
+      lowerPressureHpa: options.lower,
+      upperPressureHpa: options.upper,
+      diagnostics: parseStrings(options.diagnostics) as any,
+    };
+  } else if (kind === "profile") {
+    if (options.diagnostics === undefined) {
+      throw new Error("Profile diagnostics require --diagnostics");
+    }
+    diagnostic = {
+      kind: "profile",
+      pressureLevelsHpa: parseLevels(options.levels),
+      diagnostics: parseStrings(options.diagnostics) as any,
+    };
+  } else if (kind === "parcel") {
+    if (options.parcel === undefined) {
+      throw new Error("Parcel diagnostics require --parcel");
+    }
+    diagnostic = {
+      kind: "parcel",
+      pressureLevelsHpa: parseLevels(options.levels),
+      parcel: options.parcel,
+    } as DiagnoseAtmosphereInput["diagnostic"];
+  } else {
+    throw new Error(`Expected --kind layer|profile|parcel, received: ${options.kind}`);
+  }
+
+  return {
+    dataset,
+    geometry: { type: "point", latitude: options.lat, longitude: options.lon },
+    time,
+    diagnostic,
+    ...(dataset === "gfs-analysis" || options.run === undefined
+      ? {}
+      : { forecast: { run: String(options.run) } }),
+    ...(options.source === undefined ? {} : { source: options.source }),
+    ...ensembleInput(options),
+  };
+}
+
+function parseDataset(value: unknown): PublicAtmosphericDataset {
+  const dataset = String(value).trim().toLowerCase();
+  if (dataset === "gfs" || dataset === "gefs" || dataset === "gfs-analysis") return dataset;
+  throw new Error(`Expected --dataset gfs|gefs|gfs-analysis, received: ${value}`);
+}
+
+function parseGeometry(options: Record<string, any>): QueryAtmosphereInput["geometry"] {
+  const modes = [
+    options.lat !== undefined || options.lon !== undefined,
+    options.point !== undefined,
+    options.start !== undefined || options.end !== undefined,
+    options.west !== undefined || options.east !== undefined || options.south !== undefined || options.north !== undefined,
+  ].filter(Boolean).length;
+  if (modes !== 1) {
+    throw new Error("Choose exactly one geometry: --lat/--lon, repeatable --point, --start/--end, or --west/--east/--south/--north");
+  }
+
+  if (options.lat !== undefined || options.lon !== undefined) {
+    if (options.lat === undefined || options.lon === undefined) throw new Error("Point geometry requires both --lat and --lon");
+    return { type: "point", latitude: options.lat, longitude: options.lon };
+  }
+  if (options.point !== undefined) {
+    return { type: "points", points: options.point as PointCoordinate[] };
+  }
+  if (options.start !== undefined || options.end !== undefined) {
+    if (options.start === undefined || options.end === undefined) throw new Error("Transect geometry requires both --start and --end");
+    return {
+      type: "transect",
+      start: parseCoordinate(options.start),
+      end: parseCoordinate(options.end),
+      ...(options.samples === undefined ? {} : { samples: options.samples }),
+    };
+  }
+  for (const key of ["west", "east", "south", "north"]) {
+    if (options[key] === undefined) throw new Error("Area geometry requires --west, --east, --south and --north");
+  }
+  return {
+    type: "area",
+    westLongitude: options.west,
+    eastLongitude: options.east,
+    southLatitude: options.south,
+    northLatitude: options.north,
+  };
+}
+
+function parseTime(options: Record<string, any>): QueryAtmosphereInput["time"] {
+  const hasInstant = options.at !== undefined;
+  const hasRange = options.from !== undefined || options.to !== undefined;
+  if (hasInstant === hasRange) {
+    throw new Error("Choose exactly one time form: --at, or --from plus --to");
+  }
+  if (hasInstant) return { at: String(options.at) };
+  if (options.from === undefined || options.to === undefined) throw new Error("Time range requires both --from and --to");
+  return {
+    from: String(options.from),
+    to: String(options.to),
+    ...(options.cycles === undefined ? {} : { hoursUtc: parseNumbers(options.cycles) as Array<0 | 6 | 12 | 18> }),
+    ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }),
+  };
+}
+
+function parseSelection(options: Record<string, any>): QueryAtmosphereInput["selection"] {
+  const fields = options.fields === undefined ? undefined : parseStrings(options.fields);
+  const explicitPressure = options.vars !== undefined || options.levels !== undefined;
+  if (fields !== undefined && !explicitPressure) return { fields };
+  return {
+    variables: parseStrings(options.vars ?? DEFAULT_UNIFIED_VARIABLES),
+    pressureLevelsHpa: parseLevels(options.levels ?? DEFAULT_LEVELS),
+    ...(fields === undefined ? {} : { fields }),
+  };
+}
+
+function ensembleInput(options: Record<string, any>) {
+  const hasEnsemble = options.members !== undefined
+    || options.quantiles !== undefined
+    || Boolean(options.includeMembers)
+    || options.maxMemberSamples !== undefined;
+  if (!hasEnsemble) return {};
+  return {
+    ensemble: {
+      ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+      ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
+      ...(options.includeMembers ? { includeMembers: true } : {}),
+      ...(options.maxMemberSamples === undefined ? {} : { maxMemberSamples: options.maxMemberSamples }),
+    },
+  };
+}
+
+function aggregateInput(options: Record<string, any>) {
+  const thresholds = [
+    ...(options.gte === undefined ? [] : [{ operator: "gte" as const, value: options.gte }]),
+    ...(options.lte === undefined ? [] : [{ operator: "lte" as const, value: options.lte }]),
+  ];
+  const hasAggregate = options.percentiles !== undefined || thresholds.length > 0 || Boolean(options.extrema);
+  if (!hasAggregate) return {};
+  return {
+    aggregate: {
+      ...(options.percentiles === undefined ? {} : { percentiles: parseNumbers(options.percentiles) }),
+      ...(thresholds.length === 0 ? {} : { thresholds }),
+      ...(options.extrema ? { includeExtremaLocations: true } : {}),
+    },
+  };
+}
+
+function limitsInput(options: Record<string, any>) {
+  const limits = {
+    ...(options.maxSamples === undefined ? {} : { maxSamples: options.maxSamples }),
+    ...(options.maxPointSteps === undefined ? {} : { maxPointSteps: options.maxPointSteps }),
+    ...(options.maxGridPoints === undefined ? {} : { maxGridPoints: options.maxGridPoints }),
+    ...(options.maxMemberGridPoints === undefined
+      ? {}
+      : { maxMemberGridPoints: options.maxMemberGridPoints }),
+  };
+  return Object.keys(limits).length === 0 ? {} : { limits };
+}
+
+function parseCoordinate(value: unknown): PointCoordinate {
+  return collectPoint(String(value), undefined)[0]!;
+}
+
+function parseStrings(value: unknown): string[] {
+  return String(value).split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function printResult(result: unknown, json: boolean): void {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  console.dir(result, { depth: null });
+}

@@ -3,6 +3,7 @@ import { getGfsPressureCatalog } from "../catalog/catalog.js";
 import { getGefsCatalog } from "../catalog/gefs-catalog.js";
 import { searchGefsCatalog } from "../catalog/gefs-search.js";
 import { searchGfsCatalog } from "../catalog/search.js";
+import { searchAtmosphereCatalog } from "../catalog/unified-search.js";
 import {
   catalogSearchResultSchema,
   type CatalogSearchSection,
@@ -13,7 +14,8 @@ export function registerCatalogCommand(program: Command): void {
   program
     .command("catalog")
     .description("Browse or search supported GFS or GEFS variables, diagnostics, parcel definitions, and fields")
-    .option("--model <gfs|gefs>", "Atmospheric model family", "gfs")
+    .option("--model <gfs|gefs>", "Legacy atmospheric model selector", "gfs")
+    .option("--dataset <gfs|gefs|gfs-analysis|all>", "Unified atmospheric dataset selector; all searches across datasets")
     .option("--search <text>", "Search IDs, descriptions, dependencies, outputs, units, GRIB codes, and semantics")
     .option("--sections <list>", "Comma-separated sections: variables,fields,layer_diagnostics,profile_diagnostics,parcel_definitions")
     .option("--classification <raw|derived>", "Restrict matches to raw or derived entries")
@@ -27,6 +29,32 @@ export function registerCatalogCommand(program: Command): void {
         || options.classification !== undefined
         || options.temporal !== undefined
         || options.limit !== undefined;
+
+      if (options.dataset !== undefined) {
+        const dataset = String(options.dataset).trim().toLowerCase();
+        if (!["gfs", "gefs", "gfs-analysis", "all"].includes(dataset)) {
+          throw new Error(`Expected --dataset gfs|gefs|gfs-analysis|all, received: ${options.dataset}`);
+        }
+        const result = searchAtmosphereCatalog({
+          ...(options.search === undefined ? {} : { search: String(options.search) }),
+          ...(dataset === "all" ? {} : { datasets: [dataset as "gfs" | "gefs" | "gfs-analysis"] }),
+          ...(options.sections === undefined ? {} : { sections: parseSections(options.sections) }),
+          ...(options.classification === undefined ? {} : { classification: options.classification }),
+          ...(options.temporal === undefined ? {} : { temporalSemantics: options.temporal }),
+          ...(options.limit === undefined ? {} : { limit: options.limit }),
+        });
+        if (options.json) return console.log(JSON.stringify(result, null, 2));
+        console.log(`Atmospheric catalog; ${result.totalMatches} canonical matches${result.truncated ? `, showing ${result.matches.length}` : ""}`);
+        console.table(result.matches.map((match) => ({
+          section: match.section,
+          id: match.id,
+          classification: match.classification,
+          datasets: match.support.map((item) => item.dataset).join(","),
+          temporal: match.temporalSemantics ?? "",
+          output: match.outputs.map((output) => `${output.field} [${output.unit}]`).join(", "),
+        })));
+        return;
+      }
 
       if (!searchMode) {
         if (model === "gfs") {

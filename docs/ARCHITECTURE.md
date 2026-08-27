@@ -197,17 +197,38 @@ The rest of the codebase is isolated from decoder choice behind a narrow decodin
 
 ## Public surfaces
 
+The preferred public contract now mirrors the core architecture instead of the order in which model-specific features were implemented.
+
+> **One query language for atmospheric state; datasets preserve their semantics.**
+
+Normal access is `dataset × geometry × time × selection`. Public dataset IDs are `gfs`, `gefs`, and `gfs-analysis`; they map to the explicit internal dataset registry. Dataset-native result semantics remain unchanged.
+
 ### CLI
 
-The CLI is operation-oriented. Where registration is unified, forecast operations use `--model gfs|gefs` and preserve model-specific result schemas. Historical analysis currently keeps explicit `history-*` commands while delegating into the same core operation layer.
+The preferred CLI surface is compact:
 
-GEFS also keeps explicit model-native commands where they are clearer or predate the shared dispatcher. In v0.1.0 these include scalar ensemble access, mixed-field bundles, `ensemble-parcel`, and `ensemble-parcel-timeseries`. The shared `diagnostic-timeseries --model gefs` command currently handles layer/profile series, while the explicit parcel-series command exposes the same core parcel time-series capability.
+- `catalog --dataset ...` for cross-dataset discovery;
+- `query` for atmospheric state over point(s), time range, transect, or area where supported;
+- `diagnose` for shared layer/profile/parcel physics;
+- `compare-runs`, `compare-datasets`, `verify`, and `analogs` for composition operations.
+
+Legacy `--model`, `history-*`, and `ensemble-*` commands remain backward-compatible aliases. They continue to delegate to the same dataset-specific services and are not independent implementations.
 
 ### MCP
 
-MCP intentionally keeps explicit model-named wrappers. This gives agents smaller, less ambiguous schemas while delegating to the same core used by CLI.
+The preferred MCP vocabulary is similarly small:
 
-`get_gefs_diagnostic_timeseries` supports layer, profile and parcel diagnostic series even though the CLI currently splits parcel series into `ensemble-parcel-timeseries`.
+- `search_catalog`;
+- `query_atmosphere`;
+- `diagnose_atmosphere`;
+- `compare_runs`;
+- `compare_datasets`;
+- `verify_forecast`;
+- `find_analogs`.
+
+The first three are the normal atmospheric query language. Comparison, verification and analog search remain separate because they are genuine composition operations rather than another geometry/time shape.
+
+Model-native MCP tools remain registered for compatibility and for callers that intentionally want their narrower schemas. The unified adapters validate the common request and then delegate through existing dataset-specific schemas/services, so unsupported combinations fail explicitly rather than being coerced into fake symmetry.
 
 Both MCP transports instantiate the same tool catalog:
 
