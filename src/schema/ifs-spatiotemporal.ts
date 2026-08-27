@@ -17,7 +17,7 @@ const selectionShape = {
 };
 
 function validateSelection(
-  query: { variables?: unknown[]; pressureLevelsHpa?: unknown[]; fields?: unknown[] },
+  query: { variables?: unknown[] | undefined; pressureLevelsHpa?: unknown[] | undefined; fields?: unknown[] | undefined },
   context: z.RefinementCtx,
 ): void {
   const hasVariables = query.variables !== undefined;
