@@ -1,6 +1,6 @@
 # Unified atmospheric API
 
-WFG's public API is organized around a small operation vocabulary and three atmospheric datasets.
+WFG's public API is organized around a small operation vocabulary and four atmospheric datasets.
 
 > **One query language for atmospheric state; datasets preserve their semantics.**
 
@@ -10,9 +10,10 @@ WFG's public API is organized around a small operation vocabulary and three atmo
 | --- | --- | --- | --- |
 | `gfs` | `gfs_0p25` / `gfs_0p50` operational; grid-matched 0.25° GDEX or 0.5° NCEI archive for old explicit runs | forecast | deterministic |
 | `gefs` | `gefs_0p50` model contract; 0.5° pressure/mixed source plus 0.25° selected-field source through f240 | forecast | member-first ensemble |
+| `ifs` | `ifs_0p25` ECMWF Open Data operational forecast | forecast | deterministic |
 | `gfs-analysis` | `gfs_grid4_analysis_0p5` | historical analysis | deterministic analyzed state |
 
-The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a fourth public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently.
+The first IFS implementation supports point geometry at one valid time with canonical pressure variables and selected fields; unsupported IFS geometries/ranges fail explicitly rather than falling through to another dataset. The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a fourth public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently.
 
 ## The four orthogonal query dimensions
 
@@ -298,7 +299,7 @@ Unified state/diagnostic operations return a common envelope:
 `result` remains dataset-native.
 
 - GFS carries deterministic values and forecast metadata; `forecast.grid` selects 0.25° or 0.5° operational data and the matching historical forecast archive while retaining the public `gfs` ID.
-- GEFS carries member-derived distributions and optional members. The stable `gefs_0p50` internal model identity denotes the pressure/profile contract; `result.source.product` and `result.source.horizontalGridDegrees` expose whether an eligible field-only query used `pgrb2s` 0.25° or the `pgrb2a` 0.5° source.
+- GEFS carries member-derived distributions and optional members.\n- IFS carries deterministic 0.25° values with explicit ECMWF run, lead, sampled grid point, product and source provenance. The stable `gefs_0p50` internal model identity denotes the pressure/profile contract; `result.source.product` and `result.source.horizontalGridDegrees` expose whether an eligible field-only query used `pgrb2s` 0.25° or the `pgrb2a` 0.5° source.
 - historical GFS analysis carries deterministic analyzed values and NCEI provenance.
 
 This is deliberate: the API unifies **how the question is expressed**, not the physical meaning of the answer.
