@@ -47,7 +47,7 @@ Nonlinear diagnostics are evaluated on each GEFS member before aggregation. WFG 
 | points | ✅ shared S3 slice | ✅ member slices reused | ✅ bounded serial NCSS points |
 | points time series | ✅ | ✅ | ✅ bounded cycle × point matrix |
 | transect | ✅ shared great-circle geometry | ✅ shared great-circle geometry | ✅ shared great-circle geometry |
-| area summary | ✅ | ✅ | ⏳ requires native NCEI bbox/grid subset |
+| area summary | ✅ NOMADS bbox | ✅ member-first | ✅ native NCEI NCSS bbox |
 | run comparison | ✅ | ✅ | — |
 | scalar ensemble distribution | — | ✅ | — |
 | aligned model comparison | ✅ GFS-vs-GEFS | ✅ GFS-vs-GEFS | ⏳ forecast/analysis comparison remains a history-native verification primitive |
@@ -120,13 +120,13 @@ WFG builds larger queries by composing smaller atmospheric primitives while pres
 
 ### Historical GFS analysis
 
-Historical Grid 4 participates in the same profile, time-series, layer-diagnostic, profile-diagnostic, parcel, multi-point, multi-point-time-series and transect operation boundaries as operational data. Its source adapter preserves exact 00/06/12/18 UTC analysis semantics, 0.5° sampling, NCEI provenance and bounded serial archive access.
+Historical Grid 4 participates in the same profile, time-series, layer-diagnostic, profile-diagnostic, parcel, multi-point, multi-point-time-series, transect and area-summary operation boundaries as operational data. Its source adapter preserves exact 00/06/12/18 UTC analysis semantics, 0.5° sampling, NCEI provenance and bounded serial archive access.
 
 - diagnostic time series compose the same layer/profile/parcel kernels over selected analysis cycles;
 - multi-point requests are bounded to 10 coordinates and intentionally serialize NCEI point access under the NOAA courtesy limiter;
 - multi-point time series bound both analysis steps and the point × step matrix;
 - transects reuse the same great-circle interpolation as GFS/GEFS and delegate samples to the historical multi-point primitive;
-- area statistics remain explicitly unsupported until WFG has a proper NCEI bbox/grid-subset path. It must not simulate an area by issuing thousands of throttled point requests.
+- area statistics use one native NCEI NCSS bbox/grid subset, apply exact vertical-coordinate selection for pressure/height fields, verify the returned vertical coordinate, and reuse the same local spatial distribution kernel as operational GFS.
 
 ### GEFS
 
@@ -179,7 +179,7 @@ Physical NOMADS requests pass through the shared cross-process courtesy limiter.
 
 ### Historical GFS analysis
 
-Historical analysis uses NOAA NCEI Grid 4 through THREDDS/NCSS grid-as-point requests. Archive reads are immutable and cached; cache misses remain serial under the NOAA courtesy limiter. Source and analysis provenance stay attached to every result.
+Historical analysis uses NOAA NCEI Grid 4 through THREDDS/NCSS. Point/profile operations use grid-as-point requests; area summaries use one native bbox/grid subset. Archive reads are immutable and cached; cache misses remain serial under the NOAA courtesy limiter. Pressure/height area queries request an exact vertical coordinate and reject NCSS nearest-level substitution when the returned coordinate does not match. Source and analysis provenance stay attached to every result.
 
 ### GEFS
 
