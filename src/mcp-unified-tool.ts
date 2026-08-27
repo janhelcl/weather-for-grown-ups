@@ -50,7 +50,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("query_atmosphere", {
     title: "Query atmospheric state",
-    description: "Query GFS, GEFS, ECMWF IFS, or historical GFS analysis through one dataset × geometry × time × selection contract. The first IFS slice supports deterministic 0.25° point queries at one valid time with pressure-level variables and selected surface fields. Geometry may be one point, multiple points, a transect, or an area; point geometries also accept time ranges. The result preserves dataset-native semantics: deterministic forecasts remain deterministic, GEFS remains member-first ensemble distributions, and historical analysis keeps analysis-time/NCEI provenance without invented forecast metadata.",
+    description: "Query GFS, GEFS, ECMWF IFS, or historical GFS analysis through one dataset × geometry × time × selection contract. IFS supports deterministic 0.25° point queries and point time ranges, multi-point instant/range sampling, and transects with pressure-level variables and selected surface fields. IFS area statistics and diagnostics remain explicit unsupported boundaries. Geometry may be one point, multiple points, a transect, or an area; point geometries also accept time ranges. The result preserves dataset-native semantics: deterministic forecasts remain deterministic, GEFS remains member-first ensemble distributions, and historical analysis keeps analysis-time/NCEI provenance without invented forecast metadata.",
     inputSchema: queryAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {
