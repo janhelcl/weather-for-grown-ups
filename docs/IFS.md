@@ -7,7 +7,7 @@ WFG exposes ECMWF's deterministic IFS Open Data forecast through the same atmosp
 - public dataset: `ifs`
 - internal dataset: `ifs_0p25`
 - horizontal grid: 0.25°
-- source: ECMWF Open Data, using AWS first with Azure/Google/ECMWF HTTPS mirror failover
+- source: ECMWF Open Data, using AWS first with Google/ECMWF HTTPS mirror failover
 - product: deterministic IFS operational forecast (`oper`, `fc`)
 - cycles: 00/06/12/18 UTC
 - 00/12Z horizon: `f000`–`f360`
