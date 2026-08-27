@@ -98,21 +98,21 @@ WFG does not contain turbine power curves, wake models, availability assumptions
 
 ## Current model support
 
-WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-first **GEFS**, and deterministic **ECMWF IFS 0.25°**. The first IFS slice covers point-in-time pressure profiles and selected surface/near-surface fields through the same unified query contract.
+WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-first **GEFS**, and deterministic **ECMWF IFS 0.25°**. IFS covers point and multi-point state queries, native-cadence point ranges, multi-point time series, and deterministic transects through the same unified query contract.
 
 | Operation | GFS 0.25° / 0.5° | GEFS | IFS 0.25° |
 | --- | --- | --- | --- |
 | Catalog and search | ✅ | ✅ | ✅ |
 | Pressure profiles | ✅ deterministic | ✅ member distributions | ✅ deterministic |
 | Mixed pressure/non-isobaric fields | ✅ | ✅ member-first bundles | ✅ point + instant |
-| Raw and mixed-field time series | ✅ | ✅ | ⏳ |
+| Raw and mixed-field time series | ✅ | ✅ | ✅ deterministic |
 | Layer diagnostics | ✅ | ✅ per member → summarized | ⏳ |
 | Whole-profile diagnostics | ✅ | ✅ per member → structural summaries | ⏳ |
 | Parcel / LCL / LFC / EL / CAPE / CIN | ✅ | ✅ per member → summarized | ⏳ |
 | Diagnostic time series | ✅ layer/profile/parcel | ✅ layer/profile/parcel | ⏳ |
-| Multi-point queries | ✅ | ✅ | ⏳ |
-| Multi-point time series | ✅ | ✅ | ⏳ |
-| Transects | ✅ deterministic | ✅ ensemble-native mixed fields | ⏳ |
+| Multi-point queries | ✅ | ✅ | ✅ |
+| Multi-point time series | ✅ | ✅ | ✅ |
+| Transects | ✅ deterministic | ✅ ensemble-native mixed fields | ✅ deterministic mixed fields |
 | Area statistics | ✅ deterministic | ✅ member-first spatial statistics | ⏳ |
 | Run-to-run comparison | ✅ deterministic deltas | ✅ distribution shifts | ⏳ |
 | Scalar ensemble distribution | — | ✅ | — |
