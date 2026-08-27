@@ -185,6 +185,7 @@ An old forecast keeps `gfs` and selects the historical initialization:
 ```bash
 wfg query \
   --dataset gfs \
+  --grid 0p25 \
   --run 2019-12-24T12:00:00Z \
   --lat 50.08 --lon 14.43 \
   --at 2019-12-26T18:00:00Z \
