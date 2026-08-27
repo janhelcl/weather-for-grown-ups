@@ -541,7 +541,10 @@ function compareNumericShapeAndSemantics(left: any, right: any, path: string): v
 function close(left: number, right: number, path: string, absoluteTolerance: number): void {
   assert(Number.isFinite(left) && Number.isFinite(right), `${path}: non-finite value`);
   const scale = Math.max(1, Math.abs(left), Math.abs(right));
-  const tolerance = Math.max(absoluteTolerance, scale * 1e-7);
+  // Independent NOAA transports can differ by a couple of float32 ULPs
+  // after GRIB subsetting/decoding. Keep the check strict (0.2 ppm relative)
+  // while avoiding false failures on large-magnitude quantities such as height.
+  const tolerance = Math.max(absoluteTolerance, scale * 2e-7);
   assert(
     Math.abs(left - right) <= tolerance,
     `${path}: ${left} != ${right}; delta=${Math.abs(left - right)}, tolerance=${tolerance}`,
