@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
+import {
+  IfsPointsService,
+  IfsPointsTimeSeriesService,
+  IfsTimeSeriesService,
+  IfsTransectService,
+} from "../src/core/ifs-spatiotemporal.js";
 import { latestIfsCycleAtOrBefore } from "../src/core/ifs-time.js";
 
 const validTime = latestIfsCycleAtOrBefore(new Date());
@@ -55,4 +61,84 @@ console.log(JSON.stringify({
   levels: result.levels,
   fields: result.fields,
   source: result.source,
+}, null, 2));
+
+
+const sharedSelection = {
+  variables: ["temperature"] as const,
+  pressureLevelsHpa: [850] as const,
+  fields: ["wind_10m"] as const,
+};
+const runTime = new Date(result.run);
+
+const timeSeries = await new IfsTimeSeriesService().getTimeSeries({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: result.run,
+  startTime: runTime.toISOString(),
+  endTime: result.validTime,
+  variables: [...sharedSelection.variables],
+  pressureLevelsHpa: [...sharedSelection.pressureLevelsHpa],
+  fields: [...sharedSelection.fields],
+});
+assert(timeSeries.series.length >= 1);
+assert.equal(timeSeries.run, result.run);
+assert(timeSeries.series.every((step) => Number.isFinite(step.levels[0]?.temperatureC)));
+assert(timeSeries.series.every((step) =>
+  Number.isFinite(step.fields?.find((field) => field.id === "wind_10m")?.values.windSpeedMs)));
+
+const points = await new IfsPointsService().getPoints({
+  points: [
+    { latitude: 50.08, longitude: 14.43 },
+    { latitude: 49.20, longitude: 16.61 },
+  ],
+  run: result.run,
+  validTime: result.validTime,
+  variables: [...sharedSelection.variables],
+  pressureLevelsHpa: [...sharedSelection.pressureLevelsHpa],
+  fields: [...sharedSelection.fields],
+});
+assert.equal(points.points.length, 2);
+assert.equal(points.run, result.run);
+assert(points.points.every((sample) => Number.isFinite(sample.levels[0]?.temperatureC)));
+
+const pointsTimeSeries = await new IfsPointsTimeSeriesService().getPointsTimeSeries({
+  points: [
+    { latitude: 50.08, longitude: 14.43 },
+    { latitude: 49.20, longitude: 16.61 },
+  ],
+  run: result.run,
+  startTime: runTime.toISOString(),
+  endTime: result.validTime,
+  variables: [...sharedSelection.variables],
+  pressureLevelsHpa: [...sharedSelection.pressureLevelsHpa],
+  fields: [...sharedSelection.fields],
+  maxPointSteps: 20,
+});
+assert(pointsTimeSeries.series.length >= 1);
+assert(pointsTimeSeries.series.every((step) => step.points.length === 2));
+
+const transect = await new IfsTransectService().getTransect({
+  start: { latitude: 49.8, longitude: 14.0 },
+  end: { latitude: 50.3, longitude: 15.0 },
+  run: result.run,
+  validTime: result.validTime,
+  variables: [...sharedSelection.variables],
+  pressureLevelsHpa: [...sharedSelection.pressureLevelsHpa],
+  fields: [...sharedSelection.fields],
+  samples: 3,
+});
+assert.equal(transect.samples.length, 3);
+assert(transect.totalDistanceKm > 0);
+assert.equal(transect.samples[0]?.fraction, 0);
+assert.equal(transect.samples[2]?.fraction, 1);
+
+console.log(JSON.stringify({
+  spatiotemporal: {
+    timeSeriesSteps: timeSeries.series.length,
+    points: points.points.length,
+    pointTimeSeriesSteps: pointsTimeSeries.series.length,
+    transectSamples: transect.samples.length,
+    run: result.run,
+  },
 }, null, 2));
