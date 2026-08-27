@@ -639,7 +639,7 @@ function wrapResult(
 ): UnifiedAtmosphereResult {
   const metadata = publicDatasetMetadata(request.dataset);
   const internalDatasetId = isArchivedGfsForecastResult(result)
-    ? ARCHIVED_GFS_FORECAST_MODEL
+    ? (result as { model: "gfs_0p25_forecast_archive" | "gfs_grid4_forecast_0p5_archive" }).model
     : isOperationalGfsResult(result)
       ? (result as { model: "gfs_0p25" | "gfs_0p50" }).model
       : metadata.internalDatasetId;
@@ -667,5 +667,8 @@ function isArchivedGfsForecastResult(result: unknown): boolean {
   return typeof result === "object"
     && result !== null
     && "model" in result
-    && (result as { model?: unknown }).model === ARCHIVED_GFS_FORECAST_MODEL;
+    && (
+      (result as { model?: unknown }).model === ARCHIVED_GFS_FORECAST_MODEL
+      || (result as { model?: unknown }).model === "gfs_0p25_forecast_archive"
+    );
 }
