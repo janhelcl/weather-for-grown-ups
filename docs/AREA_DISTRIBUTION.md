@@ -1,69 +1,72 @@
 # Rich deterministic GFS area statistics
 
-The deterministic `wfg area --model gfs` / MCP `summarize_gfs_area` surface can add percentiles, threshold fractions and extrema metadata to the bounded min/max/mean summary. These options never return the raw GFS grid.
+Area statistics are part of the normal atmospheric query operation. Use area geometry with `dataset=gfs`; no separate public area tool exists.
 
-GEFS area statistics use different member-first semantics and are documented in [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md).
+The deterministic GFS implementation can add percentiles, threshold fractions and extrema metadata to the bounded min/max/mean summary without returning the raw grid. GEFS uses the same public query shape but preserves member-first spatial semantics.
 
 ## Optional outputs
 
 A caller may request:
 
 - percentiles from 0 to 100;
-- fractions of defined grid cells greater than or equal to (`gte`) or less than or equal to (`lte`) one or more thresholds;
+- fractions of defined grid cells greater than or equal to (`gte`) or less than or equal to (`lte`) thresholds;
 - representative min/max grid coordinates plus the number of cells tied at each extremum.
 
-All calculations use **defined GFS grid cells only** and are unweighted by cell area, matching the basic area mean.
+All calculations use **defined GFS grid cells only** and are unweighted by cell area, matching the basic area mean. Threshold and percentile values use WFG's normalized public units.
 
-Thresholds and percentile/extrema values use WFG's normalized public output unit. A temperature threshold of `15`, for example, means 15 °C rather than 15 K.
-
-Percentiles use linear interpolation over sorted defined grid values with zero-based position `(p / 100) * (n - 1)`. The response labels that method as `linear_interpolation_sorted_defined_grid_points`.
-
-For extrema with ties, WFG returns the first deterministic grid point in local decoder order together with `tiedGridPoints`; it does not imply the extremum is spatially unique.
+Percentiles use linear interpolation over sorted defined grid values with zero-based position `(p / 100) * (n - 1)`. For extrema with ties, WFG returns the first deterministic grid point in local decoder order together with the tie count.
 
 ## CLI
 
 ```bash
-wfg area \
-  --model gfs \
+wfg query \
+  --dataset gfs \
   --west 12 --east 18 \
   --south 48 --north 51 \
-  --valid 2026-08-24T12:00:00Z \
-  --var temperature \
-  --level 850 \
+  --at 2026-08-24T12:00:00Z \
+  --vars temperature \
+  --levels 850 \
   --percentiles 10,50,90 \
   --gte 15 \
   --lte 0 \
-  --extrema-locations \
+  --extrema \
   --json
 ```
 
-`--gte` and `--lte` are repeatable. The same options work for supported raw non-isobaric fields such as `low_cloud_cover_average`, whose vertical and temporal semantics remain explicit.
+The same operation can select one supported raw non-isobaric field instead of one pressure variable/level.
 
 ## MCP
 
-`summarize_gfs_area` accepts the corresponding structured fields, for example:
+Use `query_atmosphere` with `geometry.type="area"` and an `aggregate` object:
 
 ```json
 {
-  "percentiles": [10, 50, 90],
-  "thresholds": [
-    { "operator": "gte", "value": 15 },
-    { "operator": "lte", "value": 0 }
-  ],
-  "includeExtremaLocations": true
+  "dataset": "gfs",
+  "geometry": {
+    "type": "area",
+    "westLongitude": 12,
+    "eastLongitude": 18,
+    "southLatitude": 48,
+    "northLatitude": 51
+  },
+  "time": { "at": "2026-08-24T12:00:00Z" },
+  "selection": {
+    "variables": ["temperature"],
+    "pressureLevelsHpa": [850]
+  },
+  "aggregate": {
+    "percentiles": [10, 50, 90],
+    "thresholds": [
+      { "operator": "gte", "value": 15 },
+      { "operator": "lte", "value": 0 }
+    ],
+    "includeExtremaLocations": true
+  }
 }
 ```
 
-Up to 20 percentiles and 20 thresholds may be requested in one call. Duplicate percentiles are rejected.
-
 ## Execution path
 
-The NOMADS request is geographically cropped first and the `maxGridPoints` guard is checked before any network access.
+The NOMADS request is geographically cropped first and the grid guard is checked before network access. Rich statistics materialize only the already-bounded local values, compute the requested distribution outputs, then discard the grid.
 
-For a basic area summary WFG only needs local summary statistics. When rich statistics are requested, it materializes the already bounded grid values **inside the local calculation**, computes the requested distribution outputs, then discards the grid.
-
-For non-isobaric fields, exact variable/vertical/temporal message selection is performed before statistics are calculated.
-
-Both paths use WFG's decoder abstraction. The npm default is the bundled GRIB2 decoder; native `wgrib2` is an optional backend. The public result and statistical definitions do not depend on which decoder is selected.
-
-The NOMADS cache and shared 11-second courtesy limiter apply in either case.
+For non-isobaric fields, exact variable/vertical/temporal message selection is performed before statistics are calculated. Decoder choice does not change the public contract.
