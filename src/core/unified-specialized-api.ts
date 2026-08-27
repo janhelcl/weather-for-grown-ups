@@ -2,6 +2,7 @@ import { GefsRunComparisonService } from "./gefs-run-comparison.js";
 import { GfsGefsComparisonService } from "./gfs-gefs-comparison.js";
 import { HistoricalIndexService } from "./history-index.js";
 import { HistoricalForecastVerificationService } from "./history-verification.js";
+import { IgraForecastVerificationService } from "./igra-verification.js";
 import { RunComparisonService } from "./run-comparison.js";
 import { gefsRunComparisonQuerySchema } from "../schema/gefs-run-comparison.js";
 import { gfsGefsComparisonQuerySchema } from "../schema/gfs-gefs-comparison.js";
@@ -91,13 +92,33 @@ export class UnifiedDatasetComparisonService {
 
 export class UnifiedForecastVerificationService {
   constructor(
-    private readonly service: Pick<HistoricalForecastVerificationService, "verify"> =
+    private readonly analysisService: Pick<HistoricalForecastVerificationService, "verify"> =
       new HistoricalForecastVerificationService(),
+    private readonly igraService: Pick<IgraForecastVerificationService, "verify"> =
+      new IgraForecastVerificationService(),
   ) {}
 
   async verify(input: VerifyAtmosphericForecastInput): Promise<UnifiedSpecializedResult> {
     const request = verifyAtmosphericForecastSchema.parse(input);
-    const result = await this.service.verify(historicalForecastVerificationQuerySchema.parse({
+
+    if (request.referenceDataset === "igra") {
+      const result = await this.igraService.verify({
+        latitude: request.geometry.latitude,
+        longitude: request.geometry.longitude,
+        validTime: request.time.at,
+        leadHours: request.leadHours,
+        variables: request.variables as any,
+        pressureLevelsHpa: request.pressureLevelsHpa,
+        ...(request.gfsGrid === undefined ? {} : { gfsGrid: request.gfsGrid }),
+        ...(request.stationId === undefined ? {} : { stationId: request.stationId }),
+        ...(request.maxStationDistanceKm === undefined
+          ? {}
+          : { maxStationDistanceKm: request.maxStationDistanceKm }),
+      });
+      return wrap("verify_forecast", ["gfs", "igra"], result);
+    }
+
+    const result = await this.analysisService.verify(historicalForecastVerificationQuerySchema.parse({
       latitude: request.geometry.latitude,
       longitude: request.geometry.longitude,
       validTime: request.time.at,
