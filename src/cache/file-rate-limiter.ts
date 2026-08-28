@@ -12,8 +12,8 @@ export class FileRateLimiter {
 
   constructor(
     rootDir: string,
-    cooldownMs = DEFAULT_NOMADS_COOLDOWN_MS,
-    staleLockMs = DEFAULT_STALE_LOCK_MS,
+    cooldownMs: number = DEFAULT_NOMADS_COOLDOWN_MS,
+    staleLockMs: number = DEFAULT_STALE_LOCK_MS,
   ) {
     this.delegate = new FileAccessPolicy(rootDir, {
       ...UPSTREAM_ACCESS_POLICIES.nomads,
