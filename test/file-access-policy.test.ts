@@ -103,6 +103,37 @@ describe("FileAccessPolicy", () => {
     expect(maxActive).toBe(2);
   });
 
+  it("heartbeats long-running slots so they are not mistaken for stale locks", async () => {
+    const definition = {
+      id: "heartbeat-test",
+      maxConcurrency: 1,
+      minIntervalMs: 0,
+      staleLockMs: 50,
+    };
+    const first = new FileAccessPolicy(rootDir, definition, 5);
+    const second = new FileAccessPolicy(rootDir, definition, 5);
+    let active = 0;
+    let maxActive = 0;
+
+    const firstRun = first.run(async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await delay(160);
+      active -= 1;
+    });
+
+    await delay(80);
+    const secondRun = second.run(async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await delay(10);
+      active -= 1;
+    });
+
+    await Promise.all([firstRun, secondRun]);
+    expect(maxActive).toBe(1);
+  });
+
   it("turns the legacy cooldown override into a serial interval policy only when requested", () => {
     expect(withLegacyCooldown(UPSTREAM_ACCESS_POLICIES.gdex, undefined))
       .toBe(UPSTREAM_ACCESS_POLICIES.gdex);
