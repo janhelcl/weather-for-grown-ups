@@ -189,8 +189,8 @@ describe("IFS run comparison", () => {
       concurrency: 1,
     });
     const missing = await missingService.compareRuns({
-      latitude: 50,
-      longitude: 14,
+      latitude: requestedPoint.latitude,
+      longitude: requestedPoint.longitude,
       anchorRun: anchorRun.toISOString(),
       validTime,
       fields: ["temperature_2m"],
@@ -231,8 +231,8 @@ describe("IFS run comparison", () => {
       concurrency: 1,
     });
     const temporal = await temporalService.compareRuns({
-      latitude: 50,
-      longitude: 14,
+      latitude: requestedPoint.latitude,
+      longitude: requestedPoint.longitude,
       anchorRun: anchorRun.toISOString(),
       validTime,
       fields: ["temperature_2m"],
