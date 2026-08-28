@@ -173,6 +173,6 @@ IFS bbox aggregation reuses WFG's deterministic spatial-distribution kernel over
 
 Run comparison evaluates consecutive six-hour ECMWF initialization cycles at one fixed valid time. Runs are returned oldest to newest and every numeric delta is `newer - older`. Directional fields use shortest circular degree deltas. Non-isobaric fields are compared only when their vertical and temporal semantics match; for example, total precipitation accumulated from different initialization times is reported as non-comparable rather than subtracting different accumulation windows. At long lead times, a 06/18Z short run that cannot reach the requested valid time causes an explicit failure instead of being silently skipped.
 
-IFS still does not participate in the specialized aligned GFS-vs-GEFS comparison operation, which has model-pair-specific ensemble semantics rather than being a missing deterministic IFS state capability.
+IFS participates in the specialized aligned GFS-vs-IFS deterministic comparison branch of `compare_datasets`. The separate aligned GFS-vs-GEFS and GEFS-vs-IFS-ENS branches keep their model-pair-specific ensemble semantics rather than flattening all comparisons into one statistical contract.
 
 This keeps the architecture rule intact: **unify operations and physics; preserve model semantics.**
