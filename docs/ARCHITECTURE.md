@@ -195,7 +195,7 @@ Upstream access etiquette is source-specific rather than inherited from NOMADS. 
 
 ### Historical GFS analysis
 
-Historical analysis uses NOAA NCEI Grid 4 through THREDDS/NCSS. Point/profile operations use grid-as-point requests; area summaries use one native bbox/grid subset. Archive reads are immutable and cached; cache misses remain serial under the NOAA courtesy limiter. Pressure/height area queries request an exact vertical coordinate and reject NCSS nearest-level substitution when the returned coordinate does not match. Source and analysis provenance stay attached to every result.
+Historical analysis uses NOAA NCEI Grid 4 through THREDDS/NCSS. Point/profile operations use grid-as-point requests; area summaries use one native bbox/grid subset. Archive reads are immutable and cached; cache misses are bounded by the NCEI provider policy without the NOMADS 11-second delay. Pressure/height area queries request an exact vertical coordinate and reject NCSS nearest-level substitution when the returned coordinate does not match. Source and analysis provenance stay attached to every result.
 
 ### GEFS
 
