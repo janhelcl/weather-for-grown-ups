@@ -67,10 +67,9 @@ export class GefsIfsEnsComparisonService {
     const runIso = run.toISOString();
 
     const gefsHour = gefsForecastHour(run, validTime);
-    const ifsHour = ifsEnsForecastHour(run, validTime);
-    if (gefsHour !== ifsHour) {
-      throw new Error("GEFS/IFS ENS comparison received inconsistent forecast-hour semantics");
-    }
+    // Validate that the same lead is also native to IFS ENS; both helpers compute
+    // the same time difference once their model-specific cadence checks pass.
+    ifsEnsForecastHour(run, validTime);
 
     const includeMembers = query.thresholdGte !== undefined;
     const [gefs, ifsEns] = await Promise.all([
@@ -177,10 +176,8 @@ export class GefsIfsEnsComparisonService {
 
 function parseSharedRun(value: string): Date {
   const gefs = parseGefsRun(value);
-  const ifs = parseIfsRun(value);
-  if (gefs.getTime() !== ifs.getTime()) {
-    throw new Error("GEFS/IFS ENS comparison requires one shared 00/06/12/18 UTC initialization cycle");
-  }
+  // Apply ECMWF's exact-cycle validation too; the timestamp itself is shared.
+  parseIfsRun(value);
   return gefs;
 }
 
