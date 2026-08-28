@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { UPSTREAM_ACCESS_POLICIES } from "./file-access-policy.js";
+import {
+  FileAccessPolicy,
+  UPSTREAM_ACCESS_POLICIES,
+  type UpstreamAccessPolicy,
+} from "./file-access-policy.js";
 import {
   mergeByteRanges,
   parseGribIndex,
@@ -19,6 +23,10 @@ export class GfsS3SubsetCache {
     private readonly rootDir: string,
     private readonly fetchFn: typeof fetch = globalThis.fetch,
     private readonly rangeConcurrency = UPSTREAM_ACCESS_POLICIES.noaaAws.maxConcurrency,
+    private readonly accessPolicy: UpstreamAccessPolicy = new FileAccessPolicy(
+      join(rootDir, "access-state"),
+      UPSTREAM_ACCESS_POLICIES.noaaAws,
+    ),
   ) {}
 
   async fetch(request: ProfileDataRequest): Promise<ProfileSourceFile> {
@@ -85,34 +93,38 @@ export class GfsS3SubsetCache {
       // Immutable index files are fetched once and then reused locally.
     }
 
-    const response = await this.fetchFn(url, {
-      headers: { "user-agent": "weather-for-grown-ups/0.1" },
+    const text = await this.accessPolicy.run(async () => {
+      const response = await this.fetchFn(url, {
+        headers: { "user-agent": "weather-for-grown-ups/0.1" },
+      });
+      if (!response.ok) {
+        throw new Error(`NOAA AWS index request failed: HTTP ${response.status} ${response.statusText}`);
+      }
+      return response.text();
     });
-    if (!response.ok) {
-      throw new Error(`NOAA AWS index request failed: HTTP ${response.status} ${response.statusText}`);
-    }
-    const text = await response.text();
     await writeFile(path, text, "utf8");
     return text;
   }
 
   private async fetchRange(url: string, range: ByteRange): Promise<Uint8Array> {
     const rangeValue = `bytes=${range.start}-${range.end ?? ""}`;
-    const response = await this.fetchFn(url, {
-      headers: {
-        range: rangeValue,
-        "user-agent": "weather-for-grown-ups/0.1",
-      },
-    });
-    if (response.status !== 206) {
-      throw new Error(`NOAA AWS range request failed: HTTP ${response.status} ${response.statusText}`);
-    }
+    return this.accessPolicy.run(async () => {
+      const response = await this.fetchFn(url, {
+        headers: {
+          range: rangeValue,
+          "user-agent": "weather-for-grown-ups/0.1",
+        },
+      });
+      if (response.status !== 206) {
+        throw new Error(`NOAA AWS range request failed: HTTP ${response.status} ${response.statusText}`);
+      }
 
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
-      throw new Error(`NOAA AWS range did not start with a GRIB message (${rangeValue})`);
-    }
-    return bytes;
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
+        throw new Error(`NOAA AWS range did not start with a GRIB message (${rangeValue})`);
+      }
+      return bytes;
+    });
   }
 }
 
