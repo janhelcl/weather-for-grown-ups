@@ -6,6 +6,7 @@ import { IfsOpenDataAccessPolicy } from "./ifs-open-data-access-policy.js";
 import {
   buildIfsOpenDataForecastIndexUrl,
   buildIfsOpenDataForecastUrl,
+  IFS_OPEN_DATA_MIRRORS,
   parseIfsOpenDataIndex,
   runIfsHttpWithRetry,
   selectIfsIndexEntries,
