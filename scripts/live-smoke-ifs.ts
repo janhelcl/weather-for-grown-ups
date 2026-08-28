@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { IfsAreaSummaryService } from "../src/core/ifs-area-summary.js";
+import { IfsEnsAreaSummaryService } from "../src/core/ifs-ens-area-summary.js";
 import { GfsIfsComparisonService } from "../src/core/gfs-ifs-comparison.js";
 import { IfsEnsDiagnosticTimeSeriesService } from "../src/core/ifs-ens-diagnostic-timeseries.js";
 import { IfsEnsDiagnosticsService } from "../src/core/ifs-ens-diagnostics.js";
@@ -360,6 +361,45 @@ console.log(JSON.stringify({
     run: ensDiagnosticTimeSeries.run,
     forecastHours: ensDiagnosticTimeSeries.series.map((step) => step.forecastHour),
     cadence: ensDiagnosticTimeSeries.cadence,
+  },
+}, null, 2));
+
+const ensAreaSummary = await new IfsEnsAreaSummaryService().summarize({
+  westLongitude: 14.0,
+  eastLongitude: 14.25,
+  southLatitude: 49.9,
+  northLatitude: 50.1,
+  run: ens.run,
+  validTime: ens.validTime,
+  variable: "temperature",
+  pressureLevelHpa: 850,
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+  percentiles: [50],
+  thresholds: [{ operator: "gte", value: 0 }],
+  includeExtremaLocations: true,
+  maxGridPoints: 100,
+  maxMemberGridPoints: 200,
+});
+assert.equal(ensAreaSummary.model, "ifs_ens_0p25");
+assert.equal(ensAreaSummary.statistics.mean.memberCount, 2);
+assert(Number.isFinite(ensAreaSummary.statistics.mean.mean));
+assert(Number.isFinite(ensAreaSummary.spatialPercentiles?.[0]?.distribution.mean));
+assert(Number.isFinite(ensAreaSummary.spatialThresholdFractions?.[0]?.distribution.mean));
+assert.equal(
+  ensAreaSummary.methodology,
+  "spatial_statistics_per_member_then_ensemble_distribution",
+);
+assert.equal(ensAreaSummary.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsArea: {
+    run: ensAreaSummary.run,
+    validTime: ensAreaSummary.validTime,
+    memberCount: ensAreaSummary.statistics.mean.memberCount,
+    meanDistribution: ensAreaSummary.statistics.mean,
+    p50Distribution: ensAreaSummary.spatialPercentiles?.[0]?.distribution,
+    thresholdDistribution: ensAreaSummary.spatialThresholdFractions?.[0]?.distribution,
   },
 }, null, 2));
 
