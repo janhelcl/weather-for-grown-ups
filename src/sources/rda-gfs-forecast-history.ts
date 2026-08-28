@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NetCDFReader } from "netcdfjs";
-import type { FileRateLimiter } from "../cache/file-rate-limiter.js";
+import type { UpstreamAccessPolicy } from "../cache/file-access-policy.js";
 import type {
   ArchivedGfsForecastAreaDataSource,
   ArchivedGfsForecastAreaRequest,
@@ -26,7 +26,7 @@ export interface RdaAreaNetcdfReader {
 
 export interface RdaGfsForecastHistorySourceOptions {
   cacheDir: string;
-  limiter: Pick<FileRateLimiter, "run">;
+  limiter: UpstreamAccessPolicy;
   fetchFn?: typeof fetch;
   netcdfReaderFactory?: (data: Uint8Array) => RdaAreaNetcdfReader;
 }
