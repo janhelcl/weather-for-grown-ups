@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { inflateRawSync } from "node:zlib";
@@ -192,7 +192,7 @@ export class NceiIgraSource {
         );
       }
 
-      const tempPath = `${cachePath}.${process.pid}.tmp`;
+      const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
       if (kind === "text") {
         if (result.text === undefined) throw new Error("NOAA IGRA text response was empty");
         await writeFile(tempPath, result.text, "utf8");
