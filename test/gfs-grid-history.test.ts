@@ -97,9 +97,11 @@ describe("unified GFS grid/source vocabulary", () => {
     selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
   };
 
-  it("defaults GFS to 0.25 and accepts explicit 0.5", () => {
-    expect(queryAtmosphereSchema.parse({ ...base, forecast: { run: "latest" } }).forecast?.grid)
-      .toBe("0p25");
+  it("keeps the shared schema grid-neutral while GFS routing defaults to 0.25", () => {
+    const parsed = queryAtmosphereSchema.parse({ ...base, forecast: { run: "latest" } });
+    expect(parsed.forecast).toEqual({ run: "latest" });
+    expect(operationalGfsModelId(parsed.forecast?.grid ?? "0p25")).toBe("gfs_0p25");
+
     expect(queryAtmosphereSchema.parse({
       ...base,
       forecast: { run: "latest", grid: "0p50" },
