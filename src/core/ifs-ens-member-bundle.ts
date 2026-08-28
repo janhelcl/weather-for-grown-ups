@@ -34,7 +34,7 @@ import {
   type IfsEnsLatestRunProvider,
 } from "./ifs-ens-latest-run.js";
 import { IfsProfileService, ifsIndexSelectorsForSelection } from "./ifs-profile.js";
-import { ifsForecastHour, parseIfsRun } from "./ifs-time.js";
+import { ifsEnsForecastHour, parseIfsRun } from "./ifs-time.js";
 
 export const DEFAULT_IFS_ENS_MEMBER_CONCURRENCY = 4;
 
@@ -75,7 +75,7 @@ export class IfsEnsMemberBundleService {
     const run = query.run === "latest"
       ? await this.latestRunProvider.resolveLatestRun(validTime, availabilitySelectors)
       : parseIfsRun(query.run);
-    const forecastHour = ifsForecastHour(run, validTime);
+    const forecastHour = ifsEnsForecastHour(run, validTime);
 
     const samples = await mapConcurrent(members, this.concurrency, async (member): Promise<MemberSample> => {
       const source = new IfsEnsMemberSelectionSource(this.source, ifsEnsMemberNumber(member));
