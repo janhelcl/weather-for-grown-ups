@@ -1,3 +1,6 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { IfsOpenDataAccessPolicy } from "../cache/ifs-open-data-access-policy.js";
 import {
   IfsOpenDataRunProbe,
   type IfsAvailabilityProbe,
@@ -33,6 +36,7 @@ export interface IfsLatestRunResolverOptions {
   probe?: IfsAvailabilityProbe;
   now?: () => Date;
   maxCandidates?: number;
+  cacheDir?: string;
 }
 
 export class IfsLatestRunResolver implements IfsLatestRunProvider {
@@ -41,7 +45,17 @@ export class IfsLatestRunResolver implements IfsLatestRunProvider {
   private readonly maxCandidates: number;
 
   constructor(options: IfsLatestRunResolverOptions = {}) {
-    this.probe = options.probe ?? new IfsOpenDataRunProbe();
+    if (options.probe !== undefined) {
+      this.probe = options.probe;
+    } else {
+      const cacheDir = options.cacheDir
+        ?? process.env.WFG_CACHE_DIR
+        ?? join(homedir(), ".cache", "wfg");
+      this.probe = new IfsOpenDataRunProbe(
+        globalThis.fetch,
+        new IfsOpenDataAccessPolicy(join(cacheDir, "ifs-open-data", "access-state")),
+      );
+    }
     this.now = options.now ?? (() => new Date());
     this.maxCandidates = options.maxCandidates ?? 12;
   }
