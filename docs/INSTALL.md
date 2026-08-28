@@ -14,7 +14,7 @@ Run any CLI operation by putting its arguments after the package name:
 
 ```bash
 npx weather-for-grown-ups catalog --search cloud --json
-npx weather-for-grown-ups profile --lat 50.08 --lon 14.43 --valid 2026-08-24T12:00:00Z --vars temperature,wind --levels 850,700,500 --json
+npx weather-for-grown-ups query --dataset gfs --lat 50.08 --lon 14.43 --at 2026-08-24T12:00:00Z --vars temperature,wind --levels 850,700,500 --json
 ```
 
 The npm package includes its GRIB2 decoder, so `wgrib2` does **not** need to be installed on the host.
@@ -91,7 +91,7 @@ Docker remains useful for pinned/reproducible deployments. The image contains No
 After a tagged image is published to GHCR:
 
 ```bash
-docker run --rm ghcr.io/janhelcl/weather-for-grown-ups:0.1.0 catalog --search cloud --json
+docker run --rm ghcr.io/janhelcl/weather-for-grown-ups:0.2.0 catalog --search cloud --json
 ```
 
 The image entrypoint runs the `wfg` CLI by default, so all normal CLI arguments follow the image name.
@@ -99,7 +99,7 @@ The image entrypoint runs the `wfg` CLI by default, so all normal CLI arguments 
 For the stdio MCP surface:
 
 ```bash
-docker run -i --rm ghcr.io/janhelcl/weather-for-grown-ups:0.1.0 mcp
+docker run -i --rm ghcr.io/janhelcl/weather-for-grown-ups:0.2.0 mcp
 ```
 
 Example stdio MCP client configuration:
@@ -111,7 +111,7 @@ Example stdio MCP client configuration:
     "run",
     "-i",
     "--rm",
-    "ghcr.io/janhelcl/weather-for-grown-ups:0.1.0",
+    "ghcr.io/janhelcl/weather-for-grown-ups:0.2.0",
     "mcp"
   ]
 }
@@ -123,7 +123,7 @@ For Streamable HTTP:
 docker run --rm -p 3000:3000 \
   -e WFG_MCP_HOST=0.0.0.0 \
   -e WFG_MCP_ALLOWED_HOSTS=localhost,127.0.0.1 \
-  ghcr.io/janhelcl/weather-for-grown-ups:0.1.0 mcp-http
+  ghcr.io/janhelcl/weather-for-grown-ups:0.2.0 mcp-http
 ```
 
 ## Publishing
@@ -133,7 +133,7 @@ docker run --rm -p 3000:3000 \
 Tags matching `v*` drive both release surfaces:
 
 - `.github/workflows/release-image.yml` publishes the matching multi-architecture image to GitHub Container Registry.
-- `.github/workflows/release-npm.yml` verifies that the tag exactly matches `package.json` (for example `v0.1.0`), verifies the packed npm payload, and publishes the package to npm.
+- `.github/workflows/release-npm.yml` verifies that the tag exactly matches `package.json` (for example `v0.2.0`), verifies the packed npm payload, and publishes the package to npm.
 
 The npm workflow is set up for npm Trusted Publishing through GitHub Actions OIDC. Configure the package's npm Trusted Publisher with:
 
