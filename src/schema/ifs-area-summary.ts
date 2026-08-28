@@ -99,7 +99,7 @@ export const ifsAreaSummaryResultSchema = z.object({
   model: z.literal("ifs_0p25"),
   run: isoDateTimeSchema,
   validTime: isoDateTimeSchema,
-  forecastHour: z.number().int().min(0).max(360),
+  forecastHour: z.number().int().min(0).max(240),
   bbox: z.object({
     westLongitude: z.number(),
     eastLongitude: z.number(),
