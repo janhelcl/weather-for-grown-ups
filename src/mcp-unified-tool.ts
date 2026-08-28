@@ -76,7 +76,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("compare_runs", {
     title: "Compare forecast runs",
-    description: "Compare consecutive forecast initialization cycles for GFS, GEFS, or ECMWF IFS through one dataset-aware contract. Deterministic GFS and IFS return newer-minus-older changes with circular wind-direction deltas and explicit temporal-window compatibility for fields; GEFS returns shifts between independently summarized member distributions and never treats member labels as trajectories.",
+    description: "Compare forecast initialization cycles for GFS, GEFS, deterministic ECMWF IFS, or ECMWF IFS ENS through one dataset-aware contract. Deterministic GFS and IFS return newer-minus-older changes; GEFS and IFS ENS return shifts between independently summarized ensemble distributions and never treat member labels as trajectories. IFS ENS can compare 6-hourly cycles or use a 12-hour stride for long-range 00/12Z ensemble comparisons.",
     inputSchema: compareAtmosphericRunsSchema,
     outputSchema: unifiedSpecializedResultSchema,
   }, async (query) => {

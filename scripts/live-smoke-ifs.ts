@@ -4,6 +4,7 @@ import { GfsIfsComparisonService } from "../src/core/gfs-ifs-comparison.js";
 import { IfsEnsDiagnosticTimeSeriesService } from "../src/core/ifs-ens-diagnostic-timeseries.js";
 import { IfsEnsDiagnosticsService } from "../src/core/ifs-ens-diagnostics.js";
 import { IfsEnsMemberBundleService } from "../src/core/ifs-ens-member-bundle.js";
+import { IfsEnsRunComparisonService } from "../src/core/ifs-ens-run-comparison.js";
 import { IfsEnsTimeSeriesService } from "../src/core/ifs-ens-timeseries.js";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
 import { IfsDiagnosticsService } from "../src/core/ifs-diagnostics.js";
@@ -271,6 +272,40 @@ console.log(JSON.stringify({
     run: ensDiagnosticTimeSeries.run,
     forecastHours: ensDiagnosticTimeSeries.series.map((step) => step.forecastHour),
     cadence: ensDiagnosticTimeSeries.cadence,
+  },
+}, null, 2));
+
+const ensRunComparison = await new IfsEnsRunComparisonService().compareRuns({
+  latitude: 50.08,
+  longitude: 14.43,
+  anchorRun: ens.run,
+  validTime: ens.validTime,
+  variable: "temperature",
+  pressureLevelHpa: 850,
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+  cycles: 2,
+  cycleStrideHours: 6,
+});
+assert.equal(ensRunComparison.model, "ifs_ens_0p25");
+assert.equal(ensRunComparison.runs.length, 2);
+assert.equal(ensRunComparison.comparisons.length, 1);
+assert.equal(
+  ensRunComparison.comparisons[0]?.interpretation,
+  "distribution_shift_between_model_cycles_not_member_trajectory",
+);
+assert(Number.isFinite(ensRunComparison.comparisons[0]?.mean.delta));
+assert.equal(ensRunComparison.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsRunComparison: {
+    validTime: ensRunComparison.validTime,
+    runs: ensRunComparison.runs.map((snapshot) => ({
+      run: snapshot.run,
+      forecastHour: snapshot.forecastHour,
+      mean: snapshot.summary.mean,
+    })),
+    meanShift: ensRunComparison.comparisons[0]?.mean,
   },
 }, null, 2));
 

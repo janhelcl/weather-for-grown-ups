@@ -75,7 +75,7 @@ function registerQueryCommand(program: Command): void {
     .option("--max-point-steps <number>", "Point × time-step guardrail", Number)
     .option("--max-grid-points <number>", "Area grid-point guardrail", Number)
     .option("--max-member-grid-points <number>", "GEFS area member × grid guardrail", Number)
-    .option("--max-member-samples <number>", "GEFS raw member payload guardrail", Number)
+    .option("--max-member-samples <number>", "Ensemble raw member payload guardrail", Number)
     .option("--json", "Output JSON")
     .action(async (options) => {
       const request = buildUnifiedQuery(options);
@@ -88,7 +88,7 @@ function registerDiagnoseCommand(program: Command): void {
   program
     .command("diagnose")
     .description("Derive layer, profile, or parcel meteorology from any atmospheric dataset")
-    .option("--dataset <gfs|gefs|ifs|gfs-analysis>", "Atmospheric dataset", "gfs")
+    .option("--dataset <gfs|gefs|ifs|ifs-ens|gfs-analysis>", "Atmospheric dataset", "gfs")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--kind <layer|profile|parcel>", "Diagnostic family")
@@ -105,9 +105,9 @@ function registerDiagnoseCommand(program: Command): void {
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--source <nomads|s3>", "Operational GFS source override")
-    .option("--members <list>", "GEFS members (c00,p01..p30)")
-    .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
-    .option("--include-members", "GEFS instant diagnostics only: include member payloads")
+    .option("--members <list>", "Ensemble members: GEFS c00,p01..p30 or IFS ENS p01..p50")
+    .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
+    .option("--include-members", "Ensemble instant diagnostics only: include member payloads")
     .option("--json", "Output JSON")
     .action(async (options) => {
       const request = buildUnifiedDiagnostic(options);
@@ -119,8 +119,8 @@ function registerDiagnoseCommand(program: Command): void {
 function registerCompareRunsCommand(program: Command): void {
   program
     .command("compare-runs")
-    .description("Compare consecutive forecast initialization cycles for GFS, GEFS, or IFS")
-    .option("--dataset <gfs|gefs|ifs>", "Forecast dataset", "gfs")
+    .description("Compare forecast initialization cycles for GFS, GEFS, IFS, or IFS ENS")
+    .option("--dataset <gfs|gefs|ifs|ifs-ens>", "Forecast dataset", "gfs")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--at <iso>", "Forecast valid time")
@@ -130,9 +130,10 @@ function registerCompareRunsCommand(program: Command): void {
     .option("--anchor-run <iso|latest>", "Newest initialization cycle to compare", "latest")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--cycles <number>", "Number of consecutive cycles", Number, 3)
-    .option("--members <list>", "GEFS members (c00,p01..p30)")
-    .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
-    .option("--gte <number>", "GEFS threshold in normalized units", Number)
+    .option("--members <list>", "Ensemble members: GEFS c00,p01..p30 or IFS ENS p01..p50")
+    .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
+    .option("--gte <number>", "Ensemble threshold in normalized units", Number)
+    .option("--cycle-stride-hours <6|12>", "IFS ENS only: initialization-cycle stride", Number)
     .option("--json", "Output JSON")
     .action(async (options) => {
       const selection = parseSelection({
@@ -157,6 +158,9 @@ function registerCompareRunsCommand(program: Command): void {
               },
             }),
         ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
+        ...(options.cycleStrideHours === undefined
+          ? {}
+          : { cycleStrideHours: options.cycleStrideHours }),
       });
       printResult(result, Boolean(options.json));
     });
@@ -376,10 +380,12 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
   };
 }
 
-function parseForecastDataset(value: unknown): "gfs" | "gefs" | "ifs" {
+function parseForecastDataset(value: unknown): "gfs" | "gefs" | "ifs" | "ifs-ens" {
   const dataset = String(value).trim().toLowerCase();
-  if (dataset === "gfs" || dataset === "gefs" || dataset === "ifs") return dataset;
-  throw new Error(`Expected --dataset gfs|gefs|ifs, received: ${value}`);
+  if (dataset === "gfs" || dataset === "gefs" || dataset === "ifs" || dataset === "ifs-ens") {
+    return dataset;
+  }
+  throw new Error(`Expected --dataset gfs|gefs|ifs|ifs-ens, received: ${value}`);
 }
 
 function parseDataset(value: unknown): PublicAtmosphericDataset {

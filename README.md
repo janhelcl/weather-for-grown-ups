@@ -114,7 +114,7 @@ WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-firs
 | Multi-point time series | ✅ | ✅ | ✅ | — |
 | Transects | ✅ deterministic | ✅ ensemble-native mixed fields | ✅ deterministic mixed fields | — |
 | Area statistics | ✅ deterministic | ✅ member-first spatial statistics | ✅ deterministic raw scalar | — |
-| Run-to-run comparison | ✅ deterministic deltas | ✅ distribution shifts | ✅ deterministic deltas | — |
+| Run-to-run comparison | ✅ deterministic deltas | ✅ distribution shifts | ✅ deterministic deltas | ✅ distribution shifts, 6h/12h stride |
 | Scalar ensemble distribution | — | ✅ | — | ✅ 50 perturbations |
 | Aligned GFS-vs-GEFS comparison | ✅ | ✅ | — | — |
 | Aligned GFS-vs-IFS comparison | ✅ deterministic deltas | — | ✅ deterministic deltas | — |

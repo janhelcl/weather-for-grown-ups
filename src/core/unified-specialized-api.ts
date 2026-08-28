@@ -6,6 +6,7 @@ import { HistoricalForecastSkillService } from "./history-skill.js";
 import { HistoricalForecastVerificationService } from "./history-verification.js";
 import { IgraForecastVerificationService } from "./igra-verification.js";
 import { IgraForecastSkillService } from "./igra-skill.js";
+import { IfsEnsRunComparisonService } from "./ifs-ens-run-comparison.js";
 import { IfsRunComparisonService } from "./ifs-run-comparison.js";
 import { RunComparisonService } from "./run-comparison.js";
 import { gefsRunComparisonQuerySchema } from "../schema/gefs-run-comparison.js";
@@ -13,6 +14,7 @@ import { gfsGefsComparisonQuerySchema } from "../schema/gfs-gefs-comparison.js";
 import { gfsIfsComparisonQuerySchema } from "../schema/gfs-ifs-comparison.js";
 import { historicalAnalogQuerySchema } from "../schema/history-index.js";
 import { historicalForecastVerificationQuerySchema } from "../schema/history-verification.js";
+import { ifsEnsRunComparisonQuerySchema } from "../schema/ifs-ens-run-comparison.js";
 import { ifsRunComparisonQuerySchema } from "../schema/ifs-run-comparison.js";
 import { runComparisonQuerySchema } from "../schema/query.js";
 import {
@@ -33,6 +35,7 @@ export class UnifiedRunComparisonService {
     private readonly gfs: Pick<RunComparisonService, "compareRuns"> = new RunComparisonService(),
     private readonly gefs: Pick<GefsRunComparisonService, "compareRuns"> = new GefsRunComparisonService(),
     private readonly ifs: Pick<IfsRunComparisonService, "compareRuns"> = new IfsRunComparisonService(),
+    private readonly ifsEns: Pick<IfsEnsRunComparisonService, "compareRuns"> = new IfsEnsRunComparisonService(),
   ) {}
 
   async compare(input: CompareAtmosphericRunsInput): Promise<UnifiedSpecializedResult> {
@@ -72,7 +75,24 @@ export class UnifiedRunComparisonService {
     }
 
     if (request.ensemble?.includeMembers !== undefined || request.ensemble?.maxMemberSamples !== undefined) {
-      throw new Error("GEFS run comparison returns distribution shifts only; includeMembers/maxMemberSamples are not applicable");
+      throw new Error("Ensemble run comparison returns distribution shifts only; includeMembers/maxMemberSamples are not applicable");
+    }
+
+    if (request.dataset === "ifs-ens") {
+      const result = await this.ifsEns.compareRuns(ifsEnsRunComparisonQuerySchema.parse({
+        latitude: request.geometry.latitude,
+        longitude: request.geometry.longitude,
+        anchorRun: request.anchorRun,
+        validTime: request.time.at,
+        variable: request.selection.variables![0],
+        pressureLevelHpa: request.selection.pressureLevelsHpa![0],
+        ...(request.ensemble?.members === undefined ? {} : { members: request.ensemble.members }),
+        ...(request.ensemble?.quantiles === undefined ? {} : { quantiles: request.ensemble.quantiles }),
+        ...(request.thresholdGte === undefined ? {} : { thresholdGte: request.thresholdGte }),
+        ...(request.cycleStrideHours === undefined ? {} : { cycleStrideHours: request.cycleStrideHours }),
+        cycles: request.cycles,
+      }));
+      return wrap("compare_runs", ["ifs-ens"], result);
     }
 
     const result = await this.gefs.compareRuns(gefsRunComparisonQuerySchema.parse({

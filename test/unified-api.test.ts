@@ -416,7 +416,8 @@ describe("unified specialized operations", () => {
     const gfs = { compareRuns: vi.fn(async (query) => ({ route: "gfs-runs", query })) };
     const gefs = { compareRuns: vi.fn(async (query) => ({ route: "gefs-runs", query })) };
     const ifs = { compareRuns: vi.fn(async (query) => ({ route: "ifs-runs", query })) };
-    const service = new UnifiedRunComparisonService(gfs as any, gefs as any, ifs as any);
+    const ifsEns = { compareRuns: vi.fn(async (query) => ({ route: "ifs-ens-runs", query })) };
+    const service = new UnifiedRunComparisonService(gfs as any, gefs as any, ifs as any, ifsEns as any);
 
     const gfsResult = await service.compare({
       dataset: "gfs",
@@ -456,6 +457,29 @@ describe("unified specialized operations", () => {
       fields: ["wind_10m"],
       cycles: 2,
     }));
+
+    const ifsEnsResult = await service.compare({
+      dataset: "ifs-ens",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      anchorRun: "2026-08-27T12:00:00Z",
+      cycles: 3,
+      cycleStrideHours: 12,
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+      },
+      thresholdGte: 10,
+    });
+    expect((ifsEnsResult.result as any).route).toBe("ifs-ens-runs");
+    expect(ifsEns.compareRuns).toHaveBeenCalledWith(expect.objectContaining({
+      members: ["p01", "p50"],
+      quantiles: [0.1, 0.5, 0.9],
+      thresholdGte: 10,
+      cycleStrideHours: 12,
+      cycles: 3,
+    }));
   });
 
   it("rejects a GFS grid selector on GEFS run comparison", async () => {
@@ -484,7 +508,7 @@ describe("unified specialized operations", () => {
       time: { at: "2026-08-28T12:00:00Z" },
       selection,
       ensemble: { members: ["c00", "p01"] },
-    })).rejects.toThrow("ensemble controls are only valid for gefs");
+    })).rejects.toThrow("ensemble controls are only valid for gefs or ifs-ens run comparison");
   });
 
   it("rejects GEFS run comparison selections outside one raw pressure variable", async () => {
@@ -499,7 +523,7 @@ describe("unified specialized operations", () => {
       time: { at: "2026-08-28T12:00:00Z" },
       selection: { fields: ["temperature_2m"] },
     })).rejects.toThrow(
-      "GEFS run comparison currently requires exactly one raw pressure variable at one pressure level",
+      "Ensemble run comparison currently requires exactly one pressure variable at one pressure level",
     );
 
     await expect(service.compare({
@@ -511,7 +535,7 @@ describe("unified specialized operations", () => {
         pressureLevelsHpa: [850],
       },
     })).rejects.toThrow(
-      "GEFS run comparison currently requires exactly one raw pressure variable at one pressure level",
+      "Ensemble run comparison currently requires exactly one pressure variable at one pressure level",
     );
   });
 
