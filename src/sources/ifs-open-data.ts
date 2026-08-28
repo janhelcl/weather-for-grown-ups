@@ -150,13 +150,37 @@ export class IfsOpenDataRunProbe implements IfsAvailabilityProbe {
 export class IfsEnsOpenDataRunProbe implements IfsAvailabilityProbe {
   constructor(private readonly fetchFn: typeof fetch = globalThis.fetch) {}
 
-  isForecastAvailable(
+  async isForecastAvailable(
     run: Date,
     forecastHour: number,
     selectors: readonly IfsIndexSelector[],
   ): Promise<boolean> {
-    return isIfsProductAvailable(this.fetchFn, run, forecastHour, selectors, "enfo-ef");
+    const sharedRunStatic = selectors.filter(isIfsSharedRunStaticSelector);
+    const perturbationSelectors = selectors.filter((selector) => !isIfsSharedRunStaticSelector(selector));
+
+    if (
+      perturbationSelectors.length > 0
+      && !await isIfsProductAvailable(this.fetchFn, run, forecastHour, perturbationSelectors, "enfo-ef")
+    ) {
+      return false;
+    }
+    if (sharedRunStatic.length > 0) {
+      const deterministicSelectors = sharedRunStatic.map(withoutIfsMemberNumber);
+      if (!await isIfsProductAvailable(this.fetchFn, run, forecastHour, deterministicSelectors, "oper-fc")) {
+        return false;
+      }
+    }
+    return true;
   }
+}
+
+export function isIfsSharedRunStaticSelector(selector: IfsIndexSelector): boolean {
+  return selector.sourceForecastHour === 0;
+}
+
+function withoutIfsMemberNumber(selector: IfsIndexSelector): IfsIndexSelector {
+  const { number: _number, ...rest } = selector;
+  return rest;
 }
 
 async function isIfsProductAvailable(
