@@ -101,7 +101,7 @@ const compareGfsIfsDatasetsSchema = z.object({
   quantiles: z.never().optional(),
 });
 
-const compareGefsIfsEnsDatasetsSchema = z.object({
+export const compareGefsIfsEnsDatasetsSchema = z.object({
   datasets: z.tuple([z.literal("gefs"), z.literal("ifs-ens")]),
   geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
   time: z.object({ at: isoDateTimeSchema }),
