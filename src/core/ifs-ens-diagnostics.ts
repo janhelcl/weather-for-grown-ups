@@ -87,7 +87,7 @@ export class IfsEnsDiagnosticsService {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
     const source = options.source ?? new IfsOpenDataSubsetCache(join(cacheDir, "ifs-open-data"));
     this.profileGetter = options.profileGetter ?? new DefaultIfsEnsMemberProfileGetter(source);
-    this.latestRunProvider = options.latestRunProvider ?? new IfsEnsLatestRunResolver();
+    this.latestRunProvider = options.latestRunProvider ?? new IfsEnsLatestRunResolver({ cacheDir });
     this.concurrency = options.concurrency ?? DEFAULT_IFS_ENS_DIAGNOSTIC_MEMBER_CONCURRENCY;
   }
 
