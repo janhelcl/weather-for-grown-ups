@@ -2,40 +2,40 @@ import * as z from "zod/v4";
 import { LAYER_DIAGNOSTIC_IDS } from "../catalog/layer-diagnostics.js";
 import { PARCEL_DEFINITION_IDS } from "../catalog/parcel-diagnostics.js";
 import { PROFILE_DIAGNOSTIC_IDS } from "../catalog/profile-diagnostics.js";
+import {
+  ATMOSPHERIC_DATASET_CATALOG,
+  ATMOSPHERIC_DATASET_IDS,
+  type AtmosphericDatasetId,
+  type AtmosphericDatasetKind,
+  type AtmosphericDatasetRole,
+} from "../catalog/models.js";
 import { areaThresholdSchema } from "./area-summary.js";
-import { gfsGridWithDefaultSchema } from "./gfs-grid.js";
+import { gfsGridSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 
 export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "gefs", "ifs", "ifs-ens", "gfs-analysis"] as const;
 export const publicAtmosphericDatasetSchema = z.enum(PUBLIC_ATMOSPHERIC_DATASET_IDS);
 export type PublicAtmosphericDataset = z.infer<typeof publicAtmosphericDatasetSchema>;
 
+function datasetMetadata<Id extends AtmosphericDatasetId>(internalDatasetId: Id): {
+  internalDatasetId: Id;
+  role: AtmosphericDatasetRole;
+  kind: AtmosphericDatasetKind;
+} {
+  const dataset = ATMOSPHERIC_DATASET_CATALOG[internalDatasetId];
+  return {
+    internalDatasetId,
+    role: dataset.role,
+    kind: dataset.kind,
+  };
+}
+
 export const PUBLIC_DATASET_METADATA = {
-  gfs: {
-    internalDatasetId: "gfs_0p25",
-    role: "forecast",
-    kind: "deterministic",
-  },
-  gefs: {
-    internalDatasetId: "gefs_0p50",
-    role: "forecast",
-    kind: "ensemble",
-  },
-  ifs: {
-    internalDatasetId: "ifs_0p25",
-    role: "forecast",
-    kind: "deterministic",
-  },
-  "ifs-ens": {
-    internalDatasetId: "ifs_ens_0p25",
-    role: "forecast",
-    kind: "ensemble",
-  },
-  "gfs-analysis": {
-    internalDatasetId: "gfs_grid4_analysis_0p5",
-    role: "analysis",
-    kind: "deterministic",
-  },
+  gfs: datasetMetadata("gfs_0p25"),
+  gefs: datasetMetadata("gefs_0p50"),
+  ifs: datasetMetadata("ifs_0p25"),
+  "ifs-ens": datasetMetadata("ifs_ens_0p25"),
+  "gfs-analysis": datasetMetadata("gfs_grid4_analysis_0p5"),
 } as const;
 
 const pointGeometrySchema = z.object({
@@ -174,7 +174,7 @@ export const atmosphericForecastOptionsSchema = z.object({
   run: z.string().min(1).default("latest").describe(
     "Forecast initialization: latest, latest_complete where supported, or an explicit ISO cycle",
   ),
-  grid: gfsGridWithDefaultSchema.describe("GFS horizontal grid: 0p25 (default) or 0p50; non-GFS datasets use their fixed native grid"),
+  grid: gfsGridSchema.optional().describe("GFS-only horizontal grid override: 0p25 (default when omitted) or 0p50"),
 });
 
 export const atmosphericEnsembleOptionsSchema = z.object({
@@ -262,18 +262,15 @@ export const diagnoseAtmosphereSchema = z.object({
   }
 });
 
+export const UNIFIED_ATMOSPHERE_INTERNAL_DATASET_IDS = [
+  ...ATMOSPHERIC_DATASET_IDS,
+  "gfs_0p25_forecast_archive",
+  "gfs_grid4_forecast_0p5_archive",
+] as const;
+
 export const unifiedAtmosphereResultSchema = z.object({
   dataset: publicAtmosphericDatasetSchema,
-  internalDatasetId: z.enum([
-    "gfs_0p25",
-    "gfs_0p50",
-    "gfs_0p25_forecast_archive",
-    "gefs_0p50",
-    "ifs_0p25",
-    "ifs_ens_0p25",
-    "gfs_grid4_analysis_0p5",
-    "gfs_grid4_forecast_0p5_archive",
-  ]),
+  internalDatasetId: z.enum(UNIFIED_ATMOSPHERE_INTERNAL_DATASET_IDS),
   role: z.enum(["forecast", "analysis"]),
   kind: z.enum(["deterministic", "ensemble"]),
   geometryType: z.enum(["point", "points", "transect", "area"]),
@@ -328,28 +325,29 @@ function validateDatasetModifiers(
   request: any,
   context: z.RefinementCtx,
 ): void {
-  if (request.dataset === "gfs-analysis" && request.forecast !== undefined) {
+  const metadata = publicDatasetMetadata(request.dataset as PublicAtmosphericDataset);
+  if (metadata.role === "analysis" && request.forecast !== undefined) {
     context.addIssue({
       code: "custom",
       path: ["forecast"],
       message: "Historical GFS analysis has no forecast initialization or lead axis",
     });
   }
-  if (request.dataset !== "gfs-analysis" && "from" in request.time && request.time.hoursUtc !== undefined) {
+  if (metadata.role !== "analysis" && "from" in request.time && request.time.hoursUtc !== undefined) {
     context.addIssue({
       code: "custom",
       path: ["time", "hoursUtc"],
       message: "hoursUtc is only valid for gfs-analysis ranges",
     });
   }
-  if (request.dataset !== "gfs" && request.forecast?.grid !== undefined && request.forecast.grid !== "0p25") {
+  if (request.dataset !== "gfs" && request.forecast?.grid !== undefined) {
     context.addIssue({
       code: "custom",
       path: ["forecast", "grid"],
       message: "forecast.grid is only configurable for the gfs dataset",
     });
   }
-  if (request.dataset !== "gefs" && request.dataset !== "ifs-ens" && request.ensemble !== undefined) {
+  if (metadata.kind !== "ensemble" && request.ensemble !== undefined) {
     context.addIssue({
       code: "custom",
       path: ["ensemble"],
@@ -360,7 +358,7 @@ function validateDatasetModifiers(
     context.addIssue({
       code: "custom",
       path: ["source"],
-      message: "source override is only valid for operational gfs",
+      message: "source override is only valid for gfs",
     });
   }
 }
