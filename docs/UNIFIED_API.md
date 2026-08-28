@@ -183,12 +183,12 @@ The compact public vocabulary is:
 | `search_catalog` | Discover canonical fields/diagnostics and dataset support |
 | `query_atmosphere` | Raw/derived atmospheric state over supported geometry and time |
 | `diagnose_atmosphere` | Layer, profile and parcel meteorology |
-| `compare_runs` | Compare consecutive GFS, GEFS, or IFS forecast initialization cycles |
-| `compare_datasets` | Compare aligned datasets: GFS↔GEFS ensemble context or deterministic GFS↔IFS deltas |
+| `compare_runs` | Compare consecutive GFS, GEFS, IFS, or IFS ENS forecast initialization cycles |
+| `compare_datasets` | Compare aligned datasets: GFS↔GEFS context, deterministic GFS↔IFS deltas, or GEFS↔IFS ENS distribution shifts |
 | `verify_forecast` | Compare an archived GFS forecast with later GFS analysis or an IGRA radiosonde |
 | `find_analogs` | Search materialized historical atmospheric analogs |
 
-`compare_datasets` preserves pair-specific semantics under one operation. The default `["gfs","gefs"]` branch places deterministic GFS inside an aligned GEFS member distribution. The `["gfs","ifs"]` branch uses one shared 00/06/12/18 UTC initialization cycle, compares normalized canonical pressure-variable outputs, preserves each model's sampled grid point, and returns IFS-minus-GFS deltas. Wind direction uses the shortest signed circular difference. These deterministic model differences are not verification error or calibrated uncertainty. See [GFS_IFS_COMPARISON.md](GFS_IFS_COMPARISON.md).
+`compare_datasets` preserves pair-specific semantics under one operation. The default `["gfs","gefs"]` branch places deterministic GFS inside an aligned GEFS member distribution. The `["gfs","ifs"]` branch uses one shared 00/06/12/18 UTC initialization cycle, compares normalized canonical pressure-variable outputs, preserves each model's sampled grid point, and returns IFS-minus-GFS deltas. Wind direction uses the shortest signed circular difference. The `["gefs","ifs-ens"]` branch aligns one common cycle and compares independently summarized member-first distributions: mean/spread shifts, requested quantile shifts, and optional differences between raw member threshold fractions. Member labels are never paired across centers. Deterministic model differences and ensemble distribution differences are not verification error or calibrated uncertainty; raw member fractions are not calibrated probabilities. See [GFS_IFS_COMPARISON.md](GFS_IFS_COMPARISON.md) and [GEFS_IFS_ENS_COMPARISON.md](GEFS_IFS_ENS_COMPARISON.md).
 
 `verify_forecast` has two reference semantics. The default `referenceDataset: "gfs-analysis"` preserves the original same-grid analysis-minus-forecast comparison. `referenceDataset: "igra"` uses NOAA IGRA v2.2 radiosonde observations: an explicit `stationId` may be supplied or WFG chooses the nearest station covering the requested year within `maxStationDistanceKm`; the forecast is sampled at the sounding location and only exact observed pressure levels are compared. IGRA therefore appears as a verification reference, not as a `query_atmosphere` dataset.
 
