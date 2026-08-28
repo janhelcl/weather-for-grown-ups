@@ -37,7 +37,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("search_catalog", {
     title: "Search atmospheric datasets and capabilities",
-    description: "Search one canonical catalog across operational GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, and historical GFS analysis. Results use shared variable/field/diagnostic IDs and explicitly list which datasets support each match. IFS ENS exposes the canonical IFS pressure variables and fields as member-first point distributions and native-cadence point time series.",
+    description: "Search one canonical catalog across operational GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, and historical GFS analysis. Results use shared variable/field/diagnostic IDs and explicitly list which datasets support each match. IFS ENS exposes canonical IFS pressure variables and fields as member-first point distributions and native-cadence point time series, plus instant member-first layer/profile/parcel diagnostics.",
     inputSchema: searchAtmosphereCatalogSchema,
     outputSchema: unifiedCatalogResultSchema,
   }, async (query) => {
@@ -63,7 +63,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("diagnose_atmosphere", {
     title: "Derive atmospheric diagnostics",
-    description: "Run shared WFG diagnostic physics through one point/time contract. GFS, GEFS, ECMWF IFS, and historical GFS analysis support layer, whole-profile and parcel diagnostics plus diagnostic time series. IFS ranges preserve native ECMWF output cadence and pin one selection-capable forecast initialization across the range. GEFS diagnostics are calculated independently per member before aggregation; deterministic datasets reuse the same normalized physics kernels.",
+    description: "Run shared WFG diagnostic physics through one point/time contract. GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, and historical GFS analysis support layer, whole-profile and parcel diagnostics plus diagnostic time series. GEFS and IFS ENS diagnostics are calculated independently inside each member/perturbation before aggregation; raw member event fractions are explicitly not calibrated probabilities. IFS ENS ranges pin one initialization, preserve ECMWF's native 3h/6h cadence, and return compact member-first summaries.",
     inputSchema: diagnoseAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {
@@ -76,7 +76,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("compare_runs", {
     title: "Compare forecast runs",
-    description: "Compare consecutive forecast initialization cycles for GFS, GEFS, or ECMWF IFS through one dataset-aware contract. Deterministic GFS and IFS return newer-minus-older changes with circular wind-direction deltas and explicit temporal-window compatibility for fields; GEFS returns shifts between independently summarized member distributions and never treats member labels as trajectories.",
+    description: "Compare forecast initialization cycles for GFS, GEFS, deterministic ECMWF IFS, or ECMWF IFS ENS through one dataset-aware contract. Deterministic GFS and IFS return newer-minus-older changes; GEFS and IFS ENS return shifts between independently summarized ensemble distributions and never treat member labels as trajectories. IFS ENS can compare 6-hourly cycles or use a 12-hour stride for long-range 00/12Z ensemble comparisons.",
     inputSchema: compareAtmosphericRunsSchema,
     outputSchema: unifiedSpecializedResultSchema,
   }, async (query) => {

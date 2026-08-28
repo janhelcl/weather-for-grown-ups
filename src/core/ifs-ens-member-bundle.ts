@@ -2,9 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   IfsOpenDataSubsetCache,
-  type IfsSelectionRequest,
   type IfsSelectionSource,
-  type IfsSubsetFile,
 } from "../cache/ifs-open-data-cache.js";
 import {
   ifsEnsMemberNumber,
@@ -33,6 +31,7 @@ import {
   IfsEnsLatestRunResolver,
   type IfsEnsLatestRunProvider,
 } from "./ifs-ens-latest-run.js";
+import { IfsEnsMemberSelectionSource } from "./ifs-ens-member-source.js";
 import { IfsProfileService, ifsIndexSelectorsForSelection } from "./ifs-profile.js";
 import { ifsEnsForecastHour, parseIfsRun } from "./ifs-time.js";
 
@@ -143,31 +142,6 @@ export class IfsEnsMemberBundleService {
   }
 }
 
-class IfsEnsMemberSelectionSource implements IfsSelectionSource {
-  constructor(
-    private readonly source: IfsSelectionSource,
-    private readonly number: number,
-  ) {}
-
-  fetchSelection(request: IfsSelectionRequest): Promise<IfsSubsetFile> {
-    const sharedRunStatic = request.selectors.every((selector) => selector.sourceForecastHour !== undefined);
-    if (sharedRunStatic) {
-      return this.source.fetchSelection({
-        ...request,
-        product: "oper-fc",
-        selectors: request.selectors.map(({ number: _number, ...selector }) => selector),
-      });
-    }
-    return this.source.fetchSelection({
-      ...request,
-      product: "enfo-ef",
-      selectors: request.selectors.map((selector) => ({
-        ...selector,
-        number: this.number,
-      })),
-    });
-  }
-}
 
 function projectMember(sample: MemberSample, selection: IfsEnsSelection) {
   const pressureValues = [...selection.pressureLevelsHpa]

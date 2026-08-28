@@ -253,13 +253,6 @@ export const diagnoseAtmosphereSchema = z.object({
   source: z.enum(["nomads", "s3", "archive"]).optional().describe("GFS-only source override; archive forces the resolution-matched historical backend"),
 }).superRefine((request, context) => {
   validateDatasetModifiers(request, context);
-  if (request.dataset === "ifs-ens") {
-    context.addIssue({
-      code: "custom",
-      path: ["dataset"],
-      message: "IFS ENS diagnostics are not in the first ensemble slice; query member-first atmospheric distributions with query_atmosphere",
-    });
-  }
   if ("from" in request.time && request.ensemble?.includeMembers === true) {
     context.addIssue({
       code: "custom",

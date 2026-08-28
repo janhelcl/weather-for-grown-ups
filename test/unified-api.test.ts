@@ -416,7 +416,8 @@ describe("unified specialized operations", () => {
     const gfs = { compareRuns: vi.fn(async (query) => ({ route: "gfs-runs", query })) };
     const gefs = { compareRuns: vi.fn(async (query) => ({ route: "gefs-runs", query })) };
     const ifs = { compareRuns: vi.fn(async (query) => ({ route: "ifs-runs", query })) };
-    const service = new UnifiedRunComparisonService(gfs as any, gefs as any, ifs as any);
+    const ifsEns = { compareRuns: vi.fn(async (query) => ({ route: "ifs-ens-runs", query })) };
+    const service = new UnifiedRunComparisonService(gfs as any, gefs as any, ifs as any, ifsEns as any);
 
     const gfsResult = await service.compare({
       dataset: "gfs",
@@ -456,6 +457,29 @@ describe("unified specialized operations", () => {
       fields: ["wind_10m"],
       cycles: 2,
     }));
+
+    const ifsEnsResult = await service.compare({
+      dataset: "ifs-ens",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      anchorRun: "2026-08-27T12:00:00Z",
+      cycles: 3,
+      cycleStrideHours: 12,
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+      },
+      thresholdGte: 10,
+    });
+    expect((ifsEnsResult.result as any).route).toBe("ifs-ens-runs");
+    expect(ifsEns.compareRuns).toHaveBeenCalledWith(expect.objectContaining({
+      members: ["p01", "p50"],
+      quantiles: [0.1, 0.5, 0.9],
+      thresholdGte: 10,
+      cycleStrideHours: 12,
+      cycles: 3,
+    }));
   });
 
   it("rejects a GFS grid selector on GEFS run comparison", async () => {
@@ -484,7 +508,7 @@ describe("unified specialized operations", () => {
       time: { at: "2026-08-28T12:00:00Z" },
       selection,
       ensemble: { members: ["c00", "p01"] },
-    })).rejects.toThrow("ensemble controls are only valid for gefs");
+    })).rejects.toThrow("ensemble controls are only valid for gefs or ifs-ens run comparison");
   });
 
   it("rejects GEFS run comparison selections outside one raw pressure variable", async () => {
@@ -499,7 +523,7 @@ describe("unified specialized operations", () => {
       time: { at: "2026-08-28T12:00:00Z" },
       selection: { fields: ["temperature_2m"] },
     })).rejects.toThrow(
-      "GEFS run comparison currently requires exactly one raw pressure variable at one pressure level",
+      "Ensemble run comparison currently requires exactly one pressure variable at one pressure level",
     );
 
     await expect(service.compare({
@@ -511,7 +535,7 @@ describe("unified specialized operations", () => {
         pressureLevelsHpa: [850],
       },
     })).rejects.toThrow(
-      "GEFS run comparison currently requires exactly one raw pressure variable at one pressure level",
+      "Ensemble run comparison currently requires exactly one pressure variable at one pressure level",
     );
   });
 
@@ -925,11 +949,17 @@ describe("unified diagnostic routing coverage", () => {
     const layer = { getLayerDiagnostics: vi.fn(async () => ({ route: "layer" })) };
     const profile = { getProfileDiagnostics: vi.fn(async () => ({ route: "profile" })) };
     const parcel = { getParcelDiagnostics: vi.fn(async () => ({ route: "parcel" })) };
+    const ifsEns = {
+      getLayerDiagnostics: vi.fn(async () => ({ route: "ifs-ens-layer" })),
+      getProfileDiagnostics: vi.fn(async () => ({ route: "ifs-ens-profile" })),
+      getParcelDiagnostics: vi.fn(async () => ({ route: "ifs-ens-parcel" })),
+    };
     const timeSeries = { getDiagnosticTimeSeries: vi.fn(async () => ({ route: "series" })) };
     const service = new UnifiedAtmosphereDiagnosticService({
       layer: layer as any,
       profile: profile as any,
       parcel: parcel as any,
+      ifsEns: ifsEns as any,
       timeSeries: timeSeries as any,
     });
 
@@ -985,6 +1015,43 @@ describe("unified diagnostic routing coverage", () => {
     })).result).toEqual({ route: "profile" });
 
     expect((await service.diagnose({
+      dataset: "ifs-ens",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+      ensemble: { members: ["p01", "p50"], quantiles: [0.1, 0.9], includeMembers: true },
+    })).result).toEqual({ route: "ifs-ens-layer" });
+
+    expect((await service.diagnose({
+      dataset: "ifs-ens",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [925, 850, 700, 500],
+        diagnostics: ["freezing_level_crossings"],
+      },
+      ensemble: { members: ["p01", "p50"] },
+    })).result).toEqual({ route: "ifs-ens-profile" });
+
+    expect((await service.diagnose({
+      dataset: "ifs-ens",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      diagnostic: {
+        kind: "parcel",
+        pressureLevelsHpa: [925, 850, 700, 500],
+        parcel: "surface_2m",
+      },
+      ensemble: { members: ["p01", "p50"] },
+    })).result).toEqual({ route: "ifs-ens-parcel" });
+
+    expect((await service.diagnose({
       dataset: "gfs-analysis",
       geometry: point,
       time: { at: "2017-05-09T12:00:00Z" },
@@ -1008,11 +1075,24 @@ describe("unified diagnostic routing coverage", () => {
     expect(parcel.getParcelDiagnostics).toHaveBeenCalledWith(expect.objectContaining({
       model: "gfs_grid4_analysis_0p5",
     }));
+    expect(ifsEns.getLayerDiagnostics).toHaveBeenCalledWith(expect.objectContaining({
+      run: "latest",
+      validTime: "2026-08-28T12:00:00Z",
+      members: ["p01", "p50"],
+      quantiles: [0.1, 0.9],
+      includeMembers: true,
+    }));
+    expect(ifsEns.getProfileDiagnostics).toHaveBeenCalledOnce();
+    expect(ifsEns.getParcelDiagnostics).toHaveBeenCalledOnce();
   });
 
   it("routes diagnostic ranges while preserving dataset time semantics", async () => {
     const timeSeries = { getDiagnosticTimeSeries: vi.fn(async (input) => ({ route: input.model })) };
-    const service = new UnifiedAtmosphereDiagnosticService({ timeSeries: timeSeries as any });
+    const ifsEnsTimeSeries = { getDiagnosticTimeSeries: vi.fn(async () => ({ route: "ifs-ens-series" })) };
+    const service = new UnifiedAtmosphereDiagnosticService({
+      timeSeries: timeSeries as any,
+      ifsEnsTimeSeries: ifsEnsTimeSeries as any,
+    });
     const diagnostic = {
       kind: "layer" as const,
       lowerPressureHpa: 850,
@@ -1056,6 +1136,27 @@ describe("unified diagnostic routing coverage", () => {
       diagnostic,
       forecast: { run: "latest" },
     })).result).toEqual({ route: "ifs_0p25" });
+
+    expect((await service.diagnose({
+      dataset: "ifs-ens",
+      geometry: point,
+      time: {
+        from: "2026-08-28T00:00:00Z",
+        to: "2026-08-28T12:00:00Z",
+        maxSteps: 5,
+      },
+      diagnostic,
+      forecast: { run: "latest" },
+      ensemble: { members: ["p01", "p50"], quantiles: [0.1, 0.9] },
+    })).result).toEqual({ route: "ifs-ens-series" });
+    expect(ifsEnsTimeSeries.getDiagnosticTimeSeries).toHaveBeenCalledWith(expect.objectContaining({
+      run: "latest",
+      startTime: "2026-08-28T00:00:00Z",
+      endTime: "2026-08-28T12:00:00Z",
+      members: ["p01", "p50"],
+      quantiles: [0.1, 0.9],
+      maxSteps: 5,
+    }));
 
     expect((await service.diagnose({
       dataset: "gfs-analysis",

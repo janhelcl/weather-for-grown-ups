@@ -1,8 +1,5 @@
 import { type GefsPressureVariableId } from "../catalog/gefs.js";
-import {
-  LAYER_DIAGNOSTIC_CATALOG,
-  expandLayerDiagnosticVariables,
-} from "../catalog/layer-diagnostics.js";
+import { expandLayerDiagnosticVariables } from "../catalog/layer-diagnostics.js";
 import {
   gefsLayerDiagnosticsQuerySchema,
   gefsLayerDiagnosticsResultSchema,
@@ -14,7 +11,7 @@ import type {
   GefsEnsembleProfileResult,
 } from "../schema/gefs-ensemble-profile.js";
 import { fromGefsMemberProfiles } from "./atmospheric-profile.js";
-import { summarizeNumericDistribution } from "./ensemble-statistics.js";
+import { summarizeEnsembleLayerDiagnostics } from "./ensemble-diagnostic-summaries.js";
 import { GefsEnsembleProfileService } from "./gefs-ensemble-profile.js";
 import { deriveLayerDiagnosticsFromLevels } from "./pressure-diagnostics.js";
 
@@ -66,23 +63,10 @@ export class GefsLayerDiagnosticsService {
       };
     });
 
-    const summaries = diagnostics.flatMap((id) =>
-      LAYER_DIAGNOSTIC_CATALOG[id].outputs.map((output) => {
-        const values = derivedMembers.map((member) => {
-          const diagnostic = member.diagnostics.find((candidate) => candidate.id === id);
-          const value = diagnostic?.values[output.field];
-          if (value === undefined) {
-            throw new Error(`GEFS layer diagnostic aggregation is missing ${id}.${output.field} for ${member.member}`);
-          }
-          return value;
-        });
-        return {
-          id,
-          field: output.field,
-          unit: output.unit,
-          distribution: summarizeNumericDistribution(values, profile.selection.quantiles),
-        };
-      }),
+    const aggregate = summarizeEnsembleLayerDiagnostics(
+      diagnostics,
+      derivedMembers,
+      profile.selection.quantiles,
     );
 
     return gefsLayerDiagnosticsResultSchema.parse({
@@ -101,11 +85,8 @@ export class GefsLayerDiagnosticsService {
         members: profile.selection.members,
         quantiles: profile.selection.quantiles,
       },
-      layerDepthGpm: summarizeNumericDistribution(
-        derivedMembers.map((member) => member.layer.depthGpm),
-        profile.selection.quantiles,
-      ),
-      summaries,
+      layerDepthGpm: aggregate.layerDepthGpm,
+      summaries: aggregate.summaries,
       ...(query.includeMembers
         ? {
             members: derivedMembers.map(({ member, cacheHit, layer, diagnostics: memberDiagnostics }) => ({

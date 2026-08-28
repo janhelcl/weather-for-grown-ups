@@ -23,7 +23,7 @@ import {
 } from "./unified-api.js";
 
 export const compareAtmosphericRunsSchema = z.object({
-  dataset: z.enum(["gfs", "gefs", "ifs"]),
+  dataset: z.enum(["gfs", "gefs", "ifs", "ifs-ens"]),
   geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
   time: z.object({ at: isoDateTimeSchema }),
   selection: atmosphericSelectionSchema,
@@ -32,17 +32,33 @@ export const compareAtmosphericRunsSchema = z.object({
   cycles: z.number().int().min(2).max(6).default(3),
   ensemble: atmosphericEnsembleOptionsSchema.optional(),
   thresholdGte: z.number().optional(),
+  cycleStrideHours: z.union([z.literal(6), z.literal(12)]).optional(),
 }).superRefine((request, context) => {
   if (request.dataset !== "gfs" && request.gfsGrid !== undefined) {
     context.addIssue({ code: "custom", path: ["gfsGrid"], message: "gfsGrid is only valid for GFS run comparison" });
   }
-  if (request.dataset !== "gefs" && request.ensemble !== undefined) {
-    context.addIssue({ code: "custom", path: ["ensemble"], message: "ensemble controls are only valid for gefs" });
+  if (request.dataset !== "gefs" && request.dataset !== "ifs-ens" && request.ensemble !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["ensemble"],
+      message: "ensemble controls are only valid for gefs or ifs-ens run comparison",
+    });
   }
-  if (request.dataset !== "gefs" && request.thresholdGte !== undefined) {
-    context.addIssue({ code: "custom", path: ["thresholdGte"], message: "thresholdGte is only valid for gefs run comparison" });
+  if (request.dataset !== "gefs" && request.dataset !== "ifs-ens" && request.thresholdGte !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["thresholdGte"],
+      message: "thresholdGte is only valid for ensemble run comparison",
+    });
   }
-  if (request.dataset === "gefs") {
+  if (request.dataset !== "ifs-ens" && request.cycleStrideHours !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["cycleStrideHours"],
+      message: "cycleStrideHours is currently only configurable for ifs-ens run comparison",
+    });
+  }
+  if (request.dataset === "gefs" || request.dataset === "ifs-ens") {
     const variables = request.selection.variables?.length ?? 0;
     const levels = request.selection.pressureLevelsHpa?.length ?? 0;
     const fields = request.selection.fields?.length ?? 0;
@@ -50,7 +66,7 @@ export const compareAtmosphericRunsSchema = z.object({
       context.addIssue({
         code: "custom",
         path: ["selection"],
-        message: "GEFS run comparison currently requires exactly one raw pressure variable at one pressure level",
+        message: "Ensemble run comparison currently requires exactly one pressure variable at one pressure level",
       });
     }
   }

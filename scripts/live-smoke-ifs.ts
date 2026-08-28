@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { IfsAreaSummaryService } from "../src/core/ifs-area-summary.js";
 import { GfsIfsComparisonService } from "../src/core/gfs-ifs-comparison.js";
+import { IfsEnsDiagnosticTimeSeriesService } from "../src/core/ifs-ens-diagnostic-timeseries.js";
+import { IfsEnsDiagnosticsService } from "../src/core/ifs-ens-diagnostics.js";
 import { IfsEnsMemberBundleService } from "../src/core/ifs-ens-member-bundle.js";
+import { IfsEnsRunComparisonService } from "../src/core/ifs-ens-run-comparison.js";
 import { IfsEnsTimeSeriesService } from "../src/core/ifs-ens-timeseries.js";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
 import { IfsDiagnosticsService } from "../src/core/ifs-diagnostics.js";
@@ -189,6 +192,120 @@ console.log(JSON.stringify({
     forecastHours: ensTimeSeries.series.map((step) => step.forecastHour),
     members: ensTimeSeries.selection.members,
     source: ensTimeSeries.source,
+  },
+}, null, 2));
+
+const ensDiagnostics = new IfsEnsDiagnosticsService();
+const ensLayerDiagnostics = await ensDiagnostics.getLayerDiagnostics({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: ens.run,
+  validTime: ens.validTime,
+  lowerPressureHpa: 850,
+  upperPressureHpa: 500,
+  diagnostics: ["temperature_lapse_rate", "wind_shear"],
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+});
+assert.equal(ensLayerDiagnostics.model, "ifs_ens_0p25");
+assert.equal(ensLayerDiagnostics.selection.members.length, 2);
+assert(ensLayerDiagnostics.summaries.length >= 2);
+assert(ensLayerDiagnostics.summaries.every((summary) =>
+  Number.isFinite(summary.distribution.mean)));
+
+const ensParcelDiagnostics = await ensDiagnostics.getParcelDiagnostics({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: ens.run,
+  validTime: ens.validTime,
+  pressureLevelsHpa: [925, 850, 700, 600, 500, 400, 300],
+  parcel: "surface_2m",
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+});
+assert.equal(ensParcelDiagnostics.model, "ifs_ens_0p25");
+assert.equal(ensParcelDiagnostics.summary.capeJkg.memberCount, 2);
+assert(Number.isFinite(ensParcelDiagnostics.summary.capeJkg.mean));
+assert(Number.isFinite(ensParcelDiagnostics.summary.cinJkg.mean));
+assert.equal(ensParcelDiagnostics.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsDiagnostics: {
+    run: ensLayerDiagnostics.run,
+    validTime: ensLayerDiagnostics.validTime,
+    layer: ensLayerDiagnostics.summaries.map((summary) => ({
+      id: summary.id,
+      field: summary.field,
+      mean: summary.distribution.mean,
+    })),
+    parcel: {
+      capeMeanJkg: ensParcelDiagnostics.summary.capeJkg.mean,
+      cinMeanJkg: ensParcelDiagnostics.summary.cinJkg.mean,
+      positiveCapeMemberFraction: ensParcelDiagnostics.summary.membersWithPositiveCape.fraction,
+    },
+  },
+}, null, 2));
+
+const ensDiagnosticTimeSeries = await new IfsEnsDiagnosticTimeSeriesService().getDiagnosticTimeSeries({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: ens.run,
+  startTime: new Date(ens.run).toISOString(),
+  endTime: new Date(new Date(ens.run).getTime() + 3 * 3_600_000).toISOString(),
+  diagnostic: {
+    kind: "layer",
+    lowerPressureHpa: 850,
+    upperPressureHpa: 500,
+    diagnostics: ["temperature_lapse_rate"],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+});
+assert.deepEqual(ensDiagnosticTimeSeries.series.map((step) => step.forecastHour), [0, 3]);
+assert(ensDiagnosticTimeSeries.series.every((step) => step.kind === "layer"));
+assert(ensDiagnosticTimeSeries.series.every((step) =>
+  step.kind === "layer" && Number.isFinite(step.summaries[0]?.distribution.mean)));
+assert.equal(ensDiagnosticTimeSeries.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsDiagnosticTimeSeries: {
+    run: ensDiagnosticTimeSeries.run,
+    forecastHours: ensDiagnosticTimeSeries.series.map((step) => step.forecastHour),
+    cadence: ensDiagnosticTimeSeries.cadence,
+  },
+}, null, 2));
+
+const ensRunComparison = await new IfsEnsRunComparisonService().compareRuns({
+  latitude: 50.08,
+  longitude: 14.43,
+  anchorRun: ens.run,
+  validTime: ens.validTime,
+  variable: "temperature",
+  pressureLevelHpa: 850,
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+  cycles: 2,
+  cycleStrideHours: 6,
+});
+assert.equal(ensRunComparison.model, "ifs_ens_0p25");
+assert.equal(ensRunComparison.runs.length, 2);
+assert.equal(ensRunComparison.comparisons.length, 1);
+assert.equal(
+  ensRunComparison.comparisons[0]?.interpretation,
+  "distribution_shift_between_model_cycles_not_member_trajectory",
+);
+assert(Number.isFinite(ensRunComparison.comparisons[0]?.mean.delta));
+assert.equal(ensRunComparison.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsRunComparison: {
+    validTime: ensRunComparison.validTime,
+    runs: ensRunComparison.runs.map((snapshot) => ({
+      run: snapshot.run,
+      forecastHour: snapshot.forecastHour,
+      mean: snapshot.summary.mean,
+    })),
+    meanShift: ensRunComparison.comparisons[0]?.mean,
   },
 }, null, 2));
 

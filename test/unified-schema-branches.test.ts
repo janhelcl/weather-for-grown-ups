@@ -281,7 +281,7 @@ describe("unified atmospheric schema capability branches", () => {
       selection: pressureSelection,
     })).toThrow("IFS ENS currently supports point geometry");
 
-    expect(() => diagnoseAtmosphereSchema.parse({
+    expect(diagnoseAtmosphereSchema.parse({
       dataset: "ifs-ens",
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
@@ -290,7 +290,50 @@ describe("unified atmospheric schema capability branches", () => {
         pressureLevelsHpa: [925, 850, 700, 500],
         diagnostics: ["freezing_level_crossings"],
       },
-    })).toThrow("IFS ENS diagnostics are not in the first ensemble slice");
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+        includeMembers: true,
+      },
+    }).dataset).toBe("ifs-ens");
+
+    expect(diagnoseAtmosphereSchema.parse({
+      dataset: "ifs-ens",
+      geometry: point,
+      time: {
+        from: "2026-08-28T00:00:00Z",
+        to: "2026-08-28T12:00:00Z",
+        maxSteps: 5,
+      },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+      },
+    }).dataset).toBe("ifs-ens");
+
+    expect(() => diagnoseAtmosphereSchema.parse({
+      dataset: "ifs-ens",
+      geometry: point,
+      time: {
+        from: "2026-08-28T00:00:00Z",
+        to: "2026-08-28T12:00:00Z",
+      },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [925, 850, 700, 500],
+        diagnostics: ["freezing_level_crossings"],
+      },
+      ensemble: {
+        members: ["p01", "p50"],
+        includeMembers: true,
+      },
+    })).toThrow("Ensemble diagnostic time series return compact member-first summaries");
   });
 
   it("accepts either scalar area selection form and rejects area ranges", () => {
