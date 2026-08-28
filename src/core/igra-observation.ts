@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_NOMADS_COOLDOWN_MS, FileRateLimiter } from "../cache/file-rate-limiter.js";
+import { FileAccessPolicy, UPSTREAM_ACCESS_POLICIES, withLegacyCooldown } from "../cache/file-access-policy.js";
 import type { IgraVerificationVariable } from "../schema/igra-verification.js";
 import type { ProfileLevel } from "./types.js";
 import {
@@ -57,9 +57,9 @@ export class IgraObservationProfileService {
 
   constructor(options: IgraObservationProfileServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
-    const limiter = new FileRateLimiter(
+    const limiter = new FileAccessPolicy(
       join(cacheDir, "state"),
-      options.cooldownMs ?? DEFAULT_NOMADS_COOLDOWN_MS,
+      withLegacyCooldown(UPSTREAM_ACCESS_POLICIES.nceiIgra, options.cooldownMs),
     );
     this.source = options.source ?? new NceiIgraSource({
       cacheDir: join(cacheDir, "igra"),
