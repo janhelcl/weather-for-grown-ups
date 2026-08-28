@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { IfsAreaSummaryService } from "../src/core/ifs-area-summary.js";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
 import { IfsDiagnosticsService } from "../src/core/ifs-diagnostics.js";
+import { IfsRunComparisonService } from "../src/core/ifs-run-comparison.js";
 import { IfsDiagnosticTimeSeriesService } from "../src/core/ifs-diagnostic-timeseries.js";
 import {
   IfsPointsService,
@@ -234,6 +236,43 @@ assert(profileDiagnostics.levels.every((level) =>
 assert(profileDiagnostics.diagnostics.some((diagnostic) => diagnostic.id === "freezing_level_crossings"));
 assert(profileDiagnostics.diagnostics.some((diagnostic) => diagnostic.id === "temperature_inversion_layers"));
 
+const areaSummary = await new IfsAreaSummaryService().summarize({
+  westLongitude: 14.0,
+  eastLongitude: 14.5,
+  southLatitude: 49.75,
+  northLatitude: 50.25,
+  run: result.run,
+  validTime: result.validTime,
+  variable: "temperature",
+  pressureLevelHpa: 850,
+  percentiles: [10, 50, 90],
+  thresholds: [{ operator: "gte", value: 0 }],
+  includeExtremaLocations: true,
+  maxGridPoints: 100,
+});
+assert.equal(areaSummary.model, "ifs_0p25");
+assert(areaSummary.statistics.definedGridPoints > 0);
+assert(Number.isFinite(areaSummary.statistics.mean));
+assert.equal(areaSummary.distribution?.percentiles?.length, 3);
+assert(areaSummary.distribution?.extrema !== undefined);
+
+const runComparison = await new IfsRunComparisonService().compareRuns({
+  latitude: 50.08,
+  longitude: 14.43,
+  anchorRun: result.run,
+  validTime: result.validTime,
+  variables: ["temperature", "wind"],
+  pressureLevelsHpa: [850],
+  fields: ["wind_10m"],
+  cycles: 2,
+});
+assert.equal(runComparison.model, "ifs_0p25");
+assert.equal(runComparison.runs.length, 2);
+assert.equal(runComparison.comparisons.length, 1);
+assert(runComparison.comparisons[0]?.pressureLevels[0]?.changes.length > 0);
+assert(runComparison.comparisons[0]?.fields.some((field) =>
+  field.id === "wind_10m" && field.comparable && field.changes.length > 0));
+
 console.log(JSON.stringify({
   diagnostics: {
     layer: layerDiagnostics.diagnostics.map((diagnostic) => diagnostic.id),
@@ -251,6 +290,18 @@ console.log(JSON.stringify({
       cinJkg: parcelDiagnostics.parcel.cinJkg,
     },
     sampledPressureLevelsHpa: profileDiagnostics.sampledPressureLevelsHpa,
+    area: {
+      definedGridPoints: areaSummary.statistics.definedGridPoints,
+      mean: areaSummary.statistics.mean,
+      p50: areaSummary.distribution?.percentiles?.find((item) => item.percentile === 50)?.value,
+    },
+    runComparison: {
+      runs: runComparison.runs.map((snapshot) => ({
+        run: snapshot.run,
+        forecastHour: snapshot.forecastHour,
+      })),
+      transitions: runComparison.comparisons.length,
+    },
     run: result.run,
   },
 }, null, 2));
