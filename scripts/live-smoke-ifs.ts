@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { IfsAreaSummaryService } from "../src/core/ifs-area-summary.js";
 import { GfsIfsComparisonService } from "../src/core/gfs-ifs-comparison.js";
 import { IfsEnsMemberBundleService } from "../src/core/ifs-ens-member-bundle.js";
+import { IfsEnsTimeSeriesService } from "../src/core/ifs-ens-timeseries.js";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
 import { IfsDiagnosticsService } from "../src/core/ifs-diagnostics.js";
 import { IfsRunComparisonService } from "../src/core/ifs-run-comparison.js";
@@ -118,6 +119,37 @@ console.log(JSON.stringify({
     pressureSummaries: ens.pressureSummaries,
     fieldSummaries: ens.fieldSummaries,
     source: ens.source,
+  },
+}, null, 2));
+
+const ensRun = new Date(ens.run);
+const ensTimeSeries = await new IfsEnsTimeSeriesService().getTimeSeries({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: ens.run,
+  startTime: ensRun.toISOString(),
+  endTime: new Date(ensRun.getTime() + 3 * 3_600_000).toISOString(),
+  selection: {
+    variables: ["temperature", "wind"],
+    pressureLevelsHpa: [850],
+    fields: ["wind_10m"],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+});
+assert.equal(ensTimeSeries.model, "ifs_ens_0p25");
+assert.equal(ensTimeSeries.run, ens.run);
+assert.deepEqual(ensTimeSeries.series.map((step) => step.forecastHour), [0, 3]);
+assert(ensTimeSeries.series.every((step) => step.pressureSummaries.length === 2));
+assert(ensTimeSeries.series.every((step) => step.fieldSummaries.length === 1));
+assert.equal(ensTimeSeries.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsTimeSeries: {
+    run: ensTimeSeries.run,
+    forecastHours: ensTimeSeries.series.map((step) => step.forecastHour),
+    members: ensTimeSeries.selection.members,
+    source: ensTimeSeries.source,
   },
 }, null, 2));
 
