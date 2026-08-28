@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NetCDFReader } from "netcdfjs";
@@ -129,7 +129,7 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
         );
       }
 
-      const tempPath = `${cachePath}.${process.pid}.tmp`;
+      const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
       await writeFile(tempPath, csv, "utf8");
       await rename(tempPath, cachePath);
       return { csv, dataset, cacheHit: false };
@@ -195,7 +195,7 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
         );
       }
 
-      const tempPath = `${cachePath}.${process.pid}.tmp`;
+      const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
       await writeFile(tempPath, result.csv, "utf8");
       await rename(tempPath, cachePath);
       return { csv: result.csv, dataset, cacheHit: false };
