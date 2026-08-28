@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  IfsEnsOpenDataRunProbe,
   IfsOpenDataRunProbe,
+  buildIfsEnsOpenDataForecastIndexUrl,
+  buildIfsEnsOpenDataForecastUrl,
   buildIfsOpenDataForecastIndexUrl,
   buildIfsOpenDataForecastUrl,
   parseIfsOpenDataIndex,
@@ -16,6 +19,15 @@ describe("ECMWF IFS Open Data source", () => {
     );
     expect(buildIfsOpenDataForecastIndexUrl(run, 150)).toBe(
       "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260827/12z/ifs/0p25/oper/20260827120000-150h-oper-fc.index",
+    );
+  });
+
+  it("builds current 0.25 degree perturbed-ensemble paths", () => {
+    expect(buildIfsEnsOpenDataForecastUrl(run, 6)).toBe(
+      "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260827/12z/ifs/0p25/enfo/20260827120000-6h-enfo-ef.grib2",
+    );
+    expect(buildIfsEnsOpenDataForecastIndexUrl(run, 150)).toBe(
+      "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260827/12z/ifs/0p25/enfo/20260827120000-150h-enfo-ef.index",
     );
   });
 
@@ -36,6 +48,53 @@ describe("ECMWF IFS Open Data source", () => {
     expect(() => selectIfsIndexEntries(entries, [
       { key: "wind@850", param: "u", levtype: "pl", levelist: 850 },
     ])).toThrow("missing requested fields");
+  });
+
+  it("selects a specific perturbed member from a shared ENS index", () => {
+    const text = [
+      '{"date":"20260827","time":"1200","step":"6","levtype":"pl","levelist":"850","param":"t","number":"1","_offset":0,"_length":100}',
+      '{"date":"20260827","time":"1200","step":"6","levtype":"pl","levelist":"850","param":"t","number":"2","_offset":100,"_length":110}',
+    ].join("\n");
+    const entries = parseIfsOpenDataIndex(text);
+    expect(selectIfsIndexEntries(entries, [
+      { key: "temperature@850#p02", param: "t", levtype: "pl", levelist: 850, number: 2 },
+    ])).toMatchObject([
+      { offset: 100, length: 110, var: "t", keys: { number: "2" } },
+    ]);
+  });
+
+  it("resolves shared ENS run-static orography from oper without a perturbation number", async () => {
+    const fetchFn = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/enfo/")) {
+        return new Response(
+          '{"date":"20260827","time":"1200","step":"0","levtype":"pl","levelist":"850","param":"t","number":"2","_offset":0,"_length":10}',
+          { status: 200 },
+        );
+      }
+      if (url.includes("/oper/")) {
+        return new Response(
+          '{"date":"20260827","time":"1200","step":"0","levtype":"sfc","param":"z","_offset":0,"_length":10}',
+          { status: 200 },
+        );
+      }
+      return new Response("", { status: 404 });
+    }) as typeof fetch;
+    const probe = new IfsEnsOpenDataRunProbe(fetchFn);
+
+    await expect(probe.isForecastAvailable(run, 0, [
+      { key: "temperature@850#p02", param: "t", levtype: "pl", levelist: 850, number: 2 },
+      {
+        key: "surface_geopotential_height#p02",
+        param: "z",
+        levtype: "sfc",
+        number: 2,
+        sourceForecastHour: 0,
+      },
+    ])).resolves.toBe(true);
+
+    expect(fetchFn.mock.calls.some(([input]) => String(input).includes("/enfo/"))).toBe(true);
+    expect(fetchFn.mock.calls.some(([input]) => String(input).includes("/oper/"))).toBe(true);
   });
 
   it("retries transient throttling before resolving availability", async () => {

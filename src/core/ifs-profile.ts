@@ -60,6 +60,31 @@ export interface IfsProfileServiceOptions {
   latestRunProvider?: IfsLatestRunProvider;
 }
 
+export interface IfsProfileSampleOptions {
+  forecastHourResolver?: (run: Date, validTime: Date) => number;
+  latestRunProvider?: IfsLatestRunProvider;
+  sourceProduct?: "ifs_0p25_oper_fc" | "ifs_0p25_enfo_ef";
+}
+
+export interface IfsProfileSample {
+  model: "ifs_0p25";
+  run: string;
+  validTime: string;
+  forecastHour: number;
+  requestedPoint: { latitude: number; longitude: number };
+  gridPoint: { latitude: number; longitude: number };
+  levels: ProfileLevel[];
+  fields?: NonIsobaricFieldResult[];
+  source: {
+    provider: "ECMWF Open Data";
+    access: "indexed_http_range";
+    decoder: GribDecoderName;
+    product: "ifs_0p25_oper_fc" | "ifs_0p25_enfo_ef";
+    horizontalGridDegrees: 0.25;
+    cacheHit: boolean;
+  };
+}
+
 type IfsSelectionItem =
   | {
       kind: "pressure";
@@ -86,29 +111,37 @@ export class IfsProfileService {
   }
 
   async getProfile(input: IfsPointQueryInput): Promise<IfsProfileResult> {
+    return ifsProfileResultSchema.parse(await this.getProfileSample(input));
+  }
+
+  async getProfileSample(
+    input: IfsPointQueryInput,
+    options: IfsProfileSampleOptions = {},
+  ): Promise<IfsProfileSample> {
     const query = ifsPointQuerySchema.parse(input);
     const selection = prepareSelection(query);
     const validTime = new Date(query.validTime);
     const run = query.run === "latest"
-      ? await this.latestRunProvider.resolveLatestRun(
+      ? await (options.latestRunProvider ?? this.latestRunProvider).resolveLatestRun(
           validTime,
           selection.map((item) => item.selector),
         )
       : parseIfsRun(query.run);
-    const forecastHour = ifsForecastHour(run, validTime);
+    const forecastHour = (options.forecastHourResolver ?? ifsForecastHour)(run, validTime);
 
     const decodedSelection: Array<{ item: IfsSelectionItem; sample: DecodedValue }> = [];
     let allCacheHit = true;
-    for (const [sourceForecastHour, items] of groupSelectionByForecastHour(selection, forecastHour)) {
+    for (const group of groupSelectionByForecastHour(selection, forecastHour)) {
       const cached = await this.source.fetchSelection({
         run,
-        forecastHour: sourceForecastHour,
-        selectors: items.map((item) => item.selector),
+        forecastHour: group.sourceForecastHour,
+        selectors: group.items.map((item) => item.selector),
       });
+      const items = group.items;
       const decoded = await this.decoder.extractPoint(cached.path, query.longitude, query.latitude);
       if (decoded.length !== items.length) {
         throw new Error(
-          `IFS decoder returned ${decoded.length} values for ${items.length} selected GRIB messages at f${sourceForecastHour}`,
+          `IFS decoder returned ${decoded.length} values for ${items.length} selected GRIB messages at f${group.sourceForecastHour}`,
         );
       }
       allCacheHit = allCacheHit && cached.cacheHit;
@@ -145,7 +178,7 @@ export class IfsProfileService {
       buildFieldResult(id, fieldValues, run, validTime, forecastHour),
     );
 
-    return ifsProfileResultSchema.parse({
+    return {
       model: "ifs_0p25",
       run: run.toISOString(),
       validTime: validTime.toISOString(),
@@ -158,11 +191,11 @@ export class IfsProfileService {
         provider: "ECMWF Open Data",
         access: "indexed_http_range",
         decoder: this.decoder.engine ?? "gribberish",
-        product: "ifs_0p25_oper_fc",
+        product: options.sourceProduct ?? "ifs_0p25_oper_fc",
         horizontalGridDegrees: 0.25,
         cacheHit: allCacheHit,
       },
-    });
+    };
   }
 }
 
@@ -226,15 +259,17 @@ function prepareSelection(query: ReturnType<typeof ifsPointQuerySchema.parse>): 
 function groupSelectionByForecastHour(
   selection: readonly IfsSelectionItem[],
   requestedForecastHour: number,
-): Map<number, IfsSelectionItem[]> {
-  const groups = new Map<number, IfsSelectionItem[]>();
+): Array<{ sourceForecastHour: number; items: IfsSelectionItem[] }> {
+  const groups = new Map<string, { sourceForecastHour: number; items: IfsSelectionItem[] }>();
   for (const item of selection) {
+    const runStatic = item.selector.sourceForecastHour !== undefined;
     const sourceForecastHour = item.selector.sourceForecastHour ?? requestedForecastHour;
-    const group = groups.get(sourceForecastHour) ?? [];
-    group.push(item);
-    groups.set(sourceForecastHour, group);
+    const key = `${sourceForecastHour}:${runStatic ? "run-static" : "forecast"}`;
+    const group = groups.get(key) ?? { sourceForecastHour, items: [] };
+    group.items.push(item);
+    groups.set(key, group);
   }
-  return groups;
+  return [...groups.values()];
 }
 
 function applyRawPressureValue(

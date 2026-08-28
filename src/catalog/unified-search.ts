@@ -53,7 +53,8 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
   const entries = [
     ...(datasets.has("gfs") ? gfsEntries() : []),
     ...(datasets.has("gefs") ? gefsEntries() : []),
-    ...(datasets.has("ifs") ? ifsEntries() : []),
+    ...(datasets.has("ifs") ? ifsEntries("ifs") : []),
+    ...(datasets.has("ifs-ens") ? ifsEntries("ifs-ens") : []),
     ...(datasets.has("gfs-analysis") ? historyEntries() : []),
   ].filter((entry) => {
     if (!sections.has(entry.section)) return false;
@@ -187,11 +188,11 @@ function gefsEntries(): CatalogEntry[] {
   ];
 }
 
-function ifsEntries(): CatalogEntry[] {
+function ifsEntries(dataset: "ifs" | "ifs-ens"): CatalogEntry[] {
   const catalog = getIfsCatalog();
   return [
     ...catalog.variables.map((definition) => ({
-      dataset: "ifs" as const,
+      dataset,
       section: "variables" as const,
       id: definition.id,
       classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
@@ -201,7 +202,7 @@ function ifsEntries(): CatalogEntry[] {
       outputs: definition.outputs.map((output) => ({ ...output })),
     })),
     ...catalog.fields.map((definition) => ({
-      dataset: "ifs" as const,
+      dataset,
       section: "fields" as const,
       id: definition.id,
       classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
@@ -304,6 +305,7 @@ function preferredRepresentative(entries: CatalogEntry[]): CatalogEntry {
   return entries.find((entry) => entry.dataset === "gfs")
     ?? entries.find((entry) => entry.dataset === "gefs")
     ?? entries.find((entry) => entry.dataset === "ifs")
+    ?? entries.find((entry) => entry.dataset === "ifs-ens")
     ?? entries[0]!;
 }
 
@@ -315,6 +317,8 @@ function supportSemantics(dataset: PublicAtmosphericDataset): string {
       return "member-first ensemble forecast distribution";
     case "ifs":
       return "deterministic ECMWF IFS 0.25° operational forecast";
+    case "ifs-ens":
+      return "ECMWF IFS ENS 0.25° distribution across 50 perturbed members; deterministic IFS is the post-50r1 unperturbed control";
     case "gfs-analysis":
       return "deterministic historical model analysis; field availability may vary by model era";
   }

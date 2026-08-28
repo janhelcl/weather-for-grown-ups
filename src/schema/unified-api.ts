@@ -6,7 +6,7 @@ import { areaThresholdSchema } from "./area-summary.js";
 import { gfsGridWithDefaultSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 
-export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "gefs", "ifs", "gfs-analysis"] as const;
+export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "gefs", "ifs", "ifs-ens", "gfs-analysis"] as const;
 export const publicAtmosphericDatasetSchema = z.enum(PUBLIC_ATMOSPHERIC_DATASET_IDS);
 export type PublicAtmosphericDataset = z.infer<typeof publicAtmosphericDatasetSchema>;
 
@@ -25,6 +25,11 @@ export const PUBLIC_DATASET_METADATA = {
     internalDatasetId: "ifs_0p25",
     role: "forecast",
     kind: "deterministic",
+  },
+  "ifs-ens": {
+    internalDatasetId: "ifs_ens_0p25",
+    role: "forecast",
+    kind: "ensemble",
   },
   "gfs-analysis": {
     internalDatasetId: "gfs_grid4_analysis_0p5",
@@ -173,7 +178,7 @@ export const atmosphericForecastOptionsSchema = z.object({
 });
 
 export const atmosphericEnsembleOptionsSchema = z.object({
-  members: z.array(z.string().min(1)).min(2).max(31).optional(),
+  members: z.array(z.string().min(1)).min(2).max(50).optional(),
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
   includeMembers: z.boolean().optional(),
   maxMemberSamples: z.number().int().min(1).max(20_000).optional(),
@@ -248,11 +253,18 @@ export const diagnoseAtmosphereSchema = z.object({
   source: z.enum(["nomads", "s3", "archive"]).optional().describe("GFS-only source override; archive forces the resolution-matched historical backend"),
 }).superRefine((request, context) => {
   validateDatasetModifiers(request, context);
+  if (request.dataset === "ifs-ens") {
+    context.addIssue({
+      code: "custom",
+      path: ["dataset"],
+      message: "IFS ENS diagnostics are not in the first ensemble slice; query member-first atmospheric distributions with query_atmosphere",
+    });
+  }
   if ("from" in request.time && request.ensemble?.includeMembers === true) {
     context.addIssue({
       code: "custom",
       path: ["ensemble", "includeMembers"],
-      message: "GEFS diagnostic time series return compact member-first summaries; use a single-time diagnostic query to include member payloads",
+      message: "Ensemble diagnostic time series return compact member-first summaries; use a single-time diagnostic query to include member payloads",
     });
   }
 });
@@ -265,6 +277,7 @@ export const unifiedAtmosphereResultSchema = z.object({
     "gfs_0p25_forecast_archive",
     "gefs_0p50",
     "ifs_0p25",
+    "ifs_ens_0p25",
     "gfs_grid4_analysis_0p5",
     "gfs_grid4_forecast_0p5_archive",
   ]),
@@ -286,6 +299,13 @@ function validateCommonAtmosphericRequest(
   validateDatasetModifiers(request, context);
 
   const isRange = "from" in request.time;
+  if (request.dataset === "ifs-ens" && request.geometry.type !== "point") {
+    context.addIssue({
+      code: "custom",
+      path: ["geometry"],
+      message: "IFS ENS currently supports point geometry; multi-point, transect, and area ensemble compositions will follow on the same dataset contract",
+    });
+  }
   if (isRange && (request.geometry.type === "transect" || request.geometry.type === "area")) {
     context.addIssue({
       code: "custom",
@@ -343,11 +363,11 @@ function validateDatasetModifiers(
       message: "forecast.grid is only configurable for the gfs dataset",
     });
   }
-  if (request.dataset !== "gefs" && request.ensemble !== undefined) {
+  if (request.dataset !== "gefs" && request.dataset !== "ifs-ens" && request.ensemble !== undefined) {
     context.addIssue({
       code: "custom",
       path: ["ensemble"],
-      message: "ensemble controls are only valid for the gefs dataset",
+      message: "ensemble controls are only valid for ensemble datasets: gefs or ifs-ens",
     });
   }
   if (request.dataset !== "gfs" && request.source !== undefined) {

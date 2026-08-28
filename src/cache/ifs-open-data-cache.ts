@@ -9,12 +9,14 @@ import {
   parseIfsOpenDataIndex,
   selectIfsIndexEntries,
   type IfsIndexSelector,
+  type IfsOpenDataProduct,
 } from "../sources/ifs-open-data.js";
 
 export interface IfsSelectionRequest {
   run: Date;
   forecastHour: number;
   selectors: readonly IfsIndexSelector[];
+  product?: IfsOpenDataProduct;
 }
 
 export interface IfsSubsetFile {
@@ -28,6 +30,7 @@ export interface IfsSelectionSource {
 
 export class IfsOpenDataSubsetCache implements IfsSelectionSource {
   private readonly inFlight = new Map<string, Promise<IfsSubsetFile>>();
+  private readonly indexInFlight = new Map<string, Promise<string>>();
 
   constructor(
     private readonly rootDir: string,
@@ -72,8 +75,9 @@ export class IfsOpenDataSubsetCache implements IfsSelectionSource {
     path: string,
     baseUrl: string,
   ): Promise<IfsSubsetFile> {
-    const gribUrl = buildIfsOpenDataForecastUrl(request.run, request.forecastHour, baseUrl);
-    const indexUrl = buildIfsOpenDataForecastIndexUrl(request.run, request.forecastHour, baseUrl);
+    const product = request.product ?? "oper-fc";
+    const gribUrl = buildIfsOpenDataForecastUrl(request.run, request.forecastHour, baseUrl, product);
+    const indexUrl = buildIfsOpenDataForecastIndexUrl(request.run, request.forecastHour, baseUrl, product);
     const entries = parseIfsOpenDataIndex(await this.fetchIndex(indexUrl));
     const selected = selectIfsIndexEntries(entries, request.selectors);
     const chunks = await mapConcurrent(selected, this.rangeConcurrency, async (entry) => {
@@ -110,6 +114,16 @@ export class IfsOpenDataSubsetCache implements IfsSelectionSource {
       // ECMWF Open Data forecast files are immutable once published.
     }
 
+    const pending = this.indexInFlight.get(key);
+    if (pending) return pending;
+
+    const operation = this.downloadIndex(url, path)
+      .finally(() => this.indexInFlight.delete(key));
+    this.indexInFlight.set(key, operation);
+    return operation;
+  }
+
+  private async downloadIndex(url: string, path: string): Promise<string> {
     const response = await fetchIfsWithRetry(this.fetchFn, url, {
       headers: { "user-agent": "weather-for-grown-ups/0.2" },
     });
@@ -149,11 +163,13 @@ function subsetKey(request: IfsSelectionRequest): string {
   return createHash("sha256").update(JSON.stringify({
     run: request.run.toISOString(),
     forecastHour: request.forecastHour,
+    product: request.product ?? "oper-fc",
     selectors: request.selectors.map((selector) => ({
       key: selector.key,
       param: selector.param,
       levtype: selector.levtype,
       ...(selector.levelist === undefined ? {} : { levelist: selector.levelist }),
+      ...(selector.number === undefined ? {} : { number: selector.number }),
     })),
   })).digest("hex");
 }

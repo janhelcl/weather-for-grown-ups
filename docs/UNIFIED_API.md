@@ -1,6 +1,6 @@
 # Unified atmospheric API
 
-WFG's public API is organized around a small operation vocabulary and four atmospheric datasets.
+WFG's public API is organized around a small operation vocabulary and five atmospheric datasets.
 
 > **One query language for atmospheric state; datasets preserve their semantics.**
 
@@ -11,9 +11,10 @@ WFG's public API is organized around a small operation vocabulary and four atmos
 | `gfs` | `gfs_0p25` / `gfs_0p50` operational; grid-matched 0.25° GDEX or 0.5° NCEI archive for old explicit runs | forecast | deterministic |
 | `gefs` | `gefs_0p50` model contract; 0.5° pressure/mixed source plus 0.25° selected-field source through f240 | forecast | member-first ensemble |
 | `ifs` | `ifs_0p25` ECMWF Open Data operational forecast | forecast | deterministic |
+| `ifs-ens` | `ifs_ens_0p25` ECMWF Open Data ENS direct output | forecast | 50-member perturbed distribution |
 | `gfs-analysis` | `gfs_grid4_analysis_0p5` | historical analysis | deterministic analyzed state |
 
-IFS supports point and multi-point access, native-cadence ranges, transects, raw scalar bbox area summaries, deterministic diagnostics, and run-to-run comparison while preserving ECMWF-native cadence and field semantics. Unsupported combinations fail explicitly rather than falling through to another dataset. The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a fourth public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently.
+Deterministic IFS supports point and multi-point access, native-cadence ranges, transects, raw scalar bbox area summaries, deterministic diagnostics, and run-to-run comparison while preserving ECMWF-native cadence and field semantics. IFS ENS supports point member-first bundles at one valid time and native-cadence point time ranges with the same canonical pressure/field vocabulary, 50 perturbations, requested quantiles and optional size-guarded raw member payloads. The Cycle 50r1 unperturbed control is exposed as deterministic `ifs`. Unsupported combinations fail explicitly rather than falling through to another dataset. The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a fourth public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently.
 
 ## The four orthogonal query dimensions
 
@@ -33,6 +34,12 @@ Changing only the dataset asks the same atmospheric question of another source:
 
 ```json
 { "dataset": "gefs" }
+```
+
+or:
+
+```json
+{ "dataset": "ifs-ens" }
 ```
 
 or:

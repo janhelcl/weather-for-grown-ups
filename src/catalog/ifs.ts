@@ -197,7 +197,7 @@ export function getIfsCatalog() {
     cyclesUtc: [0, 6, 12, 18] as const,
     pressureLevelsHpa: [...IFS_PRESSURE_LEVELS_HPA],
     cadenceNote:
-      "00/12Z runs are 3-hourly through f144 then 6-hourly through f360; 06/18Z runs are 3-hourly through f144.",
+      "00/12Z runs are 3-hourly through f144 then 6-hourly through f240; 06/18Z runs are 3-hourly through f90 under IFS Cycle 50r1.",
     variables: IFS_PRESSURE_VARIABLE_IDS.map((id) => {
       const definition = VARIABLE_CATALOG[id];
       return {

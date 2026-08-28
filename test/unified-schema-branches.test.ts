@@ -234,6 +234,65 @@ describe("unified atmospheric schema capability branches", () => {
     }).dataset).toBe("ifs");
   });
 
+  it("accepts IFS ENS point distributions and point ranges while rejecting unfinished spatial shapes", () => {
+    expect(queryAtmosphereSchema.parse({
+      dataset: "ifs-ens",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: {
+        variables: ["temperature", "wind"],
+        pressureLevelsHpa: [850],
+        fields: ["wind_10m"],
+      },
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+        includeMembers: true,
+      },
+    }).dataset).toBe("ifs-ens");
+
+    expect(queryAtmosphereSchema.parse({
+      dataset: "ifs-ens",
+      geometry: point,
+      time: {
+        from: "2026-08-28T00:00:00Z",
+        to: "2026-08-28T12:00:00Z",
+        maxSteps: 5,
+      },
+      selection: pressureSelection,
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+        maxMemberSamples: 1000,
+      },
+    }).time).toMatchObject({
+      from: "2026-08-28T00:00:00Z",
+      to: "2026-08-28T12:00:00Z",
+      maxSteps: 5,
+    });
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "ifs-ens",
+      geometry: {
+        type: "points",
+        points: [{ latitude: 50, longitude: 14 }],
+      },
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: pressureSelection,
+    })).toThrow("IFS ENS currently supports point geometry");
+
+    expect(() => diagnoseAtmosphereSchema.parse({
+      dataset: "ifs-ens",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [925, 850, 700, 500],
+        diagnostics: ["freezing_level_crossings"],
+      },
+    })).toThrow("IFS ENS diagnostics are not in the first ensemble slice");
+  });
+
   it("accepts either scalar area selection form and rejects area ranges", () => {
     const geometry = {
       type: "area" as const,

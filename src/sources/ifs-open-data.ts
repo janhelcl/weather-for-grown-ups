@@ -12,11 +12,15 @@ export const IFS_OPEN_DATA_MIRRORS = [
 
 export type IfsOpenDataMirror = (typeof IFS_OPEN_DATA_MIRRORS)[number];
 
+export type IfsOpenDataProduct = "oper-fc" | "enfo-ef";
+
 export interface IfsIndexSelector {
   key: string;
   param: string;
   levtype: "pl" | "sfc";
   levelist?: number;
+  /** ECMWF perturbed ensemble member number, 1..50. Omitted for deterministic IFS. */
+  number?: number;
   /** Override the requested forecast step for run-static/source-special fields. */
   sourceForecastHour?: number;
 }
@@ -50,19 +54,42 @@ export interface IfsAvailabilityProbe {
   ): Promise<boolean>;
 }
 
-export function buildIfsOpenDataForecastUrl(run: Date, forecastHour: number, baseUrl = IFS_OPEN_DATA_BASE_URL): string {
+export function buildIfsOpenDataForecastUrl(
+  run: Date,
+  forecastHour: number,
+  baseUrl = IFS_OPEN_DATA_BASE_URL,
+  product: IfsOpenDataProduct = "oper-fc",
+): string {
   const date = yyyymmdd(run);
   const hour = run.getUTCHours().toString().padStart(2, "0");
   const step = `${forecastHour}h`;
-  return `${baseUrl}/${date}/${hour}z/ifs/0p25/oper/${date}${hour}0000-${step}-oper-fc.grib2`;
+  const [stream, type] = product.split("-") as ["oper" | "enfo", "fc" | "ef"];
+  return `${baseUrl}/${date}/${hour}z/ifs/0p25/${stream}/${date}${hour}0000-${step}-${stream}-${type}.grib2`;
 }
 
 export function buildIfsOpenDataForecastIndexUrl(
   run: Date,
   forecastHour: number,
   baseUrl = IFS_OPEN_DATA_BASE_URL,
+  product: IfsOpenDataProduct = "oper-fc",
 ): string {
-  return buildIfsOpenDataForecastUrl(run, forecastHour, baseUrl).replace(/\.grib2$/, ".index");
+  return buildIfsOpenDataForecastUrl(run, forecastHour, baseUrl, product).replace(/\.grib2$/, ".index");
+}
+
+export function buildIfsEnsOpenDataForecastUrl(
+  run: Date,
+  forecastHour: number,
+  baseUrl = IFS_OPEN_DATA_BASE_URL,
+): string {
+  return buildIfsOpenDataForecastUrl(run, forecastHour, baseUrl, "enfo-ef");
+}
+
+export function buildIfsEnsOpenDataForecastIndexUrl(
+  run: Date,
+  forecastHour: number,
+  baseUrl = IFS_OPEN_DATA_BASE_URL,
+): string {
+  return buildIfsOpenDataForecastIndexUrl(run, forecastHour, baseUrl, "enfo-ef");
 }
 
 export function parseIfsOpenDataIndex(text: string): GribIndexEntry[] {
@@ -80,16 +107,19 @@ export function selectIfsIndexEntries(
     const match = entries.find((entry) => {
       if (entry.var !== selector.param) return false;
       if (entry.keys.levtype !== selector.levtype) return false;
-      if (selector.levtype === "pl") {
-        return entry.keys.levelist === String(selector.levelist);
+      if (selector.levtype === "pl" && entry.keys.levelist !== String(selector.levelist)) {
+        return false;
+      }
+      if (selector.number !== undefined && entry.keys.number !== String(selector.number)) {
+        return false;
       }
       return true;
     });
     if (!match) {
       missing.push(
         selector.levtype === "pl"
-          ? `${selector.param}@${selector.levelist}hPa`
-          : `${selector.param}@sfc`,
+          ? `${selector.param}@${selector.levelist}hPa${memberSuffix(selector)}`
+          : `${selector.param}@sfc${memberSuffix(selector)}`,
       );
       continue;
     }
@@ -108,35 +138,85 @@ export function selectIfsIndexEntries(
 export class IfsOpenDataRunProbe implements IfsAvailabilityProbe {
   constructor(private readonly fetchFn: typeof fetch = globalThis.fetch) {}
 
+  isForecastAvailable(
+    run: Date,
+    forecastHour: number,
+    selectors: readonly IfsIndexSelector[],
+  ): Promise<boolean> {
+    return isIfsProductAvailable(this.fetchFn, run, forecastHour, selectors, "oper-fc");
+  }
+}
+
+export class IfsEnsOpenDataRunProbe implements IfsAvailabilityProbe {
+  constructor(private readonly fetchFn: typeof fetch = globalThis.fetch) {}
+
   async isForecastAvailable(
     run: Date,
     forecastHour: number,
     selectors: readonly IfsIndexSelector[],
   ): Promise<boolean> {
-    for (const mirror of IFS_OPEN_DATA_MIRRORS) {
-      const url = buildIfsOpenDataForecastIndexUrl(run, forecastHour, mirror.baseUrl);
-      const response = await fetchIfsWithRetry(this.fetchFn, url, {
-        headers: { "user-agent": "weather-for-grown-ups/0.2" },
-      });
-      if (response.status === 404 || isRetryableStatus(response.status)) continue;
-      if (!response.ok) {
-        throw new Error(
-          `ECMWF IFS run discovery failed: HTTP ${response.status} ${response.statusText} for ${url}`,
-        );
-      }
-      const entries = parseIfsOpenDataIndex(await response.text());
-      try {
-        selectIfsIndexEntries(entries, selectors);
-        return true;
-      } catch (error) {
-        if (error instanceof Error && error.message.startsWith("ECMWF IFS index is missing requested fields:")) {
-          continue;
-        }
-        throw error;
+    const sharedRunStatic = selectors.filter(isIfsSharedRunStaticSelector);
+    const perturbationSelectors = selectors.filter((selector) => !isIfsSharedRunStaticSelector(selector));
+
+    if (
+      perturbationSelectors.length > 0
+      && !await isIfsProductAvailable(this.fetchFn, run, forecastHour, perturbationSelectors, "enfo-ef")
+    ) {
+      return false;
+    }
+    if (sharedRunStatic.length > 0) {
+      const deterministicSelectors = sharedRunStatic.map(withoutIfsMemberNumber);
+      if (!await isIfsProductAvailable(this.fetchFn, run, forecastHour, deterministicSelectors, "oper-fc")) {
+        return false;
       }
     }
-    return false;
+    return true;
   }
+}
+
+export function isIfsSharedRunStaticSelector(selector: IfsIndexSelector): boolean {
+  return selector.sourceForecastHour === 0;
+}
+
+function withoutIfsMemberNumber(selector: IfsIndexSelector): IfsIndexSelector {
+  const { number: _number, ...rest } = selector;
+  return rest;
+}
+
+async function isIfsProductAvailable(
+  fetchFn: typeof fetch,
+  run: Date,
+  forecastHour: number,
+  selectors: readonly IfsIndexSelector[],
+  product: IfsOpenDataProduct,
+): Promise<boolean> {
+  for (const mirror of IFS_OPEN_DATA_MIRRORS) {
+    const url = buildIfsOpenDataForecastIndexUrl(run, forecastHour, mirror.baseUrl, product);
+    const response = await fetchIfsWithRetry(fetchFn, url, {
+      headers: { "user-agent": "weather-for-grown-ups/0.2" },
+    });
+    if (response.status === 404 || isRetryableStatus(response.status)) continue;
+    if (!response.ok) {
+      throw new Error(
+        `ECMWF IFS run discovery failed: HTTP ${response.status} ${response.statusText} for ${url}`,
+      );
+    }
+    const entries = parseIfsOpenDataIndex(await response.text());
+    try {
+      selectIfsIndexEntries(entries, selectors);
+      return true;
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("ECMWF IFS index is missing requested fields:")) {
+        continue;
+      }
+      throw error;
+    }
+  }
+  return false;
+}
+
+function memberSuffix(selector: IfsIndexSelector): string {
+  return selector.number === undefined ? "" : `#member${selector.number.toString().padStart(2, "0")}`;
 }
 
 function isRetryableStatus(status: number): boolean {

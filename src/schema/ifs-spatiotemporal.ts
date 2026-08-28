@@ -107,7 +107,7 @@ export const ifsTimeSeriesResultSchema = z.object({
   source: ifsSourceSchema,
   series: z.array(z.object({
     validTime: isoDateTimeSchema,
-    forecastHour: z.number().int().min(0).max(360),
+    forecastHour: z.number().int().min(0).max(240),
     gridPoint: gridPointSchema,
     levels: z.array(profileLevelResultSchema),
     fields: z.array(ifsFieldResultSchema).optional(),
@@ -126,7 +126,7 @@ export const ifsPointsResultSchema = z.object({
   model: z.literal("ifs_0p25"),
   run: isoDateTimeSchema,
   validTime: isoDateTimeSchema,
-  forecastHour: z.number().int().min(0).max(360),
+  forecastHour: z.number().int().min(0).max(240),
   points: z.array(ifsPointSampleResultSchema),
   source: ifsSourceSchema.extend({ allCacheHit: z.boolean() }),
 });
@@ -139,7 +139,7 @@ export const ifsPointsTimeSeriesResultSchema = z.object({
   source: ifsSourceSchema,
   series: z.array(z.object({
     validTime: isoDateTimeSchema,
-    forecastHour: z.number().int().min(0).max(360),
+    forecastHour: z.number().int().min(0).max(240),
     points: z.array(ifsPointSampleResultSchema),
     allCacheHit: z.boolean(),
   })),
@@ -149,7 +149,7 @@ export const ifsTransectResultSchema = z.object({
   model: z.literal("ifs_0p25"),
   run: isoDateTimeSchema,
   validTime: isoDateTimeSchema,
-  forecastHour: z.number().int().min(0).max(360),
+  forecastHour: z.number().int().min(0).max(240),
   startPoint: gridPointSchema,
   endPoint: gridPointSchema,
   totalDistanceKm: z.number().nonnegative(),

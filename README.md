@@ -98,30 +98,30 @@ WFG does not contain turbine power curves, wake models, availability assumptions
 
 ## Current model support
 
-WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-first **GEFS**, and deterministic **ECMWF IFS 0.25°**. IFS covers point and multi-point state queries, native-cadence ranges, deterministic transects, raw scalar area statistics, diagnostics, and run-to-run comparison through the same unified contracts.
+WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-first **GEFS**, deterministic **ECMWF IFS 0.25°**, and **ECMWF IFS ENS 0.25°**. Deterministic IFS has the broad spatiotemporal/diagnostic surface; IFS ENS supports member-first point distributions and native-cadence point time series across all 50 perturbations.
 
-| Operation | GFS 0.25° / 0.5° | GEFS | IFS 0.25° |
-| --- | --- | --- | --- |
-| Catalog and search | ✅ | ✅ | ✅ |
-| Pressure profiles | ✅ deterministic | ✅ member distributions | ✅ deterministic |
-| Mixed pressure/non-isobaric fields | ✅ | ✅ member-first bundles | ✅ point + instant |
-| Raw and mixed-field time series | ✅ | ✅ | ✅ deterministic |
-| Layer diagnostics | ✅ | ✅ per member → summarized | ✅ deterministic |
-| Whole-profile diagnostics | ✅ | ✅ per member → structural summaries | ✅ deterministic |
-| Parcel / LCL / LFC / EL / CAPE / CIN | ✅ | ✅ per member → summarized | ✅ deterministic |
-| Diagnostic time series | ✅ layer/profile/parcel | ✅ layer/profile/parcel | ✅ layer/profile/parcel |
-| Multi-point queries | ✅ | ✅ | ✅ |
-| Multi-point time series | ✅ | ✅ | ✅ |
-| Transects | ✅ deterministic | ✅ ensemble-native mixed fields | ✅ deterministic mixed fields |
-| Area statistics | ✅ deterministic | ✅ member-first spatial statistics | ✅ deterministic raw scalar |
-| Run-to-run comparison | ✅ deterministic deltas | ✅ distribution shifts | ✅ deterministic deltas |
-| Scalar ensemble distribution | — | ✅ | — |
-| Aligned GFS-vs-GEFS comparison | ✅ | ✅ | — |
-| Aligned GFS-vs-IFS comparison | ✅ deterministic deltas | — | ✅ deterministic deltas |
+| Operation | GFS 0.25° / 0.5° | GEFS | IFS 0.25° | IFS ENS 0.25° |
+| --- | --- | --- | --- | --- |
+| Catalog and search | ✅ | ✅ | ✅ | ✅ |
+| Pressure profiles | ✅ deterministic | ✅ member distributions | ✅ deterministic | ✅ member distributions |
+| Mixed pressure/non-isobaric fields | ✅ | ✅ member-first bundles | ✅ point + instant | ✅ member-first point bundle |
+| Raw and mixed-field time series | ✅ | ✅ | ✅ deterministic | ✅ member distributions |
+| Layer diagnostics | ✅ | ✅ per member → summarized | ✅ deterministic | — |
+| Whole-profile diagnostics | ✅ | ✅ per member → structural summaries | ✅ deterministic | — |
+| Parcel / LCL / LFC / EL / CAPE / CIN | ✅ | ✅ per member → summarized | ✅ deterministic | — |
+| Diagnostic time series | ✅ layer/profile/parcel | ✅ layer/profile/parcel | ✅ layer/profile/parcel | — |
+| Multi-point queries | ✅ | ✅ | ✅ | — |
+| Multi-point time series | ✅ | ✅ | ✅ | — |
+| Transects | ✅ deterministic | ✅ ensemble-native mixed fields | ✅ deterministic mixed fields | — |
+| Area statistics | ✅ deterministic | ✅ member-first spatial statistics | ✅ deterministic raw scalar | — |
+| Run-to-run comparison | ✅ deterministic deltas | ✅ distribution shifts | ✅ deterministic deltas | — |
+| Scalar ensemble distribution | — | ✅ | — | ✅ 50 perturbations |
+| Aligned GFS-vs-GEFS comparison | ✅ | ✅ | — | — |
+| Aligned GFS-vs-IFS comparison | ✅ deterministic deltas | — | ✅ deterministic deltas | — |
 
 GEFS also supports control `c00` plus perturbed members `p01`–`p30`, native three-hour output through `f384`, mixed pressure/non-isobaric field bundles, and opt-in member payloads for auditability. Field-only requests automatically use NOAA's `pgrb2s` 0.25° selected-field product through `f240`; pressure-level and mixed requests use `pgrb2a` 0.5°, and field ranges extending beyond `f240` stay on 0.5° for the whole range. Result provenance reports the actual product and horizontal grid.
 
-ECMWF **IFS 0.25°** is exposed as `ifs` through the same `query` CLI and `query_atmosphere` MCP operation. Indexed range reads use the official Open Data replicas with bounded retry/failover rather than assuming one mirror is always available. Current Cycle 50r1 Open Data semantics are explicit: 00/12Z runs extend through `f360`, 06/18Z through `f144`, with 3-hour cadence through `f144` and 6-hour cadence thereafter on the long runs. See [IFS access](docs/IFS.md).
+ECMWF **IFS 0.25°** is exposed as `ifs`; **IFS ENS 0.25°** is `ifs-ens`. Both use official Open Data indexed byte-range access with bounded mirror retry/failover. Under Cycle 50r1 the products deliberately have different horizons: deterministic `oper/fc` runs to `f240` at 00/12Z and `f90` at 06/18Z, while perturbed `enfo/ef` runs to `f360` and `f144` respectively. `ifs-ens` represents the 50 perturbed members `p01`–`p50`; the unperturbed control is now identical to deterministic `ifs`, so WFG does not invent a 51st ENS member. See [IFS access](docs/IFS.md).
 
 Historical **GFS Grid 4 0.5° analysis** is exposed as `gfs-analysis`, through the same `query` / `diagnose` CLI operations and `query_atmosphere` / `diagnose_atmosphere` MCP tools. It covers profiles, time series, diagnostics, parcels, multi-point queries, multi-point time series, transects and native bbox area statistics while preserving analysis-time semantics and NCEI provenance.
 
@@ -276,7 +276,8 @@ Start with:
 
 - [Installation and distribution](docs/INSTALL.md)
 - [Architecture](docs/ARCHITECTURE.md)
-- [GEFS ensemble access](docs/GEFS_ENSEMBLE.md)\n- [ECMWF IFS access](docs/IFS.md)
+- [GEFS ensemble access](docs/GEFS_ENSEMBLE.md)
+- [ECMWF IFS and ENS access](docs/IFS.md)
 - [Catalog search](docs/CATALOG_SEARCH.md)
 - [Testing](docs/TESTING.md)
 - [Meteorology validation](docs/METEOROLOGY_VALIDATION.md)

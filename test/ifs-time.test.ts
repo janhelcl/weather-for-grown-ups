@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  ifsEnsForecastHoursInRange,
+  ifsEnsMaxForecastHour,
+  ifsEnsValidTimeForForecastHour,
   ifsForecastHour,
   ifsForecastHoursInRange,
   ifsMaxForecastHour,
   ifsValidTimeForForecastHour,
+  isNativeIfsEnsForecastHour,
   isNativeIfsForecastHour,
   latestIfsCycleAtOrBefore,
   parseIfsRun,
@@ -13,14 +17,21 @@ describe("IFS native run semantics", () => {
   it("uses long 00/12Z and short 06/18Z forecast horizons", () => {
     const longRun = new Date("2026-08-27T12:00:00Z");
     const shortRun = new Date("2026-08-27T18:00:00Z");
-    expect(ifsMaxForecastHour(longRun)).toBe(360);
-    expect(ifsMaxForecastHour(shortRun)).toBe(144);
+    expect(ifsMaxForecastHour(longRun)).toBe(240);
+    expect(ifsMaxForecastHour(shortRun)).toBe(90);
     expect(isNativeIfsForecastHour(longRun, 144)).toBe(true);
     expect(isNativeIfsForecastHour(longRun, 147)).toBe(false);
     expect(isNativeIfsForecastHour(longRun, 150)).toBe(true);
-    expect(isNativeIfsForecastHour(longRun, 360)).toBe(true);
-    expect(isNativeIfsForecastHour(shortRun, 144)).toBe(true);
-    expect(isNativeIfsForecastHour(shortRun, 150)).toBe(false);
+    expect(isNativeIfsForecastHour(longRun, 240)).toBe(true);
+    expect(isNativeIfsForecastHour(longRun, 246)).toBe(false);
+    expect(isNativeIfsForecastHour(shortRun, 90)).toBe(true);
+    expect(isNativeIfsForecastHour(shortRun, 93)).toBe(false);
+
+    expect(ifsEnsMaxForecastHour(longRun)).toBe(360);
+    expect(ifsEnsMaxForecastHour(shortRun)).toBe(144);
+    expect(isNativeIfsEnsForecastHour(longRun, 360)).toBe(true);
+    expect(isNativeIfsEnsForecastHour(shortRun, 144)).toBe(true);
+    expect(isNativeIfsEnsForecastHour(shortRun, 150)).toBe(false);
   });
 
   it("validates forecast valid times against the selected run cadence", () => {
@@ -38,6 +49,16 @@ describe("IFS native run semantics", () => {
     expect(ifsValidTimeForForecastHour(run, 150).getTime() - run.getTime())
       .toBe(150 * 3_600_000);
     expect(() => ifsValidTimeForForecastHour(run, 147)).toThrow("not native");
+  });
+
+  it("enumerates the native ENS 3h-to-6h cadence transition independently of deterministic IFS", () => {
+    const run = new Date("2026-08-27T12:00:00Z");
+    const start = new Date(run.getTime() + 138 * 3_600_000);
+    const end = new Date(run.getTime() + 156 * 3_600_000);
+    expect(ifsEnsForecastHoursInRange(run, start, end)).toEqual([138, 141, 144, 150, 156]);
+    expect(ifsEnsValidTimeForForecastHour(run, 156).getTime() - run.getTime())
+      .toBe(156 * 3_600_000);
+    expect(() => ifsEnsValidTimeForForecastHour(run, 147)).toThrow("not native");
   });
 
   it("requires exact synoptic initialization cycles", () => {

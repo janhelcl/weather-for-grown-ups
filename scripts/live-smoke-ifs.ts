@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { IfsAreaSummaryService } from "../src/core/ifs-area-summary.js";
 import { GfsIfsComparisonService } from "../src/core/gfs-ifs-comparison.js";
+import { IfsEnsMemberBundleService } from "../src/core/ifs-ens-member-bundle.js";
+import { IfsEnsTimeSeriesService } from "../src/core/ifs-ens-timeseries.js";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
 import { IfsDiagnosticsService } from "../src/core/ifs-diagnostics.js";
 import { IfsRunComparisonService } from "../src/core/ifs-run-comparison.js";
@@ -11,7 +13,12 @@ import {
   IfsTimeSeriesService,
   IfsTransectService,
 } from "../src/core/ifs-spatiotemporal.js";
-import { ifsValidTimeForForecastHour, latestIfsCycleAtOrBefore } from "../src/core/ifs-time.js";
+import {
+  ifsEnsValidTimeForForecastHour,
+  ifsValidTimeForForecastHour,
+  latestIfsCycleAtOrBefore,
+  previousIfsCycle,
+} from "../src/core/ifs-time.js";
 
 const validTime = latestIfsCycleAtOrBefore(new Date());
 const service = new IfsProfileService();
@@ -79,6 +86,110 @@ console.log(JSON.stringify({
   levels: result.levels,
   fields: result.fields,
   source: result.source,
+}, null, 2));
+
+const ens = await new IfsEnsMemberBundleService().getBundle({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: "latest",
+  validTime: validTime.toISOString(),
+  selection: {
+    variables: ["temperature", "wind"],
+    pressureLevelsHpa: [850],
+    fields: ["wind_10m"],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+  includeMembers: true,
+});
+assert.equal(ens.model, "ifs_ens_0p25");
+assert.equal(ens.selection.members.length, 2);
+assert.equal(ens.pressureSummaries.length, 2);
+assert(ens.pressureSummaries.every((summary) =>
+  summary.outputs.every((output) =>
+    output.aggregation === "circular_direction"
+      ? Number.isFinite(output.meanDirectionDeg)
+      : Number.isFinite(output.distribution.mean))));
+assert.equal(ens.fieldSummaries.length, 1);
+assert.equal(ens.members?.length, 2);
+assert.equal(ens.source.product, "ifs_0p25_enfo_ef");
+assert.equal(ens.source.memberSemantics, "50_perturbed_members_control_is_oper_fc");
+
+console.log(JSON.stringify({
+  ifsEns: {
+    run: ens.run,
+    validTime: ens.validTime,
+    forecastHour: ens.forecastHour,
+    members: ens.selection.members,
+    pressureSummaries: ens.pressureSummaries,
+    fieldSummaries: ens.fieldSummaries,
+    source: ens.source,
+  },
+}, null, 2));
+
+let longEnsRun = latestIfsCycleAtOrBefore(new Date(Date.now() - 12 * 3_600_000));
+if (![0, 12].includes(longEnsRun.getUTCHours())) {
+  longEnsRun = previousIfsCycle(longEnsRun);
+}
+const longEnsValidTime = ifsEnsValidTimeForForecastHour(longEnsRun, 300);
+const longEns = await new IfsEnsMemberBundleService().getBundle({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: longEnsRun.toISOString(),
+  validTime: longEnsValidTime.toISOString(),
+  selection: {
+    variables: ["temperature"],
+    pressureLevelsHpa: [850],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.5],
+});
+assert.equal(longEns.forecastHour, 300);
+assert.equal(longEns.pressureSummaries.length, 1);
+assert(Number.isFinite(
+  longEns.pressureSummaries[0]?.outputs.find((output) => output.aggregation === "numeric_distribution")
+    ?.distribution.mean,
+));
+assert.equal(longEns.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsLongRange: {
+    run: longEns.run,
+    validTime: longEns.validTime,
+    forecastHour: longEns.forecastHour,
+    members: longEns.selection.members,
+  },
+}, null, 2));
+
+const ensRun = new Date(ens.run);
+const ensTimeSeries = await new IfsEnsTimeSeriesService().getTimeSeries({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: ens.run,
+  startTime: ensRun.toISOString(),
+  endTime: new Date(ensRun.getTime() + 3 * 3_600_000).toISOString(),
+  selection: {
+    variables: ["temperature", "wind"],
+    pressureLevelsHpa: [850],
+    fields: ["wind_10m"],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+});
+assert.equal(ensTimeSeries.model, "ifs_ens_0p25");
+assert.equal(ensTimeSeries.run, ens.run);
+assert.deepEqual(ensTimeSeries.series.map((step) => step.forecastHour), [0, 3]);
+assert(ensTimeSeries.series.every((step) => step.pressureSummaries.length === 2));
+assert(ensTimeSeries.series.every((step) => step.fieldSummaries.length === 1));
+assert.equal(ensTimeSeries.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsTimeSeries: {
+    run: ensTimeSeries.run,
+    forecastHours: ensTimeSeries.series.map((step) => step.forecastHour),
+    members: ensTimeSeries.selection.members,
+    source: ensTimeSeries.source,
+  },
 }, null, 2));
 
 const crossModelComparison = await new GfsIfsComparisonService().compare({

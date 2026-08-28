@@ -13,8 +13,8 @@ export const unifiedCatalogSectionSchema = z.enum(UNIFIED_CATALOG_SECTIONS);
 
 export const searchAtmosphereCatalogSchema = z.object({
   search: z.string().min(1).optional(),
-  datasets: z.array(publicAtmosphericDatasetSchema).min(1).max(4)
-    .default(["gfs", "gefs", "ifs", "gfs-analysis"]),
+  datasets: z.array(publicAtmosphericDatasetSchema).min(1).max(5)
+    .default(["gfs", "gefs", "ifs", "ifs-ens", "gfs-analysis"]),
   sections: z.array(unifiedCatalogSectionSchema).min(1).max(UNIFIED_CATALOG_SECTIONS.length)
     .optional(),
   classification: z.enum(["raw", "derived"]).optional(),
