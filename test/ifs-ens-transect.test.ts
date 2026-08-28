@@ -112,7 +112,6 @@ describe("IFS ENS transect", () => {
       run,
       validTime,
       members: ["p01", "p02"],
-      samples: undefined,
     });
     expect(getPoints.mock.calls[0]?.[0].points).toHaveLength(3);
     expect(result.samples).toHaveLength(3);
