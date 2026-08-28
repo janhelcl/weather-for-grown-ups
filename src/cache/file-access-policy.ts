@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -85,6 +85,7 @@ export class FileAccessPolicy implements UpstreamAccessPolicy {
   async run<T>(operation: () => Promise<T>): Promise<T> {
     await mkdir(this.rootDir, { recursive: true });
     const slot = await this.acquireSlot();
+    const stopHeartbeat = this.startHeartbeat(slot);
 
     try {
       if (this.definition.minIntervalMs > 0) {
@@ -108,8 +109,20 @@ export class FileAccessPolicy implements UpstreamAccessPolicy {
         }
       }
     } finally {
+      stopHeartbeat();
       await rm(this.slotPath(slot), { recursive: true, force: true });
     }
+  }
+
+  private startHeartbeat(slot: number): () => void {
+    const path = this.slotPath(slot);
+    const intervalMs = Math.max(1, Math.floor(this.staleLockMs / 3));
+    const timer = setInterval(() => {
+      const now = new Date();
+      void utimes(path, now, now).catch(() => undefined);
+    }, intervalMs);
+    timer.unref();
+    return () => clearInterval(timer);
   }
 
   private async acquireSlot(): Promise<number> {
