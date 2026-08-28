@@ -14,6 +14,7 @@ import type {
   PublicAtmosphericDataset,
   QueryAtmosphereInput,
 } from "../schema/unified-api.js";
+import type { CompareAtmosphericDatasetsInput } from "../schema/unified-specialized.js";
 import type { PointCoordinate } from "../schema/query.js";
 import {
   DEFAULT_LEVELS,
@@ -189,14 +190,14 @@ function registerCompareDatasetsCommand(program: Command): void {
         run: options.run,
         ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
       };
-      const request = against === "ifs"
+      const request: CompareAtmosphericDatasetsInput = against === "ifs"
         ? {
             ...common,
-            datasets: ["gfs", "ifs"] as const,
+            datasets: ["gfs", "ifs"],
           }
         : {
             ...common,
-            datasets: ["gfs", "gefs"] as const,
+            datasets: ["gfs", "gefs"],
             ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
             ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
           };
