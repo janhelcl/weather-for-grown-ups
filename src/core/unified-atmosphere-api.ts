@@ -26,6 +26,7 @@ import { HistoricalTimeSeriesService } from "./history-time-series.js";
 import { HistoricalTransectService } from "./history-transect.js";
 import { HistoricalProfileService } from "./history.js";
 import { IfsAreaSummaryService } from "./ifs-area-summary.js";
+import { IfsEnsMemberBundleService } from "./ifs-ens-member-bundle.js";
 import { IfsProfileService } from "./ifs-profile.js";
 import {
   IfsPointsService,
@@ -52,6 +53,7 @@ import { historicalPointsQuerySchema } from "../schema/history-points.js";
 import { historicalTransectQuerySchema } from "../schema/history-transect.js";
 import { historicalProfileQuerySchema, historicalTimeSeriesQuerySchema } from "../schema/history.js";
 import { ifsAreaSummaryQuerySchema } from "../schema/ifs-area-summary.js";
+import { ifsEnsMemberBundleQuerySchema } from "../schema/ifs-ens.js";
 import { ifsPointQuerySchema } from "../schema/ifs.js";
 import {
   ifsPointsQuerySchema,
@@ -92,6 +94,7 @@ export interface UnifiedAtmosphereQueryServiceOptions {
   gefsTransect?: Pick<GefsTransectService, "getTransect">;
   gefsArea?: Pick<GefsAreaSummaryService, "summarize">;
   ifsProfile?: Pick<IfsProfileService, "getProfile">;
+  ifsEnsBundle?: Pick<IfsEnsMemberBundleService, "getBundle">;
   ifsTimeSeries?: Pick<IfsTimeSeriesService, "getTimeSeries">;
   ifsPoints?: Pick<IfsPointsService, "getPoints">;
   ifsPointsTimeSeries?: Pick<IfsPointsTimeSeriesService, "getPointsTimeSeries">;
@@ -123,6 +126,7 @@ export class UnifiedAtmosphereQueryService {
   private readonly gefsTransect: Pick<GefsTransectService, "getTransect">;
   private readonly gefsArea: Pick<GefsAreaSummaryService, "summarize">;
   private readonly ifsProfile: Pick<IfsProfileService, "getProfile">;
+  private readonly ifsEnsBundle: Pick<IfsEnsMemberBundleService, "getBundle">;
   private readonly ifsTimeSeries: Pick<IfsTimeSeriesService, "getTimeSeries">;
   private readonly ifsPoints: Pick<IfsPointsService, "getPoints">;
   private readonly ifsPointsTimeSeries: Pick<IfsPointsTimeSeriesService, "getPointsTimeSeries">;
@@ -153,6 +157,7 @@ export class UnifiedAtmosphereQueryService {
     this.gefsTransect = options.gefsTransect ?? new GefsTransectService();
     this.gefsArea = options.gefsArea ?? new GefsAreaSummaryService();
     this.ifsProfile = options.ifsProfile ?? new IfsProfileService();
+    this.ifsEnsBundle = options.ifsEnsBundle ?? new IfsEnsMemberBundleService();
     this.ifsTimeSeries = options.ifsTimeSeries ?? new IfsTimeSeriesService();
     this.ifsPoints = options.ifsPoints ?? new IfsPointsService();
     this.ifsPointsTimeSeries = options.ifsPointsTimeSeries ?? new IfsPointsTimeSeriesService();
@@ -233,6 +238,16 @@ export class UnifiedAtmosphereQueryService {
         run,
         validTime: request.time.at,
         ...gfsSelection(request),
+      }));
+    }
+
+    if (request.dataset === "ifs-ens") {
+      return this.ifsEnsBundle.getBundle(ifsEnsMemberBundleQuerySchema.parse({
+        ...point,
+        run,
+        validTime: request.time.at,
+        selection: gefsSelection(request),
+        ...ensembleOptions(request),
       }));
     }
 
