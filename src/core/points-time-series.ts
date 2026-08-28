@@ -19,6 +19,7 @@ import {
   type LatestRunProvider,
 } from "./latest-run.js";
 import type { BatchPointsResult, PointsTimeSeriesResult } from "./types.js";
+import type { AtmosphericProgressReporter } from "./progress.js";
 
 export const DEFAULT_POINTS_TIME_SERIES_CONCURRENCY = 4;
 
@@ -30,6 +31,7 @@ export interface PointsTimeSeriesServiceOptions {
   batchPointsGetter?: BatchPointsGetter;
   latestRunProvider?: LatestRunProvider;
   concurrency?: number;
+  onProgress?: AtmosphericProgressReporter;
 }
 
 /**
@@ -44,6 +46,7 @@ export class PointsTimeSeriesService {
   private readonly latestRunProvider: LatestRunProvider;
   private readonly batchPointsGetter: BatchPointsGetter;
   private readonly concurrency: number;
+  private readonly onProgress: AtmosphericProgressReporter | undefined;
 
   constructor(options: PointsTimeSeriesServiceOptions = {}) {
     this.latestRunProvider = options.latestRunProvider ?? new LatestRunResolver();
@@ -51,6 +54,7 @@ export class PointsTimeSeriesService {
       latestRunProvider: this.latestRunProvider,
     });
     this.concurrency = options.concurrency ?? DEFAULT_POINTS_TIME_SERIES_CONCURRENCY;
+    this.onProgress = options.onProgress;
   }
 
   async getPointsTimeSeries(input: PointsTimeSeriesQueryInput): Promise<PointsTimeSeriesResult> {
@@ -90,18 +94,44 @@ export class PointsTimeSeriesService {
       );
     }
 
+    this.onProgress?.({
+      dataset: "gfs",
+      operation: "points_time_series",
+      phase: "start",
+      completedSteps: 0,
+      totalSteps: forecastHours.length,
+      source: "s3",
+    });
+
+    let completedSteps = 0;
     const batches = await mapConcurrent(
       forecastHours,
       this.concurrency,
-      async (forecastHourValue) => this.batchPointsGetter.getPoints({
-        points: query.points,
-        run: run.toISOString(),
-        ...(query.grid === undefined ? {} : { grid: query.grid }),
-        validTime: validTimeForForecastHour(run, forecastHourValue).toISOString(),
-        ...(query.variables === undefined ? {} : { variables: query.variables }),
-        ...(query.pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa: query.pressureLevelsHpa }),
-        ...(query.fields === undefined ? {} : { fields: query.fields }),
-      }),
+      async (forecastHourValue) => {
+        const validTime = validTimeForForecastHour(run, forecastHourValue).toISOString();
+        const batch = await this.batchPointsGetter.getPoints({
+          points: query.points,
+          run: run.toISOString(),
+          ...(query.grid === undefined ? {} : { grid: query.grid }),
+          validTime,
+          ...(query.variables === undefined ? {} : { variables: query.variables }),
+          ...(query.pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa: query.pressureLevelsHpa }),
+          ...(query.fields === undefined ? {} : { fields: query.fields }),
+        });
+        completedSteps += 1;
+        this.onProgress?.({
+          dataset: "gfs",
+          operation: "points_time_series",
+          phase: "step",
+          completedSteps,
+          totalSteps: forecastHours.length,
+          source: "s3",
+          forecastHour: forecastHourValue,
+          validTime,
+          cacheHit: batch.source.cacheHit,
+        });
+        return batch;
+      },
     );
 
     const first = batches[0];
@@ -144,6 +174,15 @@ export class PointsTimeSeriesService {
         }
       }
     }
+
+    this.onProgress?.({
+      dataset: "gfs",
+      operation: "points_time_series",
+      phase: "complete",
+      completedSteps: forecastHours.length,
+      totalSteps: forecastHours.length,
+      source: "s3",
+    });
 
     return {
       model: first.model,
