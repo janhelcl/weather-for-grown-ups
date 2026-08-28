@@ -693,19 +693,25 @@ describe("unified geometry routing coverage", () => {
     const gfsPoints = { getPoints: vi.fn(async () => ({ route: "gfs-points" })) };
     const gefsPoints = { getPoints: vi.fn(async () => ({ route: "gefs-points" })) };
     const ifsPoints = { getPoints: vi.fn(async () => ({ route: "ifs-points" })) };
+    const ifsEnsPoints = { getPoints: vi.fn(async () => ({ route: "ifs-ens-points" })) };
     const historyPoints = { getPoints: vi.fn(async () => ({ route: "history-points" })) };
     const gfsPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "gfs-points-series" })) };
     const gefsPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "gefs-points-series" })) };
     const ifsPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "ifs-points-series" })) };
+    const ifsEnsPointsTimeSeries = {
+      getPointsTimeSeries: vi.fn(async () => ({ route: "ifs-ens-points-series" })),
+    };
     const historyPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "history-points-series" })) };
     const service = new UnifiedAtmosphereQueryService({
       gfsPoints: gfsPoints as any,
       gefsPoints: gefsPoints as any,
       ifsPoints: ifsPoints as any,
+      ifsEnsPoints: ifsEnsPoints as any,
       historyPoints: historyPoints as any,
       gfsPointsTimeSeries: gfsPointsTimeSeries as any,
       gefsPointsTimeSeries: gefsPointsTimeSeries as any,
       ifsPointsTimeSeries: ifsPointsTimeSeries as any,
+      ifsEnsPointsTimeSeries: ifsEnsPointsTimeSeries as any,
       historyPointsTimeSeries: historyPointsTimeSeries as any,
     });
 
@@ -724,6 +730,22 @@ describe("unified geometry routing coverage", () => {
       .toEqual({ route: "gefs-points" });
     expect((await service.query({ dataset: "ifs", geometry, time: instant, selection })).result)
       .toEqual({ route: "ifs-points" });
+    expect((await service.query({
+      dataset: "ifs-ens",
+      geometry,
+      time: instant,
+      selection,
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+        maxMemberSamples: 100,
+      },
+    })).result).toEqual({ route: "ifs-ens-points" });
+    expect(ifsEnsPoints.getPoints).toHaveBeenCalledWith(expect.objectContaining({
+      points: geometry.points,
+      members: ["p01", "p50"],
+      maxMemberSamples: 100,
+    }));
     expect((await service.query({
       dataset: "gfs-analysis",
       geometry,
@@ -759,6 +781,25 @@ describe("unified geometry routing coverage", () => {
       limits: { maxPointSteps: 10 },
     })).result).toEqual({ route: "ifs-points-series" });
     expect((await service.query({
+      dataset: "ifs-ens",
+      geometry,
+      time: range,
+      selection,
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+        maxMemberSamples: 100,
+      },
+      limits: { maxPointSteps: 10 },
+    })).result).toEqual({ route: "ifs-ens-points-series" });
+    expect(ifsEnsPointsTimeSeries.getPointsTimeSeries).toHaveBeenCalledWith(expect.objectContaining({
+      points: geometry.points,
+      members: ["p01", "p50"],
+      maxSteps: 5,
+      maxPointSteps: 10,
+      maxMemberSamples: 100,
+    }));
+    expect((await service.query({
       dataset: "gfs-analysis",
       geometry,
       time: {
@@ -776,11 +817,13 @@ describe("unified geometry routing coverage", () => {
     const gfsTransect = { getTransect: vi.fn(async () => ({ route: "gfs-transect" })) };
     const gefsTransect = { getTransect: vi.fn(async () => ({ route: "gefs-transect" })) };
     const ifsTransect = { getTransect: vi.fn(async () => ({ route: "ifs-transect" })) };
+    const ifsEnsTransect = { getTransect: vi.fn(async () => ({ route: "ifs-ens-transect" })) };
     const historyTransect = { getTransect: vi.fn(async () => ({ route: "history-transect" })) };
     const service = new UnifiedAtmosphereQueryService({
       gfsTransect: gfsTransect as any,
       gefsTransect: gefsTransect as any,
       ifsTransect: ifsTransect as any,
+      ifsEnsTransect: ifsEnsTransect as any,
       historyTransect: historyTransect as any,
     });
     const geometry = {
@@ -813,6 +856,23 @@ describe("unified geometry routing coverage", () => {
     })).result).toEqual({ route: "ifs-transect" });
 
     expect((await service.query({
+      dataset: "ifs-ens",
+      geometry,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { fields: ["wind_10m"] },
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+        maxMemberSamples: 100,
+      },
+    })).result).toEqual({ route: "ifs-ens-transect" });
+    expect(ifsEnsTransect.getTransect).toHaveBeenCalledWith(expect.objectContaining({
+      samples: 5,
+      members: ["p01", "p50"],
+      maxMemberSamples: 100,
+    }));
+
+    expect((await service.query({
       dataset: "gfs-analysis",
       geometry,
       time: { at: "2017-05-09T12:00:00Z" },
@@ -824,11 +884,13 @@ describe("unified geometry routing coverage", () => {
     const gfsArea = { summarize: vi.fn(async () => ({ route: "gfs-area" })) };
     const gefsArea = { summarize: vi.fn(async () => ({ route: "gefs-area" })) };
     const ifsArea = { summarize: vi.fn(async () => ({ route: "ifs-area" })) };
+    const ifsEnsArea = { summarize: vi.fn(async () => ({ route: "ifs-ens-area" })) };
     const historyArea = { summarize: vi.fn(async () => ({ route: "history-area" })) };
     const service = new UnifiedAtmosphereQueryService({
       gfsArea: gfsArea as any,
       gefsArea: gefsArea as any,
       ifsArea: ifsArea as any,
+      ifsEnsArea: ifsEnsArea as any,
       historyArea: historyArea as any,
     });
     const geometry = {
@@ -879,6 +941,33 @@ describe("unified geometry routing coverage", () => {
       pressureLevelHpa: 850,
       percentiles: [10, 50, 90],
       maxGridPoints: 1000,
+    }));
+
+    expect((await service.query({
+      dataset: "ifs-ens",
+      geometry,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      aggregate,
+      forecast: { run: "latest" },
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+        includeMembers: true,
+      },
+      limits: { maxGridPoints: 1000, maxMemberGridPoints: 30000 },
+    })).result).toEqual({ route: "ifs-ens-area" });
+    expect(ifsEnsArea.summarize).toHaveBeenCalledWith(expect.objectContaining({
+      run: "latest",
+      validTime: "2026-08-28T12:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["p01", "p50"],
+      quantiles: [0.1, 0.5, 0.9],
+      includeMembers: true,
+      percentiles: [10, 50, 90],
+      maxGridPoints: 1000,
+      maxMemberGridPoints: 30000,
     }));
 
     expect((await service.query({

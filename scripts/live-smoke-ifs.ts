@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import { IfsAreaSummaryService } from "../src/core/ifs-area-summary.js";
+import { IfsEnsAreaSummaryService } from "../src/core/ifs-ens-area-summary.js";
 import { GfsIfsComparisonService } from "../src/core/gfs-ifs-comparison.js";
 import { IfsEnsDiagnosticTimeSeriesService } from "../src/core/ifs-ens-diagnostic-timeseries.js";
 import { IfsEnsDiagnosticsService } from "../src/core/ifs-ens-diagnostics.js";
 import { IfsEnsMemberBundleService } from "../src/core/ifs-ens-member-bundle.js";
+import {
+  IfsEnsPointsService,
+  IfsEnsPointsTimeSeriesService,
+} from "../src/core/ifs-ens-points.js";
 import { IfsEnsRunComparisonService } from "../src/core/ifs-ens-run-comparison.js";
 import { IfsEnsTimeSeriesService } from "../src/core/ifs-ens-timeseries.js";
+import { IfsEnsTransectService } from "../src/core/ifs-ens-transect.js";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
 import { IfsDiagnosticsService } from "../src/core/ifs-diagnostics.js";
 import { IfsRunComparisonService } from "../src/core/ifs-run-comparison.js";
@@ -195,6 +201,89 @@ console.log(JSON.stringify({
   },
 }, null, 2));
 
+const ensPoints = await new IfsEnsPointsService().getPoints({
+  points: [
+    { latitude: 50.08, longitude: 14.43 },
+    { latitude: 49.82, longitude: 14.21 },
+  ],
+  run: ens.run,
+  validTime: ens.validTime,
+  selection: {
+    variables: ["temperature", "wind"],
+    pressureLevelsHpa: [850],
+    fields: ["wind_10m"],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+});
+assert.equal(ensPoints.model, "ifs_ens_0p25");
+assert.equal(ensPoints.points.length, 2);
+assert(ensPoints.points.every((point) => point.pressureSummaries.length === 2));
+assert(ensPoints.points.every((point) => point.fieldSummaries.length === 1));
+assert.equal(ensPoints.source.product, "ifs_0p25_enfo_ef");
+
+const ensPointsTimeSeries = await new IfsEnsPointsTimeSeriesService().getPointsTimeSeries({
+  points: [
+    { latitude: 50.08, longitude: 14.43 },
+    { latitude: 49.82, longitude: 14.21 },
+  ],
+  run: ens.run,
+  startTime: ensRun.toISOString(),
+  endTime: new Date(ensRun.getTime() + 3 * 3_600_000).toISOString(),
+  selection: {
+    variables: ["temperature"],
+    pressureLevelsHpa: [850],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+  maxPointSteps: 4,
+});
+assert.deepEqual(ensPointsTimeSeries.series.map((step) => step.forecastHour), [0, 3]);
+assert(ensPointsTimeSeries.series.every((step) => step.points.length === 2));
+assert.equal(ensPointsTimeSeries.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsMultiPoint: {
+    run: ensPoints.run,
+    validTime: ensPoints.validTime,
+    pointCount: ensPoints.points.length,
+    timeSeriesForecastHours: ensPointsTimeSeries.series.map((step) => step.forecastHour),
+    cadence: ensPointsTimeSeries.cadence,
+  },
+}, null, 2));
+
+const ensTransect = await new IfsEnsTransectService().getTransect({
+  start: { latitude: 49.8, longitude: 14.0 },
+  end: { latitude: 50.3, longitude: 15.0 },
+  run: ens.run,
+  validTime: ens.validTime,
+  selection: {
+    variables: ["temperature", "wind"],
+    pressureLevelsHpa: [850],
+    fields: ["wind_10m"],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+  samples: 3,
+});
+assert.equal(ensTransect.model, "ifs_ens_0p25");
+assert.equal(ensTransect.samples.length, 3);
+assert.equal(ensTransect.samples[0]?.fraction, 0);
+assert.equal(ensTransect.samples[2]?.fraction, 1);
+assert(ensTransect.samples.every((sample) => sample.pressureSummaries.length === 2));
+assert(ensTransect.totalDistanceKm > 0);
+assert.equal(ensTransect.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsTransect: {
+    run: ensTransect.run,
+    validTime: ensTransect.validTime,
+    samples: ensTransect.samples.length,
+    totalDistanceKm: ensTransect.totalDistanceKm,
+  },
+}, null, 2));
+
+
 const ensDiagnostics = new IfsEnsDiagnosticsService();
 const ensLayerDiagnostics = await ensDiagnostics.getLayerDiagnostics({
   latitude: 50.08,
@@ -272,6 +361,45 @@ console.log(JSON.stringify({
     run: ensDiagnosticTimeSeries.run,
     forecastHours: ensDiagnosticTimeSeries.series.map((step) => step.forecastHour),
     cadence: ensDiagnosticTimeSeries.cadence,
+  },
+}, null, 2));
+
+const ensAreaSummary = await new IfsEnsAreaSummaryService().summarize({
+  westLongitude: 14.0,
+  eastLongitude: 14.25,
+  southLatitude: 49.9,
+  northLatitude: 50.1,
+  run: ens.run,
+  validTime: ens.validTime,
+  variable: "temperature",
+  pressureLevelHpa: 850,
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+  percentiles: [50],
+  thresholds: [{ operator: "gte", value: 0 }],
+  includeExtremaLocations: true,
+  maxGridPoints: 100,
+  maxMemberGridPoints: 200,
+});
+assert.equal(ensAreaSummary.model, "ifs_ens_0p25");
+assert.equal(ensAreaSummary.statistics.mean.memberCount, 2);
+assert(Number.isFinite(ensAreaSummary.statistics.mean.mean));
+assert(Number.isFinite(ensAreaSummary.spatialPercentiles?.[0]?.distribution.mean));
+assert(Number.isFinite(ensAreaSummary.spatialThresholdFractions?.[0]?.distribution.mean));
+assert.equal(
+  ensAreaSummary.methodology,
+  "spatial_statistics_per_member_then_ensemble_distribution",
+);
+assert.equal(ensAreaSummary.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsArea: {
+    run: ensAreaSummary.run,
+    validTime: ensAreaSummary.validTime,
+    memberCount: ensAreaSummary.statistics.mean.memberCount,
+    meanDistribution: ensAreaSummary.statistics.mean,
+    p50Distribution: ensAreaSummary.spatialPercentiles?.[0]?.distribution,
+    thresholdDistribution: ensAreaSummary.spatialThresholdFractions?.[0]?.distribution,
   },
 }, null, 2));
 
