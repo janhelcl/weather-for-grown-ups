@@ -14,6 +14,7 @@ import {
   IGRA_VERIFICATION_VARIABLE_IDS,
   igraVerificationVariableSchema,
 } from "./igra-verification.js";
+import { ifsPressureLevelSchema, ifsPressureVariableSchema } from "./ifs.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 import {
   atmosphericEnsembleOptionsSchema,
@@ -55,7 +56,7 @@ export const compareAtmosphericRunsSchema = z.object({
   }
 });
 
-export const compareAtmosphericDatasetsSchema = z.object({
+const compareGfsGefsDatasetsSchema = z.object({
   datasets: z.tuple([z.literal("gfs"), z.literal("gefs")]).default(["gfs", "gefs"]),
   geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
   time: z.object({ at: isoDateTimeSchema }),
@@ -66,6 +67,23 @@ export const compareAtmosphericDatasetsSchema = z.object({
   members: z.array(z.string().min(1)).min(2).max(31).optional(),
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
 });
+
+const compareGfsIfsDatasetsSchema = z.object({
+  datasets: z.tuple([z.literal("gfs"), z.literal("ifs")]),
+  geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
+  time: z.object({ at: isoDateTimeSchema }),
+  variable: ifsPressureVariableSchema,
+  pressureLevelHpa: ifsPressureLevelSchema,
+  run: z.string().min(1).default("latest"),
+  gfsGrid: gfsGridSchema.optional(),
+  members: z.never().optional(),
+  quantiles: z.never().optional(),
+});
+
+export const compareAtmosphericDatasetsSchema = z.union([
+  compareGfsGefsDatasetsSchema,
+  compareGfsIfsDatasetsSchema,
+]);
 
 const verifyAtmosphericForecastCaseSchema = z.object({
   forecastDataset: z.literal("gfs").default("gfs"),
