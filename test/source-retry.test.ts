@@ -44,6 +44,47 @@ describe("provider transport retries", () => {
     expect(run).toHaveBeenCalledTimes(2);
   });
 
+  it("handles concurrent identical NCEI cache misses without temp-file collisions", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-ncei-concurrent-"));
+    roots.push(cacheDir);
+    const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
+    let started = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchFn = vi.fn(async () => {
+      started += 1;
+      if (started === 2) release();
+      await gate;
+      return new Response("a,b\n1,2", { status: 200 });
+    });
+    const source = new NceiGfsHistorySource({
+      cacheDir,
+      limiter: { run },
+      fetchFn,
+      retryBaseDelayMs: 0,
+      retryJitterRatio: 0,
+    });
+    const request = {
+      analysisTime: new Date("2017-05-09T00:00:00Z"),
+      latitude: 50,
+      longitude: 14,
+      variables: ["Temperature_isobaric"] as const,
+    };
+
+    const [first, second] = await Promise.all([
+      source.fetch(request),
+      source.fetch(request),
+    ]);
+    const cached = await source.fetch(request);
+
+    expect(first.csv).toBe("a,b\n1,2");
+    expect(second.csv).toBe("a,b\n1,2");
+    expect(cached.cacheHit).toBe(true);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
   it("does not retry terminal NCEI 404 responses", async () => {
     const cacheDir = await mkdtemp(join(tmpdir(), "wfg-ncei-terminal-"));
     roots.push(cacheDir);
