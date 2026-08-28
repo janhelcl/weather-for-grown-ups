@@ -1,4 +1,5 @@
 import type { GefsPgrb2aFieldId } from "../catalog/gefs-fields.js";
+import type { IfsEnsMember } from "../catalog/ifs-ens.js";
 import type {
   GefsMember,
   GefsPressureVariableId,
@@ -111,6 +112,10 @@ export function parseGefsFields(value: unknown): GefsPgrb2aFieldId[] {
 
 export function parseGefsMembers(value: unknown): GefsMember[] {
   return String(value).split(",").map((member) => member.trim()).filter(Boolean) as GefsMember[];
+}
+
+export function parseIfsEnsMembers(value: unknown): IfsEnsMember[] {
+  return String(value).split(",").map((member) => member.trim()).filter(Boolean) as IfsEnsMember[];
 }
 
 export function parseNumbers(value: unknown): number[] {
