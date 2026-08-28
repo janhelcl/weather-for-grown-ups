@@ -2,6 +2,10 @@ import {
   parseGribIndex,
   type GribIndexEntry,
 } from "@mattnucc/gribberish";
+import {
+  isRetryableHttpStatus,
+  waitBeforeHttpRetry,
+} from "./http-retry.js";
 
 export const IFS_OPEN_DATA_BASE_URL = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com";
 export const IFS_OPEN_DATA_MIRRORS = [
@@ -34,13 +38,15 @@ export async function fetchIfsWithRetry(
   init?: RequestInit,
 ): Promise<Response> {
   let lastResponse: Response | undefined;
-  for (let attempt = 0; attempt < IFS_HTTP_MAX_ATTEMPTS; attempt += 1) {
+  for (let attempt = 1; attempt <= IFS_HTTP_MAX_ATTEMPTS; attempt += 1) {
     const response = await fetchFn(input, init);
-    if (!isRetryableStatus(response.status) || attempt === IFS_HTTP_MAX_ATTEMPTS - 1) return response;
+    if (!isRetryableHttpStatus(response.status) || attempt === IFS_HTTP_MAX_ATTEMPTS) {
+      return response;
+    }
     lastResponse = response;
-    const retryAfterMs = retryAfterMilliseconds(response.headers.get("retry-after"));
-    const delayMs = retryAfterMs ?? IFS_HTTP_INITIAL_BACKOFF_MS * 2 ** attempt;
-    await sleep(delayMs);
+    await waitBeforeHttpRetry(attempt, response.headers.get("retry-after"), {
+      baseDelayMs: IFS_HTTP_INITIAL_BACKOFF_MS,
+    });
   }
   if (lastResponse !== undefined) return lastResponse;
   throw new Error("ECMWF IFS retry loop completed without a response");
@@ -195,7 +201,7 @@ async function isIfsProductAvailable(
     const response = await fetchIfsWithRetry(fetchFn, url, {
       headers: { "user-agent": "weather-for-grown-ups/0.2" },
     });
-    if (response.status === 404 || isRetryableStatus(response.status)) continue;
+    if (response.status === 404 || isRetryableHttpStatus(response.status)) continue;
     if (!response.ok) {
       throw new Error(
         `ECMWF IFS run discovery failed: HTTP ${response.status} ${response.statusText} for ${url}`,
@@ -217,23 +223,6 @@ async function isIfsProductAvailable(
 
 function memberSuffix(selector: IfsIndexSelector): string {
   return selector.number === undefined ? "" : `#member${selector.number.toString().padStart(2, "0")}`;
-}
-
-function isRetryableStatus(status: number): boolean {
-  return status === 429 || status === 503 || (status >= 500 && status <= 599);
-}
-
-function retryAfterMilliseconds(value: string | null): number | undefined {
-  if (value === null) return undefined;
-  const seconds = Number(value);
-  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
-  const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) return undefined;
-  return Math.max(0, timestamp - Date.now());
-}
-
-function sleep(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function yyyymmdd(date: Date): string {
