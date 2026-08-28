@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { inflateRawSync } from "node:zlib";
-import type { FileRateLimiter } from "../cache/file-rate-limiter.js";
+import type { UpstreamAccessPolicy } from "../cache/file-access-policy.js";
 import { deriveSaturationVaporPressureHpa } from "../derived/thermodynamics.js";
 import type { ProfileLevel } from "../core/types.js";
 
@@ -37,7 +37,7 @@ export interface IgraSounding {
 
 export interface NceiIgraSourceOptions {
   cacheDir: string;
-  limiter: Pick<FileRateLimiter, "run">;
+  limiter: UpstreamAccessPolicy;
   fetchFn?: typeof fetch;
   now?: () => Date;
 }
