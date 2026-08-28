@@ -78,7 +78,7 @@ export const ifsProfileResultSchema = z.object({
   model: z.literal("ifs_0p25"),
   run: isoDateTimeSchema,
   validTime: isoDateTimeSchema,
-  forecastHour: z.number().int().min(0).max(360),
+  forecastHour: z.number().int().min(0).max(240),
   requestedPoint: gridPointSchema,
   gridPoint: gridPointSchema,
   levels: z.array(profileLevelResultSchema),
