@@ -49,20 +49,20 @@ const NATIVE_HUMIDITY_PROFILE_VARIABLES = [
 const queryService = new UnifiedAtmosphereQueryService();
 const diagnosticService = new UnifiedAtmosphereDiagnosticService();
 
-const summaries = [];
-for (const grid of ["0p25", "0p50"] as const) {
-  const plan = await comparisonPlan(grid);
-  if (plan.archiveStatus !== "available") {
-    summaries.push({
-      grid,
-      comparisonMode: plan.mode,
-      archiveStatus: plan.archiveStatus,
-      archiveFailures: plan.archiveFailures,
-    });
-    continue;
-  }
-  summaries.push(await verifyGrid(grid, plan));
-}
+const summaries = await Promise.all(
+  (["0p25", "0p50"] as const).map(async (grid) => {
+    const plan = await comparisonPlan(grid);
+    if (plan.archiveStatus !== "available") {
+      return {
+        grid,
+        comparisonMode: plan.mode,
+        archiveStatus: plan.archiveStatus,
+        archiveFailures: plan.archiveFailures,
+      };
+    }
+    return verifyGrid(grid, plan);
+  }),
+);
 console.log(JSON.stringify({
   checkedAt: new Date().toISOString(),
   contract: "operational_vs_historical_archive",
@@ -78,19 +78,77 @@ async function verifyGrid(
   const f006 = new Date(run.getTime() + 6 * HOUR_MS).toISOString();
   const f012 = new Date(run.getTime() + 12 * HOUR_MS).toISOString();
 
-  const operationalProfile = await pointProfile(grid, plan.leftSource, runIso, f006);
-  const archivedProfile = await pointProfile(grid, plan.rightSource, runIso, f006);
+  console.log(`[${grid}] launching bounded-concurrency archive parity checks`);
+  const [
+    [operationalProfile, archivedProfile],
+    [operationalFields, archivedFields],
+    [operationalRange, archivedRange],
+    [operationalPoints, archivedPoints],
+    [operationalLayer, archivedLayer],
+    [operationalProfileDiagnostic, archivedProfileDiagnostic],
+    [operationalParcel, archivedParcel],
+    [operationalArea, archivedArea],
+  ] = await Promise.all([
+    paired(
+      grid,
+      "profile",
+      pointProfile(grid, plan.leftSource, runIso, f006),
+      pointProfile(grid, plan.rightSource, runIso, f006),
+    ),
+    paired(
+      grid,
+      "fields",
+      pointFields(grid, plan.leftSource, runIso, f006),
+      pointFields(grid, plan.rightSource, runIso, f006),
+    ),
+    paired(
+      grid,
+      "time range",
+      pointRange(grid, plan.leftSource, runIso, f006, f012),
+      pointRange(grid, plan.rightSource, runIso, f006, f012),
+    ),
+    paired(
+      grid,
+      "multi-point",
+      pointsInstant(grid, plan.leftSource, runIso, f006),
+      pointsInstant(grid, plan.rightSource, runIso, f006),
+    ),
+    paired(
+      grid,
+      "layer diagnostic",
+      layerDiagnostic(grid, plan.leftSource, runIso, f006),
+      layerDiagnostic(grid, plan.rightSource, runIso, f006),
+    ),
+    paired(
+      grid,
+      "profile diagnostic",
+      profileDiagnostic(grid, plan.leftSource, runIso, f006),
+      profileDiagnostic(grid, plan.rightSource, runIso, f006),
+    ),
+    paired(
+      grid,
+      "parcel diagnostic",
+      parcelDiagnostic(grid, plan.leftSource, runIso, f006),
+      parcelDiagnostic(grid, plan.rightSource, runIso, f006),
+    ),
+    // Operational area queries use NOMADS geographic subsetting by contract.
+    // Point/profile parity above still exercises the selected S3 operational transport.
+    paired(
+      grid,
+      "area summary",
+      areaSummary(grid, "nomads", runIso, f006),
+      areaSummary(grid, plan.rightSource, runIso, f006),
+    ),
+  ]);
+  console.log(`[${grid}] all parity inputs fetched; comparing results`);
+
   assert.equal(operationalProfile.run, archivedProfile.run);
   assert.equal(operationalProfile.validTime, archivedProfile.validTime);
   assert.deepEqual(operationalProfile.gridPoint, archivedProfile.gridPoint);
   compareNumericTree(operationalProfile.levels, archivedProfile.levels, `${grid}.profile.levels`, 2e-4);
 
-  const operationalFields = await pointFields(grid, plan.leftSource, runIso, f006);
-  const archivedFields = await pointFields(grid, plan.rightSource, runIso, f006);
   compareFieldResults(operationalFields.fields, archivedFields.fields, `${grid}.fields`);
 
-  const operationalRange = await pointRange(grid, plan.leftSource, runIso, f006, f012);
-  const archivedRange = await pointRange(grid, plan.rightSource, runIso, f006, f012);
   const operationalByHour = new Map<number, any>(
     operationalRange.series.map((step: any) => [step.forecastHour, step]),
   );
@@ -116,8 +174,6 @@ async function verifyGrid(
     );
   }
 
-  const operationalPoints = await pointsInstant(grid, plan.leftSource, runIso, f006);
-  const archivedPoints = await pointsInstant(grid, plan.rightSource, runIso, f006);
   assert.equal(operationalPoints.points.length, archivedPoints.points.length);
   for (let index = 0; index < operationalPoints.points.length; index += 1) {
     const left = operationalPoints.points[index];
@@ -127,8 +183,6 @@ async function verifyGrid(
     compareNumericTree(left.levels, right.levels, `${grid}.points[${index}]`, 2e-4);
   }
 
-  const operationalLayer = await layerDiagnostic(grid, plan.leftSource, runIso, f006);
-  const archivedLayer = await layerDiagnostic(grid, plan.rightSource, runIso, f006);
   compareNumericTree(
     { layer: operationalLayer.layer, diagnostics: operationalLayer.diagnostics },
     { layer: archivedLayer.layer, diagnostics: archivedLayer.diagnostics },
@@ -136,8 +190,6 @@ async function verifyGrid(
     3e-4,
   );
 
-  const operationalProfileDiagnostic = await profileDiagnostic(grid, plan.leftSource, runIso, f006);
-  const archivedProfileDiagnostic = await profileDiagnostic(grid, plan.rightSource, runIso, f006);
   compareNumericTree(
     operationalProfileDiagnostic.diagnostics,
     archivedProfileDiagnostic.diagnostics,
@@ -145,8 +197,6 @@ async function verifyGrid(
     1e-2,
   );
 
-  const operationalParcel = await parcelDiagnostic(grid, plan.leftSource, runIso, f006);
-  const archivedParcel = await parcelDiagnostic(grid, plan.rightSource, runIso, f006);
   if (grid === "0p25") {
     compareNumericTree(
       stripParcelPath(operationalParcel.parcel),
@@ -166,10 +216,6 @@ async function verifyGrid(
     );
   }
 
-  // Operational area queries use NOMADS geographic subsetting by contract.
-  // Point/profile parity above still exercises the selected S3 operational transport.
-  const operationalArea = await areaSummary(grid, "nomads", runIso, f006);
-  const archivedArea = await areaSummary(grid, plan.rightSource, runIso, f006);
   assert.equal(
     operationalArea.statistics.definedGridPoints,
     archivedArea.statistics.definedGridPoints,
@@ -214,6 +260,18 @@ async function verifyGrid(
       : "archive_specific_humidity_reconstructed_from_temperature_relative_humidity",
     parcelParity: grid === "0p25" ? "numeric" : "shape_and_semantics",
   };
+}
+
+async function paired<T, U>(
+  grid: Grid,
+  label: string,
+  operational: Promise<T>,
+  archived: Promise<U>,
+): Promise<[T, U]> {
+  console.log(`[${grid}] ${label} started`);
+  const result = await Promise.all([operational, archived] as const);
+  console.log(`[${grid}] ${label} fetched`);
+  return result;
 }
 
 async function comparisonPlan(grid: Grid): Promise<ComparisonPlan> {
