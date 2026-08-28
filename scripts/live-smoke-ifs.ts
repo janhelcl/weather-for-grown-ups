@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { IfsAreaSummaryService } from "../src/core/ifs-area-summary.js";
 import { GfsIfsComparisonService } from "../src/core/gfs-ifs-comparison.js";
+import { IfsEnsMemberBundleService } from "../src/core/ifs-ens-member-bundle.js";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
 import { IfsDiagnosticsService } from "../src/core/ifs-diagnostics.js";
 import { IfsRunComparisonService } from "../src/core/ifs-run-comparison.js";
@@ -79,6 +80,45 @@ console.log(JSON.stringify({
   levels: result.levels,
   fields: result.fields,
   source: result.source,
+}, null, 2));
+
+const ens = await new IfsEnsMemberBundleService().getBundle({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: "latest",
+  validTime: validTime.toISOString(),
+  selection: {
+    variables: ["temperature", "wind"],
+    pressureLevelsHpa: [850],
+    fields: ["wind_10m"],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+  includeMembers: true,
+});
+assert.equal(ens.model, "ifs_ens_0p25");
+assert.equal(ens.selection.members.length, 2);
+assert.equal(ens.pressureSummaries.length, 2);
+assert(ens.pressureSummaries.every((summary) =>
+  summary.outputs.every((output) =>
+    output.aggregation === "circular_direction"
+      ? Number.isFinite(output.meanDirectionDeg)
+      : Number.isFinite(output.distribution.mean))));
+assert.equal(ens.fieldSummaries.length, 1);
+assert.equal(ens.members?.length, 2);
+assert.equal(ens.source.product, "ifs_0p25_enfo_ef");
+assert.equal(ens.source.memberSemantics, "50_perturbed_members_control_is_oper_fc");
+
+console.log(JSON.stringify({
+  ifsEns: {
+    run: ens.run,
+    validTime: ens.validTime,
+    forecastHour: ens.forecastHour,
+    members: ens.selection.members,
+    pressureSummaries: ens.pressureSummaries,
+    fieldSummaries: ens.fieldSummaries,
+    source: ens.source,
+  },
 }, null, 2));
 
 const crossModelComparison = await new GfsIfsComparisonService().compare({
