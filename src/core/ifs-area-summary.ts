@@ -79,7 +79,9 @@ export class IfsAreaSummaryService {
     if (query.variable === undefined || query.pressureLevelHpa === undefined) {
       throw new Error("Internal IFS area validation error: pressure selection is incomplete");
     }
-    const variable = IFS_RAW_PRESSURE_VARIABLE_CATALOG[query.variable as IfsRawPressureVariableId];
+    const rawId: IfsRawPressureVariableId =
+      query.variable === "absolute_vorticity" ? "relative_vorticity" : query.variable;
+    const variable = IFS_RAW_PRESSURE_VARIABLE_CATALOG[rawId];
     const selector = {
       key: `${query.variable}@${query.pressureLevelHpa}`,
       param: variable.param,
@@ -92,9 +94,9 @@ export class IfsAreaSummaryService {
       forecastHour,
       selectors: [selector],
     });
-    const points = normalizePoints(
+    const points = normalizePressurePoints(
       await this.decoder.extractBox(cached.path, box),
-      (value) => query.variable === "temperature" ? value - 273.15 : value,
+      query.variable,
     );
     const computed = computeAreaDistribution(points, query);
     const output = VARIABLE_CATALOG[query.variable].outputs[0];
@@ -211,6 +213,27 @@ function normalizePoints(
   normalize: (value: number) => number,
 ): GribGridPoint[] {
   return points.map((point) => ({ ...point, value: normalize(point.value) }));
+}
+
+function normalizePressurePoints(
+  points: readonly GribGridPoint[],
+  id: ReturnType<typeof ifsAreaSummaryQuerySchema.parse>["variable"],
+): GribGridPoint[] {
+  if (id === "temperature") {
+    return normalizePoints(points, (value) => value - 273.15);
+  }
+  if (id === "absolute_vorticity") {
+    return points.map((point) => ({
+      ...point,
+      value: point.value + coriolisParameterS1(point.latitude),
+    }));
+  }
+  return [...points];
+}
+
+function coriolisParameterS1(latitudeDeg: number): number {
+  const earthAngularVelocityS1 = 7.292115e-5;
+  return 2 * earthAngularVelocityS1 * Math.sin(latitudeDeg * Math.PI / 180);
 }
 
 function normalizeFieldValue(id: IfsRawFieldId, value: number): number {
