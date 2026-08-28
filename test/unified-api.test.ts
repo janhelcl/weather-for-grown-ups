@@ -817,11 +817,13 @@ describe("unified geometry routing coverage", () => {
     const gfsTransect = { getTransect: vi.fn(async () => ({ route: "gfs-transect" })) };
     const gefsTransect = { getTransect: vi.fn(async () => ({ route: "gefs-transect" })) };
     const ifsTransect = { getTransect: vi.fn(async () => ({ route: "ifs-transect" })) };
+    const ifsEnsTransect = { getTransect: vi.fn(async () => ({ route: "ifs-ens-transect" })) };
     const historyTransect = { getTransect: vi.fn(async () => ({ route: "history-transect" })) };
     const service = new UnifiedAtmosphereQueryService({
       gfsTransect: gfsTransect as any,
       gefsTransect: gefsTransect as any,
       ifsTransect: ifsTransect as any,
+      ifsEnsTransect: ifsEnsTransect as any,
       historyTransect: historyTransect as any,
     });
     const geometry = {
@@ -852,6 +854,23 @@ describe("unified geometry routing coverage", () => {
       time: { at: "2026-08-28T12:00:00Z" },
       selection: { fields: ["wind_10m"] },
     })).result).toEqual({ route: "ifs-transect" });
+
+    expect((await service.query({
+      dataset: "ifs-ens",
+      geometry,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { fields: ["wind_10m"] },
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+        maxMemberSamples: 100,
+      },
+    })).result).toEqual({ route: "ifs-ens-transect" });
+    expect(ifsEnsTransect.getTransect).toHaveBeenCalledWith(expect.objectContaining({
+      samples: 5,
+      members: ["p01", "p50"],
+      maxMemberSamples: 100,
+    }));
 
     expect((await service.query({
       dataset: "gfs-analysis",
