@@ -20,14 +20,6 @@ export const DEFAULT_LAYER_DIAGNOSTICS = "temperature_lapse_rate,wind_shear,pote
 export const DEFAULT_PROFILE_DIAGNOSTICS = "freezing_level_crossings,temperature_inversion_layers";
 export const RUN_HELP = "GFS run initialization; latest = newest run satisfying this query, latest_complete = newest run published through f384";
 
-export type CliAtmosphericModel = "gfs" | "gefs";
-
-export function parseAtmosphericModel(value: unknown): CliAtmosphericModel {
-  const model = String(value).trim().toLowerCase();
-  if (model !== "gfs" && model !== "gefs") throw new Error(`Expected --model gfs|gefs, received: ${value}`);
-  return model;
-}
-
 export function pointSelection(vars: unknown, levels: unknown, fields: unknown): {
   variables?: VariableId[];
   pressureLevelsHpa?: number[];
