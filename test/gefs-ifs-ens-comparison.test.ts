@@ -265,6 +265,138 @@ describe("GEFS / IFS ENS comparison", () => {
     expect(result.comparison.populationStdDevRatioIfsEnsToGefs).toBeNull();
   });
 
+  it("rejects inconsistent run and valid-time metadata from composed ensemble sources", async () => {
+    const runMismatch = new GefsIfsEnsComparisonService({
+      gefsBundleGetter: { getBundle: vi.fn(async () => gefsBundle()) } as any,
+      ifsEnsBundleGetter: {
+        getBundle: vi.fn(async () => ifsBundle({ run: "2026-08-27T18:00:00.000Z" })),
+      } as any,
+    });
+    await expect(runMismatch.compare({
+      latitude: 50.08,
+      longitude: 14.43,
+      run: "2026-08-28T00:00:00Z",
+      validTime: "2026-08-28T12:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      gefsMembers: ["c00", "p01"],
+      ifsEnsMembers: ["p01", "p02"],
+      quantiles: [0.5],
+    })).rejects.toThrow("inconsistent initialization cycles");
+
+    const timeMismatch = new GefsIfsEnsComparisonService({
+      gefsBundleGetter: { getBundle: vi.fn(async () => gefsBundle()) } as any,
+      ifsEnsBundleGetter: {
+        getBundle: vi.fn(async () => ifsBundle({ validTime: "2026-08-28T09:00:00.000Z" })),
+      } as any,
+    });
+    await expect(timeMismatch.compare({
+      latitude: 50.08,
+      longitude: 14.43,
+      run: "2026-08-28T00:00:00Z",
+      validTime: "2026-08-28T12:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      gefsMembers: ["c00", "p01"],
+      ifsEnsMembers: ["p01", "p02"],
+      quantiles: [0.5],
+    })).rejects.toThrow("inconsistent valid-time semantics");
+  });
+
+  it("fails explicitly when either ensemble omits the requested scalar summary", async () => {
+    const missingGefs = new GefsIfsEnsComparisonService({
+      gefsBundleGetter: {
+        getBundle: vi.fn(async () => gefsBundle({ pressureSummaries: [] })),
+      } as any,
+      ifsEnsBundleGetter: { getBundle: vi.fn(async () => ifsBundle()) } as any,
+    });
+    await expect(missingGefs.compare({
+      latitude: 50.08,
+      longitude: 14.43,
+      run: "2026-08-28T00:00:00Z",
+      validTime: "2026-08-28T12:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      gefsMembers: ["c00", "p01"],
+      ifsEnsMembers: ["p01", "p02"],
+      quantiles: [0.5],
+    })).rejects.toThrow("GEFS comparison is missing temperature@850hPa");
+
+    const missingIfs = new GefsIfsEnsComparisonService({
+      gefsBundleGetter: { getBundle: vi.fn(async () => gefsBundle()) } as any,
+      ifsEnsBundleGetter: {
+        getBundle: vi.fn(async () => ifsBundle({ pressureSummaries: [] })),
+      } as any,
+    });
+    await expect(missingIfs.compare({
+      latitude: 50.08,
+      longitude: 14.43,
+      run: "2026-08-28T00:00:00Z",
+      validTime: "2026-08-28T12:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      gefsMembers: ["c00", "p01"],
+      ifsEnsMembers: ["p01", "p02"],
+      quantiles: [0.5],
+    })).rejects.toThrow("IFS ENS comparison is missing temperature@850hPa");
+  });
+
+  it("fails explicitly when requested quantiles or threshold member payloads are missing", async () => {
+    const missingQuantile = new GefsIfsEnsComparisonService({
+      gefsBundleGetter: {
+        getBundle: vi.fn(async () => gefsBundle({
+          pressureSummaries: [{
+            variable: "temperature",
+            pressureLevelHpa: 850,
+            outputField: "temperatureC",
+            unit: "degC",
+            distribution: {
+              memberCount: 2,
+              mean: 11,
+              populationStdDev: 1,
+              min: 10,
+              max: 12,
+              quantiles: [{ quantile: 0.1, value: 10.2 }],
+            },
+          }],
+        })),
+      } as any,
+      ifsEnsBundleGetter: { getBundle: vi.fn(async () => ifsBundle()) } as any,
+    });
+    await expect(missingQuantile.compare({
+      latitude: 50.08,
+      longitude: 14.43,
+      run: "2026-08-28T00:00:00Z",
+      validTime: "2026-08-28T12:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      gefsMembers: ["c00", "p01"],
+      ifsEnsMembers: ["p01", "p02"],
+      quantiles: [0.5],
+    })).rejects.toThrow("GEFS comparison summary is missing quantile 0.5");
+
+    const missingMembers = new GefsIfsEnsComparisonService({
+      gefsBundleGetter: {
+        getBundle: vi.fn(async () => gefsBundle({ members: undefined })),
+      } as any,
+      ifsEnsBundleGetter: {
+        getBundle: vi.fn(async () => ifsBundle({ members: undefined })),
+      } as any,
+    });
+    await expect(missingMembers.compare({
+      latitude: 50.08,
+      longitude: 14.43,
+      run: "2026-08-28T00:00:00Z",
+      validTime: "2026-08-28T12:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      gefsMembers: ["c00", "p01"],
+      ifsEnsMembers: ["p01", "p02"],
+      quantiles: [0.5],
+      thresholdGte: 12,
+    })).rejects.toThrow("threshold comparison requires internal member payloads");
+  });
+
   it("rejects mismatched canonical output units rather than comparing unlike values", async () => {
     const badIfs = ifsBundle({
       pressureSummaries: [{
