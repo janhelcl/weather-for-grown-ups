@@ -27,7 +27,7 @@ export class GfsS3SubsetCache {
   constructor(
     private readonly rootDir: string,
     private readonly fetchFn: typeof fetch = globalThis.fetch,
-    private readonly rangeConcurrency = UPSTREAM_ACCESS_POLICIES.noaaAws.maxConcurrency,
+    private readonly rangeConcurrency: number = UPSTREAM_ACCESS_POLICIES.noaaAws.maxConcurrency,
     private readonly accessPolicy: UpstreamAccessPolicy = new FileAccessPolicy(
       join(rootDir, "access-state"),
       UPSTREAM_ACCESS_POLICIES.noaaAws,
