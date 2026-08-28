@@ -42,7 +42,7 @@ function registerQueryCommand(program: Command): void {
   program
     .command("query")
     .description("Query atmospheric state through dataset × geometry × time × selection")
-    .option("--dataset <gfs|gefs|ifs|gfs-analysis>", "Atmospheric dataset", "gfs")
+    .option("--dataset <gfs|gefs|ifs|ifs-ens|gfs-analysis>", "Atmospheric dataset", "gfs")
     .option("--lat <number>", "Point latitude", Number)
     .option("--lon <number>", "Point longitude", Number)
     .option("--point <lat,lon>", "Multi-point coordinate; repeat as needed", collectPoint)
@@ -64,9 +64,9 @@ function registerQueryCommand(program: Command): void {
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--source <nomads|s3>", "Operational GFS source override")
-    .option("--members <list>", "GEFS members (c00,p01..p30)")
-    .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
-    .option("--include-members", "Include GEFS member payloads where supported")
+    .option("--members <list>", "Ensemble members: GEFS c00,p01..p30 or IFS ENS p01..p50")
+    .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
+    .option("--include-members", "Include raw ensemble member payloads where supported")
     .option("--percentiles <list>", "Area spatial percentiles, e.g. 10,50,90")
     .option("--gte <number>", "Area fraction at or above this threshold", Number)
     .option("--lte <number>", "Area fraction at or below this threshold", Number)
@@ -152,7 +152,13 @@ function registerCompareRunsCommand(program: Command): void {
           ? {}
           : {
               ensemble: {
-                ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+                ...(options.members === undefined
+        ? {}
+        : {
+            members: dataset === "gefs"
+              ? parseGefsMembers(options.members)
+              : parseStrings(options.members),
+          }),
                 ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
               },
             }),
@@ -321,7 +327,7 @@ export function buildUnifiedQuery(options: Record<string, any>): QueryAtmosphere
     selection,
     ...forecastInput(dataset, options),
     ...(options.source === undefined ? {} : { source: options.source }),
-    ...ensembleInput(options),
+    ...ensembleInput(dataset, options),
     ...aggregateInput(options),
     ...limitsInput(options),
   };
@@ -372,7 +378,7 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
     diagnostic,
     ...forecastInput(dataset, options),
     ...(options.source === undefined ? {} : { source: options.source }),
-    ...ensembleInput(options),
+    ...ensembleInput(dataset, options),
   };
 }
 
@@ -384,8 +390,14 @@ function parseForecastDataset(value: unknown): "gfs" | "gefs" | "ifs" {
 
 function parseDataset(value: unknown): PublicAtmosphericDataset {
   const dataset = String(value).trim().toLowerCase();
-  if (dataset === "gfs" || dataset === "gefs" || dataset === "ifs" || dataset === "gfs-analysis") return dataset;
-  throw new Error(`Expected --dataset gfs|gefs|ifs|gfs-analysis, received: ${value}`);
+  if (
+    dataset === "gfs"
+    || dataset === "gefs"
+    || dataset === "ifs"
+    || dataset === "ifs-ens"
+    || dataset === "gfs-analysis"
+  ) return dataset;
+  throw new Error(`Expected --dataset gfs|gefs|ifs|ifs-ens|gfs-analysis, received: ${value}`);
 }
 
 function parseGeometry(options: Record<string, any>): QueryAtmosphereInput["geometry"] {
@@ -467,7 +479,7 @@ function forecastInput(
   };
 }
 
-function ensembleInput(options: Record<string, any>) {
+function ensembleInput(dataset: PublicAtmosphericDataset, options: Record<string, any>) {
   const hasEnsemble = options.members !== undefined
     || options.quantiles !== undefined
     || Boolean(options.includeMembers)
