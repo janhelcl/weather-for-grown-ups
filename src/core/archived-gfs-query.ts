@@ -520,7 +520,7 @@ export class ArchivedGfsForecastQueryService {
 export function shouldUseArchivedGfsForecast(
   request: {
     dataset: string;
-    forecast?: { run: string; grid?: GfsGrid } | undefined;
+    forecast?: { run: string; grid?: GfsGrid | undefined } | undefined;
     source?: string | undefined;
   },
   now: Date = new Date(),
