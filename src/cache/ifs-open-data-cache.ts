@@ -9,12 +9,14 @@ import {
   parseIfsOpenDataIndex,
   selectIfsIndexEntries,
   type IfsIndexSelector,
+  type IfsOpenDataProduct,
 } from "../sources/ifs-open-data.js";
 
 export interface IfsSelectionRequest {
   run: Date;
   forecastHour: number;
   selectors: readonly IfsIndexSelector[];
+  product?: IfsOpenDataProduct;
 }
 
 export interface IfsSubsetFile {
@@ -72,8 +74,9 @@ export class IfsOpenDataSubsetCache implements IfsSelectionSource {
     path: string,
     baseUrl: string,
   ): Promise<IfsSubsetFile> {
-    const gribUrl = buildIfsOpenDataForecastUrl(request.run, request.forecastHour, baseUrl);
-    const indexUrl = buildIfsOpenDataForecastIndexUrl(request.run, request.forecastHour, baseUrl);
+    const product = request.product ?? "oper-fc";
+    const gribUrl = buildIfsOpenDataForecastUrl(request.run, request.forecastHour, baseUrl, product);
+    const indexUrl = buildIfsOpenDataForecastIndexUrl(request.run, request.forecastHour, baseUrl, product);
     const entries = parseIfsOpenDataIndex(await this.fetchIndex(indexUrl));
     const selected = selectIfsIndexEntries(entries, request.selectors);
     const chunks = await mapConcurrent(selected, this.rangeConcurrency, async (entry) => {
@@ -149,11 +152,13 @@ function subsetKey(request: IfsSelectionRequest): string {
   return createHash("sha256").update(JSON.stringify({
     run: request.run.toISOString(),
     forecastHour: request.forecastHour,
+    product: request.product ?? "oper-fc",
     selectors: request.selectors.map((selector) => ({
       key: selector.key,
       param: selector.param,
       levtype: selector.levtype,
       ...(selector.levelist === undefined ? {} : { levelist: selector.levelist }),
+      ...(selector.number === undefined ? {} : { number: selector.number }),
     })),
   })).digest("hex");
 }
