@@ -28,7 +28,7 @@ The public dataset `ifs-ens` exposes ECMWF's atmospheric ensemble direct model o
 - members: `p01`–`p50`
 - 00/12Z horizon: `f000`–`f360`, 3-hourly through `f144` then 6-hourly
 - 06/18Z horizon: `f000`–`f144`, 3-hourly
-- public state surface: one point at one valid time or a native-cadence point time range, with pressure variables and/or supported IFS fields
+- public state surface: one or multiple points at one valid time, plus native-cadence point and multi-point time ranges, with pressure variables and/or supported IFS fields
 - derived state quantities and diagnostics are calculated independently inside every perturbation before aggregation
 - outputs include member count, mean, population standard deviation, min/max and requested quantiles; wind direction uses circular statistics
 - raw normalized perturbation payloads are opt-in with `ensemble.includeMembers`
@@ -61,7 +61,7 @@ Example:
 }
 ```
 
-The default member selection is all 50 perturbations. Point time ranges pin one initialization across the complete range, preserve the native ENS cadence (3-hourly through f144, then 6-hourly on 00/12Z long runs), and return compact distributions at each step by default; raw member payloads remain opt-in and size-guarded. Instant layer, whole-profile and parcel diagnostics are also member-first: physics is derived independently for each perturbation, then summarized with distributions or raw-member event fractions. Diagnostic time series preserve the same native ENS cadence and pin one initialization across the requested range; they return compact member-first summaries at each step. Multi-point, transects and areas remain intentionally unsupported for IFS ENS. Run comparison is ensemble-native: each cycle is summarized independently and only distribution shifts are compared, with 6-hour or 12-hour initialization stride.
+The default member selection is all 50 perturbations. Point and multi-point time ranges pin one initialization across the complete range, preserve the native ENS cadence (3-hourly through f144, then 6-hourly on 00/12Z long runs), and return compact distributions at each point/step by default. Multi-point composition preserves input ordering and applies explicit point × step and point × step × member × scalar-output guardrails before dispatch; raw member payloads remain opt-in and size-guarded. Instant layer, whole-profile and parcel diagnostics are also member-first: physics is derived independently for each perturbation, then summarized with distributions or raw-member event fractions. Diagnostic time series preserve the same native ENS cadence and pin one initialization across the requested range; they return compact member-first summaries at each step. Transects and areas remain intentionally unsupported for IFS ENS. Run comparison is ensemble-native: each cycle is summarized independently and only distribution shifts are compared, with 6-hour or 12-hour initialization stride.
 
 ## Current deterministic IFS query surface
 
