@@ -1,5 +1,5 @@
 import * as z from "zod/v4";
-import { GEFS_MEMBERS } from "../catalog/gefs.js";
+import { GEFS_MEMBERS, isSupportedGefsProfileSelection } from "../catalog/gefs.js";
 import { IFS_ENS_MEMBERS } from "../catalog/ifs-ens.js";
 import { gfsGridSchema } from "./gfs-grid.js";
 import {
@@ -114,6 +114,23 @@ export const compareGefsIfsEnsDatasetsSchema = z.object({
   thresholdGte: z.number().optional(),
   gfsGrid: z.never().optional(),
   members: z.never().optional(),
+}).superRefine((request, context) => {
+  if (!isSupportedGefsProfileSelection(request.variable, request.pressureLevelHpa)) {
+    context.addIssue({
+      code: "custom",
+      path: ["pressureLevelHpa"],
+      message: `GEFS cannot satisfy ${request.variable} at ${request.pressureLevelHpa} hPa in the cross-ensemble comparison contract`,
+    });
+  }
+  if (request.gefsMembers && new Set(request.gefsMembers).size !== request.gefsMembers.length) {
+    context.addIssue({ code: "custom", path: ["gefsMembers"], message: "GEFS member selection must not contain duplicates" });
+  }
+  if (request.ifsEnsMembers && new Set(request.ifsEnsMembers).size !== request.ifsEnsMembers.length) {
+    context.addIssue({ code: "custom", path: ["ifsEnsMembers"], message: "IFS ENS member selection must not contain duplicates" });
+  }
+  if (request.quantiles && new Set(request.quantiles).size !== request.quantiles.length) {
+    context.addIssue({ code: "custom", path: ["quantiles"], message: "Quantile selection must not contain duplicates" });
+  }
 });
 
 export const compareAtmosphericDatasetsSchema = z.union([
