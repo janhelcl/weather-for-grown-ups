@@ -275,12 +275,14 @@ describe("unified atmospheric routing", () => {
   it("routes time range semantics to forecast or analysis implementations", async () => {
     const gfsTimeSeries = { getTimeSeries: vi.fn(async () => ({ route: "gfs-series" })) };
     const gefsTimeSeries = { getTimeSeries: vi.fn(async () => ({ route: "gefs-series" })) };
+    const ifsEnsTimeSeries = { getTimeSeries: vi.fn(async () => ({ route: "ifs-ens-series" })) };
     const ifsTimeSeries = { getTimeSeries: vi.fn(async () => ({ route: "ifs-series" })) };
     const historyTimeSeries = { getHistoricalTimeSeries: vi.fn(async () => ({ route: "history-series" })) };
 
     const service = new UnifiedAtmosphereQueryService({
       gfsTimeSeries: gfsTimeSeries as any,
       gefsTimeSeries: gefsTimeSeries as any,
+      ifsEnsTimeSeries: ifsEnsTimeSeries as any,
       ifsTimeSeries: ifsTimeSeries as any,
       historyTimeSeries: historyTimeSeries as any,
     });
@@ -297,6 +299,16 @@ describe("unified atmospheric routing", () => {
     expect((await service.query({ dataset: "gfs", ...range })).result).toEqual({ route: "gfs-series" });
     expect((await service.query({ dataset: "gefs", ...range })).result).toEqual({ route: "gefs-series" });
     expect((await service.query({ dataset: "ifs", ...range })).result).toEqual({ route: "ifs-series" });
+    expect((await service.query({
+      dataset: "ifs-ens",
+      ...range,
+      ensemble: { members: ["p01", "p50"], quantiles: [0.1, 0.5, 0.9] },
+    })).result).toEqual({ route: "ifs-ens-series" });
+    expect(ifsEnsTimeSeries.getTimeSeries).toHaveBeenCalledWith(expect.objectContaining({
+      members: ["p01", "p50"],
+      startTime: range.time.from,
+      endTime: range.time.to,
+    }));
     expect((await service.query({
       dataset: "gfs-analysis",
       ...range,
