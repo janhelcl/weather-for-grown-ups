@@ -56,7 +56,7 @@ export const ifsRunComparisonQuerySchema = z.object({
 
 const snapshotSchema = z.object({
   run: isoDateTimeSchema,
-  forecastHour: z.number().int().min(0).max(360),
+  forecastHour: z.number().int().min(0).max(240),
   levels: z.array(profileLevelResultSchema),
   fields: z.array(ifsFieldResultSchema).optional(),
   cacheHit: z.boolean(),
@@ -65,8 +65,8 @@ const snapshotSchema = z.object({
 const transitionSchema = z.object({
   fromRun: isoDateTimeSchema,
   toRun: isoDateTimeSchema,
-  fromForecastHour: z.number().int().min(0).max(360),
-  toForecastHour: z.number().int().min(0).max(360),
+  fromForecastHour: z.number().int().min(0).max(240),
+  toForecastHour: z.number().int().min(0).max(240),
   pressureLevels: z.array(runComparisonPressureLevelChangeSchema),
   fields: z.array(runComparisonFieldChangeSchema),
 });
