@@ -29,6 +29,7 @@ export const profileLevelResultSchema = z.object({
   verticalVelocityPaS: z.number().optional(),
   geometricVerticalVelocityMs: z.number().optional(),
   absoluteVorticityS1: z.number().optional(),
+  divergenceS1: z.number().optional(),
   totalCloudCoverPct: z.number().optional(),
   cloudWaterMixingRatioKgKg: z.number().optional(),
   ozoneMixingRatioKgKg: z.number().optional(),
