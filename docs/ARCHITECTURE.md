@@ -187,11 +187,11 @@ Aligned dataset comparisons resolve one initialization cycle that can satisfy bo
 
 ### GFS
 
-WFG supports operational GFS at both 0.25° and 0.5°. It uses NOAA NOMADS where geographic subsetting materially reduces transfer and NOAA AWS Open Data `.idx` inventories plus byte ranges where selected messages can be reused across locations or forecast steps.
+WFG supports operational GFS at both 0.25° and 0.5°. Source choice is an internal routing decision by default: point/profile, time-series, multi-point, transect, and run-comparison operations use NOAA AWS Open Data `.idx` inventories plus byte ranges, while bounded area operations use NOAA NOMADS because geographic subsetting materially reduces transfer. Explicit source overrides remain available only where the selected geometry can honor them; provenance always reports the resolved backend.
 
 Explicit historical GFS runs route by the selected grid: 0.25° uses NCAR/GDEX d084001 through THREDDS/NCSS (archive start 2015-01-15), while 0.5° uses NOAA NCEI Grid 4 through THREDDS/NCSS (archive start 2006-10-10). Both preserve forecast run, lead, valid time, grid and source provenance. Archive availability is not silently substituted across grids.
 
-Physical NOMADS and paced archive requests use their respective shared cross-process courtesy limits. AWS Open Data paths do not use the NOMADS scripted-access limiter.
+Physical NOMADS and paced archive requests use their respective shared cross-process courtesy limits. AWS Open Data paths do not use the NOMADS scripted-access limiter. CLI GFS time-range queries emit native-step progress on stderr, including the resolved source and cache-hit state, so courtesy-paced NOMADS misses are visible rather than looking hung.
 
 ### Historical GFS analysis
 

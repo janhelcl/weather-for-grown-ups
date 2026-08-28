@@ -19,6 +19,7 @@ import {
 } from "../schema/unified-api.js";
 import type { CompareAtmosphericDatasetsInput } from "../schema/unified-specialized.js";
 import type { PointCoordinate } from "../schema/query.js";
+import type { AtmosphericStepProgress } from "../core/progress.js";
 import {
   DEFAULT_LEVELS,
   collectPoint,
@@ -67,7 +68,7 @@ function registerQueryCommand(program: Command): void {
     .option("--fields <list>", "Comma-separated non-isobaric fields")
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
-    .option("--source <nomads|s3|archive>", "GFS source override; archive forces the resolution-matched historical backend")
+    .option("--source <nomads|s3|archive>", "GFS source override; omit for automatic AWS/NOMADS/archive routing")
     .option("--members <list>", "Ensemble members: GEFS c00,p01..p30 or IFS ENS p01..p50")
     .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
     .option("--include-members", "Include raw ensemble member payloads where supported")
@@ -83,7 +84,9 @@ function registerQueryCommand(program: Command): void {
     .option("--json", "Output JSON")
     .action(async (options) => {
       const request = buildUnifiedQuery(options);
-      const result = await new UnifiedAtmosphereQueryService().query(request);
+      const result = await new UnifiedAtmosphereQueryService({
+        progress: reportCliProgress,
+      }).query(request);
       printResult(result, Boolean(options.json));
     });
 }
@@ -108,7 +111,7 @@ function registerDiagnoseCommand(program: Command): void {
     .option("--parcel <surface_2m|mixed_layer_100hpa|most_unstable_300hpa>", "Parcel definition")
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
-    .option("--source <nomads|s3|archive>", "GFS source override; archive forces the resolution-matched historical backend")
+    .option("--source <nomads|s3|archive>", "GFS source override; omit for automatic AWS/NOMADS/archive routing")
     .option("--members <list>", "Ensemble members: GEFS c00,p01..p30 or IFS ENS p01..p50")
     .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
     .option("--include-members", "Ensemble instant diagnostics only: include member payloads")
@@ -564,6 +567,35 @@ function parseCoordinate(value: unknown): PointCoordinate {
 
 function parseStrings(value: unknown): string[] {
   return String(value).split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function reportCliProgress(progress: AtmosphericStepProgress): void {
+  const operation = progress.operation === "points_time_series"
+    ? "GFS multi-point time series"
+    : "GFS time series";
+  const source = progress.source === "s3" ? "AWS S3" : "NOMADS";
+
+  if (progress.phase === "start") {
+    const pacing = progress.source === "nomads"
+      ? " (cache misses are courtesy-paced)"
+      : "";
+    console.error(`[wfg] ${operation}: 0/${progress.totalSteps} native steps via ${source}${pacing}`);
+    return;
+  }
+
+  if (progress.phase === "step") {
+    const forecastHour = progress.forecastHour === undefined
+      ? ""
+      : ` f${String(progress.forecastHour).padStart(3, "0")}`;
+    const validTime = progress.validTime === undefined ? "" : ` ${progress.validTime}`;
+    const cache = progress.cacheHit === undefined ? "" : progress.cacheHit ? " cache-hit" : " fetched";
+    console.error(
+      `[wfg] ${operation}: ${progress.completedSteps}/${progress.totalSteps}${forecastHour}${validTime}${cache}`,
+    );
+    return;
+  }
+
+  console.error(`[wfg] ${operation}: done ${progress.totalSteps}/${progress.totalSteps}`);
 }
 
 function printResult(result: unknown, json: boolean): void {

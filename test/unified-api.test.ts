@@ -65,6 +65,36 @@ describe("unified atmospheric public contract", () => {
     })).toThrow("ensemble controls are only valid for ensemble datasets");
   });
 
+  it("keeps explicit GFS source overrides aligned with geometry capabilities", () => {
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: {
+        type: "area",
+        westLongitude: 14,
+        eastLongitude: 15,
+        southLatitude: 49,
+        northLatitude: 50,
+      },
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      source: "s3",
+    })).toThrow("Operational GFS area queries use NOMADS");
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50.08, longitude: 14.43 },
+          { latitude: 49.2, longitude: 16.61 },
+        ],
+      },
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      source: "nomads",
+    })).toThrow("Operational GFS multi-point and transect queries reuse AWS S3");
+  });
+
   it("keeps unsupported geometry/time combinations explicit", () => {
     expect(() => queryAtmosphereSchema.parse({
       dataset: "gfs",
@@ -125,6 +155,7 @@ describe("unified atmospheric routing", () => {
     const gfs = await service.query({ dataset: "gfs", ...base });
     expect(gfs.result).toEqual({ route: "gfs-profile" });
     expect(gfsProfile.getProfile).toHaveBeenCalledOnce();
+    expect(gfsProfile.getProfile).toHaveBeenCalledWith(expect.objectContaining({ source: "s3" }));
 
     const gefs = await service.query({
       dataset: "gefs",
@@ -297,6 +328,7 @@ describe("unified atmospheric routing", () => {
     };
 
     expect((await service.query({ dataset: "gfs", ...range })).result).toEqual({ route: "gfs-series" });
+    expect(gfsTimeSeries.getTimeSeries).toHaveBeenCalledWith(expect.objectContaining({ source: "s3" }));
     expect((await service.query({ dataset: "gefs", ...range })).result).toEqual({ route: "gefs-series" });
     expect((await service.query({ dataset: "ifs", ...range })).result).toEqual({ route: "ifs-series" });
     expect((await service.query({
