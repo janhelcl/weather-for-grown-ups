@@ -133,6 +133,7 @@ describe("IFS ENS multi-point state", () => {
     const getBundle = vi.fn(async (query: {
       latitude: number;
       longitude: number;
+      run: string;
       validTime: string;
       includeMembers?: boolean;
     }) => {
@@ -239,7 +240,7 @@ describe("IFS ENS multi-point state", () => {
 
 describe("IFS ENS multi-point time series", () => {
   it("preserves the native f144 cadence transition across every point", async () => {
-    const getPoints = vi.fn(async (query: { validTime: string; includeMembers?: boolean }) => {
+    const getPoints = vi.fn(async (query: { run: string; validTime: string; includeMembers?: boolean }) => {
       const valid = new Date(query.validTime);
       const forecastHour = (valid.getTime() - run.getTime()) / 3_600_000;
       return pointsResult(valid.toISOString(), forecastHour, false, query.includeMembers === true);
@@ -311,8 +312,8 @@ describe("IFS ENS multi-point time series", () => {
       startTime: new Date(run.getTime() + 138 * 3_600_000).toISOString(),
       endTime: new Date(run.getTime() + 156 * 3_600_000).toISOString(),
       selection: {
-        variables: ["temperature"] as const[],
-        pressureLevelsHpa: [850] as const,
+        variables: ["temperature"] as ["temperature"],
+        pressureLevelsHpa: [850] as [850],
       },
       members: [...members],
       quantiles,
