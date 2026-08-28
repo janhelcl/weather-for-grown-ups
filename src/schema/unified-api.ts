@@ -286,13 +286,6 @@ function validateCommonAtmosphericRequest(
   validateDatasetModifiers(request, context);
 
   const isRange = "from" in request.time;
-  if (request.dataset === "ifs" && request.geometry.type === "area") {
-    context.addIssue({
-      code: "custom",
-      path: ["geometry"],
-      message: "IFS area statistics are not implemented yet; use point, points, or transect geometry",
-    });
-  }
   if (isRange && (request.geometry.type === "transect" || request.geometry.type === "area")) {
     context.addIssue({
       code: "custom",
