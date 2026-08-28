@@ -265,7 +265,7 @@ WFG selects only the GRIB messages needed for a query, caches immutable upstream
 - The npm package ships with a GRIB2 decoder; native `wgrib2` remains an optional compatibility/debug path.
 - Historical GFS analysis uses NOAA NCEI THREDDS/NCSS: grid-as-point for point/profile operations and native bbox/grid subsets for area statistics.
 - Historical GFS forecasts keep the public `gfs` identity and route by grid: 0.25° uses NCAR/GDEX d084001 through THREDDS/NCSS, while 0.5° uses NOAA NCEI Grid 4 through THREDDS/NCSS. Direct online availability varies; older Grid 4 files may require NCEI HAS retrieval.
-- NOAA/NCEI scripted archive requests share the cross-process courtesy limiter; AWS Open Data paths do not use it.
+- Upstream etiquette is provider-specific: NOMADS keeps an 11-second cross-process courtesy interval, NCEI THREDDS/NCSS is bounded to 2 concurrent requests, NCAR/GDEX to 4, and IGRA downloads to 4. AWS Open Data and ECMWF cloud mirrors do not inherit the NOMADS delay.
 
 ## Documentation
 
