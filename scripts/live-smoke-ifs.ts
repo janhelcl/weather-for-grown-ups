@@ -23,6 +23,8 @@ const result = await service.getProfile({
     "u_wind",
     "v_wind",
     "geopotential_height",
+    "absolute_vorticity",
+    "divergence",
     "wind",
     "dew_point",
   ],
@@ -30,6 +32,8 @@ const result = await service.getProfile({
   fields: [
     "temperature_2m",
     "dew_point_2m",
+    "relative_humidity_2m",
+    "specific_humidity_2m",
     "wind_10m",
     "wind_100m",
     "total_precipitation",
@@ -45,7 +49,13 @@ assert(result.levels.every((level) => Number.isFinite(level.temperatureC)));
 assert(result.levels.every((level) => Number.isFinite(level.relativeHumidityPct)));
 assert(result.levels.every((level) => Number.isFinite(level.windSpeedMs)));
 assert(result.levels.every((level) => Number.isFinite(level.geopotentialHeightGpm)));
+assert(result.levels.every((level) => Number.isFinite(level.absoluteVorticityS1)));
+assert(result.levels.every((level) => Number.isFinite(level.divergenceS1)));
 assert(result.fields?.some((field) => field.id === "temperature_2m"));
+assert(result.fields?.some((field) =>
+  field.id === "relative_humidity_2m" && Number.isFinite(field.values.relativeHumidityPct)));
+assert(result.fields?.some((field) =>
+  field.id === "specific_humidity_2m" && Number.isFinite(field.values.specificHumidityKgKg)));
 assert(result.fields?.some((field) => field.id === "wind_10m"));
 assert(result.fields?.some((field) => field.id === "wind_100m"));
 assert(result.fields?.some((field) => field.id === "precipitable_water"));
