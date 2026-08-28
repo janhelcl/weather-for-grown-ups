@@ -191,7 +191,7 @@ WFG supports operational GFS at both 0.25° and 0.5°. Source choice is an inter
 
 Explicit historical GFS runs route by the selected grid: 0.25° uses NCAR/GDEX d084001 through THREDDS/NCSS (archive start 2015-01-15), while 0.5° uses NOAA NCEI Grid 4 through THREDDS/NCSS (archive start 2006-10-10). Both preserve forecast run, lead, valid time, grid and source provenance. Archive availability is not silently substituted across grids.
 
-Physical NOMADS and paced archive requests use their respective shared cross-process courtesy limits. AWS Open Data paths do not use the NOMADS scripted-access limiter. CLI GFS time-range queries emit native-step progress on stderr, including the resolved source and cache-hit state, so courtesy-paced NOMADS misses are visible rather than looking hung.
+Upstream access etiquette is source-specific rather than inherited from NOMADS. NOMADS uses one cross-process slot plus an 11-second minimum interval. NCEI THREDDS/NCSS uses two cross-process slots with no artificial delay, NCAR/GDEX uses four slots (below its published 10-stream ceiling), and IGRA uses four. NOAA AWS object access does not use the NOMADS scripted-access limiter. CLI GFS time-range queries emit native-step progress on stderr, including the resolved source and cache-hit state, so courtesy-paced NOMADS misses are visible rather than looking hung.
 
 ### Historical GFS analysis
 
