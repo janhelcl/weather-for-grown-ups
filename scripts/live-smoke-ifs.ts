@@ -13,7 +13,12 @@ import {
   IfsTimeSeriesService,
   IfsTransectService,
 } from "../src/core/ifs-spatiotemporal.js";
-import { ifsValidTimeForForecastHour, latestIfsCycleAtOrBefore } from "../src/core/ifs-time.js";
+import {
+  ifsEnsValidTimeForForecastHour,
+  ifsValidTimeForForecastHour,
+  latestIfsCycleAtOrBefore,
+  previousIfsCycle,
+} from "../src/core/ifs-time.js";
 
 const validTime = latestIfsCycleAtOrBefore(new Date());
 const service = new IfsProfileService();
@@ -119,6 +124,40 @@ console.log(JSON.stringify({
     pressureSummaries: ens.pressureSummaries,
     fieldSummaries: ens.fieldSummaries,
     source: ens.source,
+  },
+}, null, 2));
+
+let longEnsRun = latestIfsCycleAtOrBefore(new Date(Date.now() - 12 * 3_600_000));
+if (![0, 12].includes(longEnsRun.getUTCHours())) {
+  longEnsRun = previousIfsCycle(longEnsRun);
+}
+const longEnsValidTime = ifsEnsValidTimeForForecastHour(longEnsRun, 300);
+const longEns = await new IfsEnsMemberBundleService().getBundle({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: longEnsRun.toISOString(),
+  validTime: longEnsValidTime.toISOString(),
+  selection: {
+    variables: ["temperature"],
+    pressureLevelsHpa: [850],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.5],
+});
+assert.equal(longEns.forecastHour, 300);
+assert.equal(longEns.pressureSummaries.length, 1);
+assert(Number.isFinite(
+  longEns.pressureSummaries[0]?.outputs.find((output) => output.aggregation === "numeric_distribution")
+    ?.distribution.mean,
+));
+assert.equal(longEns.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsLongRange: {
+    run: longEns.run,
+    validTime: longEns.validTime,
+    forecastHour: longEns.forecastHour,
+    members: longEns.selection.members,
   },
 }, null, 2));
 
