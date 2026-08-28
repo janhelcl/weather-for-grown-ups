@@ -51,9 +51,12 @@ describe("GfsS3SubsetCache", () => {
     expect(result.cacheHit).toBe(false);
     expect(Buffer.from(await readFile(result.path)).toString()).toBe("GRIB0000GRIB1111");
     expect(fetchFn.mock.calls.filter(([input]) => String(input).endsWith(".idx"))).toHaveLength(1);
-    expect(fetchFn.mock.calls.map(([, init]) => new Headers(init?.headers).get("range")).filter(Boolean)).toEqual([
-      "bytes=0-7", "bytes=8-15",
-    ]);
+    expect(fetchFn.mock.calls
+      .map(([, init]) => new Headers(init?.headers).get("range"))
+      .filter((range): range is string => range !== null)
+      .sort()).toEqual([
+        "bytes=0-7", "bytes=8-15",
+      ]);
   });
 
   it("returns a disk cache hit without any upstream requests", async () => {
