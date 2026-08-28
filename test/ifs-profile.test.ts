@@ -200,6 +200,43 @@ describe("IFS canonical point profile", () => {
     expect(result.source.cacheHit).toBe(false);
   });
 
+  it("keeps run-static orography separate from ordinary forecast fields even at f000", async () => {
+    const fetchSelection = vi.fn(async ({ selectors }: any) => ({
+      path: selectors[0]?.param === "z" ? "ifs-f0-static" : "ifs-f0-forecast",
+      cacheHit: false,
+    }));
+    const extractPoint = vi.fn(async (path: string): Promise<DecodedValue[]> => {
+      if (path === "ifs-f0-static") {
+        return [{ code: "z", surface: true, value: 980.665, gridPoint }];
+      }
+      return [{ code: "sp", surface: true, value: 100000, gridPoint }];
+    });
+    const service = new IfsProfileService({
+      source: { fetchSelection },
+      decoder: { engine: "gribberish", extractPoint },
+    });
+
+    const result = await service.getProfile({
+      latitude: 50,
+      longitude: 14,
+      run: "2026-08-27T12:00:00Z",
+      validTime: "2026-08-27T12:00:00Z",
+      fields: ["surface_pressure", "surface_geopotential_height"],
+    });
+
+    expect(fetchSelection).toHaveBeenCalledTimes(2);
+    expect(fetchSelection.mock.calls[0]?.[0]).toMatchObject({
+      forecastHour: 0,
+      selectors: [expect.objectContaining({ param: "sp" })],
+    });
+    expect(fetchSelection.mock.calls[1]?.[0]).toMatchObject({
+      forecastHour: 0,
+      selectors: [expect.objectContaining({ param: "z", sourceForecastHour: 0 })],
+    });
+    expect(result.fields?.find((field) => field.id === "surface_geopotential_height")
+      ?.values.geopotentialHeightGpm).toBeCloseTo(100, 8);
+  });
+
   it("samples ENS-native long-range leads without weakening deterministic IFS validation", async () => {
     const fetchSelection = vi.fn(async ({ forecastHour }: any) => ({
       path: `ifs-ens-f${forecastHour}`,
