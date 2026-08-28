@@ -89,7 +89,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("compare_datasets", {
     title: "Compare atmospheric datasets",
-    description: "Compare aligned atmospheric datasets at one point, valid time, pressure variable, and pressure level. GFS↔GEFS places deterministic GFS inside the aligned GEFS member distribution. GFS↔IFS compares normalized deterministic outputs from one shared initialization cycle and returns IFS-minus-GFS deltas, using circular differences for wind direction. Dataset-native semantics remain explicit; model differences are not forecast error or calibrated uncertainty.",
+    description: "Compare aligned atmospheric datasets at one point, valid time, pressure variable, and pressure level. GFS↔GEFS places deterministic GFS inside the aligned GEFS member distribution. GFS↔IFS compares normalized deterministic outputs from one shared initialization cycle. GEFS↔IFS ENS compares independently summarized member-first distributions from one common cycle, including mean/spread/quantile shifts and optional raw threshold-fraction differences; member labels are never paired across centers. Dataset-native semantics remain explicit; model differences and raw member fractions are not forecast error or calibrated uncertainty.",
     inputSchema: compareAtmosphericDatasetsSchema,
     outputSchema: unifiedSpecializedResultSchema,
   }, async (query) => {
