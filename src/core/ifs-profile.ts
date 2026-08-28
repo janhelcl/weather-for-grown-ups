@@ -141,7 +141,7 @@ export class IfsProfileService {
       const decoded = await this.decoder.extractPoint(cached.path, query.longitude, query.latitude);
       if (decoded.length !== items.length) {
         throw new Error(
-          `IFS decoder returned ${decoded.length} values for ${items.length} selected GRIB messages at f${sourceForecastHour}`,
+          `IFS decoder returned ${decoded.length} values for ${items.length} selected GRIB messages at f${group.sourceForecastHour}`,
         );
       }
       allCacheHit = allCacheHit && cached.cacheHit;
