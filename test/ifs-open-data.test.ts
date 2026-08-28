@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  IfsEnsOpenDataRunProbe,
   IfsOpenDataRunProbe,
   buildIfsEnsOpenDataForecastIndexUrl,
   buildIfsEnsOpenDataForecastUrl,
@@ -60,6 +61,40 @@ describe("ECMWF IFS Open Data source", () => {
     ])).toMatchObject([
       { offset: 100, length: 110, var: "t", keys: { number: "2" } },
     ]);
+  });
+
+  it("resolves shared ENS run-static orography from oper without a perturbation number", async () => {
+    const fetchFn = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/enfo/")) {
+        return new Response(
+          '{"date":"20260827","time":"1200","step":"0","levtype":"pl","levelist":"850","param":"t","number":"2","_offset":0,"_length":10}',
+          { status: 200 },
+        );
+      }
+      if (url.includes("/oper/")) {
+        return new Response(
+          '{"date":"20260827","time":"1200","step":"0","levtype":"sfc","param":"z","_offset":0,"_length":10}',
+          { status: 200 },
+        );
+      }
+      return new Response("", { status: 404 });
+    }) as typeof fetch;
+    const probe = new IfsEnsOpenDataRunProbe(fetchFn);
+
+    await expect(probe.isForecastAvailable(run, 0, [
+      { key: "temperature@850#p02", param: "t", levtype: "pl", levelist: 850, number: 2 },
+      {
+        key: "surface_geopotential_height#p02",
+        param: "z",
+        levtype: "sfc",
+        number: 2,
+        sourceForecastHour: 0,
+      },
+    ])).resolves.toBe(true);
+
+    expect(fetchFn.mock.calls.some(([input]) => String(input).includes("/enfo/"))).toBe(true);
+    expect(fetchFn.mock.calls.some(([input]) => String(input).includes("/oper/"))).toBe(true);
   });
 
   it("retries transient throttling before resolving availability", async () => {
