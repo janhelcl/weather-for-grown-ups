@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { IfsAreaSummaryService } from "../src/core/ifs-area-summary.js";
+import { GfsIfsComparisonService } from "../src/core/gfs-ifs-comparison.js";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
 import { IfsDiagnosticsService } from "../src/core/ifs-diagnostics.js";
 import { IfsRunComparisonService } from "../src/core/ifs-run-comparison.js";
@@ -78,6 +79,34 @@ console.log(JSON.stringify({
   levels: result.levels,
   fields: result.fields,
   source: result.source,
+}, null, 2));
+
+const crossModelComparison = await new GfsIfsComparisonService().compare({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: result.run,
+  validTime: result.validTime,
+  variable: "temperature",
+  pressureLevelHpa: 850,
+});
+assert.equal(crossModelComparison.run, result.run);
+assert.equal(crossModelComparison.validTime, result.validTime);
+assert.equal(crossModelComparison.gfs.model, "gfs_0p25");
+assert.equal(crossModelComparison.ifs.model, "ifs_0p25");
+assert(Number.isFinite(crossModelComparison.comparison.outputs[0]?.ifsMinusGfs));
+assert.equal(
+  crossModelComparison.comparison.interpretation,
+  "raw_deterministic_model_difference_not_error_or_uncertainty",
+);
+
+console.log(JSON.stringify({
+  crossModelComparison: {
+    datasets: ["gfs", "ifs"],
+    run: crossModelComparison.run,
+    validTime: crossModelComparison.validTime,
+    selection: crossModelComparison.selection,
+    comparison: crossModelComparison.comparison,
+  },
 }, null, 2));
 
 

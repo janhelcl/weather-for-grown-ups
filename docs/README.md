@@ -21,6 +21,7 @@ Detailed documentation for **Weather for Grown Ups v0.1.0** lives here so the re
 - [AREA_SUMMARY.md](AREA_SUMMARY.md) — bounded deterministic GFS area summaries.
 - [AREA_DISTRIBUTION.md](AREA_DISTRIBUTION.md) — richer deterministic area distribution semantics.
 - [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md) — aligned deterministic-vs-ensemble comparison.
+- [GFS_IFS_COMPARISON.md](GFS_IFS_COMPARISON.md) — aligned deterministic GFS-vs-IFS comparison with normalized deltas.
 
 ## GEFS ensemble reference
 
