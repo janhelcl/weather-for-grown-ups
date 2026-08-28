@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { UpstreamAccessPolicy } from "../cache/file-access-policy.js";
@@ -145,7 +145,7 @@ export class NceiGfsForecastHistorySource implements ArchivedGfsForecastDataSour
         );
       }
 
-      const tempPath = `${cachePath}.${process.pid}.tmp`;
+      const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
       await writeFile(tempPath, result.csv, "utf8");
       await rename(tempPath, cachePath);
       return { csv: result.csv, dataset, cacheHit: false };
