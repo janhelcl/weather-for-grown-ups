@@ -3,6 +3,7 @@ import { VARIABLE_CATALOG } from "../catalog/variables.js";
 import {
   ifsEnsMemberNumber,
   sortIfsEnsMembers,
+  type IfsEnsMember,
 } from "../catalog/ifs-ens.js";
 import {
   ifsEnsPointsQuerySchema,
@@ -249,7 +250,7 @@ export class IfsEnsPointsTimeSeriesService {
 
 function availabilitySelectors(
   selection: IfsEnsSelection,
-  members: readonly ReturnType<typeof sortIfsEnsMembers>[number][],
+  members: readonly IfsEnsMember[],
 ) {
   const base = ifsIndexSelectorsForSelection(selection);
   return members.flatMap((member) => {
