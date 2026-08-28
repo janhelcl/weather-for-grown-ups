@@ -115,8 +115,14 @@ describe("GfsS3SubsetCache", () => {
   });
 
   it("fails on an unavailable index", async () => {
-    const fetchFn = vi.fn(async () => new Response("no", { status: 503, statusText: "Unavailable" }));
-    await expect(new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch).fetch(request())).rejects.toThrow(/index request failed: HTTP 503/);
+    const fetchFn = vi.fn(async () => new Response("no", {
+      status: 503,
+      statusText: "Unavailable",
+      headers: { "retry-after": "0" },
+    }));
+    await expect(new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch).fetch(request()))
+      .rejects.toThrow(/index request failed: HTTP 503/);
+    expect(fetchFn).toHaveBeenCalledTimes(3);
   });
 
   it("fails rather than accepting a server that ignores the Range header", async () => {
