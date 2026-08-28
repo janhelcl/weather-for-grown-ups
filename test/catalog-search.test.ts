@@ -93,7 +93,7 @@ describe("searchGfsCatalog", () => {
       "air_density",
       "cloud_water_mixing_ratio",
       "dew_point",
-      "equivalent_potential_temperature",
+      "divergence",
     ]);
   });
 
