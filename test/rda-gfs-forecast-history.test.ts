@@ -101,6 +101,8 @@ describe("GDEX transient failure handling", () => {
       ));
     const source = new RdaGfsForecastHistorySource({
       cacheDir,
+      retryBaseDelayMs: 0,
+      retryJitterRatio: 0,
       limiter: { run },
       fetchFn,
     });
@@ -137,6 +139,8 @@ describe("GDEX transient failure handling", () => {
     );
     const source = new RdaGfsForecastHistorySource({
       cacheDir,
+      retryBaseDelayMs: 0,
+      retryJitterRatio: 0,
       limiter: { run },
       fetchFn,
     });
@@ -167,6 +171,8 @@ describe("GDEX transient failure handling", () => {
     };
     const source = new RdaGfsForecastHistorySource({
       cacheDir,
+      retryBaseDelayMs: 0,
+      retryJitterRatio: 0,
       limiter: { run },
       fetchFn,
       netcdfReaderFactory: () => ({
@@ -201,7 +207,13 @@ describe("GDEX terminal and decoder edge cases", () => {
     dirs.push(cacheDir);
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
     const fetchFn = vi.fn(async () => new Response("", { status: 404, statusText: "Not Found" }));
-    const source = new RdaGfsForecastHistorySource({ cacheDir, limiter: { run }, fetchFn });
+    const source = new RdaGfsForecastHistorySource({
+      cacheDir,
+      retryBaseDelayMs: 0,
+      retryJitterRatio: 0,
+      limiter: { run },
+      fetchFn,
+    });
 
     await expect(source.fetch({
       runTime: new Date("2026-08-24T00:00:00Z"),
@@ -219,7 +231,13 @@ describe("GDEX terminal and decoder edge cases", () => {
     dirs.push(cacheDir);
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
     const fetchFn = vi.fn(async () => new Response("", { status: 404, statusText: "Not Found" }));
-    const source = new RdaGfsForecastHistorySource({ cacheDir, limiter: { run }, fetchFn });
+    const source = new RdaGfsForecastHistorySource({
+      cacheDir,
+      retryBaseDelayMs: 0,
+      retryJitterRatio: 0,
+      limiter: { run },
+      fetchFn,
+    });
 
     await expect(source.fetchArea(request)).rejects.toThrow("is not available for run");
     expect(fetchFn).toHaveBeenCalledOnce();
