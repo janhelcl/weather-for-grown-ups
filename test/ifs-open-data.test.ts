@@ -119,6 +119,32 @@ describe("ECMWF IFS Open Data source", () => {
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 
+  it("runs every availability retry attempt through the ECMWF access policy", async () => {
+    let call = 0;
+    const fetchFn = vi.fn(async () => {
+      call += 1;
+      if (call === 1) {
+        return new Response("Slow Down", {
+          status: 503,
+          headers: { "retry-after": "0" },
+        });
+      }
+      return new Response(
+        '{"date":"20260827","time":"1200","step":"6","levtype":"pl","levelist":"850","param":"t","_offset":0,"_length":10}',
+        { status: 200 },
+      );
+    }) as typeof fetch;
+    const accessRun = vi.fn(async <T>(_url: string, operation: () => Promise<T>) => operation());
+    const probe = new IfsOpenDataRunProbe(fetchFn, { run: accessRun });
+
+    await expect(probe.isForecastAvailable(run, 6, [
+      { key: "t@850", param: "t", levtype: "pl", levelist: 850 },
+    ])).resolves.toBe(true);
+
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(accessRun).toHaveBeenCalledTimes(2);
+  });
+
   it("fails over from a throttled AWS mirror to another ECMWF replica", async () => {
     const fetchFn = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
