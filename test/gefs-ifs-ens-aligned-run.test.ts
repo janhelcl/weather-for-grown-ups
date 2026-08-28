@@ -39,8 +39,8 @@ describe("GEFS / IFS ENS aligned run resolver", () => {
       6,
       ["c00", "p01"],
     );
-    expect(ifsEnsProbe.isForecastAvailable).toHaveBeenCalledTimes(1);
-    expect(ifsEnsProbe.isForecastAvailable).toHaveBeenCalledWith(
+    expect(ifsEnsProbe.isForecastAvailable).toHaveBeenCalledTimes(2);
+    expect(ifsEnsProbe.isForecastAvailable).toHaveBeenLastCalledWith(
       new Date("2026-08-28T06:00:00.000Z"),
       6,
       expect.arrayContaining([
