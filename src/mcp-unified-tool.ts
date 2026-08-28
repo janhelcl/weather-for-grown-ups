@@ -50,7 +50,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("query_atmosphere", {
     title: "Query atmospheric state",
-    description: "Query GFS, GEFS, ECMWF IFS, or historical GFS analysis through one dataset × geometry × time × selection contract. IFS supports deterministic 0.25° point queries and point time ranges, multi-point instant/range sampling, and transects with pressure-level variables and selected surface fields. IFS area statistics remain an explicit unsupported boundary. Geometry may be one point, multiple points, a transect, or an area; point geometries also accept time ranges. The result preserves dataset-native semantics: deterministic forecasts remain deterministic, GEFS remains member-first ensemble distributions, and historical analysis keeps analysis-time/NCEI provenance without invented forecast metadata.",
+    description: "Query GFS, GEFS, ECMWF IFS, or historical GFS analysis through one dataset × geometry × time × selection contract. IFS supports deterministic 0.25° point queries and point time ranges, multi-point instant/range sampling, transects, and raw scalar area statistics with pressure-level variables or selected surface fields. Geometry may be one point, multiple points, a transect, or an area; point geometries also accept time ranges. The result preserves dataset-native semantics: deterministic forecasts remain deterministic, GEFS remains member-first ensemble distributions, and historical analysis keeps analysis-time/NCEI provenance without invented forecast metadata.",
     inputSchema: queryAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {
@@ -76,7 +76,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("compare_runs", {
     title: "Compare forecast runs",
-    description: "Compare consecutive forecast initialization cycles for GFS or GEFS through one dataset-aware contract. Deterministic GFS returns raw newer-minus-older changes; GEFS returns shifts between independently summarized member distributions and never treats member labels as trajectories.",
+    description: "Compare consecutive forecast initialization cycles for GFS, GEFS, or ECMWF IFS through one dataset-aware contract. Deterministic GFS and IFS return newer-minus-older changes with circular wind-direction deltas and explicit temporal-window compatibility for fields; GEFS returns shifts between independently summarized member distributions and never treats member labels as trajectories.",
     inputSchema: compareAtmosphericRunsSchema,
     outputSchema: unifiedSpecializedResultSchema,
   }, async (query) => {

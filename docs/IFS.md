@@ -28,6 +28,7 @@ IFS now exposes the same deterministic state through several geometries while pi
 - multi-point sampling at one valid time;
 - multi-point time series with an explicit point × time guardrail;
 - great-circle transects at one valid time;
+- raw scalar bbox area statistics at one valid time, with mean/min/max plus optional percentiles, threshold fractions and extrema locations;
 - pressure-level variables and/or selected non-isobaric fields throughout;
 - deterministic normalized output with explicit run, lead, sampled grid point and ECMWF provenance.
 
@@ -69,7 +70,7 @@ wfg query \
   --json
 ```
 
-No IFS-specific MCP tool is added. The same `diagnose_atmosphere` / `wfg diagnose` surface supports IFS layer, whole-profile, and parcel diagnostics at one valid time or across a valid-time range.
+No IFS-specific MCP tool is added. The same `diagnose_atmosphere` / `wfg diagnose` surface supports IFS layer, whole-profile, and parcel diagnostics at one valid time or across a valid-time range. The generic `compare_runs` / `wfg compare-runs` operation also supports deterministic IFS cycles.
 
 ## Canonical pressure variables
 
@@ -122,8 +123,12 @@ Parcel physics are the same model-independent implementation used by determinist
 
 The IFS adapter fetches only the required pressure variables and keeps ECMWF run, lead, sampled grid point and source provenance attached to the derived result. Diagnostic ranges pin one selection-capable IFS run and evaluate the same single-time kernels at each native output: three-hourly through f144 and, for 00/12Z runs, six-hourly thereafter. Compact parcel time-series steps omit the full parcel path while preserving the scalar parcel diagnostics and starting state.
 
-## Deliberate capability boundary
+## Area statistics and run comparison
 
-IFS **area statistics** remain unsupported in this slice. Unsupported operations fail explicitly rather than being emulated with another model or hidden repeated public calls.
+IFS bbox aggregation reuses WFG's deterministic spatial-distribution kernel over the native 0.25° grid. Like deterministic GFS area summaries, the area contract intentionally accepts one **raw** pressure variable at one pressure level or one **raw** field at a time. Results include an unweighted grid-point mean, min/max and defined-grid-point count, with optional spatial percentiles, threshold fractions and representative extrema locations. ECMWF unit normalization is applied before aggregation, and run-static fields such as surface geopotential are still fetched from their native source step.
+
+Run comparison evaluates consecutive six-hour ECMWF initialization cycles at one fixed valid time. Runs are returned oldest to newest and every numeric delta is `newer - older`. Directional fields use shortest circular degree deltas. Non-isobaric fields are compared only when their vertical and temporal semantics match; for example, total precipitation accumulated from different initialization times is reported as non-comparable rather than subtracting different accumulation windows. At long lead times, a 06/18Z short run that cannot reach the requested valid time causes an explicit failure instead of being silently skipped.
+
+IFS still does not participate in the specialized aligned GFS-vs-GEFS comparison operation, which has model-pair-specific ensemble semantics rather than being a missing deterministic IFS state capability.
 
 This keeps the architecture rule intact: **unify operations and physics; preserve model semantics.**

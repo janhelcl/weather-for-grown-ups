@@ -170,7 +170,7 @@ describe("unified atmospheric schema capability branches", () => {
       selection: pressureSelection,
     }).geometry.type).toBe("transect");
 
-    expect(() => queryAtmosphereSchema.parse({
+    expect(queryAtmosphereSchema.parse({
       dataset: "ifs",
       geometry: {
         type: "area",
@@ -181,7 +181,7 @@ describe("unified atmospheric schema capability branches", () => {
       },
       time: { at: "2026-08-28T12:00:00Z" },
       selection: pressureSelection,
-    })).toThrow("IFS area statistics are not implemented");
+    }).dataset).toBe("ifs");
 
     expect(diagnoseAtmosphereSchema.parse({
       dataset: "ifs",

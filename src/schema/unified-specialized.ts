@@ -22,7 +22,7 @@ import {
 } from "./unified-api.js";
 
 export const compareAtmosphericRunsSchema = z.object({
-  dataset: z.enum(["gfs", "gefs"]),
+  dataset: z.enum(["gfs", "gefs", "ifs"]),
   geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
   time: z.object({ at: isoDateTimeSchema }),
   selection: atmosphericSelectionSchema,
@@ -32,11 +32,14 @@ export const compareAtmosphericRunsSchema = z.object({
   ensemble: atmosphericEnsembleOptionsSchema.optional(),
   thresholdGte: z.number().optional(),
 }).superRefine((request, context) => {
-  if (request.dataset === "gefs" && request.gfsGrid !== undefined) {
+  if (request.dataset !== "gfs" && request.gfsGrid !== undefined) {
     context.addIssue({ code: "custom", path: ["gfsGrid"], message: "gfsGrid is only valid for GFS run comparison" });
   }
   if (request.dataset !== "gefs" && request.ensemble !== undefined) {
     context.addIssue({ code: "custom", path: ["ensemble"], message: "ensemble controls are only valid for gefs" });
+  }
+  if (request.dataset !== "gefs" && request.thresholdGte !== undefined) {
+    context.addIssue({ code: "custom", path: ["thresholdGte"], message: "thresholdGte is only valid for gefs run comparison" });
   }
   if (request.dataset === "gefs") {
     const variables = request.selection.variables?.length ?? 0;

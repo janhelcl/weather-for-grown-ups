@@ -13,7 +13,7 @@ WFG's public API is organized around a small operation vocabulary and four atmos
 | `ifs` | `ifs_0p25` ECMWF Open Data operational forecast | forecast | deterministic |
 | `gfs-analysis` | `gfs_grid4_analysis_0p5` | historical analysis | deterministic analyzed state |
 
-The first IFS implementation supports point geometry at one valid time with canonical pressure variables and selected fields; unsupported IFS geometries/ranges fail explicitly rather than falling through to another dataset. The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a fourth public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently.
+IFS supports point and multi-point access, native-cadence ranges, transects, raw scalar bbox area summaries, deterministic diagnostics, and run-to-run comparison while preserving ECMWF-native cadence and field semantics. Unsupported combinations fail explicitly rather than falling through to another dataset. The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a fourth public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently.
 
 ## The four orthogonal query dimensions
 
@@ -176,7 +176,7 @@ The compact public vocabulary is:
 | `search_catalog` | Discover canonical fields/diagnostics and dataset support |
 | `query_atmosphere` | Raw/derived atmospheric state over supported geometry and time |
 | `diagnose_atmosphere` | Layer, profile and parcel meteorology |
-| `compare_runs` | Compare consecutive forecast initialization cycles |
+| `compare_runs` | Compare consecutive GFS, GEFS, or IFS forecast initialization cycles |
 | `compare_datasets` | Compare aligned datasets; currently GFS against GEFS |
 | `verify_forecast` | Compare an archived GFS forecast with later GFS analysis or an IGRA radiosonde |
 | `find_analogs` | Search materialized historical atmospheric analogs |

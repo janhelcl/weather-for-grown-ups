@@ -382,7 +382,8 @@ describe("unified specialized operations", () => {
   it("keeps compare-runs dataset-aware while delegating to native semantics", async () => {
     const gfs = { compareRuns: vi.fn(async (query) => ({ route: "gfs-runs", query })) };
     const gefs = { compareRuns: vi.fn(async (query) => ({ route: "gefs-runs", query })) };
-    const service = new UnifiedRunComparisonService(gfs as any, gefs as any);
+    const ifs = { compareRuns: vi.fn(async (query) => ({ route: "ifs-runs", query })) };
+    const service = new UnifiedRunComparisonService(gfs as any, gefs as any, ifs as any);
 
     const gfsResult = await service.compare({
       dataset: "gfs",
@@ -403,6 +404,25 @@ describe("unified specialized operations", () => {
     });
     expect((gefsResult.result as any).route).toBe("gefs-runs");
     expect(gefs.compareRuns).toHaveBeenCalledOnce();
+
+    const ifsResult = await service.compare({
+      dataset: "ifs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: {
+        variables: ["temperature", "wind"],
+        pressureLevelsHpa: [850],
+        fields: ["wind_10m"],
+      },
+      cycles: 2,
+    });
+    expect((ifsResult.result as any).route).toBe("ifs-runs");
+    expect(ifs.compareRuns).toHaveBeenCalledWith(expect.objectContaining({
+      variables: ["temperature", "wind"],
+      pressureLevelsHpa: [850],
+      fields: ["wind_10m"],
+      cycles: 2,
+    }));
   });
 
   it("rejects a GFS grid selector on GEFS run comparison", async () => {
@@ -746,10 +766,12 @@ describe("unified geometry routing coverage", () => {
   it("routes scalar area summaries with shared aggregation controls", async () => {
     const gfsArea = { summarize: vi.fn(async () => ({ route: "gfs-area" })) };
     const gefsArea = { summarize: vi.fn(async () => ({ route: "gefs-area" })) };
+    const ifsArea = { summarize: vi.fn(async () => ({ route: "ifs-area" })) };
     const historyArea = { summarize: vi.fn(async () => ({ route: "history-area" })) };
     const service = new UnifiedAtmosphereQueryService({
       gfsArea: gfsArea as any,
       gefsArea: gefsArea as any,
+      ifsArea: ifsArea as any,
       historyArea: historyArea as any,
     });
     const geometry = {
@@ -783,6 +805,24 @@ describe("unified geometry routing coverage", () => {
       ensemble: { quantiles: [0.1, 0.5, 0.9] },
       limits: { maxGridPoints: 1000, maxMemberGridPoints: 30000 },
     })).result).toEqual({ route: "gefs-area" });
+
+    expect((await service.query({
+      dataset: "ifs",
+      geometry,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      aggregate,
+      forecast: { run: "latest" },
+      limits: { maxGridPoints: 1000 },
+    })).result).toEqual({ route: "ifs-area" });
+    expect(ifsArea.summarize).toHaveBeenCalledWith(expect.objectContaining({
+      run: "latest",
+      validTime: "2026-08-28T12:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      percentiles: [10, 50, 90],
+      maxGridPoints: 1000,
+    }));
 
     expect((await service.query({
       dataset: "gfs-analysis",
