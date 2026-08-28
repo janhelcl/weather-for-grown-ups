@@ -118,14 +118,14 @@ function registerDiagnoseCommand(program: Command): void {
 function registerCompareRunsCommand(program: Command): void {
   program
     .command("compare-runs")
-    .description("Compare consecutive forecast initialization cycles for GFS or GEFS")
-    .option("--dataset <gfs|gefs>", "Forecast dataset", "gfs")
+    .description("Compare consecutive forecast initialization cycles for GFS, GEFS, or IFS")
+    .option("--dataset <gfs|gefs|ifs>", "Forecast dataset", "gfs")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--at <iso>", "Forecast valid time")
     .option("--vars <list>", "Pressure-level variables", "temperature")
     .option("--levels <list>", "Pressure levels in hPa", "850")
-    .option("--fields <list>", "GFS-only non-isobaric fields")
+    .option("--fields <list>", "Deterministic GFS/IFS non-isobaric fields")
     .option("--anchor-run <iso|latest>", "Newest initialization cycle to compare", "latest")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--cycles <number>", "Number of consecutive cycles", Number, 3)
@@ -361,10 +361,10 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
   };
 }
 
-function parseForecastDataset(value: unknown): "gfs" | "gefs" {
+function parseForecastDataset(value: unknown): "gfs" | "gefs" | "ifs" {
   const dataset = String(value).trim().toLowerCase();
-  if (dataset === "gfs" || dataset === "gefs") return dataset;
-  throw new Error(`Expected --dataset gfs|gefs, received: ${value}`);
+  if (dataset === "gfs" || dataset === "gefs" || dataset === "ifs") return dataset;
+  throw new Error(`Expected --dataset gfs|gefs|ifs, received: ${value}`);
 }
 
 function parseDataset(value: unknown): PublicAtmosphericDataset {
