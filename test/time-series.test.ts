@@ -151,6 +151,46 @@ describe("TimeSeriesService", () => {
     });
   });
 
+  it("reports native-step progress without changing result ordering", async () => {
+    const getProfile = vi.fn(async (query: ProfileQueryInput) => profileFor(query));
+    const onProgress = vi.fn();
+    const service = new TimeSeriesService({
+      profileGetter: { getProfile },
+      concurrency: 1,
+      onProgress,
+    });
+
+    await service.getTimeSeries({
+      ...base,
+      startTime: "2026-08-19T00:00:00Z",
+      endTime: "2026-08-19T02:00:00Z",
+      source: "nomads",
+    });
+
+    expect(onProgress.mock.calls[0]?.[0]).toMatchObject({
+      phase: "start",
+      completedSteps: 0,
+      totalSteps: 3,
+      source: "nomads",
+    });
+    expect(onProgress.mock.calls.slice(1, 4).map(([progress]) => ({
+      phase: progress.phase,
+      completedSteps: progress.completedSteps,
+      forecastHour: progress.forecastHour,
+      cacheHit: progress.cacheHit,
+    }))).toEqual([
+      { phase: "step", completedSteps: 1, forecastHour: 0, cacheHit: true },
+      { phase: "step", completedSteps: 2, forecastHour: 1, cacheHit: false },
+      { phase: "step", completedSteps: 3, forecastHour: 2, cacheHit: true },
+    ]);
+    expect(onProgress.mock.calls.at(-1)?.[0]).toMatchObject({
+      phase: "complete",
+      completedSteps: 3,
+      totalSteps: 3,
+      source: "nomads",
+    });
+  });
+
   it("normalizes offset range timestamps in the result", async () => {
     const getProfile = vi.fn(async (query: ProfileQueryInput) => profileFor(query));
     const service = new TimeSeriesService({ profileGetter: { getProfile } });
