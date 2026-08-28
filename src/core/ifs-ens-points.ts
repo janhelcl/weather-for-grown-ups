@@ -352,7 +352,7 @@ function assertBatchInvariant(
     throw new Error("IFS ENS multi-point source provenance changed within one time-series query");
   }
   assertStableSelection(
-    { selection: batch.selection } as IfsEnsMemberBundleResult,
+    batch,
     expected.members,
     expected.quantiles,
     expected.selection,
