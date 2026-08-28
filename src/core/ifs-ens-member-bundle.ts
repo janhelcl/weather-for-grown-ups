@@ -11,7 +11,10 @@ import {
   sortIfsEnsMembers,
   type IfsEnsMember,
 } from "../catalog/ifs-ens.js";
-import { NON_ISOBARIC_FIELD_CATALOG } from "../catalog/non-isobaric-fields.js";
+import {
+  NON_ISOBARIC_FIELD_CATALOG,
+  type NonIsobaricLevel,
+} from "../catalog/non-isobaric-fields.js";
 import { VARIABLE_CATALOG } from "../catalog/variables.js";
 import {
   ifsEnsMemberBundleQuerySchema,
@@ -235,9 +238,6 @@ function summarizeFields(
       if (!value) throw new Error(`IFS ENS aggregation is missing field ${field}`);
       return value;
     });
-    const profileField = samples.length > 0
-      ? undefined
-      : undefined;
     const temporal = memberFields[0]?.temporal;
     if (!temporal) throw new Error(`IFS ENS field ${field} produced no perturbation values`);
     for (const memberField of memberFields) {
@@ -283,7 +283,7 @@ function summarizeOutput(
   };
 }
 
-function publicLevel(level: (typeof NON_ISOBARIC_FIELD_CATALOG)[keyof typeof NON_ISOBARIC_FIELD_CATALOG]["level"]) {
+function publicLevel(level: NonIsobaricLevel) {
   switch (level.type) {
     case "surface": return { type: "surface" as const };
     case "height_above_ground_m":
