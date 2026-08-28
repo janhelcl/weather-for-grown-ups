@@ -1,4 +1,6 @@
 import * as z from "zod/v4";
+import { GEFS_MEMBERS } from "../catalog/gefs.js";
+import { IFS_ENS_MEMBERS } from "../catalog/ifs-ens.js";
 import { gfsGridSchema } from "./gfs-grid.js";
 import {
   HISTORICAL_GFS_VARIABLE_IDS,
@@ -14,6 +16,9 @@ import {
   IGRA_VERIFICATION_VARIABLE_IDS,
   igraVerificationVariableSchema,
 } from "./igra-verification.js";
+import { gefsMemberSchema } from "./gefs-ensemble.js";
+import { gefsIfsEnsComparisonVariableSchema } from "./gefs-ifs-ens-comparison.js";
+import { ifsEnsMemberSchema } from "./ifs-ens.js";
 import { ifsPressureLevelSchema, ifsPressureVariableSchema } from "./ifs.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 import {
@@ -96,9 +101,25 @@ const compareGfsIfsDatasetsSchema = z.object({
   quantiles: z.never().optional(),
 });
 
+const compareGefsIfsEnsDatasetsSchema = z.object({
+  datasets: z.tuple([z.literal("gefs"), z.literal("ifs-ens")]),
+  geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
+  time: z.object({ at: isoDateTimeSchema }),
+  variable: gefsIfsEnsComparisonVariableSchema,
+  pressureLevelHpa: ifsPressureLevelSchema,
+  run: z.string().min(1).default("latest"),
+  gefsMembers: z.array(gefsMemberSchema).min(2).max(GEFS_MEMBERS.length).optional(),
+  ifsEnsMembers: z.array(ifsEnsMemberSchema).min(2).max(IFS_ENS_MEMBERS.length).optional(),
+  quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
+  thresholdGte: z.number().optional(),
+  gfsGrid: z.never().optional(),
+  members: z.never().optional(),
+});
+
 export const compareAtmosphericDatasetsSchema = z.union([
   compareGfsGefsDatasetsSchema,
   compareGfsIfsDatasetsSchema,
+  compareGefsIfsEnsDatasetsSchema,
 ]);
 
 const verifyAtmosphericForecastCaseSchema = z.object({
