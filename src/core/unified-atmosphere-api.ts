@@ -25,6 +25,7 @@ import { HistoricalPointsService } from "./history-points.js";
 import { HistoricalTimeSeriesService } from "./history-time-series.js";
 import { HistoricalTransectService } from "./history-transect.js";
 import { HistoricalProfileService } from "./history.js";
+import { IfsAreaSummaryService } from "./ifs-area-summary.js";
 import { IfsProfileService } from "./ifs-profile.js";
 import {
   IfsPointsService,
@@ -50,6 +51,7 @@ import { historicalPointsTimeSeriesQuerySchema } from "../schema/history-points-
 import { historicalPointsQuerySchema } from "../schema/history-points.js";
 import { historicalTransectQuerySchema } from "../schema/history-transect.js";
 import { historicalProfileQuerySchema, historicalTimeSeriesQuerySchema } from "../schema/history.js";
+import { ifsAreaSummaryQuerySchema } from "../schema/ifs-area-summary.js";
 import { ifsPointQuerySchema } from "../schema/ifs.js";
 import {
   ifsPointsQuerySchema,
@@ -94,6 +96,7 @@ export interface UnifiedAtmosphereQueryServiceOptions {
   ifsPoints?: Pick<IfsPointsService, "getPoints">;
   ifsPointsTimeSeries?: Pick<IfsPointsTimeSeriesService, "getPointsTimeSeries">;
   ifsTransect?: Pick<IfsTransectService, "getTransect">;
+  ifsArea?: Pick<IfsAreaSummaryService, "summarize">;
   historyProfile?: Pick<HistoricalProfileService, "getHistoricalProfile">;
   historyFields?: Pick<HistoricalFieldsService, "getHistoricalFields">;
   historyTimeSeries?: Pick<HistoricalTimeSeriesService, "getHistoricalTimeSeries">;
@@ -124,6 +127,7 @@ export class UnifiedAtmosphereQueryService {
   private readonly ifsPoints: Pick<IfsPointsService, "getPoints">;
   private readonly ifsPointsTimeSeries: Pick<IfsPointsTimeSeriesService, "getPointsTimeSeries">;
   private readonly ifsTransect: Pick<IfsTransectService, "getTransect">;
+  private readonly ifsArea: Pick<IfsAreaSummaryService, "summarize">;
   private readonly historyProfile: Pick<HistoricalProfileService, "getHistoricalProfile">;
   private readonly historyFields: Pick<HistoricalFieldsService, "getHistoricalFields">;
   private readonly historyTimeSeries: Pick<HistoricalTimeSeriesService, "getHistoricalTimeSeries">;
@@ -153,6 +157,7 @@ export class UnifiedAtmosphereQueryService {
     this.ifsPoints = options.ifsPoints ?? new IfsPointsService();
     this.ifsPointsTimeSeries = options.ifsPointsTimeSeries ?? new IfsPointsTimeSeriesService();
     this.ifsTransect = options.ifsTransect ?? new IfsTransectService();
+    this.ifsArea = options.ifsArea ?? new IfsAreaSummaryService();
     this.historyProfile = options.historyProfile ?? new HistoricalProfileService();
     this.historyFields = options.historyFields ?? new HistoricalFieldsService();
     this.historyTimeSeries = options.historyTimeSeries ?? new HistoricalTimeSeriesService();
@@ -507,6 +512,16 @@ export class UnifiedAtmosphereQueryService {
         ...(request.limits?.maxMemberGridPoints === undefined
           ? {}
           : { maxMemberGridPoints: request.limits.maxMemberGridPoints }),
+      }));
+    }
+    if (request.dataset === "ifs") {
+      return this.ifsArea.summarize(ifsAreaSummaryQuerySchema.parse({
+        ...bbox,
+        run,
+        validTime: request.time.at,
+        ...scalar,
+        ...aggregate,
+        ...(request.limits?.maxGridPoints === undefined ? {} : { maxGridPoints: request.limits.maxGridPoints }),
       }));
     }
     return this.historyArea.summarize(historicalAreaSummaryQuerySchema.parse({
