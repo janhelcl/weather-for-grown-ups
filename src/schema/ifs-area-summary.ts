@@ -8,15 +8,24 @@ import { ifsPressureLevelSchema, ifsRunSelectorSchema } from "./ifs.js";
 import { gridPointSchema, nonIsobaricFieldLevelResultSchema, fieldTemporalResultSchema } from "./result.js";
 import { isoDateTimeSchema } from "./query.js";
 
-export const IFS_AREA_PRESSURE_VARIABLE_IDS = IFS_RAW_PRESSURE_VARIABLE_IDS
-  .filter((id) => id !== "relative_vorticity") as readonly [
-    "temperature",
-    ..."relative_humidity"[]
-  ];
+export const IFS_AREA_PRESSURE_VARIABLE_IDS = [
+  "temperature",
+  "relative_humidity",
+  "u_wind",
+  "v_wind",
+  "geopotential_height",
+  "specific_humidity",
+  "vertical_velocity",
+  "divergence",
+] as const;
 
 export const IFS_AREA_FIELD_IDS = IFS_RAW_FIELD_IDS;
 
-const ifsAreaPressureVariableSchema = z.enum([
+const ifsAreaPressureVariableSchema = z.enum(IFS_AREA_PRESSURE_VARIABLE_IDS);
+const ifsAreaFieldSchema = z.enum(IFS_AREA_FIELD_IDS);
+
+/* canonical raw-only area semantics, matching deterministic GFS */
+const _ifsAreaPressureVariableSchemaExhaustiveness = z.enum([
   "temperature",
   "relative_humidity",
   "u_wind",
@@ -26,8 +35,7 @@ const ifsAreaPressureVariableSchema = z.enum([
   "vertical_velocity",
   "divergence",
 ]);
-
-const ifsAreaFieldSchema = z.enum(IFS_AREA_FIELD_IDS);
+void _ifsAreaPressureVariableSchemaExhaustiveness;
 
 export const ifsAreaSummaryQuerySchema = z.object({
   westLongitude: z.number().min(-180).max(180),
