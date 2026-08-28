@@ -4,11 +4,9 @@
 
 Weather is the canonical agent tutorial: give the model a tool, ask for tomorrow's forecast, celebrate when it tells you to bring an umbrella.
 
-**Weather for Grown Ups (WFG)** goes a bit further. It gives agents direct access to NOAA's GFS/GEFS and ECMWF's IFS numerical weather models — pressure profiles, mixed fields, ensemble distributions, diagnostics, parcel physics, time series, transects, area statistics, run comparisons, and more.
+**Weather for Grown Ups (WFG)** goes a bit further. It gives agents direct access to NOAA's GFS/GEFS and ECMWF's deterministic IFS / IFS ENS numerical weather models — pressure profiles, mixed fields, ensemble distributions, diagnostics, parcel physics, time series, transects, area statistics, run comparisons, and more.
 
-One TypeScript core powers equal CLI and MCP surfaces. No need to teach your agent how to wrestle GRIB files first.
-
-Current release: **v0.2.0**.
+One TypeScript core powers equal CLI and MCP surfaces. The public contract is deliberately model-neutral: **one query language over weather datasets**, with model-specific cadence, provenance and deterministic/ensemble semantics preserved behind it. No need to teach your agent how to wrestle GRIB files first.
 
 ## Quick start
 
