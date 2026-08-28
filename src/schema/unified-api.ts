@@ -211,7 +211,7 @@ export const queryAtmosphereSchema = z.object({
   selection: atmosphericSelectionSchema,
   forecast: atmosphericForecastOptionsSchema.optional(),
   ensemble: atmosphericEnsembleOptionsSchema.optional(),
-  source: z.enum(["nomads", "s3", "archive"]).optional().describe("GFS-only source override; archive forces the resolution-matched historical backend"),
+  source: z.enum(["nomads", "s3", "archive"]).optional().describe("GFS-only source override. Omit for automatic routing: AWS S3 for point/multi-point/time-series/transect access, NOMADS for area subsets, and the resolution-matched archive for explicit old runs."),
   aggregate: atmosphericAggregationSchema,
   limits: atmosphericLimitsSchema,
 }).superRefine(validateCommonAtmosphericRequest);
@@ -250,7 +250,7 @@ export const diagnoseAtmosphereSchema = z.object({
   diagnostic: atmosphericDiagnosticSelectionSchema,
   forecast: atmosphericForecastOptionsSchema.optional(),
   ensemble: atmosphericEnsembleOptionsSchema.optional(),
-  source: z.enum(["nomads", "s3", "archive"]).optional().describe("GFS-only source override; archive forces the resolution-matched historical backend"),
+  source: z.enum(["nomads", "s3", "archive"]).optional().describe("GFS-only source override. Omit for automatic routing: AWS S3 for point/multi-point/time-series/transect access, NOMADS for area subsets, and the resolution-matched archive for explicit old runs."),
 }).superRefine((request, context) => {
   validateDatasetModifiers(request, context);
   if ("from" in request.time && request.ensemble?.includeMembers === true) {
@@ -287,6 +287,26 @@ function validateCommonAtmosphericRequest(
   context: z.RefinementCtx,
 ): void {
   validateDatasetModifiers(request, context);
+
+  if (request.dataset === "gfs" && request.source !== undefined && request.source !== "archive") {
+    if (request.geometry.type === "area" && request.source !== "nomads") {
+      context.addIssue({
+        code: "custom",
+        path: ["source"],
+        message: "Operational GFS area queries use NOMADS geographic subsetting; omit source for automatic routing or use source=nomads",
+      });
+    }
+    if (
+      (request.geometry.type === "points" || request.geometry.type === "transect")
+      && request.source !== "s3"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["source"],
+        message: "Operational GFS multi-point and transect queries reuse AWS S3 byte-range slices; omit source for automatic routing or use source=s3",
+      });
+    }
+  }
 
   const isRange = "from" in request.time;
   if (isRange && (request.geometry.type === "transect" || request.geometry.type === "area")) {
