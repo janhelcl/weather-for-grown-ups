@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
+import { ifsEnsForecastHour } from "../src/core/ifs-time.js";
 import type { DecodedValue } from "../src/core/types.js";
 
 const gridPoint = { latitude: 50, longitude: 14.5 };
@@ -197,6 +198,50 @@ describe("IFS canonical point profile", () => {
     expect(result.fields?.find((field) => field.id === "surface_geopotential_height")
       ?.values.geopotentialHeightGpm).toBeCloseTo(100, 8);
     expect(result.source.cacheHit).toBe(false);
+  });
+
+  it("samples ENS-native long-range leads without weakening deterministic IFS validation", async () => {
+    const fetchSelection = vi.fn(async ({ forecastHour }: any) => ({
+      path: `ifs-ens-f${forecastHour}`,
+      cacheHit: false,
+    }));
+    const service = new IfsProfileService({
+      source: { fetchSelection },
+      decoder: {
+        engine: "gribberish",
+        extractPoint: vi.fn(async () => [
+          { code: "t", pressureHpa: 850, value: 280, gridPoint },
+        ]),
+      },
+    });
+    const run = "2026-08-27T12:00:00Z";
+    const validTime = "2026-09-09T00:00:00Z"; // f300
+
+    await expect(service.getProfile({
+      latitude: 50,
+      longitude: 14,
+      run,
+      validTime,
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    })).rejects.toThrow("does not publish f300");
+
+    const sample = await service.getProfileSample({
+      latitude: 50,
+      longitude: 14,
+      run,
+      validTime,
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    }, {
+      forecastHourResolver: ifsEnsForecastHour,
+      sourceProduct: "ifs_0p25_enfo_ef",
+    });
+
+    expect(sample.forecastHour).toBe(300);
+    expect(sample.levels[0]?.temperatureC).toBeCloseTo(6.85);
+    expect(sample.source.product).toBe("ifs_0p25_enfo_ef");
+    expect(fetchSelection).toHaveBeenLastCalledWith(expect.objectContaining({ forecastHour: 300 }));
   });
 
   it("rejects selected fields that resolve to different IFS grid cells", async () => {
