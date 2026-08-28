@@ -57,7 +57,7 @@ export class IfsEnsMemberBundleService {
   constructor(options: IfsEnsMemberBundleServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
     this.source = options.source ?? new IfsOpenDataSubsetCache(join(cacheDir, "ifs-open-data"));
-    this.latestRunProvider = options.latestRunProvider ?? new IfsEnsLatestRunResolver();
+    this.latestRunProvider = options.latestRunProvider ?? new IfsEnsLatestRunResolver({ cacheDir });
     this.concurrency = options.concurrency ?? DEFAULT_IFS_ENS_MEMBER_CONCURRENCY;
   }
 
