@@ -1,6 +1,6 @@
-# ECMWF IFS operational access
+# ECMWF IFS operational and ensemble access
 
-WFG exposes ECMWF's deterministic IFS Open Data forecast through the same atmospheric query vocabulary used for GFS and GEFS.
+WFG exposes both ECMWF's deterministic IFS Open Data forecast and the perturbed IFS ENS distribution through the same atmospheric query vocabulary used for GFS and GEFS.
 
 ## Current source contract
 
@@ -10,16 +10,60 @@ WFG exposes ECMWF's deterministic IFS Open Data forecast through the same atmosp
 - source: ECMWF Open Data, using AWS first with Google/ECMWF HTTPS mirror failover
 - product: deterministic IFS operational forecast (`oper`, `fc`)
 - cycles: 00/06/12/18 UTC
-- 00/12Z horizon: `f000`–`f360`
-- 06/18Z horizon: `f000`–`f144`
-- cadence: 3-hourly through `f144`; 00/12Z then 6-hourly from `f150` through `f360`
+- 00/12Z horizon: `f000`–`f240`
+- 06/18Z horizon: `f000`–`f090`
+- cadence: 3-hourly through `f144` on 00/12Z then 6-hourly from `f150` through `f240`; 06/18Z is 3-hourly through `f090`
 - pressure levels: 1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50, 10 hPa
 - transport: JSON-lines `.index` inventory + exact HTTP byte ranges, with bounded retry/failover across official mirrors
 - decoding: bundled GRIB2 decoder, including ECMWF CCSDS/AEC packing
 
 The source adapter resolves `latest` against the **requested selection**, not merely the newest cycle name. If a newly initializing cycle has not yet published the requested fields at the required lead, WFG walks back to the newest cycle that can satisfy the complete point request.
 
-## Current IFS query surface
+## IFS ENS
+
+The public dataset `ifs-ens` exposes ECMWF's atmospheric ensemble direct model output:
+
+- internal dataset: `ifs_ens_0p25`
+- product: `stream=enfo`, file type `ef` (perturbed forecasts are `type=pf` in MARS/index metadata)
+- members: `p01`–`p50`
+- 00/12Z horizon: `f000`–`f360`, 3-hourly through `f144` then 6-hourly
+- 06/18Z horizon: `f000`–`f144`, 3-hourly
+- first public slice: one point × one valid time, pressure variables and/or supported IFS fields
+- derived quantities are calculated independently inside every perturbation before aggregation
+- outputs include member count, mean, population standard deviation, min/max and requested quantiles; wind direction uses circular statistics
+- raw normalized perturbation payloads are opt-in with `ensemble.includeMembers`
+
+Since IFS Cycle 50r1, ECMWF no longer publishes a distinct ENS control in `enfo`: the unperturbed control is identical to deterministic `oper/fc`. WFG therefore keeps the 50 perturbations in `ifs-ens` and exposes the control truthfully as `dataset: "ifs"`, rather than inventing a `c00` member.
+
+Example:
+
+```json
+{
+  "dataset": "ifs-ens",
+  "geometry": {
+    "type": "point",
+    "latitude": 50.08,
+    "longitude": 14.43
+  },
+  "time": {
+    "at": "2026-08-28T12:00:00Z"
+  },
+  "selection": {
+    "variables": ["temperature", "wind", "dew_point"],
+    "pressureLevelsHpa": [850, 500],
+    "fields": ["temperature_2m", "wind_10m"]
+  },
+  "ensemble": {
+    "members": ["p01", "p02", "p03", "p04"],
+    "quantiles": [0.1, 0.5, 0.9],
+    "includeMembers": false
+  }
+}
+```
+
+The default member selection is all 50 perturbations. Point ranges, multi-point, transects, areas, diagnostics and ensemble run comparison are intentionally rejected for now instead of being routed through deterministic IFS semantics.
+
+## Current deterministic IFS query surface
 
 IFS now exposes the same deterministic state through several geometries while pinning one initialization per composed request:
 
