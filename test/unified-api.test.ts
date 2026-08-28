@@ -62,7 +62,7 @@ describe("unified atmospheric public contract", () => {
       time: { at: "2026-08-28T12:00:00Z" },
       selection,
       ensemble: { quantiles: [0.1, 0.5, 0.9] },
-    })).toThrow("ensemble controls are only valid for the gefs dataset");
+    })).toThrow("ensemble controls are only valid for ensemble datasets");
   });
 
   it("keeps unsupported geometry/time combinations explicit", () => {
@@ -103,6 +103,7 @@ describe("unified atmospheric routing", () => {
     const gfsProfile = { getProfile: vi.fn(async () => ({ route: "gfs-profile" })) };
     const gefsBundle = { getBundle: vi.fn(async () => ({ route: "gefs-bundle" })) };
     const ifsProfile = { getProfile: vi.fn(async () => ({ route: "ifs-profile" })) };
+    const ifsEnsBundle = { getBundle: vi.fn(async () => ({ route: "ifs-ens-bundle" })) };
     const historyProfile = { getHistoricalProfile: vi.fn(async () => ({ route: "history-profile" })) };
     const historyFields = { getHistoricalFields: vi.fn(async () => ({ route: "history-fields" })) };
 
@@ -110,6 +111,7 @@ describe("unified atmospheric routing", () => {
       gfsProfile: gfsProfile as any,
       gefsBundle: gefsBundle as any,
       ifsProfile: ifsProfile as any,
+      ifsEnsBundle: ifsEnsBundle as any,
       historyProfile: historyProfile as any,
       historyFields: historyFields as any,
     });
@@ -145,6 +147,24 @@ describe("unified atmospheric routing", () => {
       validTime: "2026-08-28T12:00:00Z",
       variables: ["temperature"],
       pressureLevelsHpa: [850],
+    }));
+
+    const ifsEns = await service.query({
+      dataset: "ifs-ens",
+      ...base,
+      ensemble: { members: ["p01", "p50"], quantiles: [0.1, 0.5, 0.9] },
+    });
+    expect(ifsEns.result).toEqual({ route: "ifs-ens-bundle" });
+    expect(ifsEns.internalDatasetId).toBe("ifs_ens_0p25");
+    expect(ifsEns.kind).toBe("ensemble");
+    expect(ifsEnsBundle.getBundle).toHaveBeenCalledWith(expect.objectContaining({
+      run: "latest",
+      validTime: "2026-08-28T12:00:00Z",
+      members: ["p01", "p50"],
+      selection: expect.objectContaining({
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+      }),
     }));
 
     const historicalPressure = await service.query({
@@ -312,6 +332,7 @@ describe("unified catalog", () => {
       "gfs",
       "gefs",
       "ifs",
+      "ifs-ens",
       "gfs-analysis",
     ]);
   });
