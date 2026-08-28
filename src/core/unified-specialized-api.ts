@@ -1,5 +1,6 @@
 import { GefsRunComparisonService } from "./gefs-run-comparison.js";
 import { GfsGefsComparisonService } from "./gfs-gefs-comparison.js";
+import { GfsIfsComparisonService } from "./gfs-ifs-comparison.js";
 import { HistoricalIndexService } from "./history-index.js";
 import { HistoricalForecastSkillService } from "./history-skill.js";
 import { HistoricalForecastVerificationService } from "./history-verification.js";
@@ -9,6 +10,7 @@ import { IfsRunComparisonService } from "./ifs-run-comparison.js";
 import { RunComparisonService } from "./run-comparison.js";
 import { gefsRunComparisonQuerySchema } from "../schema/gefs-run-comparison.js";
 import { gfsGefsComparisonQuerySchema } from "../schema/gfs-gefs-comparison.js";
+import { gfsIfsComparisonQuerySchema } from "../schema/gfs-ifs-comparison.js";
 import { historicalAnalogQuerySchema } from "../schema/history-index.js";
 import { historicalForecastVerificationQuerySchema } from "../schema/history-verification.js";
 import { ifsRunComparisonQuerySchema } from "../schema/ifs-run-comparison.js";
@@ -91,12 +93,29 @@ export class UnifiedRunComparisonService {
 
 export class UnifiedDatasetComparisonService {
   constructor(
-    private readonly service: Pick<GfsGefsComparisonService, "compare"> = new GfsGefsComparisonService(),
+    private readonly gfsGefs: Pick<GfsGefsComparisonService, "compare"> = new GfsGefsComparisonService(),
+    private readonly gfsIfs: Pick<GfsIfsComparisonService, "compare"> = new GfsIfsComparisonService(),
   ) {}
 
   async compare(input: CompareAtmosphericDatasetsInput): Promise<UnifiedSpecializedResult> {
     const request = compareAtmosphericDatasetsSchema.parse(input);
-    const result = await this.service.compare(gfsGefsComparisonQuerySchema.parse({
+
+    if (request.datasets[1] === "gefs") {
+      const result = await this.gfsGefs.compare(gfsGefsComparisonQuerySchema.parse({
+        latitude: request.geometry.latitude,
+        longitude: request.geometry.longitude,
+        run: request.run,
+        ...(request.gfsGrid === undefined ? {} : { gfsGrid: request.gfsGrid }),
+        validTime: request.time.at,
+        variable: request.variable,
+        pressureLevelHpa: request.pressureLevelHpa,
+        ...(request.members === undefined ? {} : { members: request.members }),
+        ...(request.quantiles === undefined ? {} : { quantiles: request.quantiles }),
+      }));
+      return wrap("compare_datasets", ["gfs", "gefs"], result);
+    }
+
+    const result = await this.gfsIfs.compare(gfsIfsComparisonQuerySchema.parse({
       latitude: request.geometry.latitude,
       longitude: request.geometry.longitude,
       run: request.run,
@@ -104,10 +123,8 @@ export class UnifiedDatasetComparisonService {
       validTime: request.time.at,
       variable: request.variable,
       pressureLevelHpa: request.pressureLevelHpa,
-      ...(request.members === undefined ? {} : { members: request.members }),
-      ...(request.quantiles === undefined ? {} : { quantiles: request.quantiles }),
     }));
-    return wrap("compare_datasets", ["gfs", "gefs"], result);
+    return wrap("compare_datasets", ["gfs", "ifs"], result);
   }
 }
 
