@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
 import { IfsDiagnosticsService } from "../src/core/ifs-diagnostics.js";
+import { IfsDiagnosticTimeSeriesService } from "../src/core/ifs-diagnostic-timeseries.js";
 import {
   IfsPointsService,
   IfsPointsTimeSeriesService,
@@ -196,6 +197,24 @@ assert(Number.isFinite(parcelDiagnostics.parcel.startingState.specificHumidityKg
 assert(Number.isFinite(parcelDiagnostics.parcel.capeJkg));
 assert(Number.isFinite(parcelDiagnostics.parcel.cinJkg));
 
+const diagnosticTimeSeries = await new IfsDiagnosticTimeSeriesService().getDiagnosticTimeSeries({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: result.run,
+  startTime: runTime.toISOString(),
+  endTime: parcelValidTime.toISOString(),
+  diagnostic: {
+    kind: "parcel",
+    pressureLevelsHpa: [925, 850, 700, 600, 500, 400, 300],
+    parcel: "surface_2m",
+  },
+});
+assert.deepEqual(diagnosticTimeSeries.series.map((step) => step.forecastHour), [0, 3, 6]);
+assert(diagnosticTimeSeries.series.every((step) =>
+  step.kind === "parcel"
+  && Number.isFinite(step.parcel.capeJkg)
+  && Number.isFinite(step.parcel.cinJkg)));
+
 const profileDiagnostics = await diagnosticsService.getProfileDiagnostics({
   latitude: 50.08,
   longitude: 14.43,
@@ -220,6 +239,10 @@ console.log(JSON.stringify({
     layer: layerDiagnostics.diagnostics.map((diagnostic) => diagnostic.id),
     layerDepthGpm: layerDiagnostics.layer.depthGpm,
     profile: profileDiagnostics.diagnostics.map((diagnostic) => diagnostic.id),
+    diagnosticTimeSeries: {
+      kind: diagnosticTimeSeries.diagnostic.kind,
+      steps: diagnosticTimeSeries.series.map((step) => step.forecastHour),
+    },
     parcel: {
       definition: parcelDiagnostics.parcel.startingState.definition,
       forecastHour: parcelDiagnostics.forecastHour,
