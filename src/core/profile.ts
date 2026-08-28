@@ -179,6 +179,7 @@ function applyDecodedPressureValue(level: ProfileLevel, value: DecodedValue): vo
     case "VVEL": level.verticalVelocityPaS = value.value; break;
     case "DZDT": level.geometricVerticalVelocityMs = value.value; break;
     case "ABSV": level.absoluteVorticityS1 = value.value; break;
+    case "DIV": level.divergenceS1 = value.value; break;
     case "TCDC": level.totalCloudCoverPct = value.value; break;
     case "CLWMR": level.cloudWaterMixingRatioKgKg = value.value; break;
     case "O3MR": level.ozoneMixingRatioKgKg = value.value; break;

@@ -79,7 +79,7 @@ describe("profileQuerySchema", () => {
     const variables = [
       "temperature", "relative_humidity", "u_wind", "v_wind", "geopotential_height",
       "specific_humidity", "vertical_velocity", "geometric_vertical_velocity",
-      "absolute_vorticity", "total_cloud_cover", "cloud_water_mixing_ratio", "ozone_mixing_ratio",
+      "absolute_vorticity", "divergence", "total_cloud_cover", "cloud_water_mixing_ratio", "ozone_mixing_ratio",
       "wind", "dew_point", "potential_temperature", "mixing_ratio", "virtual_temperature", "air_density",
       "wet_bulb_temperature", "equivalent_potential_temperature",
     ];

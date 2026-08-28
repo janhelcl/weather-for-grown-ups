@@ -25,6 +25,8 @@ import {
   deriveEquivalentPotentialTemperatureK,
   deriveMixingRatioKgKg,
   derivePotentialTemperatureK,
+  deriveSaturationVaporPressureHpa,
+  deriveSpecificHumidityFromRelativeHumidityKgKg,
   deriveVirtualTemperatureC,
   deriveWetBulbTemperatureC,
 } from "../derived/thermodynamics.js";
@@ -121,7 +123,7 @@ export class IfsProfileService {
       if (item.kind === "pressure") {
         const level = levelMap.get(item.pressureHpa);
         if (!level) throw new Error(`Internal IFS pressure selection mismatch at ${item.pressureHpa} hPa`);
-        applyRawPressureValue(level, item.rawId, sample.value);
+        applyRawPressureValue(level, item.rawId, sample.value, query.latitude);
       } else {
         fieldValues.set(item.rawId, sample.value);
       }
@@ -214,6 +216,7 @@ function applyRawPressureValue(
   level: ProfileLevel,
   id: IfsRawPressureVariableId,
   value: number,
+  latitudeDeg: number,
 ): void {
   switch (id) {
     case "temperature": level.temperatureC = value - 273.15; break;
@@ -223,6 +226,10 @@ function applyRawPressureValue(
     case "geopotential_height": level.geopotentialHeightGpm = value; break;
     case "specific_humidity": level.specificHumidityKgKg = value; break;
     case "vertical_velocity": level.verticalVelocityPaS = value; break;
+    case "relative_vorticity":
+      level.absoluteVorticityS1 = value + coriolisParameterS1(latitudeDeg);
+      break;
+    case "divergence": level.divergenceS1 = value; break;
   }
 }
 
@@ -315,17 +322,54 @@ function buildFieldResult(
     };
   }
 
-  const u = rawValues.get(source.dependencies[0]);
-  const v = rawValues.get(source.dependencies[1]);
-  if (u === undefined || v === undefined) throw new Error(`Internal IFS wind dependency missing for ${id}`);
-  const wind = deriveWind(u, v);
+  if (id === "wind_10m" || id === "wind_100m") {
+    const u = rawValues.get(source.dependencies[0]!);
+    const v = rawValues.get(source.dependencies[1]!);
+    if (u === undefined || v === undefined) throw new Error(`Internal IFS wind dependency missing for ${id}`);
+    const wind = deriveWind(u, v);
+    return {
+      id,
+      level: publicLevel(canonical.level),
+      temporal: { type: "instantaneous" },
+      values: {
+        windSpeedMs: wind.speedMs,
+        windDirectionDeg: wind.directionDeg,
+      },
+    };
+  }
+
+  const temperatureK = rawValues.get("temperature_2m");
+  const dewPointK = rawValues.get("dew_point_2m");
+  if (temperatureK === undefined || dewPointK === undefined) {
+    throw new Error(`Internal IFS 2 m humidity dependency missing for ${id}`);
+  }
+  const temperatureC = temperatureK - 273.15;
+  const dewPointC = dewPointK - 273.15;
+  const relativeHumidityPct = deriveRelativeHumidityFromDewPointPct(temperatureC, dewPointC);
+
+  if (id === "relative_humidity_2m") {
+    return {
+      id,
+      level: publicLevel(canonical.level),
+      temporal: { type: "instantaneous" },
+      values: { relativeHumidityPct },
+    };
+  }
+
+  const surfacePressurePa = rawValues.get("surface_pressure");
+  if (surfacePressurePa === undefined) {
+    throw new Error("Internal IFS surface-pressure dependency missing for specific_humidity_2m");
+  }
   return {
     id,
     level: publicLevel(canonical.level),
     temporal: { type: "instantaneous" },
     values: {
-      windSpeedMs: wind.speedMs,
-      windDirectionDeg: wind.directionDeg,
+      specificHumidityKgKg: deriveSpecificHumidityFromRelativeHumidityKgKg(
+        temperatureC,
+        relativeHumidityPct,
+        surfacePressurePa / 100,
+      ),
     },
   };
 }
@@ -354,6 +398,17 @@ function publicLevel(level: NonIsobaricLevel): NonIsobaricFieldResult["level"] {
     case "named_layer": return { type: "named_layer", id: level.id };
     case "named_level": return { type: "named_level", id: level.id };
   }
+}
+
+function deriveRelativeHumidityFromDewPointPct(temperatureC: number, dewPointC: number): number {
+  const saturationAtTemperature = deriveSaturationVaporPressureHpa(temperatureC);
+  const vaporPressure = deriveSaturationVaporPressureHpa(dewPointC);
+  return Math.max(0, Math.min(100, 100 * vaporPressure / saturationAtTemperature));
+}
+
+function coriolisParameterS1(latitudeDeg: number): number {
+  const earthAngularVelocityS1 = 7.292115e-5;
+  return 2 * earthAngularVelocityS1 * Math.sin(latitudeDeg * Math.PI / 180);
 }
 
 function dependency(value: number | undefined, id: string, pressureHpa: number): number {

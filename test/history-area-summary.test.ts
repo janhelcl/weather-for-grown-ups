@@ -104,6 +104,22 @@ describe("parseHistoricalAreaCsv", () => {
     ]);
   });
 
+  it("accepts NCSS CSV when an explicitly selected singleton vertical dimension is collapsed", () => {
+    const collapsedCsv = [
+      'latitude,longitude,time,Temperature_isobaric[unit="K"]',
+      '50,14,t,283.15',
+      '50,14.5,t,285.15',
+    ].join("\n");
+    expect(parseHistoricalAreaCsv(
+      collapsedCsv,
+      HISTORICAL_AREA_PRESSURE_CATALOG.temperature,
+      85000,
+    )).toEqual([
+      { latitude: 50, longitude: 14, value: 10 },
+      { latitude: 50, longitude: 14.5, value: 12 },
+    ]);
+  });
+
   it("rejects NCSS nearest-level substitution instead of silently accepting it", () => {
     expect(() => parseHistoricalAreaCsv(
       temperatureCsv.replaceAll("85000", "90000"),
@@ -124,12 +140,6 @@ describe("parseHistoricalAreaCsv", () => {
       HISTORICAL_AREA_PRESSURE_CATALOG.temperature,
       85000,
     )).toThrow(/missing variable Temperature_isobaric/);
-
-    expect(() => parseHistoricalAreaCsv(
-      'latitude,longitude,Temperature_isobaric\n50,14,285',
-      HISTORICAL_AREA_PRESSURE_CATALOG.temperature,
-      85000,
-    )).toThrow(/missing the vertical coordinate/);
 
     expect(() => parseHistoricalAreaCsv(
       'latitude,longitude,isobaric,Temperature_isobaric\n50,14,85000,NaN',

@@ -13,7 +13,7 @@ describe("getGfsPressureCatalog", () => {
 
   it("exposes all raw and derived variable metadata without internal functions", () => {
     const catalog = getGfsPressureCatalog();
-    expect(catalog.variables).toHaveLength(20);
+    expect(catalog.variables).toHaveLength(21);
     expect(catalog.variables.find((variable) => variable.id === "specific_humidity")).toMatchObject({
       kind: "raw",
       gfsCode: "SPFH",
@@ -52,6 +52,6 @@ describe("getGfsPressureCatalog", () => {
     first.variables.pop();
     const second = getGfsPressureCatalog();
     expect(second.pressureLevelsHpa).toHaveLength(41);
-    expect(second.variables).toHaveLength(20);
+    expect(second.variables).toHaveLength(21);
   });
 });

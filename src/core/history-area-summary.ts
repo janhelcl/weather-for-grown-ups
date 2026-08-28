@@ -197,19 +197,16 @@ export function parseHistoricalAreaCsv(
       `NCEI historical GFS area response is missing variable ${definition.ncssName}`,
     );
   }
-  if (expectedVerticalCoordinate !== undefined && verticalIndex < 0) {
-    throw new Error(
-      `NCEI historical GFS area response is missing the vertical coordinate needed to verify ${definition.id}`,
-    );
-  }
-
+  // NCSS may collapse an explicitly selected singleton vertical dimension and omit
+  // its coordinate column from CSV output. Verify the coordinate whenever it is
+  // present; when omitted, the exact vertCoord remains part of the source request.
   const points: GridValuePoint[] = [];
   for (const line of lines.slice(1)) {
     const cells = parseCsvLine(line);
     const latitude = numericCell(cells[latitudeIndex]);
     const longitude = numericCell(cells[longitudeIndex]);
     const rawValue = numericCell(cells[variableIndex]);
-    if (expectedVerticalCoordinate !== undefined) {
+    if (expectedVerticalCoordinate !== undefined && verticalIndex >= 0) {
       const returnedVerticalCoordinate = numericCell(cells[verticalIndex]);
       if (
         returnedVerticalCoordinate !== undefined

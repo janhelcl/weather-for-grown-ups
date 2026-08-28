@@ -13,10 +13,20 @@ export const IFS_RAW_PRESSURE_VARIABLE_IDS = [
   "geopotential_height",
   "specific_humidity",
   "vertical_velocity",
+  "relative_vorticity",
+  "divergence",
 ] as const;
 
 export const IFS_PRESSURE_VARIABLE_IDS = [
-  ...IFS_RAW_PRESSURE_VARIABLE_IDS,
+  "temperature",
+  "relative_humidity",
+  "u_wind",
+  "v_wind",
+  "geopotential_height",
+  "specific_humidity",
+  "vertical_velocity",
+  "absolute_vorticity",
+  "divergence",
   "wind",
   "dew_point",
   "potential_temperature",
@@ -44,6 +54,8 @@ export const IFS_RAW_PRESSURE_VARIABLE_CATALOG: Record<IfsRawPressureVariableId,
   geopotential_height: { id: "geopotential_height", param: "gh", sourceUnit: "gpm" },
   specific_humidity: { id: "specific_humidity", param: "q", sourceUnit: "kg/kg" },
   vertical_velocity: { id: "vertical_velocity", param: "w", sourceUnit: "Pa/s" },
+  relative_vorticity: { id: "relative_vorticity", param: "vo", sourceUnit: "1/s" },
+  divergence: { id: "divergence", param: "d", sourceUnit: "1/s" },
 };
 
 export const IFS_RAW_FIELD_IDS = [
@@ -64,6 +76,8 @@ export const IFS_RAW_FIELD_IDS = [
 
 export const IFS_FIELD_IDS = [
   ...IFS_RAW_FIELD_IDS,
+  "relative_humidity_2m",
+  "specific_humidity_2m",
   "wind_10m",
   "wind_100m",
 ] as const;
@@ -81,9 +95,9 @@ export interface IfsRawFieldDefinition {
 }
 
 export interface IfsDerivedFieldDefinition {
-  id: "wind_10m" | "wind_100m";
+  id: "wind_10m" | "wind_100m" | "relative_humidity_2m" | "specific_humidity_2m";
   kind: "derived";
-  dependencies: readonly [IfsRawFieldId, IfsRawFieldId];
+  dependencies: readonly IfsRawFieldId[];
   temporalSemantics: "instantaneous";
 }
 
@@ -93,6 +107,18 @@ export const IFS_FIELD_CATALOG: Record<IfsFieldId, IfsFieldDefinition> = {
   surface_pressure: rawField("surface_pressure", "sp", "Pa"),
   temperature_2m: rawField("temperature_2m", "2t", "K"),
   dew_point_2m: rawField("dew_point_2m", "2d", "K"),
+  relative_humidity_2m: {
+    id: "relative_humidity_2m",
+    kind: "derived",
+    dependencies: ["temperature_2m", "dew_point_2m"],
+    temporalSemantics: "instantaneous",
+  },
+  specific_humidity_2m: {
+    id: "specific_humidity_2m",
+    kind: "derived",
+    dependencies: ["temperature_2m", "dew_point_2m", "surface_pressure"],
+    temporalSemantics: "instantaneous",
+  },
   u_wind_10m: rawField("u_wind_10m", "10u", "m/s"),
   v_wind_10m: rawField("v_wind_10m", "10v", "m/s"),
   wind_10m: {
@@ -124,6 +150,10 @@ export function isIfsPressureLevel(value: number): value is (typeof IFS_PRESSURE
 export function expandIfsPressureVariables(ids: readonly IfsPressureVariableId[]): IfsRawPressureVariableId[] {
   const raw = new Set<IfsRawPressureVariableId>();
   for (const id of ids) {
+    if (id === "absolute_vorticity") {
+      raw.add("relative_vorticity");
+      continue;
+    }
     if ((IFS_RAW_PRESSURE_VARIABLE_IDS as readonly string[]).includes(id)) {
       raw.add(id as IfsRawPressureVariableId);
       continue;
@@ -169,7 +199,11 @@ export function getIfsCatalog() {
         outputs: definition.outputs.map((output) => ({ ...output })),
         supportedPressureLevelsHpa: [...IFS_PRESSURE_LEVELS_HPA],
         ...(definition.kind === "raw"
-          ? { sourceParam: IFS_RAW_PRESSURE_VARIABLE_CATALOG[id as IfsRawPressureVariableId].param }
+          ? {
+              sourceParam: IFS_RAW_PRESSURE_VARIABLE_CATALOG[
+                id === "absolute_vorticity" ? "relative_vorticity" : id as IfsRawPressureVariableId
+              ].param,
+            }
           : { dependencies: [...definition.dependencies] }),
       };
     }),

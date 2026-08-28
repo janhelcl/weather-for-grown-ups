@@ -45,6 +45,7 @@ export interface ProfileLevel {
   verticalVelocityPaS?: number;
   geometricVerticalVelocityMs?: number;
   absoluteVorticityS1?: number;
+  divergenceS1?: number;
   totalCloudCoverPct?: number;
   cloudWaterMixingRatioKgKg?: number;
   ozoneMixingRatioKgKg?: number;
