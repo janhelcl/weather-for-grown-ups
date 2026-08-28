@@ -37,7 +37,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("search_catalog", {
     title: "Search atmospheric datasets and capabilities",
-    description: "Search one canonical catalog across operational GFS, GEFS, ECMWF IFS, and historical GFS analysis. Results use shared variable/field/diagnostic IDs and explicitly list which datasets support each match. This is the preferred discovery tool for the unified WFG API.",
+    description: "Search one canonical catalog across operational GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, and historical GFS analysis. Results use shared variable/field/diagnostic IDs and explicitly list which datasets support each match. IFS ENS currently exposes the canonical IFS pressure variables and fields as member-first distributions.",
     inputSchema: searchAtmosphereCatalogSchema,
     outputSchema: unifiedCatalogResultSchema,
   }, async (query) => {
@@ -50,7 +50,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("query_atmosphere", {
     title: "Query atmospheric state",
-    description: "Query GFS, GEFS, ECMWF IFS, or historical GFS analysis through one dataset × geometry × time × selection contract. IFS supports deterministic 0.25° point queries and point time ranges, multi-point instant/range sampling, transects, and raw scalar area statistics with pressure-level variables or selected surface fields. Geometry may be one point, multiple points, a transect, or an area; point geometries also accept time ranges. The result preserves dataset-native semantics: deterministic forecasts remain deterministic, GEFS remains member-first ensemble distributions, and historical analysis keeps analysis-time/NCEI provenance without invented forecast metadata.",
+    description: "Query GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, or historical GFS analysis through one dataset × geometry × time × selection contract. IFS ENS uses dataset 'ifs-ens' and currently supports one point at one valid time with p01..p50 perturbed members, distribution summaries, optional raw member payloads, canonical pressure variables, and selected IFS surface fields. Since ECMWF Cycle 50r1 the unperturbed ENS control is identical to deterministic oper/fc and is exposed separately as dataset 'ifs'. Deterministic IFS retains its broader point/range/multi-point/transect/area support. Dataset-native semantics stay explicit and member-derived quantities are computed inside each member before aggregation.",
     inputSchema: queryAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {
