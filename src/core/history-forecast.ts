@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_NOMADS_COOLDOWN_MS, FileRateLimiter } from "../cache/file-rate-limiter.js";
+import { FileAccessPolicy, UPSTREAM_ACCESS_POLICIES, withLegacyCooldown } from "../cache/file-access-policy.js";
 import {
   historicalAnalysisTimeSchema,
   type HistoricalGfsVariableId,
@@ -73,17 +73,21 @@ export class ArchivedGfsForecastProfileService {
 
   constructor(options: ArchivedGfsForecastProfileServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
-    const limiter = new FileRateLimiter(
+    const nceiAccessPolicy = new FileAccessPolicy(
       join(cacheDir, "state"),
-      options.cooldownMs ?? DEFAULT_NOMADS_COOLDOWN_MS,
+      withLegacyCooldown(UPSTREAM_ACCESS_POLICIES.nceiThredds, options.cooldownMs),
+    );
+    const gdexAccessPolicy = new FileAccessPolicy(
+      join(cacheDir, "state"),
+      withLegacyCooldown(UPSTREAM_ACCESS_POLICIES.gdex, options.cooldownMs),
     );
     this.nceiSource = options.source ?? new NceiGfsForecastHistorySource({
       cacheDir: join(cacheDir, "ncei-forecast-history"),
-      limiter,
+      limiter: nceiAccessPolicy,
     });
     this.rdaSource = options.rdaSource ?? new RdaGfsForecastHistorySource({
       cacheDir: join(cacheDir, "rda-forecast-history"),
-      limiter,
+      limiter: gdexAccessPolicy,
     });
     this.now = options.now ?? (() => new Date());
   }
