@@ -121,4 +121,80 @@ describe("GFS/IFS deterministic comparison", () => {
       expect.objectContaining({ field: "windDirectionDeg", ifsMinusGfs: 20, deltaKind: "circular_degrees" }),
     ]);
   });
+  it("rejects inconsistent initialization metadata returned by a model source", async () => {
+    const service = new GfsIfsComparisonService({
+      gfsProfileGetter: {
+        getProfile: vi.fn(async () => ({
+          model: "gfs_0p25" as const,
+          run: "2026-08-28T00:00:00.000Z",
+          validTime: "2026-08-28T09:00:00Z",
+          forecastHour: 9,
+          requestedPoint: { latitude: 50, longitude: 14 },
+          gridPoint: { latitude: 50, longitude: 14 },
+          levels: [{ pressureHpa: 850, temperatureC: 10 }],
+          source: sourceGfs,
+        })),
+      },
+      ifsProfileGetter: {
+        getProfile: vi.fn(async () => ({
+          model: "ifs_0p25" as const,
+          run: "2026-08-27T18:00:00.000Z",
+          validTime: "2026-08-28T09:00:00Z",
+          forecastHour: 15,
+          requestedPoint: { latitude: 50, longitude: 14 },
+          gridPoint: { latitude: 50, longitude: 14 },
+          levels: [{ pressureHpa: 850, temperatureC: 11 }],
+          source: sourceIfs,
+        })),
+      },
+    });
+
+    await expect(service.compare({
+      latitude: 50,
+      longitude: 14,
+      run: "2026-08-28T00:00:00Z",
+      validTime: "2026-08-28T09:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    })).rejects.toThrow("inconsistent initialization cycles");
+  });
+
+  it("fails explicitly when a model omits the requested canonical output", async () => {
+    const service = new GfsIfsComparisonService({
+      gfsProfileGetter: {
+        getProfile: vi.fn(async () => ({
+          model: "gfs_0p25" as const,
+          run: "2026-08-28T00:00:00.000Z",
+          validTime: "2026-08-28T09:00:00Z",
+          forecastHour: 9,
+          requestedPoint: { latitude: 50, longitude: 14 },
+          gridPoint: { latitude: 50, longitude: 14 },
+          levels: [{ pressureHpa: 850 }],
+          source: sourceGfs,
+        })),
+      },
+      ifsProfileGetter: {
+        getProfile: vi.fn(async () => ({
+          model: "ifs_0p25" as const,
+          run: "2026-08-28T00:00:00.000Z",
+          validTime: "2026-08-28T09:00:00Z",
+          forecastHour: 9,
+          requestedPoint: { latitude: 50, longitude: 14 },
+          gridPoint: { latitude: 50, longitude: 14 },
+          levels: [{ pressureHpa: 850, temperatureC: 11 }],
+          source: sourceIfs,
+        })),
+      },
+    });
+
+    await expect(service.compare({
+      latitude: 50,
+      longitude: 14,
+      run: "2026-08-28T00:00:00Z",
+      validTime: "2026-08-28T09:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    })).rejects.toThrow("GFS comparison profile is missing output field temperatureC");
+  });
+
 });
