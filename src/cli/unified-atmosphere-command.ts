@@ -63,8 +63,8 @@ function registerQueryCommand(program: Command): void {
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--source <nomads|s3>", "Operational GFS source override")
-    .option("--members <list>", "GFS↔GEFS only: GEFS members (c00,p01..p30)")
-    .option("--quantiles <list>", "GFS↔GEFS only: GEFS quantiles from 0 to 1")
+    .option("--members <list>", "GEFS members (c00,p01..p30)")
+    .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
     .option("--include-members", "Include GEFS member payloads where supported")
     .option("--percentiles <list>", "Area spatial percentiles, e.g. 10,50,90")
     .option("--gte <number>", "Area fraction at or above this threshold", Number)
@@ -173,8 +173,8 @@ function registerCompareDatasetsCommand(program: Command): void {
     .requiredOption("--level <hpa>", "Pressure level in hPa", Number)
     .option("--run <iso|latest>", "Shared aligned initialization", "latest")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
-    .option("--members <list>", "GEFS members (c00,p01..p30)")
-    .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
+    .option("--members <list>", "GFS↔GEFS only: GEFS members (c00,p01..p30)")
+    .option("--quantiles <list>", "GFS↔GEFS only: GEFS quantiles from 0 to 1")
     .option("--json", "Output JSON")
     .action(async (options) => {
       const against = String(options.against).trim().toLowerCase();
