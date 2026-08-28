@@ -127,7 +127,7 @@ WFG builds larger queries by composing smaller atmospheric primitives while pres
 Historical Grid 4 participates in the same profile, time-series, layer-diagnostic, profile-diagnostic, parcel, multi-point, multi-point-time-series, transect and area-summary operation boundaries as operational data. Its source adapter preserves exact 00/06/12/18 UTC analysis semantics, 0.5° sampling, NCEI provenance and bounded archive access.
 
 - diagnostic time series compose the same layer/profile/parcel kernels over selected analysis cycles;
-- multi-point requests are bounded to 10 coordinates and intentionally serialize NCEI point access under the NOAA courtesy limiter;
+- multi-point requests are bounded to 10 coordinates and use the NCEI THREDDS/NCSS provider policy rather than the NOMADS courtesy interval;
 - multi-point time series bound both analysis steps and the point × step matrix;
 - transects reuse the same great-circle interpolation as GFS/GEFS and delegate samples to the historical multi-point primitive;
 - area statistics use one native NCEI NCSS bbox/grid subset, apply exact vertical-coordinate selection for pressure/height fields, verify the returned vertical coordinate, and reuse the same local spatial distribution kernel as operational GFS.
