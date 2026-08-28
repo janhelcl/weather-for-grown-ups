@@ -212,6 +212,20 @@ function ifsEntries(dataset: "ifs" | "ifs-ens"): CatalogEntry[] {
       temporalSemantics: definition.temporalSemantics,
       outputs: definition.outputs.map((output) => ({ ...output })),
     })),
+    ...Object.values(LAYER_DIAGNOSTIC_CATALOG).map((definition) =>
+      diagnosticEntry(dataset, "layer_diagnostics", definition)),
+    ...Object.values(PROFILE_DIAGNOSTIC_CATALOG).map((definition) =>
+      diagnosticEntry(dataset, "profile_diagnostics", definition)),
+    ...Object.values(PARCEL_DIAGNOSTIC_CATALOG).map((definition) => ({
+      dataset,
+      section: "parcel_definitions" as const,
+      id: definition.id,
+      classification: "derived" as const,
+      kind: definition.kind,
+      description: definition.description,
+      verticalSemantics: "parcel_profile",
+      outputs: definition.outputs.map((output) => ({ ...output })),
+    })),
   ];
 }
 
