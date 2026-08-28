@@ -34,6 +34,7 @@ import {
   IfsEnsPointsTimeSeriesService,
 } from "./ifs-ens-points.js";
 import { IfsEnsTimeSeriesService } from "./ifs-ens-timeseries.js";
+import { IfsEnsTransectService } from "./ifs-ens-transect.js";
 import { IfsProfileService } from "./ifs-profile.js";
 import {
   IfsPointsService,
@@ -66,6 +67,7 @@ import {
   ifsEnsPointsTimeSeriesQuerySchema,
 } from "../schema/ifs-ens-points.js";
 import { ifsEnsTimeSeriesQuerySchema } from "../schema/ifs-ens-timeseries.js";
+import { ifsEnsTransectQuerySchema } from "../schema/ifs-ens-transect.js";
 import { ifsEnsMemberBundleQuerySchema } from "../schema/ifs-ens.js";
 import { ifsPointQuerySchema } from "../schema/ifs.js";
 import {
@@ -111,6 +113,7 @@ export interface UnifiedAtmosphereQueryServiceOptions {
   ifsEnsTimeSeries?: Pick<IfsEnsTimeSeriesService, "getTimeSeries">;
   ifsEnsPoints?: Pick<IfsEnsPointsService, "getPoints">;
   ifsEnsPointsTimeSeries?: Pick<IfsEnsPointsTimeSeriesService, "getPointsTimeSeries">;
+  ifsEnsTransect?: Pick<IfsEnsTransectService, "getTransect">;
   ifsTimeSeries?: Pick<IfsTimeSeriesService, "getTimeSeries">;
   ifsPoints?: Pick<IfsPointsService, "getPoints">;
   ifsPointsTimeSeries?: Pick<IfsPointsTimeSeriesService, "getPointsTimeSeries">;
@@ -146,6 +149,7 @@ export class UnifiedAtmosphereQueryService {
   private readonly ifsEnsTimeSeries: Pick<IfsEnsTimeSeriesService, "getTimeSeries">;
   private readonly ifsEnsPoints: Pick<IfsEnsPointsService, "getPoints">;
   private readonly ifsEnsPointsTimeSeries: Pick<IfsEnsPointsTimeSeriesService, "getPointsTimeSeries">;
+  private readonly ifsEnsTransect: Pick<IfsEnsTransectService, "getTransect">;
   private readonly ifsTimeSeries: Pick<IfsTimeSeriesService, "getTimeSeries">;
   private readonly ifsPoints: Pick<IfsPointsService, "getPoints">;
   private readonly ifsPointsTimeSeries: Pick<IfsPointsTimeSeriesService, "getPointsTimeSeries">;
@@ -180,6 +184,7 @@ export class UnifiedAtmosphereQueryService {
     this.ifsEnsTimeSeries = options.ifsEnsTimeSeries ?? new IfsEnsTimeSeriesService();
     this.ifsEnsPoints = options.ifsEnsPoints ?? new IfsEnsPointsService();
     this.ifsEnsPointsTimeSeries = options.ifsEnsPointsTimeSeries ?? new IfsEnsPointsTimeSeriesService();
+    this.ifsEnsTransect = options.ifsEnsTransect ?? new IfsEnsTransectService();
     this.ifsTimeSeries = options.ifsTimeSeries ?? new IfsTimeSeriesService();
     this.ifsPoints = options.ifsPoints ?? new IfsPointsService();
     this.ifsPointsTimeSeries = options.ifsPointsTimeSeries ?? new IfsPointsTimeSeriesService();
@@ -527,6 +532,20 @@ export class UnifiedAtmosphereQueryService {
     }
     if (request.dataset === "gefs") {
       return this.gefsTransect.getTransect(gefsTransectQuerySchema.parse({
+        start: request.geometry.start,
+        end: request.geometry.end,
+        run,
+        validTime: request.time.at,
+        selection: gefsSelection(request),
+        ...ensembleOptions(request),
+        ...(request.ensemble?.maxMemberSamples === undefined
+          ? {}
+          : { maxMemberSamples: request.ensemble.maxMemberSamples }),
+        ...(request.geometry.samples === undefined ? {} : { samples: request.geometry.samples }),
+      }));
+    }
+    if (request.dataset === "ifs-ens") {
+      return this.ifsEnsTransect.getTransect(ifsEnsTransectQuerySchema.parse({
         start: request.geometry.start,
         end: request.geometry.end,
         run,
