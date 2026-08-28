@@ -80,7 +80,9 @@ Raw Open Data pressure fields currently mapped into WFG are:
 - U/V wind;
 - geopotential height;
 - specific humidity;
-- pressure vertical velocity.
+- pressure vertical velocity;
+- relative vorticity, normalized to canonical **absolute vorticity** by adding the latitude-dependent Coriolis parameter;
+- horizontal divergence.
 
 Where their dependencies are available, WFG reuses the same model-independent derived kernels as GFS for wind, dew point, potential temperature, mixing ratio, virtual temperature, air density, wet-bulb temperature and equivalent potential temperature.
 
@@ -90,6 +92,7 @@ The first slice includes:
 
 - surface pressure;
 - 2 m temperature and dew point;
+- derived 2 m relative humidity and specific humidity (from temperature/dew point, plus surface pressure for specific humidity);
 - 10 m U/V wind and derived wind;
 - 100 m U/V wind and derived wind;
 - total precipitation;
