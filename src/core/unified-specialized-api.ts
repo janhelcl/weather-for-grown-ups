@@ -1,4 +1,5 @@
 import { GefsRunComparisonService } from "./gefs-run-comparison.js";
+import { GefsIfsEnsComparisonService } from "./gefs-ifs-ens-comparison.js";
 import { GfsGefsComparisonService } from "./gfs-gefs-comparison.js";
 import { GfsIfsComparisonService } from "./gfs-ifs-comparison.js";
 import { HistoricalIndexService } from "./history-index.js";
@@ -10,6 +11,7 @@ import { IfsEnsRunComparisonService } from "./ifs-ens-run-comparison.js";
 import { IfsRunComparisonService } from "./ifs-run-comparison.js";
 import { RunComparisonService } from "./run-comparison.js";
 import { gefsRunComparisonQuerySchema } from "../schema/gefs-run-comparison.js";
+import { gefsIfsEnsComparisonQuerySchema } from "../schema/gefs-ifs-ens-comparison.js";
 import { gfsGefsComparisonQuerySchema } from "../schema/gfs-gefs-comparison.js";
 import { gfsIfsComparisonQuerySchema } from "../schema/gfs-ifs-comparison.js";
 import { historicalAnalogQuerySchema } from "../schema/history-index.js";
@@ -19,6 +21,7 @@ import { ifsRunComparisonQuerySchema } from "../schema/ifs-run-comparison.js";
 import { runComparisonQuerySchema } from "../schema/query.js";
 import {
   compareAtmosphericDatasetsSchema,
+  compareGefsIfsEnsDatasetsSchema,
   compareAtmosphericRunsSchema,
   findAtmosphericAnalogsSchema,
   unifiedSpecializedResultSchema,
@@ -115,6 +118,7 @@ export class UnifiedDatasetComparisonService {
   constructor(
     private readonly gfsGefs: Pick<GfsGefsComparisonService, "compare"> = new GfsGefsComparisonService(),
     private readonly gfsIfs: Pick<GfsIfsComparisonService, "compare"> = new GfsIfsComparisonService(),
+    private readonly gefsIfsEns: Pick<GefsIfsEnsComparisonService, "compare"> = new GefsIfsEnsComparisonService(),
   ) {}
 
   async compare(input: CompareAtmosphericDatasetsInput): Promise<UnifiedSpecializedResult> {
@@ -133,6 +137,23 @@ export class UnifiedDatasetComparisonService {
         ...(request.quantiles === undefined ? {} : { quantiles: request.quantiles }),
       }));
       return wrap("compare_datasets", ["gfs", "gefs"], result);
+    }
+
+    if (request.datasets[0] === "gefs") {
+      const ensembleRequest = compareGefsIfsEnsDatasetsSchema.parse(request);
+      const result = await this.gefsIfsEns.compare(gefsIfsEnsComparisonQuerySchema.parse({
+        latitude: ensembleRequest.geometry.latitude,
+        longitude: ensembleRequest.geometry.longitude,
+        run: ensembleRequest.run,
+        validTime: ensembleRequest.time.at,
+        variable: ensembleRequest.variable,
+        pressureLevelHpa: ensembleRequest.pressureLevelHpa,
+        ...(ensembleRequest.gefsMembers === undefined ? {} : { gefsMembers: ensembleRequest.gefsMembers }),
+        ...(ensembleRequest.ifsEnsMembers === undefined ? {} : { ifsEnsMembers: ensembleRequest.ifsEnsMembers }),
+        ...(ensembleRequest.quantiles === undefined ? {} : { quantiles: ensembleRequest.quantiles }),
+        ...(ensembleRequest.thresholdGte === undefined ? {} : { thresholdGte: ensembleRequest.thresholdGte }),
+      }));
+      return wrap("compare_datasets", ["gefs", "ifs-ens"], result);
     }
 
     const result = await this.gfsIfs.compare(gfsIfsComparisonQuerySchema.parse({

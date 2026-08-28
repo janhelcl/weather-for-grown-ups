@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { IfsAreaSummaryService } from "../src/core/ifs-area-summary.js";
 import { IfsEnsAreaSummaryService } from "../src/core/ifs-ens-area-summary.js";
+import { GefsIfsEnsComparisonService } from "../src/core/gefs-ifs-ens-comparison.js";
 import { GfsIfsComparisonService } from "../src/core/gfs-ifs-comparison.js";
 import { IfsEnsDiagnosticTimeSeriesService } from "../src/core/ifs-ens-diagnostic-timeseries.js";
 import { IfsEnsDiagnosticsService } from "../src/core/ifs-ens-diagnostics.js";
@@ -133,6 +134,45 @@ console.log(JSON.stringify({
     pressureSummaries: ens.pressureSummaries,
     fieldSummaries: ens.fieldSummaries,
     source: ens.source,
+  },
+}, null, 2));
+
+const crossEnsemble = await new GefsIfsEnsComparisonService().compare({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: "latest",
+  validTime: validTime.toISOString(),
+  variable: "temperature",
+  pressureLevelHpa: 850,
+  gefsMembers: ["c00", "p01"],
+  ifsEnsMembers: ["p01", "p02"],
+  quantiles: [0.5],
+  thresholdGte: 0,
+});
+assert.equal(crossEnsemble.gefs.summary.memberCount, 2);
+assert.equal(crossEnsemble.ifsEns.summary.memberCount, 2);
+assert.equal(crossEnsemble.comparison.quantileShifts.length, 1);
+assert(Number.isFinite(crossEnsemble.comparison.ifsEnsMinusGefsMean));
+assert(Number.isFinite(crossEnsemble.comparison.ifsEnsMinusGefsPopulationStdDev));
+assert.equal(
+  crossEnsemble.comparison.interpretation,
+  "independent_raw_ensemble_distributions_no_member_pairing_not_calibrated_uncertainty",
+);
+assert(crossEnsemble.comparison.threshold !== undefined);
+assert.equal(
+  crossEnsemble.comparison.threshold?.interpretation,
+  "raw_member_fractions_not_calibrated_probabilities",
+);
+
+console.log(JSON.stringify({
+  gefsIfsEnsComparison: {
+    run: crossEnsemble.run,
+    validTime: crossEnsemble.validTime,
+    forecastHour: crossEnsemble.forecastHour,
+    selection: crossEnsemble.selection,
+    gefs: crossEnsemble.gefs,
+    ifsEns: crossEnsemble.ifsEns,
+    comparison: crossEnsemble.comparison,
   },
 }, null, 2));
 

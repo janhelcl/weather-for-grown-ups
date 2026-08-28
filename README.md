@@ -118,6 +118,7 @@ WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-firs
 | Scalar ensemble distribution | — | ✅ | — | ✅ 50 perturbations |
 | Aligned GFS-vs-GEFS comparison | ✅ | ✅ | — | — |
 | Aligned GFS-vs-IFS comparison | ✅ deterministic deltas | — | ✅ deterministic deltas | — |
+| Aligned GEFS-vs-IFS ENS comparison | — | ✅ distribution shifts | — | ✅ distribution shifts |
 
 GEFS also supports control `c00` plus perturbed members `p01`–`p30`, native three-hour output through `f384`, mixed pressure/non-isobaric field bundles, and opt-in member payloads for auditability. Field-only requests automatically use NOAA's `pgrb2s` 0.25° selected-field product through `f240`; pressure-level and mixed requests use `pgrb2a` 0.5°, and field ranges extending beyond `f240` stay on 0.5° for the whole range. Result provenance reports the actual product and horizontal grid.
 
@@ -159,7 +160,7 @@ Normal atmospheric access is expressed as:
 dataset × geometry × time × selection
 ```
 
-with short dataset IDs `gfs`, `gefs`, `ifs`, and `gfs-analysis`. The same query structure therefore works for a deterministic forecast, an ensemble forecast, an archived GFS forecast, or an archived analysis while each result preserves its native deterministic/ensemble and forecast/analysis semantics. An archived forecast remains `gfs`; the explicit old `forecast.run` selects the historical state.
+with short dataset IDs `gfs`, `gefs`, `ifs`, `ifs-ens`, and `gfs-analysis`. The same query structure therefore works for a deterministic forecast, an ensemble forecast, an archived GFS forecast, or an archived analysis while each result preserves its native deterministic/ensemble and forecast/analysis semantics. An archived forecast remains `gfs`; the explicit old `forecast.run` selects the historical state.
 
 The MCP vocabulary is intentionally small:
 
