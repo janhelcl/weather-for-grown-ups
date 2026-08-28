@@ -5,6 +5,8 @@ import {
 } from "../sources/ifs-open-data.js";
 import {
   ifsEnsForecastHour,
+  ifsEnsForecastHoursInRange,
+  ifsEnsMaxForecastHour,
   isNativeIfsEnsForecastHour,
   latestIfsCycleAtOrBefore,
   previousIfsCycle,
@@ -15,6 +17,14 @@ const HOUR_MS = 3_600_000;
 export interface IfsEnsLatestRunProvider {
   resolveLatestRun(
     validTime: Date,
+    selectors: readonly IfsIndexSelector[],
+  ): Promise<Date>;
+}
+
+export interface IfsEnsLatestRangeRunProvider {
+  resolveLatestRunForRange(
+    startTime: Date,
+    endTime: Date,
     selectors: readonly IfsIndexSelector[],
   ): Promise<Date>;
 }
@@ -34,6 +44,39 @@ export class IfsEnsLatestRunResolver implements IfsEnsLatestRunProvider {
     this.probe = options.probe ?? new IfsEnsOpenDataRunProbe();
     this.now = options.now ?? (() => new Date());
     this.maxCandidates = options.maxCandidates ?? 12;
+  }
+
+  async resolveLatestRunForRange(
+    startTime: Date,
+    endTime: Date,
+    selectors: readonly IfsIndexSelector[],
+  ): Promise<Date> {
+    if (endTime.getTime() < startTime.getTime()) {
+      throw new Error("IFS ENS end time must be at or after start time");
+    }
+    const anchorTime = new Date(Math.min(this.now().getTime(), endTime.getTime()));
+    const anchor = latestIfsCycleAtOrBefore(anchorTime);
+
+    for (let index = 0; index < this.maxCandidates; index += 1) {
+      const run = previousIfsCycle(anchor, index);
+      if (run.getTime() > startTime.getTime()) continue;
+      const maxValidTime = run.getTime() + ifsEnsMaxForecastHour(run) * HOUR_MS;
+      if (maxValidTime < endTime.getTime()) continue;
+
+      let forecastHours: number[];
+      try {
+        forecastHours = ifsEnsForecastHoursInRange(run, startTime, endTime);
+      } catch {
+        continue;
+      }
+      const lastForecastHour = forecastHours[forecastHours.length - 1];
+      if (lastForecastHour === undefined) continue;
+      if (await selectionAvailable(this.probe, run, lastForecastHour, selectors)) return run;
+    }
+
+    throw new Error(
+      `No published ECMWF IFS ENS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested time range, perturbations, and field selection`,
+    );
   }
 
   async resolveLatestRun(
