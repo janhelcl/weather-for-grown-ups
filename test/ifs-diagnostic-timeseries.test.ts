@@ -141,6 +141,51 @@ describe("IFS diagnostic time series", () => {
     expect(getProfile).toHaveBeenCalledTimes(3);
   });
 
+  it("supports explicit-run whole-profile ranges and enforces maxSteps", async () => {
+    const getProfileDiagnostics = vi.fn(async (query: any) => ({
+      model: "ifs_0p25" as const,
+      run: run.toISOString(),
+      validTime: new Date(query.validTime).toISOString(),
+      forecastHour: (new Date(query.validTime).getTime() - run.getTime()) / 3_600_000,
+      requestedPoint,
+      gridPoint,
+      diagnostics: [{
+        id: "temperature_inversion_layers" as const,
+        layers: [],
+      }],
+      source,
+    }));
+    const service = new IfsDiagnosticTimeSeriesService({
+      diagnostics: {
+        getLayerDiagnostics: vi.fn(),
+        getProfileDiagnostics,
+        getParcelDiagnostics: vi.fn(),
+      } as any,
+      concurrency: 1,
+    });
+    const input = {
+      latitude: requestedPoint.latitude,
+      longitude: requestedPoint.longitude,
+      run: run.toISOString(),
+      startTime: "2026-08-27T12:00:00Z",
+      endTime: "2026-08-27T18:00:00Z",
+      diagnostic: {
+        kind: "profile" as const,
+        pressureLevelsHpa: [925, 850] as const,
+        diagnostics: ["temperature_inversion_layers" as const],
+      },
+    };
+
+    const result = await service.getDiagnosticTimeSeries(input);
+    expect(result.series.map((step) => step.kind)).toEqual(["profile", "profile", "profile"]);
+    expect(getProfileDiagnostics).toHaveBeenCalledTimes(3);
+
+    await expect(service.getDiagnosticTimeSeries({
+      ...input,
+      maxSteps: 2,
+    })).rejects.toThrow("3 native IFS outputs");
+  });
+
   it("rejects non-native pressure levels and duplicate diagnostic selections", async () => {
     const service = new IfsDiagnosticTimeSeriesService();
     await expect(service.getDiagnosticTimeSeries({
@@ -167,6 +212,60 @@ describe("IFS diagnostic time series", () => {
         lowerPressureHpa: 850,
         upperPressureHpa: 500,
         diagnostics: ["wind_shear", "wind_shear"],
+      },
+    })).rejects.toThrow("must not contain duplicates");
+
+    await expect(service.getDiagnosticTimeSeries({
+      latitude: 50,
+      longitude: 14,
+      run: run.toISOString(),
+      startTime: "2026-08-27T18:00:00Z",
+      endTime: "2026-08-27T12:00:00Z",
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+    })).rejects.toThrow("endTime must be at or after startTime");
+
+    await expect(service.getDiagnosticTimeSeries({
+      latitude: 50,
+      longitude: 14,
+      run: run.toISOString(),
+      startTime: "2026-08-27T12:00:00Z",
+      endTime: "2026-08-27T18:00:00Z",
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 500,
+        upperPressureHpa: 850,
+        diagnostics: ["wind_shear"],
+      },
+    })).rejects.toThrow("lowerPressureHpa must be greater");
+
+    await expect(service.getDiagnosticTimeSeries({
+      latitude: 50,
+      longitude: 14,
+      run: run.toISOString(),
+      startTime: "2026-08-27T12:00:00Z",
+      endTime: "2026-08-27T18:00:00Z",
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [925, 925],
+        diagnostics: ["freezing_level_crossings", "freezing_level_crossings"],
+      },
+    })).rejects.toThrow("must not contain duplicates");
+
+    await expect(service.getDiagnosticTimeSeries({
+      latitude: 50,
+      longitude: 14,
+      run: run.toISOString(),
+      startTime: "2026-08-27T12:00:00Z",
+      endTime: "2026-08-27T18:00:00Z",
+      diagnostic: {
+        kind: "parcel",
+        pressureLevelsHpa: [925, 925],
+        parcel: "surface_2m",
       },
     })).rejects.toThrow("must not contain duplicates");
   });
