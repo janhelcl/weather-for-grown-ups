@@ -166,7 +166,9 @@ async function verifyGrid(
     );
   }
 
-  const operationalArea = await areaSummary(grid, plan.leftSource, runIso, f006);
+  // Operational area queries use NOMADS geographic subsetting by contract.
+  // Point/profile parity above still exercises the selected S3 operational transport.
+  const operationalArea = await areaSummary(grid, "nomads", runIso, f006);
   const archivedArea = await areaSummary(grid, plan.rightSource, runIso, f006);
   assert.equal(
     operationalArea.statistics.definedGridPoints,
