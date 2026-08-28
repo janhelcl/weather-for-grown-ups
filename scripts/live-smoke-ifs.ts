@@ -10,6 +10,7 @@ import {
 } from "../src/core/ifs-ens-points.js";
 import { IfsEnsRunComparisonService } from "../src/core/ifs-ens-run-comparison.js";
 import { IfsEnsTimeSeriesService } from "../src/core/ifs-ens-timeseries.js";
+import { IfsEnsTransectService } from "../src/core/ifs-ens-transect.js";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
 import { IfsDiagnosticsService } from "../src/core/ifs-diagnostics.js";
 import { IfsRunComparisonService } from "../src/core/ifs-run-comparison.js";
@@ -249,6 +250,38 @@ console.log(JSON.stringify({
     cadence: ensPointsTimeSeries.cadence,
   },
 }, null, 2));
+
+const ensTransect = await new IfsEnsTransectService().getTransect({
+  start: { latitude: 49.8, longitude: 14.0 },
+  end: { latitude: 50.3, longitude: 15.0 },
+  run: ens.run,
+  validTime: ens.validTime,
+  selection: {
+    variables: ["temperature", "wind"],
+    pressureLevelsHpa: [850],
+    fields: ["wind_10m"],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+  samples: 3,
+});
+assert.equal(ensTransect.model, "ifs_ens_0p25");
+assert.equal(ensTransect.samples.length, 3);
+assert.equal(ensTransect.samples[0]?.fraction, 0);
+assert.equal(ensTransect.samples[2]?.fraction, 1);
+assert(ensTransect.samples.every((sample) => sample.pressureSummaries.length === 2));
+assert(ensTransect.totalDistanceKm > 0);
+assert.equal(ensTransect.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsTransect: {
+    run: ensTransect.run,
+    validTime: ensTransect.validTime,
+    samples: ensTransect.samples.length,
+    totalDistanceKm: ensTransect.totalDistanceKm,
+  },
+}, null, 2));
+
 
 const ensDiagnostics = new IfsEnsDiagnosticsService();
 const ensLayerDiagnostics = await ensDiagnostics.getLayerDiagnostics({
