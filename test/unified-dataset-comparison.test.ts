@@ -50,6 +50,63 @@ describe("unified dataset comparison", () => {
     expect(gfsGefs.compare).not.toHaveBeenCalled();
   });
 
+
+  it("routes GEFS/IFS ENS through independent ensemble distribution semantics", async () => {
+    const gfsGefs = { compare: vi.fn() };
+    const gfsIfs = { compare: vi.fn() };
+    const gefsIfsEns = { compare: vi.fn(async (query) => ({ route: "gefs-ifs-ens", query })) };
+    const service = new UnifiedDatasetComparisonService(
+      gfsGefs as any,
+      gfsIfs as any,
+      gefsIfsEns as any,
+    );
+
+    const result = await service.compare({
+      datasets: ["gefs", "ifs-ens"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      run: "latest",
+      gefsMembers: ["c00", "p01"],
+      ifsEnsMembers: ["p01", "p50"],
+      quantiles: [0.1, 0.5, 0.9],
+      thresholdGte: 0,
+    });
+
+    expect(result.datasets).toEqual(["gefs", "ifs-ens"]);
+    expect((result.result as any).route).toBe("gefs-ifs-ens");
+    expect(gefsIfsEns.compare).toHaveBeenCalledWith(expect.objectContaining({
+      validTime: "2026-08-28T12:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      gefsMembers: ["c00", "p01"],
+      ifsEnsMembers: ["p01", "p50"],
+      thresholdGte: 0,
+    }));
+    expect(gfsGefs.compare).not.toHaveBeenCalled();
+    expect(gfsIfs.compare).not.toHaveBeenCalled();
+  });
+
+  it("rejects GFS-only controls and unsupported pressure selections on GEFS/IFS ENS", () => {
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      datasets: ["gefs", "ifs-ens"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      gfsGrid: "0p25",
+    })).toThrow();
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      datasets: ["gefs", "ifs-ens"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 600,
+    })).toThrow();
+  });
+
   it("rejects ensemble controls on deterministic GFS/IFS comparisons", () => {
     expect(() => compareAtmosphericDatasetsSchema.parse({
       datasets: ["gfs", "ifs"],
