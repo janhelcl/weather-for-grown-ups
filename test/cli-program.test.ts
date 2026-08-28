@@ -44,6 +44,17 @@ describe("CLI public surface", () => {
     }
   });
 
+  it("advertises the complete unified dataset and source vocabulary", () => {
+    const program = createCliProgram();
+    const catalog = program.commands.find((command) => command.name() === "catalog");
+    const query = program.commands.find((command) => command.name() === "query");
+
+    expect(catalog?.options.find((option) => option.long === "--dataset")?.flags)
+      .toContain("gfs|gefs|ifs|ifs-ens|gfs-analysis|all");
+    expect(query?.options.find((option) => option.long === "--source")?.flags)
+      .toContain("nomads|s3|archive");
+  });
+
   it("exposes GFS grid selection on the canonical forecast-capable commands", () => {
     const program = createCliProgram();
 
