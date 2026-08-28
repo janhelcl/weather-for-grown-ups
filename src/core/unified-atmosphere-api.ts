@@ -44,6 +44,7 @@ import {
   IfsTransectService,
 } from "./ifs-spatiotemporal.js";
 import { PointsTimeSeriesService } from "./points-time-series.js";
+import type { AtmosphericProgressReporter } from "./progress.js";
 import { ProfileService } from "./profile.js";
 import { TimeSeriesService } from "./time-series.js";
 import { TransectService } from "./transect.js";
@@ -131,6 +132,7 @@ export interface UnifiedAtmosphereQueryServiceOptions {
   historyTransect?: Pick<HistoricalTransectService, "getTransect">;
   historyArea?: Pick<HistoricalAreaSummaryService, "summarize">;
   archivedGfs?: Pick<ArchivedGfsForecastQueryService, "query">;
+  progress?: AtmosphericProgressReporter;
   now?: () => Date;
 }
 
@@ -172,9 +174,13 @@ export class UnifiedAtmosphereQueryService {
 
   constructor(options: UnifiedAtmosphereQueryServiceOptions = {}) {
     this.gfsProfile = options.gfsProfile ?? new ProfileService();
-    this.gfsTimeSeries = options.gfsTimeSeries ?? new TimeSeriesService();
+    this.gfsTimeSeries = options.gfsTimeSeries ?? new TimeSeriesService({
+      ...(options.progress === undefined ? {} : { onProgress: options.progress }),
+    });
     this.gfsPoints = options.gfsPoints ?? new BatchPointsService();
-    this.gfsPointsTimeSeries = options.gfsPointsTimeSeries ?? new PointsTimeSeriesService();
+    this.gfsPointsTimeSeries = options.gfsPointsTimeSeries ?? new PointsTimeSeriesService({
+      ...(options.progress === undefined ? {} : { onProgress: options.progress }),
+    });
     this.gfsTransect = options.gfsTransect ?? new TransectService();
     this.gfsArea = options.gfsArea ?? new AreaSummaryService();
     this.gefsBundle = options.gefsBundle ?? new GefsMemberBundleService();
@@ -247,7 +253,7 @@ export class UnifiedAtmosphereQueryService {
         grid: request.forecast?.grid ?? "0p25",
         validTime: request.time.at,
         ...gfsSelection(request),
-        ...(request.source === undefined ? {} : { source: request.source }),
+        source: request.source ?? "s3",
       });
       return this.gfsProfile.getProfile(query);
     }
@@ -316,7 +322,7 @@ export class UnifiedAtmosphereQueryService {
         startTime: request.time.from,
         endTime: request.time.to,
         ...gfsSelection(request),
-        ...(request.source === undefined ? {} : { source: request.source }),
+        source: request.source ?? "s3",
         ...(request.time.maxSteps === undefined ? {} : { maxSteps: request.time.maxSteps }),
       });
       return this.gfsTimeSeries.getTimeSeries(query);
@@ -782,7 +788,7 @@ export class UnifiedAtmosphereDiagnosticService {
           ...common,
           run: request.forecast?.run ?? "latest",
           grid: request.forecast?.grid ?? "0p25",
-          ...(request.source === undefined ? {} : { source: request.source }),
+          source: request.source ?? "s3",
         },
       } as any);
     }
@@ -880,7 +886,7 @@ function datasetDiagnosticQuery(request: DiagnoseAtmosphereRequest, common: Reco
       ...common,
       run: request.forecast?.run ?? "latest",
       grid: request.forecast?.grid ?? "0p25",
-      ...(request.source === undefined ? {} : { source: request.source }),
+      source: request.source ?? "s3",
     };
   }
   if (request.dataset === "gefs") {
