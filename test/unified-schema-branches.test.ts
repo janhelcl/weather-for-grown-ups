@@ -234,7 +234,7 @@ describe("unified atmospheric schema capability branches", () => {
     }).dataset).toBe("ifs");
   });
 
-  it("accepts IFS ENS point distributions and rejects unfinished ensemble shapes", () => {
+  it("accepts IFS ENS point distributions and point ranges while rejecting unfinished spatial shapes", () => {
     expect(queryAtmosphereSchema.parse({
       dataset: "ifs-ens",
       geometry: point,
@@ -251,15 +251,25 @@ describe("unified atmospheric schema capability branches", () => {
       },
     }).dataset).toBe("ifs-ens");
 
-    expect(() => queryAtmosphereSchema.parse({
+    expect(queryAtmosphereSchema.parse({
       dataset: "ifs-ens",
       geometry: point,
       time: {
         from: "2026-08-28T00:00:00Z",
         to: "2026-08-28T12:00:00Z",
+        maxSteps: 5,
       },
       selection: pressureSelection,
-    })).toThrow("IFS ENS currently supports point + instant queries");
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+        maxMemberSamples: 1000,
+      },
+    }).time).toMatchObject({
+      from: "2026-08-28T00:00:00Z",
+      to: "2026-08-28T12:00:00Z",
+      maxSteps: 5,
+    });
 
     expect(() => queryAtmosphereSchema.parse({
       dataset: "ifs-ens",
@@ -269,7 +279,7 @@ describe("unified atmospheric schema capability branches", () => {
       },
       time: { at: "2026-08-28T12:00:00Z" },
       selection: pressureSelection,
-    })).toThrow("IFS ENS currently supports point + instant queries");
+    })).toThrow("IFS ENS currently supports point geometry");
 
     expect(() => diagnoseAtmosphereSchema.parse({
       dataset: "ifs-ens",
