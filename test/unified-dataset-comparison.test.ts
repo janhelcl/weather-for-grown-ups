@@ -88,6 +88,31 @@ describe("unified dataset comparison", () => {
     expect(gfsIfs.compare).not.toHaveBeenCalled();
   });
 
+  it("rejects duplicate member and quantile selections on GEFS/IFS ENS", () => {
+    const base = {
+      datasets: ["gefs", "ifs-ens"] as const,
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature" as const,
+      pressureLevelHpa: 850,
+    };
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      gefsMembers: ["p01", "p01"],
+    })).toThrow("GEFS member selection must not contain duplicates");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      ifsEnsMembers: ["p01", "p01"],
+    })).toThrow("IFS ENS member selection must not contain duplicates");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      quantiles: [0.5, 0.5],
+    })).toThrow("Quantile selection must not contain duplicates");
+  });
+
   it("rejects GFS-only controls and unsupported pressure selections on GEFS/IFS ENS", () => {
     expect(() => compareAtmosphericDatasetsSchema.parse({
       datasets: ["gefs", "ifs-ens"],
