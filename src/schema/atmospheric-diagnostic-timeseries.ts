@@ -10,6 +10,10 @@ import {
   historicalDiagnosticTimeSeriesQuerySchema,
   historicalDiagnosticTimeSeriesResultSchema,
 } from "./history-diagnostic-timeseries.js";
+import {
+  ifsDiagnosticTimeSeriesQuerySchema,
+  ifsDiagnosticTimeSeriesResultSchema,
+} from "./ifs-diagnostic-timeseries.js";
 
 export const atmosphericDiagnosticTimeSeriesRequestSchema = z.union([
   z.object({
@@ -21,6 +25,10 @@ export const atmosphericDiagnosticTimeSeriesRequestSchema = z.union([
     query: gefsDiagnosticTimeSeriesQuerySchema,
   }),
   z.object({
+    model: z.literal("ifs_0p25"),
+    query: ifsDiagnosticTimeSeriesQuerySchema,
+  }),
+  z.object({
     model: z.literal("gfs_grid4_analysis_0p5"),
     query: historicalDiagnosticTimeSeriesQuerySchema,
   }),
@@ -29,6 +37,7 @@ export const atmosphericDiagnosticTimeSeriesRequestSchema = z.union([
 export const atmosphericDiagnosticTimeSeriesResultSchema = z.union([
   diagnosticTimeSeriesResultSchema,
   gefsDiagnosticTimeSeriesResultSchema,
+  ifsDiagnosticTimeSeriesResultSchema,
   historicalDiagnosticTimeSeriesResultSchema,
 ]);
 

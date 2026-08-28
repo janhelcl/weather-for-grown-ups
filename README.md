@@ -109,7 +109,7 @@ WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-firs
 | Layer diagnostics | ✅ | ✅ per member → summarized | ✅ deterministic |
 | Whole-profile diagnostics | ✅ | ✅ per member → structural summaries | ✅ deterministic |
 | Parcel / LCL / LFC / EL / CAPE / CIN | ✅ | ✅ per member → summarized | ✅ deterministic |
-| Diagnostic time series | ✅ layer/profile/parcel | ✅ layer/profile/parcel | ⏳ |
+| Diagnostic time series | ✅ layer/profile/parcel | ✅ layer/profile/parcel | ✅ layer/profile/parcel |
 | Multi-point queries | ✅ | ✅ | ✅ |
 | Multi-point time series | ✅ | ✅ | ✅ |
 | Transects | ✅ deterministic | ✅ ensemble-native mixed fields | ✅ deterministic mixed fields |

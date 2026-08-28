@@ -14,9 +14,14 @@ import type {
   HistoricalDiagnosticTimeSeriesQueryInput,
   HistoricalDiagnosticTimeSeriesResult,
 } from "../schema/history-diagnostic-timeseries.js";
+import type {
+  IfsDiagnosticTimeSeriesQueryInput,
+  IfsDiagnosticTimeSeriesResult,
+} from "../schema/ifs-diagnostic-timeseries.js";
 import { DiagnosticTimeSeriesService } from "./diagnostic-time-series.js";
 import { GefsDiagnosticTimeSeriesService } from "./gefs-diagnostic-timeseries.js";
 import { HistoricalDiagnosticTimeSeriesService } from "./history-diagnostic-timeseries.js";
+import { IfsDiagnosticTimeSeriesService } from "./ifs-diagnostic-timeseries.js";
 
 export interface DeterministicDiagnosticTimeSeriesGetter {
   getDiagnosticTimeSeries(query: DiagnosticTimeSeriesQueryInput): Promise<DiagnosticTimeSeriesResult>;
@@ -26,6 +31,10 @@ export interface EnsembleDiagnosticTimeSeriesGetter {
   getDiagnosticTimeSeries(query: GefsDiagnosticTimeSeriesQueryInput): Promise<GefsDiagnosticTimeSeriesResult>;
 }
 
+export interface IfsDiagnosticTimeSeriesGetter {
+  getDiagnosticTimeSeries(query: IfsDiagnosticTimeSeriesQueryInput): Promise<IfsDiagnosticTimeSeriesResult>;
+}
+
 export interface HistoricalDiagnosticTimeSeriesGetter {
   getDiagnosticTimeSeries(query: HistoricalDiagnosticTimeSeriesQueryInput): Promise<HistoricalDiagnosticTimeSeriesResult>;
 }
@@ -33,17 +42,20 @@ export interface HistoricalDiagnosticTimeSeriesGetter {
 export interface AtmosphericDiagnosticTimeSeriesServiceOptions {
   gfs?: DeterministicDiagnosticTimeSeriesGetter;
   gefs?: EnsembleDiagnosticTimeSeriesGetter;
+  ifs?: IfsDiagnosticTimeSeriesGetter;
   history?: HistoricalDiagnosticTimeSeriesGetter;
 }
 
 export class AtmosphericDiagnosticTimeSeriesService {
   private readonly gfs: DeterministicDiagnosticTimeSeriesGetter;
   private readonly gefs: EnsembleDiagnosticTimeSeriesGetter;
+  private readonly ifs: IfsDiagnosticTimeSeriesGetter;
   private readonly history: HistoricalDiagnosticTimeSeriesGetter;
 
   constructor(options: AtmosphericDiagnosticTimeSeriesServiceOptions = {}) {
     this.gfs = options.gfs ?? new DiagnosticTimeSeriesService();
     this.gefs = options.gefs ?? new GefsDiagnosticTimeSeriesService();
+    this.ifs = options.ifs ?? new IfsDiagnosticTimeSeriesService();
     this.history = options.history ?? new HistoricalDiagnosticTimeSeriesService();
   }
 
@@ -61,6 +73,8 @@ export class AtmosphericDiagnosticTimeSeriesService {
         return this.gfs.getDiagnosticTimeSeries({ ...request.query, grid: "0p50" });
       case "gefs_0p50":
         return this.gefs.getDiagnosticTimeSeries(request.query);
+      case "ifs_0p25":
+        return this.ifs.getDiagnosticTimeSeries(request.query);
       case "gfs_grid4_analysis_0p5":
         return this.history.getDiagnosticTimeSeries(request.query);
     }
