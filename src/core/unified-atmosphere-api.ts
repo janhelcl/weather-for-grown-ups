@@ -616,6 +616,15 @@ export class UnifiedAtmosphereDiagnosticService {
         },
       } as any);
     }
+    if (request.dataset === "ifs") {
+      return this.timeSeries.getDiagnosticTimeSeries({
+        model,
+        query: {
+          ...common,
+          run: request.forecast?.run ?? "latest",
+        },
+      } as any);
+    }
     return this.timeSeries.getDiagnosticTimeSeries({
       model,
       query: {
