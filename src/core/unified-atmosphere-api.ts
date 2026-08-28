@@ -26,6 +26,7 @@ import { HistoricalTimeSeriesService } from "./history-time-series.js";
 import { HistoricalTransectService } from "./history-transect.js";
 import { HistoricalProfileService } from "./history.js";
 import { IfsAreaSummaryService } from "./ifs-area-summary.js";
+import { IfsEnsAreaSummaryService } from "./ifs-ens-area-summary.js";
 import { IfsEnsDiagnosticTimeSeriesService } from "./ifs-ens-diagnostic-timeseries.js";
 import { IfsEnsDiagnosticsService } from "./ifs-ens-diagnostics.js";
 import { IfsEnsMemberBundleService } from "./ifs-ens-member-bundle.js";
@@ -61,6 +62,7 @@ import { historicalPointsQuerySchema } from "../schema/history-points.js";
 import { historicalTransectQuerySchema } from "../schema/history-transect.js";
 import { historicalProfileQuerySchema, historicalTimeSeriesQuerySchema } from "../schema/history.js";
 import { ifsAreaSummaryQuerySchema } from "../schema/ifs-area-summary.js";
+import { ifsEnsAreaSummaryQuerySchema } from "../schema/ifs-ens-area-summary.js";
 import { ifsEnsDiagnosticTimeSeriesQuerySchema } from "../schema/ifs-ens-diagnostic-timeseries.js";
 import {
   ifsEnsPointsQuerySchema,
@@ -114,6 +116,7 @@ export interface UnifiedAtmosphereQueryServiceOptions {
   ifsEnsPoints?: Pick<IfsEnsPointsService, "getPoints">;
   ifsEnsPointsTimeSeries?: Pick<IfsEnsPointsTimeSeriesService, "getPointsTimeSeries">;
   ifsEnsTransect?: Pick<IfsEnsTransectService, "getTransect">;
+  ifsEnsArea?: Pick<IfsEnsAreaSummaryService, "summarize">;
   ifsTimeSeries?: Pick<IfsTimeSeriesService, "getTimeSeries">;
   ifsPoints?: Pick<IfsPointsService, "getPoints">;
   ifsPointsTimeSeries?: Pick<IfsPointsTimeSeriesService, "getPointsTimeSeries">;
@@ -150,6 +153,7 @@ export class UnifiedAtmosphereQueryService {
   private readonly ifsEnsPoints: Pick<IfsEnsPointsService, "getPoints">;
   private readonly ifsEnsPointsTimeSeries: Pick<IfsEnsPointsTimeSeriesService, "getPointsTimeSeries">;
   private readonly ifsEnsTransect: Pick<IfsEnsTransectService, "getTransect">;
+  private readonly ifsEnsArea: Pick<IfsEnsAreaSummaryService, "summarize">;
   private readonly ifsTimeSeries: Pick<IfsTimeSeriesService, "getTimeSeries">;
   private readonly ifsPoints: Pick<IfsPointsService, "getPoints">;
   private readonly ifsPointsTimeSeries: Pick<IfsPointsTimeSeriesService, "getPointsTimeSeries">;
@@ -185,6 +189,7 @@ export class UnifiedAtmosphereQueryService {
     this.ifsEnsPoints = options.ifsEnsPoints ?? new IfsEnsPointsService();
     this.ifsEnsPointsTimeSeries = options.ifsEnsPointsTimeSeries ?? new IfsEnsPointsTimeSeriesService();
     this.ifsEnsTransect = options.ifsEnsTransect ?? new IfsEnsTransectService();
+    this.ifsEnsArea = options.ifsEnsArea ?? new IfsEnsAreaSummaryService();
     this.ifsTimeSeries = options.ifsTimeSeries ?? new IfsTimeSeriesService();
     this.ifsPoints = options.ifsPoints ?? new IfsPointsService();
     this.ifsPointsTimeSeries = options.ifsPointsTimeSeries ?? new IfsPointsTimeSeriesService();
@@ -611,6 +616,22 @@ export class UnifiedAtmosphereQueryService {
         ...aggregate,
         ...ensembleOptions(request),
         ...(request.limits?.maxGridPoints === undefined ? {} : { maxGridPoints: request.limits.maxGridPoints }),
+        ...(request.limits?.maxMemberGridPoints === undefined
+          ? {}
+          : { maxMemberGridPoints: request.limits.maxMemberGridPoints }),
+      }));
+    }
+    if (request.dataset === "ifs-ens") {
+      return this.ifsEnsArea.summarize(ifsEnsAreaSummaryQuerySchema.parse({
+        ...bbox,
+        run,
+        validTime: request.time.at,
+        ...scalar,
+        ...aggregate,
+        ...ensembleOptions(request),
+        ...(request.limits?.maxGridPoints === undefined
+          ? {}
+          : { maxGridPoints: request.limits.maxGridPoints }),
         ...(request.limits?.maxMemberGridPoints === undefined
           ? {}
           : { maxMemberGridPoints: request.limits.maxMemberGridPoints }),
