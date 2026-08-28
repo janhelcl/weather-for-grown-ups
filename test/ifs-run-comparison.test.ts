@@ -125,6 +125,166 @@ describe("IFS run comparison", () => {
     });
   });
 
+  it("supports explicit field-only comparisons and reports vertical incompatibility", async () => {
+    const getProfile = vi.fn(async (query: IfsPointQueryInput): Promise<IfsProfileResult> => {
+      const currentRun = new Date(String(query.run));
+      const newer = currentRun.getTime() === anchorRun.getTime();
+      return {
+        ...profile(currentRun),
+        levels: [],
+        fields: [{
+          id: "wind_10m",
+          level: newer
+            ? { type: "height_above_ground_m", heightM: 100 }
+            : { type: "height_above_ground_m", heightM: 10 },
+          temporal: { type: "instantaneous" },
+          values: { windSpeedMs: newer ? 8 : 6 },
+        }],
+      };
+    });
+    const service = new IfsRunComparisonService({
+      profileGetter: { getProfile },
+      concurrency: 1,
+    });
+
+    const result = await service.compareRuns({
+      latitude: requestedPoint.latitude,
+      longitude: requestedPoint.longitude,
+      anchorRun: anchorRun.toISOString(),
+      validTime,
+      fields: ["wind_10m"],
+      cycles: 2,
+    });
+
+    expect(getProfile).toHaveBeenCalledWith(expect.not.objectContaining({
+      variables: expect.anything(),
+      pressureLevelsHpa: expect.anything(),
+    }));
+    expect(result.comparisons[0]?.fields[0]).toEqual({
+      id: "wind_10m",
+      comparable: false,
+      reason: "vertical_semantics_differ",
+      changes: [],
+    });
+  });
+
+  it("reports missing fields and temporal-type incompatibility explicitly", async () => {
+    const missingService = new IfsRunComparisonService({
+      profileGetter: {
+        getProfile: vi.fn(async (query: IfsPointQueryInput): Promise<IfsProfileResult> => {
+          const currentRun = new Date(String(query.run));
+          const newer = currentRun.getTime() === anchorRun.getTime();
+          return {
+            ...profile(currentRun),
+            levels: [],
+            fields: newer ? [] : [{
+              id: "temperature_2m",
+              level: { type: "height_above_ground_m", heightM: 2 },
+              temporal: { type: "instantaneous" },
+              values: { temperatureC: 10 },
+            }],
+          };
+        }),
+      },
+      concurrency: 1,
+    });
+    const missing = await missingService.compareRuns({
+      latitude: 50,
+      longitude: 14,
+      anchorRun: anchorRun.toISOString(),
+      validTime,
+      fields: ["temperature_2m"],
+      cycles: 2,
+    });
+    expect(missing.comparisons[0]?.fields[0]).toEqual({
+      id: "temperature_2m",
+      comparable: false,
+      reason: "field_missing_in_one_run",
+      changes: [],
+    });
+
+    const temporalService = new IfsRunComparisonService({
+      profileGetter: {
+        getProfile: vi.fn(async (query: IfsPointQueryInput): Promise<IfsProfileResult> => {
+          const currentRun = new Date(String(query.run));
+          const newer = currentRun.getTime() === anchorRun.getTime();
+          return {
+            ...profile(currentRun),
+            levels: [],
+            fields: [{
+              id: "temperature_2m",
+              level: { type: "height_above_ground_m", heightM: 2 },
+              temporal: newer
+                ? {
+                    type: "accumulation",
+                    startForecastHour: 0,
+                    endForecastHour: 6,
+                    startTime: currentRun.toISOString(),
+                    endTime: validTime,
+                  }
+                : { type: "instantaneous" },
+              values: { temperatureC: newer ? 12 : 10 },
+            }],
+          };
+        }),
+      },
+      concurrency: 1,
+    });
+    const temporal = await temporalService.compareRuns({
+      latitude: 50,
+      longitude: 14,
+      anchorRun: anchorRun.toISOString(),
+      validTime,
+      fields: ["temperature_2m"],
+      cycles: 2,
+    });
+    expect(temporal.comparisons[0]?.fields[0]).toEqual({
+      id: "temperature_2m",
+      comparable: false,
+      reason: "temporal_windows_differ",
+      changes: [],
+    });
+  });
+
+  it("validates IFS run-comparison selection invariants before I/O", async () => {
+    const service = new IfsRunComparisonService({
+      profileGetter: { getProfile: vi.fn() },
+    });
+    const common = {
+      latitude: 50,
+      longitude: 14,
+      anchorRun: anchorRun.toISOString(),
+      validTime,
+      cycles: 2,
+    };
+
+    await expect(service.compareRuns({
+      ...common,
+      variables: ["temperature"],
+    } as any)).rejects.toThrow("must be supplied together");
+
+    await expect(service.compareRuns({
+      ...common,
+    } as any)).rejects.toThrow("Request at least one IFS pressure variable or field");
+
+    await expect(service.compareRuns({
+      ...common,
+      variables: ["temperature", "temperature"],
+      pressureLevelsHpa: [850],
+    } as any)).rejects.toThrow("variables must not contain duplicates");
+
+    await expect(service.compareRuns({
+      ...common,
+      variables: ["temperature"],
+      pressureLevelsHpa: [850, 850],
+    } as any)).rejects.toThrow("pressureLevelsHpa must not contain duplicates");
+
+    await expect(service.compareRuns({
+      ...common,
+      fields: ["wind_10m", "wind_10m"],
+    } as any)).rejects.toThrow("fields must not contain duplicates");
+  });
+
   it("wraps source/cadence failures with the offending IFS run", async () => {
     const getProfile = vi.fn(async () => {
       throw new Error("IFS run does not publish f150");
