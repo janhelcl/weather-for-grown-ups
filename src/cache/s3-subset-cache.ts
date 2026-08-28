@@ -14,6 +14,11 @@ import {
   type ByteRange,
 } from "../grib/index.js";
 import { buildGfsS3ForecastIndexUrl, buildGfsS3ForecastUrl } from "../sources/gfs-s3.js";
+import {
+  DEFAULT_HTTP_RETRY_MAX_ATTEMPTS,
+  isRetryableHttpStatus,
+  waitBeforeHttpRetry,
+} from "../sources/http-retry.js";
 import type { ProfileDataRequest, ProfileSourceFile } from "../sources/types.js";
 
 export class GfsS3SubsetCache {
@@ -93,38 +98,71 @@ export class GfsS3SubsetCache {
       // Immutable index files are fetched once and then reused locally.
     }
 
-    const text = await this.accessPolicy.run(async () => {
-      const response = await this.fetchFn(url, {
-        headers: { "user-agent": "weather-for-grown-ups/0.1" },
+    for (let attempt = 1; attempt <= DEFAULT_HTTP_RETRY_MAX_ATTEMPTS; attempt += 1) {
+      const result = await this.accessPolicy.run(async () => {
+        const response = await this.fetchFn(url, {
+          headers: { "user-agent": "weather-for-grown-ups/0.1" },
+        });
+        return {
+          status: response.status,
+          statusText: response.statusText,
+          retryAfter: response.headers.get("retry-after"),
+          text: response.ok ? await response.text() : undefined,
+        };
       });
-      if (!response.ok) {
-        throw new Error(`NOAA AWS index request failed: HTTP ${response.status} ${response.statusText}`);
+
+      if (isRetryableHttpStatus(result.status) && attempt < DEFAULT_HTTP_RETRY_MAX_ATTEMPTS) {
+        await waitBeforeHttpRetry(attempt, result.retryAfter);
+        continue;
       }
-      return response.text();
-    });
-    await writeFile(path, text, "utf8");
-    return text;
+      if (result.status < 200 || result.status >= 300 || result.text === undefined) {
+        throw new Error(`NOAA AWS index request failed: HTTP ${result.status} ${result.statusText}`);
+      }
+      await writeFile(path, result.text, "utf8");
+      return result.text;
+    }
+
+    throw new Error("NOAA AWS index retry loop exhausted unexpectedly");
   }
 
   private async fetchRange(url: string, range: ByteRange): Promise<Uint8Array> {
     const rangeValue = `bytes=${range.start}-${range.end ?? ""}`;
-    return this.accessPolicy.run(async () => {
-      const response = await this.fetchFn(url, {
-        headers: {
-          range: rangeValue,
-          "user-agent": "weather-for-grown-ups/0.1",
-        },
-      });
-      if (response.status !== 206) {
-        throw new Error(`NOAA AWS range request failed: HTTP ${response.status} ${response.statusText}`);
-      }
 
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
+    for (let attempt = 1; attempt <= DEFAULT_HTTP_RETRY_MAX_ATTEMPTS; attempt += 1) {
+      const result = await this.accessPolicy.run(async () => {
+        const response = await this.fetchFn(url, {
+          headers: {
+            range: rangeValue,
+            "user-agent": "weather-for-grown-ups/0.1",
+          },
+        });
+        return {
+          status: response.status,
+          statusText: response.statusText,
+          retryAfter: response.headers.get("retry-after"),
+          bytes: response.status === 206
+            ? new Uint8Array(await response.arrayBuffer())
+            : undefined,
+        };
+      });
+
+      if (isRetryableHttpStatus(result.status) && attempt < DEFAULT_HTTP_RETRY_MAX_ATTEMPTS) {
+        await waitBeforeHttpRetry(attempt, result.retryAfter);
+        continue;
+      }
+      if (result.status !== 206 || result.bytes === undefined) {
+        throw new Error(`NOAA AWS range request failed: HTTP ${result.status} ${result.statusText}`);
+      }
+      if (
+        result.bytes.length < 4
+        || new TextDecoder().decode(result.bytes.slice(0, 4)) !== "GRIB"
+      ) {
         throw new Error(`NOAA AWS range did not start with a GRIB message (${rangeValue})`);
       }
-      return bytes;
-    });
+      return result.bytes;
+    }
+
+    throw new Error("NOAA AWS range retry loop exhausted unexpectedly");
   }
 }
 
