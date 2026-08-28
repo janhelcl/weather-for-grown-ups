@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { FileRateLimiter } from "../cache/file-rate-limiter.js";
+import type { UpstreamAccessPolicy } from "../cache/file-access-policy.js";
 import { NCEI_GFS_HISTORY_BASE_URL } from "./ncei-gfs-history.js";
 
 export const NCEI_GFS_GRID4_FORECAST_START = new Date("2006-10-10T00:00:00Z");
@@ -43,7 +43,7 @@ export interface ArchivedGfsForecastAreaDataSource {
 
 export interface NceiGfsForecastHistorySourceOptions {
   cacheDir: string;
-  limiter: Pick<FileRateLimiter, "run">;
+  limiter: UpstreamAccessPolicy;
   fetchFn?: typeof fetch;
 }
 
