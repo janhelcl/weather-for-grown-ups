@@ -13,6 +13,7 @@ export const IFS_AREA_PRESSURE_VARIABLE_IDS = [
   "geopotential_height",
   "specific_humidity",
   "vertical_velocity",
+  "absolute_vorticity",
   "divergence",
 ] as const;
 
