@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  ifsEnsMaxForecastHour,
   ifsForecastHour,
   ifsForecastHoursInRange,
   ifsMaxForecastHour,
   ifsValidTimeForForecastHour,
+  isNativeIfsEnsForecastHour,
   isNativeIfsForecastHour,
   latestIfsCycleAtOrBefore,
   parseIfsRun,
@@ -13,14 +15,21 @@ describe("IFS native run semantics", () => {
   it("uses long 00/12Z and short 06/18Z forecast horizons", () => {
     const longRun = new Date("2026-08-27T12:00:00Z");
     const shortRun = new Date("2026-08-27T18:00:00Z");
-    expect(ifsMaxForecastHour(longRun)).toBe(360);
-    expect(ifsMaxForecastHour(shortRun)).toBe(144);
+    expect(ifsMaxForecastHour(longRun)).toBe(240);
+    expect(ifsMaxForecastHour(shortRun)).toBe(90);
     expect(isNativeIfsForecastHour(longRun, 144)).toBe(true);
     expect(isNativeIfsForecastHour(longRun, 147)).toBe(false);
     expect(isNativeIfsForecastHour(longRun, 150)).toBe(true);
-    expect(isNativeIfsForecastHour(longRun, 360)).toBe(true);
-    expect(isNativeIfsForecastHour(shortRun, 144)).toBe(true);
-    expect(isNativeIfsForecastHour(shortRun, 150)).toBe(false);
+    expect(isNativeIfsForecastHour(longRun, 240)).toBe(true);
+    expect(isNativeIfsForecastHour(longRun, 246)).toBe(false);
+    expect(isNativeIfsForecastHour(shortRun, 90)).toBe(true);
+    expect(isNativeIfsForecastHour(shortRun, 93)).toBe(false);
+
+    expect(ifsEnsMaxForecastHour(longRun)).toBe(360);
+    expect(ifsEnsMaxForecastHour(shortRun)).toBe(144);
+    expect(isNativeIfsEnsForecastHour(longRun, 360)).toBe(true);
+    expect(isNativeIfsEnsForecastHour(shortRun, 144)).toBe(true);
+    expect(isNativeIfsEnsForecastHour(shortRun, 150)).toBe(false);
   });
 
   it("validates forecast valid times against the selected run cadence", () => {
