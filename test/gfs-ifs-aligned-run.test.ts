@@ -69,4 +69,55 @@ describe("GfsIfsAlignedRunResolver", () => {
     expect(gfsSelections[0]).toEqual(["UGRD", "VGRD"]);
     expect(ifsSelections[0]).toEqual(["u", "v"]);
   });
+  it("skips an IFS short cycle that cannot reach the valid time and uses the older long cycle", async () => {
+    const gfsRuns: string[] = [];
+    const ifsRuns: string[] = [];
+    const resolver = new GfsIfsAlignedRunResolver({
+      now: () => new Date("2026-08-28T06:00:00Z"),
+      gfsProbe: {
+        isRunComplete: async () => true,
+        isForecastAvailable: async (run) => {
+          gfsRuns.push(run.toISOString());
+          return true;
+        },
+      },
+      ifsProbe: {
+        isForecastAvailable: async (run) => {
+          ifsRuns.push(run.toISOString());
+          return true;
+        },
+      },
+    });
+
+    const run = await resolver.resolveLatestAlignedRun(
+      new Date("2026-09-03T12:00:00Z"),
+      "temperature",
+      850,
+    );
+
+    expect(run.toISOString()).toBe("2026-08-28T00:00:00.000Z");
+    expect(gfsRuns).toEqual(["2026-08-28T00:00:00.000Z"]);
+    expect(ifsRuns).toEqual(["2026-08-28T00:00:00.000Z"]);
+  });
+
+  it("fails explicitly when no common cycle publishes the requested selection", async () => {
+    const resolver = new GfsIfsAlignedRunResolver({
+      now: () => new Date("2026-08-28T10:00:00Z"),
+      maxCandidates: 2,
+      gfsProbe: {
+        isRunComplete: async () => true,
+        isForecastAvailable: async () => false,
+      },
+      ifsProbe: {
+        isForecastAvailable: async () => true,
+      },
+    });
+
+    await expect(resolver.resolveLatestAlignedRun(
+      new Date("2026-08-28T09:00:00Z"),
+      "temperature",
+      850,
+    )).rejects.toThrow("No aligned GFS/IFS cycle");
+  });
+
 });
