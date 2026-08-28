@@ -5,11 +5,13 @@ import { HistoricalForecastSkillService } from "./history-skill.js";
 import { HistoricalForecastVerificationService } from "./history-verification.js";
 import { IgraForecastVerificationService } from "./igra-verification.js";
 import { IgraForecastSkillService } from "./igra-skill.js";
+import { IfsRunComparisonService } from "./ifs-run-comparison.js";
 import { RunComparisonService } from "./run-comparison.js";
 import { gefsRunComparisonQuerySchema } from "../schema/gefs-run-comparison.js";
 import { gfsGefsComparisonQuerySchema } from "../schema/gfs-gefs-comparison.js";
 import { historicalAnalogQuerySchema } from "../schema/history-index.js";
 import { historicalForecastVerificationQuerySchema } from "../schema/history-verification.js";
+import { ifsRunComparisonQuerySchema } from "../schema/ifs-run-comparison.js";
 import { runComparisonQuerySchema } from "../schema/query.js";
 import {
   compareAtmosphericDatasetsSchema,
@@ -28,6 +30,7 @@ export class UnifiedRunComparisonService {
   constructor(
     private readonly gfs: Pick<RunComparisonService, "compareRuns"> = new RunComparisonService(),
     private readonly gefs: Pick<GefsRunComparisonService, "compareRuns"> = new GefsRunComparisonService(),
+    private readonly ifs: Pick<IfsRunComparisonService, "compareRuns"> = new IfsRunComparisonService(),
   ) {}
 
   async compare(input: CompareAtmosphericRunsInput): Promise<UnifiedSpecializedResult> {
@@ -48,6 +51,22 @@ export class UnifiedRunComparisonService {
         cycles: request.cycles,
       }));
       return wrap("compare_runs", ["gfs"], result);
+    }
+
+    if (request.dataset === "ifs") {
+      const result = await this.ifs.compareRuns(ifsRunComparisonQuerySchema.parse({
+        latitude: request.geometry.latitude,
+        longitude: request.geometry.longitude,
+        anchorRun: request.anchorRun,
+        validTime: request.time.at,
+        ...(request.selection.variables === undefined ? {} : { variables: request.selection.variables }),
+        ...(request.selection.pressureLevelsHpa === undefined
+          ? {}
+          : { pressureLevelsHpa: request.selection.pressureLevelsHpa }),
+        ...(request.selection.fields === undefined ? {} : { fields: request.selection.fields }),
+        cycles: request.cycles,
+      }));
+      return wrap("compare_runs", ["ifs"], result);
     }
 
     if (request.ensemble?.includeMembers !== undefined || request.ensemble?.maxMemberSamples !== undefined) {
