@@ -253,18 +253,7 @@ export const diagnoseAtmosphereSchema = z.object({
   source: z.enum(["nomads", "s3", "archive"]).optional().describe("GFS-only source override; archive forces the resolution-matched historical backend"),
 }).superRefine((request, context) => {
   validateDatasetModifiers(request, context);
-  if (request.dataset === "ifs-ens" && "from" in request.time) {
-    context.addIssue({
-      code: "custom",
-      path: ["time"],
-      message: "IFS ENS diagnostic time series are not implemented yet; use one valid time or query_atmosphere for ensemble state time series",
-    });
-  }
-  if (
-    request.dataset !== "ifs-ens"
-    && "from" in request.time
-    && request.ensemble?.includeMembers === true
-  ) {
+  if ("from" in request.time && request.ensemble?.includeMembers === true) {
     context.addIssue({
       code: "custom",
       path: ["ensemble", "includeMembers"],

@@ -63,7 +63,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("diagnose_atmosphere", {
     title: "Derive atmospheric diagnostics",
-    description: "Run shared WFG diagnostic physics through one point/time contract. GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, and historical GFS analysis support layer, whole-profile and parcel diagnostics. GEFS and IFS ENS diagnostics are calculated independently inside each member/perturbation before aggregation; raw member event fractions are explicitly not calibrated probabilities. GFS, GEFS, deterministic IFS and historical analysis also support diagnostic time series; IFS ENS diagnostic time series are intentionally not exposed yet.",
+    description: "Run shared WFG diagnostic physics through one point/time contract. GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, and historical GFS analysis support layer, whole-profile and parcel diagnostics plus diagnostic time series. GEFS and IFS ENS diagnostics are calculated independently inside each member/perturbation before aggregation; raw member event fractions are explicitly not calibrated probabilities. IFS ENS ranges pin one initialization, preserve ECMWF's native 3h/6h cadence, and return compact member-first summaries.",
     inputSchema: diagnoseAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {

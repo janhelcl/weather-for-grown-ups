@@ -26,6 +26,7 @@ import { HistoricalTimeSeriesService } from "./history-time-series.js";
 import { HistoricalTransectService } from "./history-transect.js";
 import { HistoricalProfileService } from "./history.js";
 import { IfsAreaSummaryService } from "./ifs-area-summary.js";
+import { IfsEnsDiagnosticTimeSeriesService } from "./ifs-ens-diagnostic-timeseries.js";
 import { IfsEnsDiagnosticsService } from "./ifs-ens-diagnostics.js";
 import { IfsEnsMemberBundleService } from "./ifs-ens-member-bundle.js";
 import { IfsEnsTimeSeriesService } from "./ifs-ens-timeseries.js";
@@ -55,6 +56,7 @@ import { historicalPointsQuerySchema } from "../schema/history-points.js";
 import { historicalTransectQuerySchema } from "../schema/history-transect.js";
 import { historicalProfileQuerySchema, historicalTimeSeriesQuerySchema } from "../schema/history.js";
 import { ifsAreaSummaryQuerySchema } from "../schema/ifs-area-summary.js";
+import { ifsEnsDiagnosticTimeSeriesQuerySchema } from "../schema/ifs-ens-diagnostic-timeseries.js";
 import { ifsEnsTimeSeriesQuerySchema } from "../schema/ifs-ens-timeseries.js";
 import { ifsEnsMemberBundleQuerySchema } from "../schema/ifs-ens.js";
 import { ifsPointQuerySchema } from "../schema/ifs.js";
@@ -579,6 +581,7 @@ export interface UnifiedAtmosphereDiagnosticServiceOptions {
     IfsEnsDiagnosticsService,
     "getLayerDiagnostics" | "getProfileDiagnostics" | "getParcelDiagnostics"
   >;
+  ifsEnsTimeSeries?: Pick<IfsEnsDiagnosticTimeSeriesService, "getDiagnosticTimeSeries">;
   archivedGfs?: Pick<ArchivedGfsForecastDiagnosticService, "diagnose">;
   now?: () => Date;
 }
@@ -592,6 +595,7 @@ export class UnifiedAtmosphereDiagnosticService {
     IfsEnsDiagnosticsService,
     "getLayerDiagnostics" | "getProfileDiagnostics" | "getParcelDiagnostics"
   >;
+  private readonly ifsEnsTimeSeries: Pick<IfsEnsDiagnosticTimeSeriesService, "getDiagnosticTimeSeries">;
   private readonly archivedGfs: Pick<ArchivedGfsForecastDiagnosticService, "diagnose">;
   private readonly now: () => Date;
 
@@ -601,6 +605,7 @@ export class UnifiedAtmosphereDiagnosticService {
     this.parcel = options.parcel ?? new AtmosphericParcelDiagnosticsService();
     this.timeSeries = options.timeSeries ?? new AtmosphericDiagnosticTimeSeriesService();
     this.ifsEns = options.ifsEns ?? new IfsEnsDiagnosticsService();
+    this.ifsEnsTimeSeries = options.ifsEnsTimeSeries ?? new IfsEnsDiagnosticTimeSeriesService();
     this.archivedGfs = options.archivedGfs ?? new ArchivedGfsForecastDiagnosticService();
     this.now = options.now ?? (() => new Date());
   }
@@ -673,6 +678,17 @@ export class UnifiedAtmosphereDiagnosticService {
       diagnostic: request.diagnostic,
       ...(request.time.maxSteps === undefined ? {} : { maxSteps: request.time.maxSteps }),
     };
+
+    if (request.dataset === "ifs-ens") {
+      return this.ifsEnsTimeSeries.getDiagnosticTimeSeries(
+        ifsEnsDiagnosticTimeSeriesQuerySchema.parse({
+          ...common,
+          run: request.forecast?.run ?? "latest",
+          ...(request.ensemble?.members === undefined ? {} : { members: request.ensemble.members }),
+          ...(request.ensemble?.quantiles === undefined ? {} : { quantiles: request.ensemble.quantiles }),
+        }),
+      );
+    }
 
     if (request.dataset === "gfs") {
       return this.timeSeries.getDiagnosticTimeSeries({

@@ -98,7 +98,7 @@ WFG does not contain turbine power curves, wake models, availability assumptions
 
 ## Current model support
 
-WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-first **GEFS**, deterministic **ECMWF IFS 0.25°**, and **ECMWF IFS ENS 0.25°**. Deterministic IFS has the broad spatiotemporal/diagnostic surface; IFS ENS supports member-first point distributions, native-cadence point time series, and member-first diagnostics across all 50 perturbations.
+WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-first **GEFS**, deterministic **ECMWF IFS 0.25°**, and **ECMWF IFS ENS 0.25°**. Deterministic IFS has the broad spatiotemporal/diagnostic surface; IFS ENS supports member-first point distributions, native-cadence point time series, member-first diagnostics, and native-cadence diagnostic time series across all 50 perturbations.
 
 | Operation | GFS 0.25° / 0.5° | GEFS | IFS 0.25° | IFS ENS 0.25° |
 | --- | --- | --- | --- | --- |
@@ -109,7 +109,7 @@ WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-firs
 | Layer diagnostics | ✅ | ✅ per member → summarized | ✅ deterministic | ✅ per perturbation → summarized |
 | Whole-profile diagnostics | ✅ | ✅ per member → structural summaries | ✅ deterministic | ✅ structural member summaries |
 | Parcel / LCL / LFC / EL / CAPE / CIN | ✅ | ✅ per member → summarized | ✅ deterministic | ✅ per perturbation → summarized |
-| Diagnostic time series | ✅ layer/profile/parcel | ✅ layer/profile/parcel | ✅ layer/profile/parcel | — |
+| Diagnostic time series | ✅ layer/profile/parcel | ✅ layer/profile/parcel | ✅ layer/profile/parcel | ✅ compact member-first |
 | Multi-point queries | ✅ | ✅ | ✅ | — |
 | Multi-point time series | ✅ | ✅ | ✅ | — |
 | Transects | ✅ deterministic | ✅ ensemble-native mixed fields | ✅ deterministic mixed fields | — |

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { IfsAreaSummaryService } from "../src/core/ifs-area-summary.js";
 import { GfsIfsComparisonService } from "../src/core/gfs-ifs-comparison.js";
+import { IfsEnsDiagnosticTimeSeriesService } from "../src/core/ifs-ens-diagnostic-timeseries.js";
 import { IfsEnsDiagnosticsService } from "../src/core/ifs-ens-diagnostics.js";
 import { IfsEnsMemberBundleService } from "../src/core/ifs-ens-member-bundle.js";
 import { IfsEnsTimeSeriesService } from "../src/core/ifs-ens-timeseries.js";
@@ -241,6 +242,35 @@ console.log(JSON.stringify({
       cinMeanJkg: ensParcelDiagnostics.summary.cinJkg.mean,
       positiveCapeMemberFraction: ensParcelDiagnostics.summary.membersWithPositiveCape.fraction,
     },
+  },
+}, null, 2));
+
+const ensDiagnosticTimeSeries = await new IfsEnsDiagnosticTimeSeriesService().getDiagnosticTimeSeries({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: ens.run,
+  startTime: new Date(ens.run).toISOString(),
+  endTime: new Date(new Date(ens.run).getTime() + 3 * 3_600_000).toISOString(),
+  diagnostic: {
+    kind: "layer",
+    lowerPressureHpa: 850,
+    upperPressureHpa: 500,
+    diagnostics: ["temperature_lapse_rate"],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+});
+assert.deepEqual(ensDiagnosticTimeSeries.series.map((step) => step.forecastHour), [0, 3]);
+assert(ensDiagnosticTimeSeries.series.every((step) => step.kind === "layer"));
+assert(ensDiagnosticTimeSeries.series.every((step) =>
+  step.kind === "layer" && Number.isFinite(step.summaries[0]?.distribution.mean)));
+assert.equal(ensDiagnosticTimeSeries.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsDiagnosticTimeSeries: {
+    run: ensDiagnosticTimeSeries.run,
+    forecastHours: ensDiagnosticTimeSeries.series.map((step) => step.forecastHour),
+    cadence: ensDiagnosticTimeSeries.cadence,
   },
 }, null, 2));
 

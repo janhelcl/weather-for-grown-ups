@@ -1064,7 +1064,11 @@ describe("unified diagnostic routing coverage", () => {
 
   it("routes diagnostic ranges while preserving dataset time semantics", async () => {
     const timeSeries = { getDiagnosticTimeSeries: vi.fn(async (input) => ({ route: input.model })) };
-    const service = new UnifiedAtmosphereDiagnosticService({ timeSeries: timeSeries as any });
+    const ifsEnsTimeSeries = { getDiagnosticTimeSeries: vi.fn(async () => ({ route: "ifs-ens-series" })) };
+    const service = new UnifiedAtmosphereDiagnosticService({
+      timeSeries: timeSeries as any,
+      ifsEnsTimeSeries: ifsEnsTimeSeries as any,
+    });
     const diagnostic = {
       kind: "layer" as const,
       lowerPressureHpa: 850,
@@ -1108,6 +1112,27 @@ describe("unified diagnostic routing coverage", () => {
       diagnostic,
       forecast: { run: "latest" },
     })).result).toEqual({ route: "ifs_0p25" });
+
+    expect((await service.diagnose({
+      dataset: "ifs-ens",
+      geometry: point,
+      time: {
+        from: "2026-08-28T00:00:00Z",
+        to: "2026-08-28T12:00:00Z",
+        maxSteps: 5,
+      },
+      diagnostic,
+      forecast: { run: "latest" },
+      ensemble: { members: ["p01", "p50"], quantiles: [0.1, 0.9] },
+    })).result).toEqual({ route: "ifs-ens-series" });
+    expect(ifsEnsTimeSeries.getDiagnosticTimeSeries).toHaveBeenCalledWith(expect.objectContaining({
+      run: "latest",
+      startTime: "2026-08-28T00:00:00Z",
+      endTime: "2026-08-28T12:00:00Z",
+      members: ["p01", "p50"],
+      quantiles: [0.1, 0.9],
+      maxSteps: 5,
+    }));
 
     expect((await service.diagnose({
       dataset: "gfs-analysis",
