@@ -105,6 +105,8 @@ Area:
 
 Dataset-specific limits remain explicit. For example, historical NCEI transects are more tightly bounded than AWS-backed operational queries.
 
+For operational `gfs`, source selection is normally automatic and is not another query dimension. Point/profile, time-series, multi-point, transect, and run-comparison work prefers NOAA AWS Open Data byte ranges; bounded areas use NOMADS geographic subsetting. An explicit `source: "nomads" | "s3" | "archive"` is an override/debugging control where the chosen geometry supports it. Old explicit forecast runs still route to the grid-matched archive. CLI time-range queries report native-step progress on stderr, leaving JSON stdout machine-readable.
+
 ### Time
 
 One valid atmospheric state:
