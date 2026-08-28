@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  FileAccessPolicy,
+  UPSTREAM_ACCESS_POLICIES,
+  type UpstreamAccessPolicy,
+} from "./file-access-policy.js";
 import type { GefsMember } from "../catalog/gefs.js";
 import type { GfsCode } from "../catalog/variables.js";
 import {
@@ -55,6 +60,10 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
   constructor(
     private readonly rootDir: string,
     private readonly fetchFn: typeof fetch = globalThis.fetch,
+    private readonly accessPolicy: UpstreamAccessPolicy = new FileAccessPolicy(
+      join(rootDir, "access-state"),
+      UPSTREAM_ACCESS_POLICIES.noaaAws,
+    ),
   ) {}
 
   async fetch(request: GefsMemberDataRequest): Promise<GefsSubsetFile> {
@@ -159,33 +168,37 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
       // GEFS forecast files are immutable after publication, so index responses cache forever locally.
     }
 
-    const response = await this.fetchFn(url, {
-      headers: { "user-agent": "weather-for-grown-ups/0.1" },
+    const text = await this.accessPolicy.run(async () => {
+      const response = await this.fetchFn(url, {
+        headers: { "user-agent": "weather-for-grown-ups/0.1" },
+      });
+      if (!response.ok) {
+        throw new Error(`NOAA GEFS AWS index request failed: HTTP ${response.status} ${response.statusText}`);
+      }
+      return response.text();
     });
-    if (!response.ok) {
-      throw new Error(`NOAA GEFS AWS index request failed: HTTP ${response.status} ${response.statusText}`);
-    }
-    const text = await response.text();
     await writeFile(path, text, "utf8");
     return text;
   }
 
   private async fetchRange(url: string, range: ByteRange): Promise<Uint8Array> {
     const rangeValue = `bytes=${range.start}-${range.end ?? ""}`;
-    const response = await this.fetchFn(url, {
-      headers: {
-        range: rangeValue,
-        "user-agent": "weather-for-grown-ups/0.1",
-      },
+    return this.accessPolicy.run(async () => {
+      const response = await this.fetchFn(url, {
+        headers: {
+          range: rangeValue,
+          "user-agent": "weather-for-grown-ups/0.1",
+        },
+      });
+      if (response.status !== 206) {
+        throw new Error(`NOAA GEFS AWS range request failed: HTTP ${response.status} ${response.statusText}`);
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
+        throw new Error(`NOAA GEFS AWS range did not start with a GRIB message (${rangeValue})`);
+      }
+      return bytes;
     });
-    if (response.status !== 206) {
-      throw new Error(`NOAA GEFS AWS range request failed: HTTP ${response.status} ${response.statusText}`);
-    }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
-      throw new Error(`NOAA GEFS AWS range did not start with a GRIB message (${rangeValue})`);
-    }
-    return bytes;
   }
 }
 
