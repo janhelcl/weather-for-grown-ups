@@ -133,4 +133,134 @@ describe("IFS ENS member-first area statistics", () => {
 
     expect(fetchSelection).not.toHaveBeenCalled();
   });
+
+  it("rejects an oversized bbox before even multiplying by perturbations", async () => {
+    const fetchSelection = vi.fn();
+    const service = new IfsEnsAreaSummaryService({
+      source: { fetchSelection },
+      decoder: { engine: "gribberish", extractBox: vi.fn() },
+    });
+
+    await expect(service.summarize({
+      westLongitude: 14,
+      eastLongitude: 15,
+      southLatitude: 49,
+      northLatitude: 50,
+      run: run.toISOString(),
+      validTime: validTime.toISOString(),
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["p01", "p02"],
+      maxGridPoints: 35,
+      maxMemberGridPoints: 200,
+    })).rejects.toThrow("36 IFS ENS grid points");
+
+    expect(fetchSelection).not.toHaveBeenCalled();
+  });
+
+  it("normalizes explicit-run pressure and raw-field scalar families with truthful metadata", async () => {
+    let decodedValues: readonly number[] = [0, 0];
+    let decodedLatitudes: readonly number[] = [50, 50];
+    const fetchSelection = vi.fn(async (request: {
+      selectors: Array<{ key?: string; number?: number }>;
+    }) => ({
+      path: request.selectors[0]?.key ?? "selection",
+      cacheHit: true,
+    }));
+    const extractBox = vi.fn(async () =>
+      decodedValues.map((value, index) => ({
+        latitude: decodedLatitudes[index] ?? 50,
+        longitude: 14 + index * 0.25,
+        value,
+      })));
+    const service = new IfsEnsAreaSummaryService({
+      source: { fetchSelection },
+      decoder: { engine: "gribberish", extractBox },
+      concurrency: 1,
+    });
+    const common = {
+      westLongitude: 14,
+      eastLongitude: 14.25,
+      southLatitude: 0,
+      northLatitude: 60,
+      run: run.toISOString(),
+      validTime: validTime.toISOString(),
+      members: ["p01", "p02"] as const,
+      quantiles: [0.5],
+      maxGridPoints: 1_000,
+      maxMemberGridPoints: 2_000,
+    };
+
+    decodedValues = [0, 0];
+    decodedLatitudes = [0, 60];
+    const vorticity = await service.summarize({
+      ...common,
+      variable: "absolute_vorticity",
+      pressureLevelHpa: 850,
+    });
+    expect(vorticity.selection.variable).toBe("absolute_vorticity");
+    expect(vorticity.statistics.mean.mean).toBeGreaterThan(0);
+
+    const fieldCases = [
+      {
+        field: "temperature_2m",
+        values: [273.15, 275.15],
+        expectedMean: 1,
+        level: { type: "height_above_ground_m", heightM: 2 },
+        temporal: "instantaneous",
+      },
+      {
+        field: "total_precipitation",
+        values: [0.001, 0.003],
+        expectedMean: 2,
+        level: { type: "surface" },
+        temporal: "accumulation",
+      },
+      {
+        field: "low_cloud_cover",
+        values: [0.25, 0.75],
+        expectedMean: 50,
+        level: { type: "named_layer", id: "low_cloud_layer" },
+        temporal: "instantaneous",
+      },
+      {
+        field: "precipitable_water",
+        values: [10, 20],
+        expectedMean: 15,
+        level: { type: "named_layer", id: "entire_atmosphere_single_layer" },
+        temporal: "instantaneous",
+      },
+    ] as const;
+
+    for (const fieldCase of fieldCases) {
+      decodedValues = fieldCase.values;
+      decodedLatitudes = [50, 50];
+      const result = await service.summarize({
+        ...common,
+        field: fieldCase.field,
+        includeMembers: true,
+      });
+
+      expect(result.statistics.mean.mean).toBeCloseTo(fieldCase.expectedMean, 8);
+      expect(result.selection.level).toMatchObject(fieldCase.level);
+      expect(result.selection.temporal?.type).toBe(fieldCase.temporal);
+      if (fieldCase.temporal === "accumulation") {
+        expect(result.selection.temporal).toMatchObject({
+          type: "accumulation",
+          startForecastHour: 0,
+          endForecastHour: 6,
+          startTime: run.toISOString(),
+          endTime: validTime.toISOString(),
+        });
+      }
+      expect(result.members).toHaveLength(2);
+      expect(result.members?.every((member) =>
+        member.percentiles === undefined
+        && member.thresholdFractions === undefined
+        && member.extrema === undefined)).toBe(true);
+      expect(result.source.allCacheHit).toBe(true);
+      expect(result.source.sharedRunStaticProduct).toBeUndefined();
+    }
+  });
+
 });
