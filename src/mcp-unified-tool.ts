@@ -37,7 +37,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("search_catalog", {
     title: "Search atmospheric datasets and capabilities",
-    description: "Search one canonical catalog across operational GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, and historical GFS analysis. Results use shared variable/field/diagnostic IDs and explicitly list which datasets support each match. IFS ENS exposes the canonical IFS pressure variables and fields as member-first point distributions and native-cadence point time series.",
+    description: "Search one canonical catalog across operational GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, and historical GFS analysis. Results use shared variable/field/diagnostic IDs and explicitly list which datasets support each match. IFS ENS exposes canonical IFS pressure variables and fields as member-first point distributions and native-cadence point time series, plus instant member-first layer/profile/parcel diagnostics.",
     inputSchema: searchAtmosphereCatalogSchema,
     outputSchema: unifiedCatalogResultSchema,
   }, async (query) => {
@@ -63,7 +63,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("diagnose_atmosphere", {
     title: "Derive atmospheric diagnostics",
-    description: "Run shared WFG diagnostic physics through one point/time contract. GFS, GEFS, ECMWF IFS, and historical GFS analysis support layer, whole-profile and parcel diagnostics plus diagnostic time series. IFS ranges preserve native ECMWF output cadence and pin one selection-capable forecast initialization across the range. GEFS diagnostics are calculated independently per member before aggregation; deterministic datasets reuse the same normalized physics kernels.",
+    description: "Run shared WFG diagnostic physics through one point/time contract. GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, and historical GFS analysis support layer, whole-profile and parcel diagnostics. GEFS and IFS ENS diagnostics are calculated independently inside each member/perturbation before aggregation; raw member event fractions are explicitly not calibrated probabilities. GFS, GEFS, deterministic IFS and historical analysis also support diagnostic time series; IFS ENS diagnostic time series are intentionally not exposed yet.",
     inputSchema: diagnoseAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {

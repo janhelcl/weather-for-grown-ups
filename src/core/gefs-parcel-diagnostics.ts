@@ -28,7 +28,7 @@ import {
 } from "../schema/gefs-parcel-diagnostics.js";
 import type { DecodedValue, ProfileLevel } from "./types.js";
 import { mapConcurrent } from "./concurrency.js";
-import { summarizeNumericDistribution } from "./ensemble-statistics.js";
+import { summarizeEnsembleParcels } from "./ensemble-diagnostic-summaries.js";
 import { DEFAULT_GEFS_MEMBER_CONCURRENCY, type GefsPointDecoder } from "./gefs-ensemble.js";
 import { GefsLatestRunResolver, type GefsLatestRunProvider } from "./gefs-latest-run.js";
 import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
@@ -129,7 +129,10 @@ export class GefsParcelDiagnosticsService {
         surfaceMoisture: "2m_temperature_relative_humidity_surface_pressure_to_specific_humidity_per_member",
         surfaceOrography: "same_cycle_f000_surface_geopotential_height",
       },
-      summary: summarizeParcels(derivedMembers, quantiles),
+      summary: summarizeEnsembleParcels(
+        derivedMembers.map((member) => member.parcel),
+        quantiles,
+      ),
       ...(query.includeMembers
         ? {
             members: derivedMembers.map(({ member, forecastCacheHit, surfaceOrographyCacheHit, levels, parcel }) => ({
@@ -266,47 +269,3 @@ function requiredGridPoint(
   return first.gridPoint;
 }
 
-function summarizeParcels(members: readonly DerivedMemberParcel[], quantiles: readonly number[]) {
-  const parcels = members.map((member) => member.parcel);
-  return {
-    startingPressureHpa: summarizeNumericDistribution(parcels.map((parcel) => parcel.startingState.pressureHpa), quantiles),
-    startingTemperatureC: summarizeNumericDistribution(parcels.map((parcel) => parcel.startingState.temperatureC), quantiles),
-    startingSpecificHumidityKgKg: summarizeNumericDistribution(parcels.map((parcel) => parcel.startingState.specificHumidityKgKg), quantiles),
-    lclPressureHpa: summarizeNumericDistribution(parcels.map((parcel) => parcel.lcl.pressureHpa), quantiles),
-    lclTemperatureC: summarizeNumericDistribution(parcels.map((parcel) => parcel.lcl.temperatureC), quantiles),
-    capeJkg: summarizeNumericDistribution(parcels.map((parcel) => parcel.capeJkg), quantiles),
-    cinJkg: summarizeNumericDistribution(parcels.map((parcel) => parcel.cinJkg), quantiles),
-    membersWithPositiveCape: eventFraction(parcels.filter((parcel) => parcel.capeJkg > 0).length, parcels.length),
-    lfc: summarizeBoundary(parcels.map((parcel) => parcel.lfc), parcels.length, quantiles),
-    el: summarizeBoundary(parcels.map((parcel) => parcel.el), parcels.length, quantiles),
-  };
-}
-
-function summarizeBoundary(
-  boundaries: readonly ({ pressureHpa: number; geopotentialHeightGpm?: number } | undefined)[],
-  memberCount: number,
-  quantiles: readonly number[],
-) {
-  const present = boundaries.filter((boundary): boundary is { pressureHpa: number; geopotentialHeightGpm?: number } => boundary !== undefined);
-  const heights = present
-    .map((boundary) => boundary.geopotentialHeightGpm)
-    .filter((value): value is number => value !== undefined);
-  return {
-    membersWithBoundary: eventFraction(present.length, memberCount),
-    ...(present.length === 0 ? {} : {
-      pressureHpa: summarizeNumericDistribution(present.map((boundary) => boundary.pressureHpa), quantiles),
-    }),
-    ...(heights.length === present.length && heights.length > 0 ? {
-      geopotentialHeightGpm: summarizeNumericDistribution(heights, quantiles),
-    } : {}),
-  };
-}
-
-function eventFraction(count: number, memberCount: number) {
-  return {
-    count,
-    memberCount,
-    fraction: count / memberCount,
-    interpretation: "raw_member_fraction_not_calibrated_probability" as const,
-  };
-}

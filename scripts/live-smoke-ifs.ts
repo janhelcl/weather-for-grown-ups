@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { IfsAreaSummaryService } from "../src/core/ifs-area-summary.js";
 import { GfsIfsComparisonService } from "../src/core/gfs-ifs-comparison.js";
+import { IfsEnsDiagnosticsService } from "../src/core/ifs-ens-diagnostics.js";
 import { IfsEnsMemberBundleService } from "../src/core/ifs-ens-member-bundle.js";
 import { IfsEnsTimeSeriesService } from "../src/core/ifs-ens-timeseries.js";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
@@ -189,6 +190,57 @@ console.log(JSON.stringify({
     forecastHours: ensTimeSeries.series.map((step) => step.forecastHour),
     members: ensTimeSeries.selection.members,
     source: ensTimeSeries.source,
+  },
+}, null, 2));
+
+const ensDiagnostics = new IfsEnsDiagnosticsService();
+const ensLayerDiagnostics = await ensDiagnostics.getLayerDiagnostics({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: ens.run,
+  validTime: ens.validTime,
+  lowerPressureHpa: 850,
+  upperPressureHpa: 500,
+  diagnostics: ["temperature_lapse_rate", "wind_shear"],
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+});
+assert.equal(ensLayerDiagnostics.model, "ifs_ens_0p25");
+assert.equal(ensLayerDiagnostics.selection.members.length, 2);
+assert(ensLayerDiagnostics.summaries.length >= 2);
+assert(ensLayerDiagnostics.summaries.every((summary) =>
+  Number.isFinite(summary.distribution.mean)));
+
+const ensParcelDiagnostics = await ensDiagnostics.getParcelDiagnostics({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: ens.run,
+  validTime: ens.validTime,
+  pressureLevelsHpa: [925, 850, 700, 600, 500, 400, 300],
+  parcel: "surface_2m",
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+});
+assert.equal(ensParcelDiagnostics.model, "ifs_ens_0p25");
+assert.equal(ensParcelDiagnostics.summary.capeJkg.memberCount, 2);
+assert(Number.isFinite(ensParcelDiagnostics.summary.capeJkg.mean));
+assert(Number.isFinite(ensParcelDiagnostics.summary.cinJkg.mean));
+assert.equal(ensParcelDiagnostics.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsDiagnostics: {
+    run: ensLayerDiagnostics.run,
+    validTime: ensLayerDiagnostics.validTime,
+    layer: ensLayerDiagnostics.summaries.map((summary) => ({
+      id: summary.id,
+      field: summary.field,
+      mean: summary.distribution.mean,
+    })),
+    parcel: {
+      capeMeanJkg: ensParcelDiagnostics.summary.capeJkg.mean,
+      cinMeanJkg: ensParcelDiagnostics.summary.cinJkg.mean,
+      positiveCapeMemberFraction: ensParcelDiagnostics.summary.membersWithPositiveCape.fraction,
+    },
   },
 }, null, 2));
 
