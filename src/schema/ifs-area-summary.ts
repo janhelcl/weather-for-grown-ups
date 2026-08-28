@@ -1,8 +1,5 @@
 import * as z from "zod/v4";
-import {
-  IFS_RAW_FIELD_IDS,
-  IFS_RAW_PRESSURE_VARIABLE_IDS,
-} from "../catalog/ifs.js";
+import { IFS_RAW_FIELD_IDS } from "../catalog/ifs.js";
 import { AREA_PERCENTILE_METHOD, areaThresholdSchema } from "./area-summary.js";
 import { ifsPressureLevelSchema, ifsRunSelectorSchema } from "./ifs.js";
 import { gridPointSchema, nonIsobaricFieldLevelResultSchema, fieldTemporalResultSchema } from "./result.js";
@@ -24,18 +21,6 @@ export const IFS_AREA_FIELD_IDS = IFS_RAW_FIELD_IDS;
 const ifsAreaPressureVariableSchema = z.enum(IFS_AREA_PRESSURE_VARIABLE_IDS);
 const ifsAreaFieldSchema = z.enum(IFS_AREA_FIELD_IDS);
 
-/* canonical raw-only area semantics, matching deterministic GFS */
-const _ifsAreaPressureVariableSchemaExhaustiveness = z.enum([
-  "temperature",
-  "relative_humidity",
-  "u_wind",
-  "v_wind",
-  "geopotential_height",
-  "specific_humidity",
-  "vertical_velocity",
-  "divergence",
-]);
-void _ifsAreaPressureVariableSchemaExhaustiveness;
 
 export const ifsAreaSummaryQuerySchema = z.object({
   westLongitude: z.number().min(-180).max(180),
