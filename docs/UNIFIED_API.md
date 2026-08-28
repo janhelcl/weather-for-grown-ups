@@ -177,9 +177,11 @@ The compact public vocabulary is:
 | `query_atmosphere` | Raw/derived atmospheric state over supported geometry and time |
 | `diagnose_atmosphere` | Layer, profile and parcel meteorology |
 | `compare_runs` | Compare consecutive GFS, GEFS, or IFS forecast initialization cycles |
-| `compare_datasets` | Compare aligned datasets; currently GFS against GEFS |
+| `compare_datasets` | Compare aligned datasets: GFS↔GEFS ensemble context or deterministic GFS↔IFS deltas |
 | `verify_forecast` | Compare an archived GFS forecast with later GFS analysis or an IGRA radiosonde |
 | `find_analogs` | Search materialized historical atmospheric analogs |
+
+`compare_datasets` preserves pair-specific semantics under one operation. The default `["gfs","gefs"]` branch places deterministic GFS inside an aligned GEFS member distribution. The `["gfs","ifs"]` branch uses one shared 00/06/12/18 UTC initialization cycle, compares normalized canonical pressure-variable outputs, preserves each model's sampled grid point, and returns IFS-minus-GFS deltas. Wind direction uses the shortest signed circular difference. These deterministic model differences are not verification error or calibrated uncertainty. See [GFS_IFS_COMPARISON.md](GFS_IFS_COMPARISON.md).
 
 `verify_forecast` has two reference semantics. The default `referenceDataset: "gfs-analysis"` preserves the original same-grid analysis-minus-forecast comparison. `referenceDataset: "igra"` uses NOAA IGRA v2.2 radiosonde observations: an explicit `stationId` may be supplied or WFG chooses the nearest station covering the requested year within `maxStationDistanceKm`; the forecast is sampled at the sounding location and only exact observed pressure levels are compared. IGRA therefore appears as a verification reference, not as a `query_atmosphere` dataset.
 
