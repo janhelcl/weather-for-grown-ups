@@ -169,11 +169,18 @@ describe("GEFS / IFS ENS comparison", () => {
     expect(result.comparison.ifsEnsMinusGefsMean).toBe(2);
     expect(result.comparison.ifsEnsMinusGefsPopulationStdDev).toBe(1);
     expect(result.comparison.populationStdDevRatioIfsEnsToGefs).toBe(2);
-    expect(result.comparison.quantileShifts).toEqual([
-      { quantile: 0.1, gefsValue: 10.2, ifsEnsValue: 11.4, ifsEnsMinusGefs: 1.200000000000001 },
-      { quantile: 0.5, gefsValue: 11, ifsEnsValue: 13, ifsEnsMinusGefs: 2 },
-      { quantile: 0.9, gefsValue: 11.8, ifsEnsValue: 14.6, ifsEnsMinusGefs: 2.8 },
+    expect(result.comparison.quantileShifts.map((shift) => ({
+      quantile: shift.quantile,
+      gefsValue: shift.gefsValue,
+      ifsEnsValue: shift.ifsEnsValue,
+    }))).toEqual([
+      { quantile: 0.1, gefsValue: 10.2, ifsEnsValue: 11.4 },
+      { quantile: 0.5, gefsValue: 11, ifsEnsValue: 13 },
+      { quantile: 0.9, gefsValue: 11.8, ifsEnsValue: 14.6 },
     ]);
+    expect(result.comparison.quantileShifts[0]?.ifsEnsMinusGefs).toBeCloseTo(1.2);
+    expect(result.comparison.quantileShifts[1]?.ifsEnsMinusGefs).toBeCloseTo(2);
+    expect(result.comparison.quantileShifts[2]?.ifsEnsMinusGefs).toBeCloseTo(2.8);
     expect(result.comparison.threshold).toEqual({
       operator: "gte",
       value: 12.5,
