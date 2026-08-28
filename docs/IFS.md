@@ -69,7 +69,7 @@ wfg query \
   --json
 ```
 
-No IFS-specific MCP tool is added. The same `diagnose_atmosphere` / `wfg diagnose` surface supports IFS layer, whole-profile, and parcel diagnostics at one valid time.
+No IFS-specific MCP tool is added. The same `diagnose_atmosphere` / `wfg diagnose` surface supports IFS layer, whole-profile, and parcel diagnostics at one valid time or across a valid-time range.
 
 ## Canonical pressure variables
 
@@ -120,10 +120,10 @@ IFS reuses WFG's normalized deterministic kernels for layer, whole-profile, and 
 
 Parcel physics are the same model-independent implementation used by deterministic GFS. IFS supplies the environmental sounding from pressure-level temperature, specific humidity and geopotential height; surface initialization uses surface pressure, 2 m temperature, derived 2 m specific humidity, and the run-static surface geopotential field.
 
-The IFS adapter fetches only the required pressure variables and keeps ECMWF run, lead, sampled grid point and source provenance attached to the derived result.
+The IFS adapter fetches only the required pressure variables and keeps ECMWF run, lead, sampled grid point and source provenance attached to the derived result. Diagnostic ranges pin one selection-capable IFS run and evaluate the same single-time kernels at each native output: three-hourly through f144 and, for 00/12Z runs, six-hourly thereafter. Compact parcel time-series steps omit the full parcel path while preserving the scalar parcel diagnostics and starting state.
 
 ## Deliberate capability boundary
 
-IFS **area statistics and diagnostic time series** remain unsupported in this slice. Unsupported operations fail explicitly rather than being emulated with another model or hidden repeated public calls.
+IFS **area statistics** remain unsupported in this slice. Unsupported operations fail explicitly rather than being emulated with another model or hidden repeated public calls.
 
 This keeps the architecture rule intact: **unify operations and physics; preserve model semantics.**
