@@ -131,12 +131,13 @@ export class IfsProfileService {
 
     const decodedSelection: Array<{ item: IfsSelectionItem; sample: DecodedValue }> = [];
     let allCacheHit = true;
-    for (const [sourceForecastHour, items] of groupSelectionByForecastHour(selection, forecastHour)) {
+    for (const group of groupSelectionByForecastHour(selection, forecastHour)) {
       const cached = await this.source.fetchSelection({
         run,
-        forecastHour: sourceForecastHour,
-        selectors: items.map((item) => item.selector),
+        forecastHour: group.sourceForecastHour,
+        selectors: group.items.map((item) => item.selector),
       });
+      const items = group.items;
       const decoded = await this.decoder.extractPoint(cached.path, query.longitude, query.latitude);
       if (decoded.length !== items.length) {
         throw new Error(
@@ -258,15 +259,17 @@ function prepareSelection(query: ReturnType<typeof ifsPointQuerySchema.parse>): 
 function groupSelectionByForecastHour(
   selection: readonly IfsSelectionItem[],
   requestedForecastHour: number,
-): Map<number, IfsSelectionItem[]> {
-  const groups = new Map<number, IfsSelectionItem[]>();
+): Array<{ sourceForecastHour: number; items: IfsSelectionItem[] }> {
+  const groups = new Map<string, { sourceForecastHour: number; items: IfsSelectionItem[] }>();
   for (const item of selection) {
+    const runStatic = item.selector.sourceForecastHour !== undefined;
     const sourceForecastHour = item.selector.sourceForecastHour ?? requestedForecastHour;
-    const group = groups.get(sourceForecastHour) ?? [];
-    group.push(item);
-    groups.set(sourceForecastHour, group);
+    const key = `${sourceForecastHour}:${runStatic ? "run-static" : "forecast"}`;
+    const group = groups.get(key) ?? { sourceForecastHour, items: [] };
+    group.items.push(item);
+    groups.set(key, group);
   }
-  return groups;
+  return [...groups.values()];
 }
 
 function applyRawPressureValue(
