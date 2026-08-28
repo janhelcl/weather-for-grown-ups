@@ -85,7 +85,7 @@ describe("searchGfsCatalog", () => {
 
   it("returns a deterministic compact browse result when no text search is supplied", () => {
     const result = searchGfsCatalog({ sections: ["variables"], limit: 5 });
-    expect(result.totalMatches).toBe(20);
+    expect(result.totalMatches).toBe(21);
     expect(result.matches).toHaveLength(5);
     expect(result.truncated).toBe(true);
     expect(result.matches.map((match) => match.id)).toEqual([
