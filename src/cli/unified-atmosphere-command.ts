@@ -20,6 +20,7 @@ import {
   DEFAULT_LEVELS,
   collectPoint,
   parseGefsMembers,
+  parseIfsEnsMembers,
   parseLevels,
   parseNumbers,
 } from "./shared.js";
@@ -169,42 +170,65 @@ function registerCompareRunsCommand(program: Command): void {
 function registerCompareDatasetsCommand(program: Command): void {
   program
     .command("compare-datasets")
-    .description("Compare aligned operational GFS against GEFS or ECMWF IFS")
+    .description("Compare aligned GFS↔GEFS, GFS↔IFS, or GEFS↔IFS ENS forecasts")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--at <iso>", "Forecast valid time")
-    .option("--against <gefs|ifs>", "Dataset to compare with GFS", "gefs")
+    .option("--against <gefs|ifs|ifs-ens>", "Comparison branch: gefs=GFS↔GEFS, ifs=GFS↔IFS, ifs-ens=GEFS↔IFS ENS", "gefs")
     .requiredOption("--var <id>", "Canonical pressure-level variable")
     .requiredOption("--level <hpa>", "Pressure level in hPa", Number)
     .option("--run <iso|latest>", "Shared aligned initialization", "latest")
-    .option("--grid <0p25|0p50>", "GFS horizontal grid")
+    .option("--grid <0p25|0p50>", "GFS horizontal grid; GFS comparison branches only")
     .option("--members <list>", "GFS↔GEFS only: GEFS members (c00,p01..p30)")
-    .option("--quantiles <list>", "GFS↔GEFS only: GEFS quantiles from 0 to 1")
+    .option("--gefs-members <list>", "GEFS↔IFS ENS only: GEFS members (c00,p01..p30)")
+    .option("--ifs-ens-members <list>", "GEFS↔IFS ENS only: IFS ENS perturbations (p01..p50)")
+    .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
+    .option("--gte <number>", "GEFS↔IFS ENS only: compare raw member fractions at or above this threshold", Number)
     .option("--json", "Output JSON")
     .action(async (options) => {
       const against = String(options.against).trim().toLowerCase();
-      if (against !== "gefs" && against !== "ifs") {
-        throw new Error(`Expected --against gefs|ifs, received: ${options.against}`);
+      if (against !== "gefs" && against !== "ifs" && against !== "ifs-ens") {
+        throw new Error(`Expected --against gefs|ifs|ifs-ens, received: ${options.against}`);
       }
-      const common = {
+
+      const base = {
         geometry: { type: "point" as const, latitude: options.lat, longitude: options.lon },
         time: { at: options.at },
         variable: options.var,
         pressureLevelHpa: options.level,
         run: options.run,
-        ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
       };
-      const request: CompareAtmosphericDatasetsInput = against === "ifs"
-        ? {
-            ...common,
-            datasets: ["gfs", "ifs"],
-          }
-        : {
-            ...common,
-            datasets: ["gfs", "gefs"],
-            ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
-            ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
-          };
+
+      let request: CompareAtmosphericDatasetsInput;
+      if (against === "ifs-ens") {
+        request = {
+          ...base,
+          datasets: ["gefs", "ifs-ens"],
+          ...(options.gefsMembers === undefined
+            ? {}
+            : { gefsMembers: parseGefsMembers(options.gefsMembers) }),
+          ...(options.ifsEnsMembers === undefined
+            ? {}
+            : { ifsEnsMembers: parseIfsEnsMembers(options.ifsEnsMembers) }),
+          ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
+          ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
+        };
+      } else if (against === "ifs") {
+        request = {
+          ...base,
+          datasets: ["gfs", "ifs"],
+          ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
+        };
+      } else {
+        request = {
+          ...base,
+          datasets: ["gfs", "gefs"],
+          ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
+          ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+          ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
+        };
+      }
+
       const result = await new UnifiedDatasetComparisonService().compare(request);
       printResult(result, Boolean(options.json));
     });
