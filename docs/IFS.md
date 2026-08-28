@@ -28,7 +28,7 @@ The public dataset `ifs-ens` exposes ECMWF's atmospheric ensemble direct model o
 - members: `p01`–`p50`
 - 00/12Z horizon: `f000`–`f360`, 3-hourly through `f144` then 6-hourly
 - 06/18Z horizon: `f000`–`f144`, 3-hourly
-- first public slice: one point × one valid time, pressure variables and/or supported IFS fields
+- public state surface: one point at one valid time or a native-cadence point time range, with pressure variables and/or supported IFS fields
 - derived quantities are calculated independently inside every perturbation before aggregation
 - outputs include member count, mean, population standard deviation, min/max and requested quantiles; wind direction uses circular statistics
 - raw normalized perturbation payloads are opt-in with `ensemble.includeMembers`
@@ -61,7 +61,7 @@ Example:
 }
 ```
 
-The default member selection is all 50 perturbations. Point ranges, multi-point, transects, areas, diagnostics and ensemble run comparison are intentionally rejected for now instead of being routed through deterministic IFS semantics.
+The default member selection is all 50 perturbations. Point time ranges pin one initialization across the complete range, preserve the native ENS cadence (3-hourly through f144, then 6-hourly on 00/12Z long runs), and return compact distributions at each step by default; raw member payloads remain opt-in and size-guarded. Multi-point, transects, areas, diagnostics and ensemble run comparison are intentionally rejected for now instead of being routed through deterministic IFS semantics.
 
 ## Current deterministic IFS query surface
 
