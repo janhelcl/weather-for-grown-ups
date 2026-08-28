@@ -25,6 +25,38 @@ describe("IFS ENS latest run resolution", () => {
     expect(isForecastAvailable).toHaveBeenCalledWith(run, 96, selectors);
   });
 
+  it("pins the newest ENS run that covers a complete mixed-cadence range", async () => {
+    const isForecastAvailable = vi.fn(async () => true);
+    const resolver = new IfsEnsLatestRunResolver({
+      probe: { isForecastAvailable },
+      now: () => new Date("2026-08-27T18:00:00Z"),
+    });
+
+    const startTime = new Date("2026-08-27T12:00:00Z");
+    const endTime = new Date("2026-09-03T00:00:00Z");
+    const run = await resolver.resolveLatestRunForRange(startTime, endTime, selectors);
+
+    expect(run.toISOString()).toBe("2026-08-27T12:00:00.000Z");
+    expect(isForecastAvailable).toHaveBeenCalledOnce();
+    expect(isForecastAvailable).toHaveBeenCalledWith(run, 156, selectors);
+  });
+
+  it("skips short ENS cycles that cannot cover the complete requested range", async () => {
+    const isForecastAvailable = vi.fn(async () => true);
+    const resolver = new IfsEnsLatestRunResolver({
+      probe: { isForecastAvailable },
+      now: () => new Date("2026-08-27T18:00:00Z"),
+    });
+
+    const startTime = new Date("2026-08-27T18:00:00Z");
+    const endTime = new Date("2026-09-03T00:00:00Z");
+    const run = await resolver.resolveLatestRunForRange(startTime, endTime, selectors);
+
+    expect(run.toISOString()).toBe("2026-08-27T12:00:00.000Z");
+    expect(isForecastAvailable).toHaveBeenCalledOnce();
+    expect(isForecastAvailable).toHaveBeenCalledWith(run, 156, selectors);
+  });
+
   it("skips an 18Z candidate beyond f144 and falls back to a long ENS cycle", async () => {
     const isForecastAvailable = vi.fn(async () => true);
     const resolver = new IfsEnsLatestRunResolver({
