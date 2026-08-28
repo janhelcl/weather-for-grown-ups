@@ -29,6 +29,10 @@ import { IfsAreaSummaryService } from "./ifs-area-summary.js";
 import { IfsEnsDiagnosticTimeSeriesService } from "./ifs-ens-diagnostic-timeseries.js";
 import { IfsEnsDiagnosticsService } from "./ifs-ens-diagnostics.js";
 import { IfsEnsMemberBundleService } from "./ifs-ens-member-bundle.js";
+import {
+  IfsEnsPointsService,
+  IfsEnsPointsTimeSeriesService,
+} from "./ifs-ens-points.js";
 import { IfsEnsTimeSeriesService } from "./ifs-ens-timeseries.js";
 import { IfsProfileService } from "./ifs-profile.js";
 import {
@@ -57,6 +61,10 @@ import { historicalTransectQuerySchema } from "../schema/history-transect.js";
 import { historicalProfileQuerySchema, historicalTimeSeriesQuerySchema } from "../schema/history.js";
 import { ifsAreaSummaryQuerySchema } from "../schema/ifs-area-summary.js";
 import { ifsEnsDiagnosticTimeSeriesQuerySchema } from "../schema/ifs-ens-diagnostic-timeseries.js";
+import {
+  ifsEnsPointsQuerySchema,
+  ifsEnsPointsTimeSeriesQuerySchema,
+} from "../schema/ifs-ens-points.js";
 import { ifsEnsTimeSeriesQuerySchema } from "../schema/ifs-ens-timeseries.js";
 import { ifsEnsMemberBundleQuerySchema } from "../schema/ifs-ens.js";
 import { ifsPointQuerySchema } from "../schema/ifs.js";
@@ -101,6 +109,8 @@ export interface UnifiedAtmosphereQueryServiceOptions {
   ifsProfile?: Pick<IfsProfileService, "getProfile">;
   ifsEnsBundle?: Pick<IfsEnsMemberBundleService, "getBundle">;
   ifsEnsTimeSeries?: Pick<IfsEnsTimeSeriesService, "getTimeSeries">;
+  ifsEnsPoints?: Pick<IfsEnsPointsService, "getPoints">;
+  ifsEnsPointsTimeSeries?: Pick<IfsEnsPointsTimeSeriesService, "getPointsTimeSeries">;
   ifsTimeSeries?: Pick<IfsTimeSeriesService, "getTimeSeries">;
   ifsPoints?: Pick<IfsPointsService, "getPoints">;
   ifsPointsTimeSeries?: Pick<IfsPointsTimeSeriesService, "getPointsTimeSeries">;
@@ -134,6 +144,8 @@ export class UnifiedAtmosphereQueryService {
   private readonly ifsProfile: Pick<IfsProfileService, "getProfile">;
   private readonly ifsEnsBundle: Pick<IfsEnsMemberBundleService, "getBundle">;
   private readonly ifsEnsTimeSeries: Pick<IfsEnsTimeSeriesService, "getTimeSeries">;
+  private readonly ifsEnsPoints: Pick<IfsEnsPointsService, "getPoints">;
+  private readonly ifsEnsPointsTimeSeries: Pick<IfsEnsPointsTimeSeriesService, "getPointsTimeSeries">;
   private readonly ifsTimeSeries: Pick<IfsTimeSeriesService, "getTimeSeries">;
   private readonly ifsPoints: Pick<IfsPointsService, "getPoints">;
   private readonly ifsPointsTimeSeries: Pick<IfsPointsTimeSeriesService, "getPointsTimeSeries">;
@@ -166,6 +178,8 @@ export class UnifiedAtmosphereQueryService {
     this.ifsProfile = options.ifsProfile ?? new IfsProfileService();
     this.ifsEnsBundle = options.ifsEnsBundle ?? new IfsEnsMemberBundleService();
     this.ifsEnsTimeSeries = options.ifsEnsTimeSeries ?? new IfsEnsTimeSeriesService();
+    this.ifsEnsPoints = options.ifsEnsPoints ?? new IfsEnsPointsService();
+    this.ifsEnsPointsTimeSeries = options.ifsEnsPointsTimeSeries ?? new IfsEnsPointsTimeSeriesService();
     this.ifsTimeSeries = options.ifsTimeSeries ?? new IfsTimeSeriesService();
     this.ifsPoints = options.ifsPoints ?? new IfsPointsService();
     this.ifsPointsTimeSeries = options.ifsPointsTimeSeries ?? new IfsPointsTimeSeriesService();
@@ -389,6 +403,18 @@ export class UnifiedAtmosphereQueryService {
           : { maxMemberSamples: request.ensemble.maxMemberSamples }),
       }));
     }
+    if (request.dataset === "ifs-ens") {
+      return this.ifsEnsPoints.getPoints(ifsEnsPointsQuerySchema.parse({
+        points: request.geometry.points,
+        run,
+        validTime: request.time.at,
+        selection: gefsSelection(request),
+        ...ensembleOptions(request),
+        ...(request.ensemble?.maxMemberSamples === undefined
+          ? {}
+          : { maxMemberSamples: request.ensemble.maxMemberSamples }),
+      }));
+    }
     if (request.dataset === "ifs") {
       return this.ifsPoints.getPoints(ifsPointsQuerySchema.parse({
         points: request.geometry.points,
@@ -436,6 +462,25 @@ export class UnifiedAtmosphereQueryService {
           ? {}
           : { maxMemberSamples: request.ensemble.maxMemberSamples }),
       }));
+    }
+    if (request.dataset === "ifs-ens") {
+      return this.ifsEnsPointsTimeSeries.getPointsTimeSeries(
+        ifsEnsPointsTimeSeriesQuerySchema.parse({
+          points: request.geometry.points,
+          run,
+          startTime: request.time.from,
+          endTime: request.time.to,
+          selection: gefsSelection(request),
+          ...ensembleOptions(request),
+          ...(request.time.maxSteps === undefined ? {} : { maxSteps: request.time.maxSteps }),
+          ...(request.limits?.maxPointSteps === undefined
+            ? {}
+            : { maxPointSteps: request.limits.maxPointSteps }),
+          ...(request.ensemble?.maxMemberSamples === undefined
+            ? {}
+            : { maxMemberSamples: request.ensemble.maxMemberSamples }),
+        }),
+      );
     }
     if (request.dataset === "ifs") {
       return this.ifsPointsTimeSeries.getPointsTimeSeries(ifsPointsTimeSeriesQuerySchema.parse({
