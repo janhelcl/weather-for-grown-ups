@@ -37,7 +37,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("search_catalog", {
     title: "Search atmospheric datasets and capabilities",
-    description: "Search one canonical catalog across operational GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, and historical GFS analysis. Results use shared variable/field/diagnostic IDs and explicitly list which datasets support each match. IFS ENS exposes canonical IFS pressure variables and fields as member-first point/multi-point distributions and native-cadence state time series, plus member-first layer/profile/parcel diagnostics.",
+    description: "Search one canonical catalog across all atmospheric datasets. Results use shared variable, field and diagnostic IDs and explicitly list which datasets support each match, so capability differences are discovered through data rather than separate model-specific tools.",
     inputSchema: searchAtmosphereCatalogSchema,
     outputSchema: unifiedCatalogResultSchema,
   }, async (query) => {
@@ -50,7 +50,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("query_atmosphere", {
     title: "Query atmospheric state",
-    description: "Query GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, or historical GFS analysis through one dataset × geometry × time × selection contract. IFS ENS uses dataset 'ifs-ens' and supports point or multi-point state at one valid time and native-cadence point/multi-point ranges with p01..p50 perturbed members, distribution summaries, optional size-guarded raw member payloads, canonical pressure variables, and selected IFS surface fields. One initialization is pinned across a range, ECMWF's native 3h/6h ENS cadence is preserved, and multi-point ranges are bounded by explicit point × step and member-payload guardrails. Since ECMWF Cycle 50r1 the unperturbed ENS control is identical to deterministic oper/fc and is exposed separately as dataset 'ifs'. IFS ENS also supports instant great-circle transects plus scalar bbox area statistics. Area calculations run independently inside each perturbation before ensemble aggregation, with explicit grid and member × grid-point guardrails. Dataset-native semantics stay explicit and member-derived quantities are computed inside each member before aggregation.",
+    description: "Query atmospheric state through one dataset × geometry × time × selection contract across GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, and historical GFS analysis. Dataset-native cadence, provenance, deterministic/member-first semantics and capability limits stay explicit; unsupported combinations fail rather than being coerced into fake symmetry.",
     inputSchema: queryAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {
@@ -63,7 +63,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("diagnose_atmosphere", {
     title: "Derive atmospheric diagnostics",
-    description: "Run shared WFG diagnostic physics through one point/time contract. GFS, GEFS, deterministic ECMWF IFS, ECMWF IFS ENS, and historical GFS analysis support layer, whole-profile and parcel diagnostics plus diagnostic time series. GEFS and IFS ENS diagnostics are calculated independently inside each member/perturbation before aggregation; raw member event fractions are explicitly not calibrated probabilities. IFS ENS ranges pin one initialization, preserve ECMWF's native 3h/6h cadence, and return compact member-first summaries.",
+    description: "Run shared layer, profile or parcel physics through the same dataset and point/time vocabulary. Deterministic datasets evaluate the shared kernels once; ensemble datasets evaluate nonlinear diagnostics member by member before aggregation. Dataset-native cadence and capability limits remain explicit.",
     inputSchema: diagnoseAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {
