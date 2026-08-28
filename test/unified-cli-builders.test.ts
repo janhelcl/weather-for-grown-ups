@@ -60,6 +60,27 @@ describe("unified CLI request builders", () => {
     expect(request).not.toHaveProperty("source");
   });
 
+  it("uses IFS ENS member semantics behind the shared --members flag", () => {
+    const request = buildUnifiedQuery({
+      dataset: "ifs-ens",
+      lat: 50.08,
+      lon: 14.43,
+      at: "2026-08-28T12:00:00Z",
+      vars: "temperature",
+      levels: "850",
+      members: "p31,p50",
+      quantiles: "0.1,0.5,0.9",
+    });
+
+    expect(queryAtmosphereSchema.parse(request)).toMatchObject({
+      dataset: "ifs-ens",
+      ensemble: {
+        members: ["p31", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+      },
+    });
+  });
+
   it("builds historical multi-point field ranges without forecast metadata", () => {
     const request = buildUnifiedQuery({
       dataset: "gfs-analysis",
