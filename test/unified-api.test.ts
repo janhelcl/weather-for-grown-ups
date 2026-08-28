@@ -884,11 +884,13 @@ describe("unified geometry routing coverage", () => {
     const gfsArea = { summarize: vi.fn(async () => ({ route: "gfs-area" })) };
     const gefsArea = { summarize: vi.fn(async () => ({ route: "gefs-area" })) };
     const ifsArea = { summarize: vi.fn(async () => ({ route: "ifs-area" })) };
+    const ifsEnsArea = { summarize: vi.fn(async () => ({ route: "ifs-ens-area" })) };
     const historyArea = { summarize: vi.fn(async () => ({ route: "history-area" })) };
     const service = new UnifiedAtmosphereQueryService({
       gfsArea: gfsArea as any,
       gefsArea: gefsArea as any,
       ifsArea: ifsArea as any,
+      ifsEnsArea: ifsEnsArea as any,
       historyArea: historyArea as any,
     });
     const geometry = {
@@ -939,6 +941,33 @@ describe("unified geometry routing coverage", () => {
       pressureLevelHpa: 850,
       percentiles: [10, 50, 90],
       maxGridPoints: 1000,
+    }));
+
+    expect((await service.query({
+      dataset: "ifs-ens",
+      geometry,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      aggregate,
+      forecast: { run: "latest" },
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+        includeMembers: true,
+      },
+      limits: { maxGridPoints: 1000, maxMemberGridPoints: 30000 },
+    })).result).toEqual({ route: "ifs-ens-area" });
+    expect(ifsEnsArea.summarize).toHaveBeenCalledWith(expect.objectContaining({
+      run: "latest",
+      validTime: "2026-08-28T12:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["p01", "p50"],
+      quantiles: [0.1, 0.5, 0.9],
+      includeMembers: true,
+      percentiles: [10, 50, 90],
+      maxGridPoints: 1000,
+      maxMemberGridPoints: 30000,
     }));
 
     expect((await service.query({
