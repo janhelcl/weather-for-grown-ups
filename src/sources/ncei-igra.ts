@@ -168,9 +168,12 @@ export class NceiIgraSource {
       });
 
       if (result.cacheHit) {
-        return kind === "text"
-          ? { text: result.text, cacheHit: true }
-          : { bytes: result.bytes, cacheHit: true };
+        if (kind === "text") {
+          if (result.text === undefined) throw new Error("NOAA IGRA cached text response was empty");
+          return { text: result.text, cacheHit: true };
+        }
+        if (result.bytes === undefined) throw new Error("NOAA IGRA cached binary response was empty");
+        return { bytes: result.bytes, cacheHit: true };
       }
       if (isRetryableHttpStatus(result.status) && attempt < DEFAULT_HTTP_RETRY_MAX_ATTEMPTS) {
         await waitBeforeHttpRetry(attempt, result.retryAfter, {
