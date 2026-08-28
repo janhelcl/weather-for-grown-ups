@@ -98,7 +98,7 @@ WFG does not contain turbine power curves, wake models, availability assumptions
 
 ## Current model support
 
-WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-first **GEFS**, and deterministic **ECMWF IFS 0.25°**. IFS covers point and multi-point state queries, native-cadence point ranges, multi-point time series, and deterministic transects through the same unified query contract.
+WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-first **GEFS**, and deterministic **ECMWF IFS 0.25°**. IFS covers point and multi-point state queries, native-cadence ranges, deterministic transects, raw scalar area statistics, diagnostics, and run-to-run comparison through the same unified contracts.
 
 | Operation | GFS 0.25° / 0.5° | GEFS | IFS 0.25° |
 | --- | --- | --- | --- |
@@ -113,8 +113,8 @@ WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-firs
 | Multi-point queries | ✅ | ✅ | ✅ |
 | Multi-point time series | ✅ | ✅ | ✅ |
 | Transects | ✅ deterministic | ✅ ensemble-native mixed fields | ✅ deterministic mixed fields |
-| Area statistics | ✅ deterministic | ✅ member-first spatial statistics | ⏳ |
-| Run-to-run comparison | ✅ deterministic deltas | ✅ distribution shifts | ⏳ |
+| Area statistics | ✅ deterministic | ✅ member-first spatial statistics | ✅ deterministic raw scalar |
+| Run-to-run comparison | ✅ deterministic deltas | ✅ distribution shifts | ✅ deterministic deltas |
 | Scalar ensemble distribution | — | ✅ | — |
 | Aligned GFS-vs-GEFS comparison | ✅ | ✅ | — |
 
