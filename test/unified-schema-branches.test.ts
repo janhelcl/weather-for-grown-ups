@@ -218,7 +218,7 @@ describe("unified atmospheric schema capability branches", () => {
       },
     }).diagnostic.kind).toBe("parcel");
 
-    expect(() => diagnoseAtmosphereSchema.parse({
+    expect(diagnoseAtmosphereSchema.parse({
       dataset: "ifs",
       geometry: point,
       time: {
@@ -231,7 +231,7 @@ describe("unified atmospheric schema capability branches", () => {
         upperPressureHpa: 500,
         diagnostics: ["wind_shear"],
       },
-    })).toThrow("IFS diagnostic time ranges are not implemented");
+    }).dataset).toBe("ifs");
   });
 
   it("accepts either scalar area selection form and rejects area ranges", () => {
