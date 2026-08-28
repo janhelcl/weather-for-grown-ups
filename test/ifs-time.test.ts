@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  ifsEnsForecastHoursInRange,
   ifsEnsMaxForecastHour,
+  ifsEnsValidTimeForForecastHour,
   ifsForecastHour,
   ifsForecastHoursInRange,
   ifsMaxForecastHour,
@@ -47,6 +49,16 @@ describe("IFS native run semantics", () => {
     expect(ifsValidTimeForForecastHour(run, 150).getTime() - run.getTime())
       .toBe(150 * 3_600_000);
     expect(() => ifsValidTimeForForecastHour(run, 147)).toThrow("not native");
+  });
+
+  it("enumerates the native ENS 3h-to-6h cadence transition independently of deterministic IFS", () => {
+    const run = new Date("2026-08-27T12:00:00Z");
+    const start = new Date(run.getTime() + 138 * 3_600_000);
+    const end = new Date(run.getTime() + 156 * 3_600_000);
+    expect(ifsEnsForecastHoursInRange(run, start, end)).toEqual([138, 141, 144, 150, 156]);
+    expect(ifsEnsValidTimeForForecastHour(run, 156).getTime() - run.getTime())
+      .toBe(156 * 3_600_000);
+    expect(() => ifsEnsValidTimeForForecastHour(run, 147)).toThrow("not native");
   });
 
   it("requires exact synoptic initialization cycles", () => {
