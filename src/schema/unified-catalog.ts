@@ -1,5 +1,8 @@
 import * as z from "zod/v4";
-import { publicAtmosphericDatasetSchema } from "./unified-api.js";
+import {
+  PUBLIC_ATMOSPHERIC_DATASET_IDS,
+  publicAtmosphericDatasetSchema,
+} from "./unified-api.js";
 
 export const UNIFIED_CATALOG_SECTIONS = [
   "variables",
@@ -13,8 +16,8 @@ export const unifiedCatalogSectionSchema = z.enum(UNIFIED_CATALOG_SECTIONS);
 
 export const searchAtmosphereCatalogSchema = z.object({
   search: z.string().min(1).optional(),
-  datasets: z.array(publicAtmosphericDatasetSchema).min(1).max(5)
-    .default(["gfs", "gefs", "ifs", "ifs-ens", "gfs-analysis"]),
+  datasets: z.array(publicAtmosphericDatasetSchema).min(1).max(PUBLIC_ATMOSPHERIC_DATASET_IDS.length)
+    .default([...PUBLIC_ATMOSPHERIC_DATASET_IDS]),
   sections: z.array(unifiedCatalogSectionSchema).min(1).max(UNIFIED_CATALOG_SECTIONS.length)
     .optional(),
   classification: z.enum(["raw", "derived"]).optional(),

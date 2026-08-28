@@ -9,10 +9,13 @@ import {
   UnifiedForecastVerificationService,
   UnifiedRunComparisonService,
 } from "../core/unified-specialized-api.js";
-import type {
-  DiagnoseAtmosphereInput,
-  PublicAtmosphericDataset,
-  QueryAtmosphereInput,
+import {
+  PUBLIC_ATMOSPHERIC_DATASET_IDS,
+  publicAtmosphericDatasetSchema,
+  publicDatasetMetadata,
+  type DiagnoseAtmosphereInput,
+  type PublicAtmosphericDataset,
+  type QueryAtmosphereInput,
 } from "../schema/unified-api.js";
 import type { CompareAtmosphericDatasetsInput } from "../schema/unified-specialized.js";
 import type { PointCoordinate } from "../schema/query.js";
@@ -64,7 +67,7 @@ function registerQueryCommand(program: Command): void {
     .option("--fields <list>", "Comma-separated non-isobaric fields")
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
-    .option("--source <nomads|s3>", "Operational GFS source override")
+    .option("--source <nomads|s3|archive>", "GFS source override; archive forces the resolution-matched historical backend")
     .option("--members <list>", "Ensemble members: GEFS c00,p01..p30 or IFS ENS p01..p50")
     .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
     .option("--include-members", "Include raw ensemble member payloads where supported")
@@ -105,7 +108,7 @@ function registerDiagnoseCommand(program: Command): void {
     .option("--parcel <surface_2m|mixed_layer_100hpa|most_unstable_300hpa>", "Parcel definition")
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
-    .option("--source <nomads|s3>", "Operational GFS source override")
+    .option("--source <nomads|s3|archive>", "GFS source override; archive forces the resolution-matched historical backend")
     .option("--members <list>", "Ensemble members: GEFS c00,p01..p30 or IFS ENS p01..p50")
     .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
     .option("--include-members", "Ensemble instant diagnostics only: include member payloads")
@@ -404,24 +407,23 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
   };
 }
 
-function parseForecastDataset(value: unknown): "gfs" | "gefs" | "ifs" | "ifs-ens" {
-  const dataset = String(value).trim().toLowerCase();
-  if (dataset === "gfs" || dataset === "gefs" || dataset === "ifs" || dataset === "ifs-ens") {
-    return dataset;
+function parseForecastDataset(
+  value: unknown,
+): Exclude<PublicAtmosphericDataset, "gfs-analysis"> {
+  const dataset = parseDataset(value);
+  if (publicDatasetMetadata(dataset).role === "forecast") {
+    return dataset as Exclude<PublicAtmosphericDataset, "gfs-analysis">;
   }
-  throw new Error(`Expected --dataset gfs|gefs|ifs|ifs-ens, received: ${value}`);
+  throw new Error(`Expected a forecast dataset, received: ${value}`);
 }
 
 function parseDataset(value: unknown): PublicAtmosphericDataset {
-  const dataset = String(value).trim().toLowerCase();
-  if (
-    dataset === "gfs"
-    || dataset === "gefs"
-    || dataset === "ifs"
-    || dataset === "ifs-ens"
-    || dataset === "gfs-analysis"
-  ) return dataset;
-  throw new Error(`Expected --dataset gfs|gefs|ifs|ifs-ens|gfs-analysis, received: ${value}`);
+  const normalized = String(value).trim().toLowerCase();
+  const parsed = publicAtmosphericDatasetSchema.safeParse(normalized);
+  if (parsed.success) return parsed.data;
+  throw new Error(
+    `Expected --dataset ${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}, received: ${value}`,
+  );
 }
 
 function parseGeometry(options: Record<string, any>): QueryAtmosphereInput["geometry"] {
@@ -494,7 +496,7 @@ function forecastInput(
   dataset: PublicAtmosphericDataset,
   options: Record<string, any>,
 ): Pick<QueryAtmosphereInput, "forecast"> | {} {
-  if (dataset === "gfs-analysis" || (options.run === undefined && options.grid === undefined)) return {};
+  if (publicDatasetMetadata(dataset).role === "analysis" || (options.run === undefined && options.grid === undefined)) return {};
   return {
     forecast: {
       ...(options.run === undefined ? {} : { run: String(options.run) }),
@@ -509,9 +511,18 @@ function ensembleInput(dataset: PublicAtmosphericDataset, options: Record<string
     || Boolean(options.includeMembers)
     || options.maxMemberSamples !== undefined;
   if (!hasEnsemble) return {};
+
+  const members = options.members === undefined
+    ? undefined
+    : dataset === "gefs"
+      ? parseGefsMembers(options.members)
+      : dataset === "ifs-ens"
+        ? parseIfsEnsMembers(options.members)
+        : parseStrings(options.members);
+
   return {
     ensemble: {
-      ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+      ...(members === undefined ? {} : { members }),
       ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
       ...(options.includeMembers ? { includeMembers: true } : {}),
       ...(options.maxMemberSamples === undefined ? {} : { maxMemberSamples: options.maxMemberSamples }),

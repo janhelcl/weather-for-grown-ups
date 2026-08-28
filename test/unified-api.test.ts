@@ -365,7 +365,7 @@ describe("unified catalog branch coverage", () => {
       match.support.every((support) => support.dataset === "gefs"))).toBe(true);
   });
 
-  it("discovers IFS canonical pressure and field support", () => {
+  it("discovers IFS canonical state and diagnostic support", () => {
     const pressure = searchAtmosphereCatalog({
       datasets: ["ifs"],
       sections: ["variables"],
@@ -382,6 +382,24 @@ describe("unified catalog branch coverage", () => {
       limit: 10,
     });
     expect(fields.matches.some((match) => match.id === "wind_10m")).toBe(true);
+
+    const diagnostics = searchAtmosphereCatalog({
+      datasets: ["ifs", "ifs-ens"],
+      sections: ["layer_diagnostics"],
+      search: "wind shear",
+      limit: 10,
+    });
+    expect(diagnostics.matches.find((match) => match.id === "wind_shear")?.support
+      .map((support) => support.dataset)).toEqual(["ifs", "ifs-ens"]);
+
+    const parcels = searchAtmosphereCatalog({
+      datasets: ["ifs", "ifs-ens"],
+      sections: ["parcel_definitions"],
+      search: "surface",
+      limit: 10,
+    });
+    expect(parcels.matches.find((match) => match.id === "surface_2m")?.support
+      .map((support) => support.dataset)).toEqual(["ifs", "ifs-ens"]);
   });
 
   it("filters historical instantaneous raw fields and truncates deterministically", () => {

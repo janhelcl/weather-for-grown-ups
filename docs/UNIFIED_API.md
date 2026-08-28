@@ -14,7 +14,7 @@ WFG's public API is organized around a small operation vocabulary and five atmos
 | `ifs-ens` | `ifs_ens_0p25` ECMWF Open Data ENS direct output | forecast | 50-member perturbed distribution |
 | `gfs-analysis` | `gfs_grid4_analysis_0p5` | historical analysis | deterministic analyzed state |
 
-Deterministic IFS supports point and multi-point access, native-cadence ranges, transects, raw scalar bbox area summaries, deterministic diagnostics, and run-to-run comparison while preserving ECMWF-native cadence and field semantics. IFS ENS supports point and multi-point member-first bundles, great-circle transects, member-first scalar area statistics, native-cadence point/multi-point state ranges and diagnostic time ranges, layer/profile/parcel diagnostics, and run-to-run distribution shifts with the same canonical pressure vocabulary, 50 perturbations and requested quantiles. Raw member payloads are opt-in for single-time/state queries; diagnostic ranges and run comparisons stay compact. The Cycle 50r1 unperturbed control is exposed as deterministic `ifs`. Unsupported combinations fail explicitly rather than falling through to another dataset. The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a fourth public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently.
+Deterministic IFS supports point and multi-point access, native-cadence ranges, transects, raw scalar bbox area summaries, deterministic diagnostics, and run-to-run comparison while preserving ECMWF-native cadence and field semantics. IFS ENS supports point and multi-point member-first bundles, great-circle transects, member-first scalar area statistics, native-cadence point/multi-point state ranges and diagnostic time ranges, layer/profile/parcel diagnostics, and run-to-run distribution shifts with the same canonical pressure vocabulary, 50 perturbations and requested quantiles. Raw member payloads are opt-in for single-time/state queries; diagnostic ranges and run comparisons stay compact. The Cycle 50r1 unperturbed control is exposed as deterministic `ifs`. Unsupported combinations fail explicitly rather than falling through to another dataset. The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a separate public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently.
 
 ## The four orthogonal query dimensions
 
@@ -308,8 +308,10 @@ Unified state/diagnostic operations return a common envelope:
 `result` remains dataset-native.
 
 - GFS carries deterministic values and forecast metadata; `forecast.grid` selects 0.25° or 0.5° operational data and the matching historical forecast archive while retaining the public `gfs` ID.
-- GEFS carries member-derived distributions and optional members.\n- IFS carries deterministic 0.25° values with explicit ECMWF run, lead, sampled grid point, product and source provenance. The stable `gefs_0p50` internal model identity denotes the pressure/profile contract; `result.source.product` and `result.source.horizontalGridDegrees` expose whether an eligible field-only query used `pgrb2s` 0.25° or the `pgrb2a` 0.5° source.
-- historical GFS analysis carries deterministic analyzed values and NCEI provenance.
+- GEFS carries member-derived distributions and optional members. The stable `gefs_0p50` internal model identity denotes the pressure/profile contract; `result.source.product` and `result.source.horizontalGridDegrees` expose whether an eligible field-only query used `pgrb2s` 0.25° or the `pgrb2a` 0.5° source.
+- IFS carries deterministic 0.25° values with explicit ECMWF run, lead, sampled grid point, product and source provenance.
+- IFS ENS carries distributions across the requested `p01`–`p50` perturbed members, requested quantiles, and optional raw members where the operation permits them; deterministic IFS remains the separate unperturbed-control dataset.
+- Historical GFS analysis carries deterministic analyzed values and NCEI provenance.
 
 This is deliberate: the API unifies **how the question is expressed**, not the physical meaning of the answer.
 
@@ -363,7 +365,7 @@ Parcel time series over historical analyses:
 }
 ```
 
-The parcel/layer/profile physics are shared. GEFS evaluates nonlinear diagnostics member by member before aggregation.
+The parcel/layer/profile physics are shared. GEFS and IFS ENS evaluate nonlinear diagnostics member by member before aggregation.
 
 ## CLI
 

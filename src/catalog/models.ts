@@ -3,6 +3,7 @@ export const ATMOSPHERIC_DATASET_IDS = [
   "gfs_0p50",
   "gefs_0p50",
   "ifs_0p25",
+  "ifs_ens_0p25",
   "gfs_grid4_analysis_0p5",
 ] as const;
 
@@ -114,7 +115,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "deterministic",
     role: "forecast",
     horizontalGridDegrees: 0.25,
-    maxForecastHour: 360,
+    maxForecastHour: 240,
     operations: [
       "profile",
       "timeseries",
@@ -127,6 +128,30 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "transect",
       "area_summary",
       "run_comparison",
+    ],
+  },
+  ifs_ens_0p25: {
+    id: "ifs_ens_0p25",
+    family: "ifs",
+    kind: "ensemble",
+    role: "forecast",
+    horizontalGridDegrees: 0.25,
+    maxForecastHour: 360,
+    members: 50,
+    operations: [
+      "profile",
+      "timeseries",
+      "layer_diagnostics",
+      "profile_diagnostics",
+      "diagnostic_timeseries",
+      "parcel_diagnostics",
+      "points",
+      "points_timeseries",
+      "transect",
+      "area_summary",
+      "run_comparison",
+      "ensemble_distribution",
+      "aligned_model_comparison",
     ],
   },
   gfs_grid4_analysis_0p5: {
@@ -162,7 +187,13 @@ export function datasetSupportsOperation(
  * models so callers that truly mean "forecast models" do not silently start
  * iterating historical analysis datasets.
  */
-export const ATMOSPHERIC_MODEL_IDS = ["gfs_0p25", "gfs_0p50", "gefs_0p50", "ifs_0p25"] as const;
+export const ATMOSPHERIC_MODEL_IDS = [
+  "gfs_0p25",
+  "gfs_0p50",
+  "gefs_0p50",
+  "ifs_0p25",
+  "ifs_ens_0p25",
+] as const;
 export type AtmosphericModelId = (typeof ATMOSPHERIC_MODEL_IDS)[number];
 export type AtmosphericModelKind = AtmosphericDatasetKind;
 export type AtmosphericModelDefinition = AtmosphericDatasetDefinition;
@@ -171,6 +202,7 @@ export const ATMOSPHERIC_MODEL_CATALOG: Record<AtmosphericModelId, AtmosphericDa
   gfs_0p50: ATMOSPHERIC_DATASET_CATALOG.gfs_0p50,
   gefs_0p50: ATMOSPHERIC_DATASET_CATALOG.gefs_0p50,
   ifs_0p25: ATMOSPHERIC_DATASET_CATALOG.ifs_0p25,
+  ifs_ens_0p25: ATMOSPHERIC_DATASET_CATALOG.ifs_ens_0p25,
 };
 
 export function modelSupportsOperation(
