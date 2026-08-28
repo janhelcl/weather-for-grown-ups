@@ -63,7 +63,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("diagnose_atmosphere", {
     title: "Derive atmospheric diagnostics",
-    description: "Run shared WFG diagnostic physics through one point/time contract. GFS, GEFS and historical GFS analysis support layer, whole-profile and parcel diagnostics plus diagnostic time series. ECMWF IFS supports deterministic layer and whole-profile diagnostics at one valid time; IFS parcel and diagnostic time-series operations remain explicit unsupported boundaries. GEFS diagnostics are calculated independently per member before aggregation; deterministic datasets reuse the same normalized physics kernels.",
+    description: "Run shared WFG diagnostic physics through one point/time contract. GFS, GEFS, ECMWF IFS, and historical GFS analysis support layer, whole-profile and parcel diagnostics plus diagnostic time series. IFS ranges preserve native ECMWF output cadence and pin one selection-capable forecast initialization across the range. GEFS diagnostics are calculated independently per member before aggregation; deterministic datasets reuse the same normalized physics kernels.",
     inputSchema: diagnoseAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {
