@@ -693,19 +693,25 @@ describe("unified geometry routing coverage", () => {
     const gfsPoints = { getPoints: vi.fn(async () => ({ route: "gfs-points" })) };
     const gefsPoints = { getPoints: vi.fn(async () => ({ route: "gefs-points" })) };
     const ifsPoints = { getPoints: vi.fn(async () => ({ route: "ifs-points" })) };
+    const ifsEnsPoints = { getPoints: vi.fn(async () => ({ route: "ifs-ens-points" })) };
     const historyPoints = { getPoints: vi.fn(async () => ({ route: "history-points" })) };
     const gfsPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "gfs-points-series" })) };
     const gefsPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "gefs-points-series" })) };
     const ifsPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "ifs-points-series" })) };
+    const ifsEnsPointsTimeSeries = {
+      getPointsTimeSeries: vi.fn(async () => ({ route: "ifs-ens-points-series" })),
+    };
     const historyPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "history-points-series" })) };
     const service = new UnifiedAtmosphereQueryService({
       gfsPoints: gfsPoints as any,
       gefsPoints: gefsPoints as any,
       ifsPoints: ifsPoints as any,
+      ifsEnsPoints: ifsEnsPoints as any,
       historyPoints: historyPoints as any,
       gfsPointsTimeSeries: gfsPointsTimeSeries as any,
       gefsPointsTimeSeries: gefsPointsTimeSeries as any,
       ifsPointsTimeSeries: ifsPointsTimeSeries as any,
+      ifsEnsPointsTimeSeries: ifsEnsPointsTimeSeries as any,
       historyPointsTimeSeries: historyPointsTimeSeries as any,
     });
 
@@ -724,6 +730,22 @@ describe("unified geometry routing coverage", () => {
       .toEqual({ route: "gefs-points" });
     expect((await service.query({ dataset: "ifs", geometry, time: instant, selection })).result)
       .toEqual({ route: "ifs-points" });
+    expect((await service.query({
+      dataset: "ifs-ens",
+      geometry,
+      time: instant,
+      selection,
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+        maxMemberSamples: 100,
+      },
+    })).result).toEqual({ route: "ifs-ens-points" });
+    expect(ifsEnsPoints.getPoints).toHaveBeenCalledWith(expect.objectContaining({
+      points: geometry.points,
+      members: ["p01", "p50"],
+      maxMemberSamples: 100,
+    }));
     expect((await service.query({
       dataset: "gfs-analysis",
       geometry,
@@ -758,6 +780,25 @@ describe("unified geometry routing coverage", () => {
       selection,
       limits: { maxPointSteps: 10 },
     })).result).toEqual({ route: "ifs-points-series" });
+    expect((await service.query({
+      dataset: "ifs-ens",
+      geometry,
+      time: range,
+      selection,
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+        maxMemberSamples: 100,
+      },
+      limits: { maxPointSteps: 10 },
+    })).result).toEqual({ route: "ifs-ens-points-series" });
+    expect(ifsEnsPointsTimeSeries.getPointsTimeSeries).toHaveBeenCalledWith(expect.objectContaining({
+      points: geometry.points,
+      members: ["p01", "p50"],
+      maxSteps: 5,
+      maxPointSteps: 10,
+      maxMemberSamples: 100,
+    }));
     expect((await service.query({
       dataset: "gfs-analysis",
       geometry,
