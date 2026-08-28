@@ -38,6 +38,9 @@ export const compareAtmosphericRunsSchema = z.object({
   if (request.dataset !== "gefs" && request.ensemble !== undefined) {
     context.addIssue({ code: "custom", path: ["ensemble"], message: "ensemble controls are only valid for gefs" });
   }
+  if (request.dataset !== "gefs" && request.thresholdGte !== undefined) {
+    context.addIssue({ code: "custom", path: ["thresholdGte"], message: "thresholdGte is only valid for gefs run comparison" });
+  }
   if (request.dataset === "gefs") {
     const variables = request.selection.variables?.length ?? 0;
     const levels = request.selection.pressureLevelsHpa?.length ?? 0;
