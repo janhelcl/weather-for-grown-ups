@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { FileRateLimiter } from "../cache/file-rate-limiter.js";
+import type { UpstreamAccessPolicy } from "../cache/file-access-policy.js";
 
 export const NCEI_GFS_HISTORY_BASE_URL = "https://www.ncei.noaa.gov/thredds/ncss/grid";
 export const NCEI_GFS_GRID4_ANALYSIS_START = new Date("2007-01-01T00:00:00Z");
@@ -41,7 +41,7 @@ export interface HistoricalAnalysisAreaDataSource {
 
 export interface NceiGfsHistorySourceOptions {
   cacheDir: string;
-  limiter: Pick<FileRateLimiter, "run">;
+  limiter: UpstreamAccessPolicy;
   fetchFn?: typeof fetch;
 }
 
