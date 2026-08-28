@@ -4,8 +4,8 @@ import {
   type IfsIndexSelector,
 } from "../sources/ifs-open-data.js";
 import {
-  ifsForecastHour,
-  isNativeIfsForecastHour,
+  ifsEnsForecastHour,
+  isNativeIfsEnsForecastHour,
   latestIfsCycleAtOrBefore,
   previousIfsCycle,
 } from "./ifs-time.js";
@@ -46,11 +46,11 @@ export class IfsEnsLatestRunResolver implements IfsEnsLatestRunProvider {
     for (let index = 0; index < this.maxCandidates; index += 1) {
       const run = previousIfsCycle(anchor, index);
       const forecastHour = (validTime.getTime() - run.getTime()) / HOUR_MS;
-      if (!isNativeIfsForecastHour(run, forecastHour)) continue;
+      if (!isNativeIfsEnsForecastHour(run, forecastHour)) continue;
       if (await selectionAvailable(this.probe, run, forecastHour, selectors)) return run;
     }
 
-    ifsForecastHour(anchor, validTime);
+    ifsEnsForecastHour(anchor, validTime);
     throw new Error(
       `No published ECMWF IFS ENS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested valid time, perturbations, and field selection`,
     );
