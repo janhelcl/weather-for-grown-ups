@@ -269,8 +269,10 @@ const runComparison = await new IfsRunComparisonService().compareRuns({
 assert.equal(runComparison.model, "ifs_0p25");
 assert.equal(runComparison.runs.length, 2);
 assert.equal(runComparison.comparisons.length, 1);
-assert(runComparison.comparisons[0]?.pressureLevels[0]?.changes.length > 0);
-assert(runComparison.comparisons[0]?.fields.some((field) =>
+const comparison = runComparison.comparisons[0];
+assert(comparison);
+assert(comparison.pressureLevels[0]?.changes.length);
+assert(comparison.fields.some((field) =>
   field.id === "wind_10m" && field.comparable && field.changes.length > 0));
 
 console.log(JSON.stringify({
