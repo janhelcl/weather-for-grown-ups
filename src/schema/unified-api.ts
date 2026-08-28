@@ -299,11 +299,11 @@ function validateCommonAtmosphericRequest(
   validateDatasetModifiers(request, context);
 
   const isRange = "from" in request.time;
-  if (request.dataset === "ifs-ens" && (request.geometry.type !== "point" || isRange)) {
+  if (request.dataset === "ifs-ens" && request.geometry.type !== "point") {
     context.addIssue({
       code: "custom",
-      path: request.geometry.type !== "point" ? ["geometry"] : ["time"],
-      message: "IFS ENS currently supports point + instant queries; time ranges and spatial compositions will follow on the same dataset contract",
+      path: ["geometry"],
+      message: "IFS ENS currently supports point geometry; multi-point, transect, and area ensemble compositions will follow on the same dataset contract",
     });
   }
   if (isRange && (request.geometry.type === "transect" || request.geometry.type === "area")) {
