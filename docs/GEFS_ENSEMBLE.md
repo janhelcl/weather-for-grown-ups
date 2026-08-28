@@ -39,7 +39,7 @@ The current implementation includes:
 - run-to-run distribution comparison;
 - aligned deterministic GFS-vs-GEFS comparison.
 
-The older limitations around GEFS parcel diagnostics, multi-point time series, transects and area statistics no longer apply to v0.1.0.
+The older limitations around GEFS parcel diagnostics, multi-point time series, transects and area statistics no longer apply.
 
 ## Pressure-profile variables
 
@@ -190,7 +190,7 @@ MCP: `diagnose_atmosphere`. See [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGN
 
 ### Parcel diagnostics
 
-GEFS v0.1.0 supports the same explicit parcel definitions as GFS, evaluated member by member:
+GEFS supports the same explicit parcel definitions as GFS, evaluated member by member:
 
 - `surface_2m`
 - `mixed_layer_100hpa`
