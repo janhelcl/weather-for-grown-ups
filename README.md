@@ -112,7 +112,7 @@ WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-firs
 | Diagnostic time series | ✅ layer/profile/parcel | ✅ layer/profile/parcel | ✅ layer/profile/parcel | ✅ compact member-first |
 | Multi-point queries | ✅ | ✅ | ✅ | ✅ member distributions |
 | Multi-point time series | ✅ | ✅ | ✅ | ✅ native 3h/6h cadence |
-| Transects | ✅ deterministic | ✅ ensemble-native mixed fields | ✅ deterministic mixed fields | — |
+| Transects | ✅ deterministic | ✅ ensemble-native mixed fields | ✅ deterministic mixed fields | ✅ member-first mixed fields |
 | Area statistics | ✅ deterministic | ✅ member-first spatial statistics | ✅ deterministic raw scalar | — |
 | Run-to-run comparison | ✅ deterministic deltas | ✅ distribution shifts | ✅ deterministic deltas | ✅ distribution shifts, 6h/12h stride |
 | Scalar ensemble distribution | — | ✅ | — | ✅ 50 perturbations |
