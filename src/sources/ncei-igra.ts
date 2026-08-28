@@ -112,7 +112,14 @@ export class NceiIgraSource {
           : { bytes: new Uint8Array(await readFile(cachePath)), cacheHit: true };
       }
 
-      const result = await this.options.limiter.run(async () => {
+      const result: {
+        status: number;
+        statusText: string;
+        retryAfter: string | null;
+        text?: string;
+        bytes?: Uint8Array;
+        cacheHit: boolean;
+      } = await this.options.limiter.run(async () => {
         if (await isFresh(cachePath, ttlMs)) {
           return kind === "text"
             ? {
