@@ -4,6 +4,11 @@ import {
   UNIFIED_CATALOG_SECTIONS,
   type UnifiedCatalogResult,
 } from "../schema/unified-catalog.js";
+import {
+  PUBLIC_ATMOSPHERIC_DATASET_IDS,
+  publicAtmosphericDatasetSchema,
+  type PublicAtmosphericDataset,
+} from "../schema/unified-api.js";
 
 type UnifiedSection = (typeof UNIFIED_CATALOG_SECTIONS)[number];
 
@@ -11,7 +16,7 @@ export function registerCatalogCommand(program: Command): void {
   program
     .command("catalog")
     .description("Search atmospheric variables, fields, diagnostics, and dataset support")
-    .option("--dataset <gfs|gefs|gfs-analysis|all>", "Dataset filter", "all")
+    .option(`--dataset <${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}|all>`, "Dataset filter", "all")
     .option("--search <text>", "Search catalog text")
     .option("--sections <list>", "Comma-separated catalog sections")
     .option("--classification <raw|derived>", "Raw or derived entries")
@@ -37,12 +42,14 @@ export function registerCatalogCommand(program: Command): void {
     });
 }
 
-function parseDataset(value: unknown): "gfs" | "gefs" | "gfs-analysis" | "all" {
+function parseDataset(value: unknown): PublicAtmosphericDataset | "all" {
   const dataset = String(value).trim().toLowerCase();
-  if (dataset === "gfs" || dataset === "gefs" || dataset === "gfs-analysis" || dataset === "all") {
-    return dataset;
-  }
-  throw new Error(`Expected --dataset gfs|gefs|gfs-analysis|all, received: ${value}`);
+  if (dataset === "all") return "all";
+  const parsed = publicAtmosphericDatasetSchema.safeParse(dataset);
+  if (parsed.success) return parsed.data;
+  throw new Error(
+    `Expected --dataset ${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}|all, received: ${value}`,
+  );
 }
 
 function parseSections(value: unknown): UnifiedSection[] {
