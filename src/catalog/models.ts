@@ -125,6 +125,8 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points",
       "points_timeseries",
       "transect",
+      "area_summary",
+      "run_comparison",
     ],
   },
   gfs_grid4_analysis_0p5: {
