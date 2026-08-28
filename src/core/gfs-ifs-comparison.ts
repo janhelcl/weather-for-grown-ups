@@ -7,7 +7,7 @@ import {
 } from "../schema/gfs-ifs-comparison.js";
 import type { IfsPointQueryInput, IfsProfileResult } from "../schema/ifs.js";
 import type { ProfileQueryInput } from "../schema/query.js";
-import type { ProfileLevel, ProfileResult } from "./types.js";
+import type { ProfileResult } from "./types.js";
 import {
   GfsIfsAlignedRunResolver,
   type GfsIfsAlignedRunProvider,
@@ -157,13 +157,17 @@ function parseSharedRun(value: string): Date {
   return gfs;
 }
 
-function findLevel(levels: readonly ProfileLevel[], pressureHpa: number, model: string): ProfileLevel {
+function findLevel<T extends { pressureHpa: number }>(
+  levels: readonly T[],
+  pressureHpa: number,
+  model: string,
+): T {
   const level = levels.find((candidate) => candidate.pressureHpa === pressureHpa);
   if (!level) throw new Error(`${model} comparison profile is missing ${pressureHpa} hPa`);
   return level;
 }
 
-function levelValue(level: ProfileLevel, field: string, model: string): number {
+function levelValue(level: { pressureHpa: number }, field: string, model: string): number {
   const value = (level as unknown as Record<string, unknown>)[field];
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new Error(`${model} comparison profile is missing output field ${field}@${level.pressureHpa}hPa`);
