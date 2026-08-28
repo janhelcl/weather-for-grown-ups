@@ -16,6 +16,7 @@ export const rawVariableIdSchema = z.enum([
   "vertical_velocity",
   "geometric_vertical_velocity",
   "absolute_vorticity",
+  "divergence",
   "total_cloud_cover",
   "cloud_water_mixing_ratio",
   "ozone_mixing_ratio",
