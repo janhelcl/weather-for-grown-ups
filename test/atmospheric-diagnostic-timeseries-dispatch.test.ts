@@ -3,6 +3,7 @@ import { AtmosphericDiagnosticTimeSeriesService } from "../src/core/atmospheric-
 import type { DiagnosticTimeSeriesResult } from "../src/schema/diagnostic-time-series-result.js";
 import type { GefsDiagnosticTimeSeriesResult } from "../src/schema/gefs-diagnostic-timeseries.js";
 import type { HistoricalDiagnosticTimeSeriesResult } from "../src/schema/history-diagnostic-timeseries.js";
+import type { IfsDiagnosticTimeSeriesResult } from "../src/schema/ifs-diagnostic-timeseries.js";
 
 const gfsResult: DiagnosticTimeSeriesResult = {
   model: "gfs_0p25",
@@ -85,6 +86,42 @@ const gefsResult: GefsDiagnosticTimeSeriesResult = {
 };
 
 
+const ifsResult: IfsDiagnosticTimeSeriesResult = {
+  model: "ifs_0p25",
+  run: "2026-08-27T12:00:00Z",
+  requestedStartTime: "2026-08-27T15:00:00Z",
+  requestedEndTime: "2026-08-27T18:00:00Z",
+  requestedPoint: { latitude: 50.08, longitude: 14.43 },
+  gridPoint: { latitude: 50, longitude: 14.5 },
+  source: {
+    provider: "ECMWF Open Data",
+    access: "indexed_http_range",
+    decoder: "gribberish",
+    product: "ifs_0p25_oper_fc",
+    horizontalGridDegrees: 0.25,
+  },
+  diagnostic: {
+    kind: "layer",
+    lowerPressureHpa: 850,
+    upperPressureHpa: 500,
+    diagnostics: ["temperature_lapse_rate"],
+  },
+  series: [{
+    kind: "layer",
+    validTime: "2026-08-27T15:00:00Z",
+    forecastHour: 3,
+    layer: {
+      lowerPressureHpa: 850,
+      upperPressureHpa: 500,
+      lowerGeopotentialHeightGpm: 1500,
+      upperGeopotentialHeightGpm: 5500,
+      depthGpm: 4000,
+    },
+    diagnostics: [{ id: "temperature_lapse_rate", values: { temperatureLapseRateCPerKm: 6 } }],
+    cacheHit: true,
+  }],
+};
+
 const historicalResult: HistoricalDiagnosticTimeSeriesResult = {
   model: "gfs_grid4_analysis_0p5",
   requestedStartTime: "2017-05-09T12:00:00.000Z",
@@ -164,6 +201,28 @@ describe("atmospheric diagnostic time-series dispatch", () => {
     expect(getDiagnosticTimeSeries).toHaveBeenCalledWith(
       expect.objectContaining({ grid: "0p50" }),
     );
+  });
+
+  it("routes IFS diagnostic time-series requests", async () => {
+    const getDiagnosticTimeSeries = vi.fn(async () => ifsResult);
+    const service = new AtmosphericDiagnosticTimeSeriesService({
+      gfs: { getDiagnosticTimeSeries: async () => gfsResult },
+      gefs: { getDiagnosticTimeSeries: async () => gefsResult },
+      ifs: { getDiagnosticTimeSeries },
+    });
+    const result = await service.getDiagnosticTimeSeries({
+      model: "ifs_0p25",
+      query: {
+        latitude: 50.08,
+        longitude: 14.43,
+        run: ifsResult.run,
+        startTime: ifsResult.requestedStartTime,
+        endTime: ifsResult.requestedEndTime,
+        diagnostic: ifsResult.diagnostic,
+      },
+    });
+    expect(result.model).toBe("ifs_0p25");
+    expect(getDiagnosticTimeSeries).toHaveBeenCalledOnce();
   });
 
   it("routes historical analysis requests without forecast-shaped fields", async () => {
