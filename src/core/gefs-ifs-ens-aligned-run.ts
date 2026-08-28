@@ -70,19 +70,17 @@ export class GefsIfsEnsAlignedRunResolver implements GefsIfsEnsAlignedRunProvide
 
     for (let index = 0; index < this.maxCandidates; index += 1) {
       const run = previousIfsCycle(anchor, index);
-      let gefsHour: number;
-      let ifsHour: number;
+      let forecastHour: number;
       try {
-        gefsHour = gefsForecastHour(run, validTime);
-        ifsHour = ifsEnsForecastHour(run, validTime);
+        forecastHour = gefsForecastHour(run, validTime);
+        ifsEnsForecastHour(run, validTime);
       } catch {
         continue;
       }
-      if (gefsHour !== ifsHour) continue;
 
       const [gefsAvailable, ifsAvailable] = await Promise.all([
-        this.gefsProbe.areMembersAvailable(run, gefsHour, gefsMembers),
-        this.ifsEnsProbe.isForecastAvailable(run, ifsHour, ifsSelectors),
+        this.gefsProbe.areMembersAvailable(run, forecastHour, gefsMembers),
+        this.ifsEnsProbe.isForecastAvailable(run, forecastHour, ifsSelectors),
       ]);
       if (gefsAvailable && ifsAvailable) return run;
     }
