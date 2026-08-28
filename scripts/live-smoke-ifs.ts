@@ -4,6 +4,10 @@ import { GfsIfsComparisonService } from "../src/core/gfs-ifs-comparison.js";
 import { IfsEnsDiagnosticTimeSeriesService } from "../src/core/ifs-ens-diagnostic-timeseries.js";
 import { IfsEnsDiagnosticsService } from "../src/core/ifs-ens-diagnostics.js";
 import { IfsEnsMemberBundleService } from "../src/core/ifs-ens-member-bundle.js";
+import {
+  IfsEnsPointsService,
+  IfsEnsPointsTimeSeriesService,
+} from "../src/core/ifs-ens-points.js";
 import { IfsEnsRunComparisonService } from "../src/core/ifs-ens-run-comparison.js";
 import { IfsEnsTimeSeriesService } from "../src/core/ifs-ens-timeseries.js";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
@@ -192,6 +196,57 @@ console.log(JSON.stringify({
     forecastHours: ensTimeSeries.series.map((step) => step.forecastHour),
     members: ensTimeSeries.selection.members,
     source: ensTimeSeries.source,
+  },
+}, null, 2));
+
+const ensPoints = await new IfsEnsPointsService().getPoints({
+  points: [
+    { latitude: 50.08, longitude: 14.43 },
+    { latitude: 49.82, longitude: 14.21 },
+  ],
+  run: ens.run,
+  validTime: ens.validTime,
+  selection: {
+    variables: ["temperature", "wind"],
+    pressureLevelsHpa: [850],
+    fields: ["wind_10m"],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+});
+assert.equal(ensPoints.model, "ifs_ens_0p25");
+assert.equal(ensPoints.points.length, 2);
+assert(ensPoints.points.every((point) => point.pressureSummaries.length === 2));
+assert(ensPoints.points.every((point) => point.fieldSummaries.length === 1));
+assert.equal(ensPoints.source.product, "ifs_0p25_enfo_ef");
+
+const ensPointsTimeSeries = await new IfsEnsPointsTimeSeriesService().getPointsTimeSeries({
+  points: [
+    { latitude: 50.08, longitude: 14.43 },
+    { latitude: 49.82, longitude: 14.21 },
+  ],
+  run: ens.run,
+  startTime: ensRun.toISOString(),
+  endTime: new Date(ensRun.getTime() + 3 * 3_600_000).toISOString(),
+  selection: {
+    variables: ["temperature"],
+    pressureLevelsHpa: [850],
+  },
+  members: ["p01", "p02"],
+  quantiles: [0.1, 0.5, 0.9],
+  maxPointSteps: 4,
+});
+assert.deepEqual(ensPointsTimeSeries.series.map((step) => step.forecastHour), [0, 3]);
+assert(ensPointsTimeSeries.series.every((step) => step.points.length === 2));
+assert.equal(ensPointsTimeSeries.source.product, "ifs_0p25_enfo_ef");
+
+console.log(JSON.stringify({
+  ifsEnsMultiPoint: {
+    run: ensPoints.run,
+    validTime: ensPoints.validTime,
+    pointCount: ensPoints.points.length,
+    timeSeriesForecastHours: ensPointsTimeSeries.series.map((step) => step.forecastHour),
+    cadence: ensPointsTimeSeries.cadence,
   },
 }, null, 2));
 
