@@ -912,6 +912,18 @@ describe("unified diagnostic routing coverage", () => {
     })).result).toEqual({ route: "profile" });
 
     expect((await service.diagnose({
+      dataset: "ifs",
+      geometry: point,
+      time: {
+        from: "2026-08-28T00:00:00Z",
+        to: "2026-08-28T12:00:00Z",
+        maxSteps: 5,
+      },
+      diagnostic,
+      forecast: { run: "latest" },
+    })).result).toEqual({ route: "ifs_0p25" });
+
+    expect((await service.diagnose({
       dataset: "gfs-analysis",
       geometry: point,
       time: { at: "2017-05-09T12:00:00Z" },
@@ -984,6 +996,14 @@ describe("unified diagnostic routing coverage", () => {
       diagnostic,
     })).result).toEqual({ route: "gfs_grid4_analysis_0p5" });
 
-    expect(timeSeries.getDiagnosticTimeSeries).toHaveBeenCalledTimes(3);
+    expect(timeSeries.getDiagnosticTimeSeries).toHaveBeenCalledTimes(4);
+    expect(timeSeries.getDiagnosticTimeSeries).toHaveBeenCalledWith(expect.objectContaining({
+      model: "ifs_0p25",
+      query: expect.objectContaining({
+        run: "latest",
+        startTime: "2026-08-28T00:00:00Z",
+        endTime: "2026-08-28T12:00:00Z",
+      }),
+    }));
   });
 });
