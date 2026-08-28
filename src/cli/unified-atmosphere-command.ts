@@ -63,8 +63,8 @@ function registerQueryCommand(program: Command): void {
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--source <nomads|s3>", "Operational GFS source override")
-    .option("--members <list>", "GEFS members (c00,p01..p30)")
-    .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
+    .option("--members <list>", "GFS↔GEFS only: GEFS members (c00,p01..p30)")
+    .option("--quantiles <list>", "GFS↔GEFS only: GEFS quantiles from 0 to 1")
     .option("--include-members", "Include GEFS member payloads where supported")
     .option("--percentiles <list>", "Area spatial percentiles, e.g. 10,50,90")
     .option("--gte <number>", "Area fraction at or above this threshold", Number)
@@ -164,11 +164,12 @@ function registerCompareRunsCommand(program: Command): void {
 function registerCompareDatasetsCommand(program: Command): void {
   program
     .command("compare-datasets")
-    .description("Compare aligned atmospheric datasets; currently deterministic GFS against GEFS")
+    .description("Compare aligned operational GFS against GEFS or ECMWF IFS")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--at <iso>", "Forecast valid time")
-    .requiredOption("--var <id>", "Raw pressure-level variable")
+    .option("--against <gefs|ifs>", "Dataset to compare with GFS", "gefs")
+    .requiredOption("--var <id>", "Canonical pressure-level variable")
     .requiredOption("--level <hpa>", "Pressure level in hPa", Number)
     .option("--run <iso|latest>", "Shared aligned initialization", "latest")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
@@ -176,17 +177,30 @@ function registerCompareDatasetsCommand(program: Command): void {
     .option("--quantiles <list>", "GEFS quantiles from 0 to 1")
     .option("--json", "Output JSON")
     .action(async (options) => {
-      const result = await new UnifiedDatasetComparisonService().compare({
-        datasets: ["gfs", "gefs"],
-        geometry: { type: "point", latitude: options.lat, longitude: options.lon },
+      const against = String(options.against).trim().toLowerCase();
+      if (against !== "gefs" && against !== "ifs") {
+        throw new Error(`Expected --against gefs|ifs, received: ${options.against}`);
+      }
+      const common = {
+        geometry: { type: "point" as const, latitude: options.lat, longitude: options.lon },
         time: { at: options.at },
         variable: options.var,
         pressureLevelHpa: options.level,
         run: options.run,
         ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
-        ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
-        ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
-      });
+      };
+      const request = against === "ifs"
+        ? {
+            ...common,
+            datasets: ["gfs", "ifs"] as const,
+          }
+        : {
+            ...common,
+            datasets: ["gfs", "gefs"] as const,
+            ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
+            ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
+          };
+      const result = await new UnifiedDatasetComparisonService().compare(request);
       printResult(result, Boolean(options.json));
     });
 }
