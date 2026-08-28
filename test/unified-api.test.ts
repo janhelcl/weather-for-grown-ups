@@ -668,24 +668,6 @@ describe("unified geometry routing coverage", () => {
     expect((await service.query({ dataset: "ifs", geometry, time: instant, selection })).result)
       .toEqual({ route: "ifs-points" });
     expect((await service.query({
-      dataset: "ifs",
-      geometry,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection,
-      aggregate,
-      forecast: { run: "latest" },
-      limits: { maxGridPoints: 1000 },
-    })).result).toEqual({ route: "ifs-area" });
-    expect(ifsArea.summarize).toHaveBeenCalledWith(expect.objectContaining({
-      run: "latest",
-      validTime: "2026-08-28T12:00:00Z",
-      variable: "temperature",
-      pressureLevelHpa: 850,
-      percentiles: [10, 50, 90],
-      maxGridPoints: 1000,
-    }));
-
-    expect((await service.query({
       dataset: "gfs-analysis",
       geometry,
       time: { at: "2017-05-09T12:00:00Z" },
@@ -823,6 +805,24 @@ describe("unified geometry routing coverage", () => {
       ensemble: { quantiles: [0.1, 0.5, 0.9] },
       limits: { maxGridPoints: 1000, maxMemberGridPoints: 30000 },
     })).result).toEqual({ route: "gefs-area" });
+
+    expect((await service.query({
+      dataset: "ifs",
+      geometry,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection,
+      aggregate,
+      forecast: { run: "latest" },
+      limits: { maxGridPoints: 1000 },
+    })).result).toEqual({ route: "ifs-area" });
+    expect(ifsArea.summarize).toHaveBeenCalledWith(expect.objectContaining({
+      run: "latest",
+      validTime: "2026-08-28T12:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      percentiles: [10, 50, 90],
+      maxGridPoints: 1000,
+    }));
 
     expect((await service.query({
       dataset: "gfs-analysis",
