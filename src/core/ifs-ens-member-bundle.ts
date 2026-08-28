@@ -23,7 +23,7 @@ import {
   type IfsEnsMemberBundleResult,
   type IfsEnsSelection,
 } from "../schema/ifs-ens.js";
-import type { IfsProfileResult } from "../schema/ifs.js";
+import type { IfsProfileSample } from "./ifs-profile.js";
 import { mapConcurrent } from "./concurrency.js";
 import {
   summarizeCircularDegrees,
@@ -47,7 +47,7 @@ export interface IfsEnsMemberBundleServiceOptions {
 
 interface MemberSample {
   member: IfsEnsMember;
-  profile: IfsProfileResult;
+  profile: IfsProfileSample;
 }
 
 export class IfsEnsMemberBundleService {
@@ -79,7 +79,7 @@ export class IfsEnsMemberBundleService {
 
     const samples = await mapConcurrent(members, this.concurrency, async (member): Promise<MemberSample> => {
       const source = new IfsEnsMemberSelectionSource(this.source, ifsEnsMemberNumber(member));
-      const profile = await new IfsProfileService({ source }).getProfile({
+      const profile = await new IfsProfileService({ source }).getProfileSample({
         latitude: query.latitude,
         longitude: query.longitude,
         run: run.toISOString(),
@@ -91,6 +91,9 @@ export class IfsEnsMemberBundleService {
               pressureLevelsHpa: query.selection.pressureLevelsHpa,
             }),
         ...(query.selection.fields.length === 0 ? {} : { fields: query.selection.fields }),
+      }, {
+        forecastHourResolver: ifsEnsForecastHour,
+        sourceProduct: "ifs_0p25_enfo_ef",
       });
       return { member, profile };
     });
