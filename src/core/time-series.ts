@@ -14,6 +14,7 @@ import {
   type LatestRunProvider,
 } from "./latest-run.js";
 import { ProfileService } from "./profile.js";
+import type { AtmosphericProgressReporter } from "./progress.js";
 import type { ProfileResult, TimeSeriesResult } from "./types.js";
 
 export const DEFAULT_TIME_SERIES_CONCURRENCY = 4;
@@ -26,17 +27,20 @@ export interface TimeSeriesServiceOptions {
   profileGetter?: ProfileGetter;
   latestRunProvider?: LatestRunProvider;
   concurrency?: number;
+  onProgress?: AtmosphericProgressReporter;
 }
 
 export class TimeSeriesService {
   private readonly latestRunProvider: LatestRunProvider;
   private readonly profileGetter: ProfileGetter;
   private readonly concurrency: number;
+  private readonly onProgress: AtmosphericProgressReporter | undefined;
 
   constructor(options: TimeSeriesServiceOptions = {}) {
     this.latestRunProvider = options.latestRunProvider ?? new LatestRunResolver();
     this.profileGetter = options.profileGetter ?? new ProfileService({ latestRunProvider: this.latestRunProvider });
     this.concurrency = options.concurrency ?? DEFAULT_TIME_SERIES_CONCURRENCY;
+    this.onProgress = options.onProgress;
   }
 
   async getTimeSeries(input: TimeSeriesQueryInput): Promise<TimeSeriesResult> {
@@ -68,20 +72,46 @@ export class TimeSeriesService {
       );
     }
 
+    this.onProgress?.({
+      dataset: "gfs",
+      operation: "time_series",
+      phase: "start",
+      completedSteps: 0,
+      totalSteps: forecastHours.length,
+      source: query.source,
+    });
+
+    let completedSteps = 0;
     const profiles = await mapConcurrent(
       forecastHours,
       this.concurrency,
-      async (forecastHourValue) => this.profileGetter.getProfile({
-        latitude: query.latitude,
-        longitude: query.longitude,
-        run: run.toISOString(),
-        ...(query.grid === undefined ? {} : { grid: query.grid }),
-        validTime: validTimeForForecastHour(run, forecastHourValue).toISOString(),
-        ...(query.variables === undefined ? {} : { variables: query.variables }),
-        ...(query.pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa: query.pressureLevelsHpa }),
-        ...(query.fields === undefined ? {} : { fields: query.fields }),
-        source: query.source,
-      }),
+      async (forecastHourValue) => {
+        const validTime = validTimeForForecastHour(run, forecastHourValue).toISOString();
+        const profile = await this.profileGetter.getProfile({
+          latitude: query.latitude,
+          longitude: query.longitude,
+          run: run.toISOString(),
+          ...(query.grid === undefined ? {} : { grid: query.grid }),
+          validTime,
+          ...(query.variables === undefined ? {} : { variables: query.variables }),
+          ...(query.pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa: query.pressureLevelsHpa }),
+          ...(query.fields === undefined ? {} : { fields: query.fields }),
+          source: query.source,
+        });
+        completedSteps += 1;
+        this.onProgress?.({
+          dataset: "gfs",
+          operation: "time_series",
+          phase: "step",
+          completedSteps,
+          totalSteps: forecastHours.length,
+          source: query.source,
+          forecastHour: forecastHourValue,
+          validTime,
+          cacheHit: profile.source.cacheHit,
+        });
+        return profile;
+      },
     );
 
     const first = profiles[0];
@@ -101,6 +131,15 @@ export class TimeSeriesService {
         throw new Error("Data source changed within one time-series query");
       }
     }
+
+    this.onProgress?.({
+      dataset: "gfs",
+      operation: "time_series",
+      phase: "complete",
+      completedSteps: forecastHours.length,
+      totalSteps: forecastHours.length,
+      source: query.source,
+    });
 
     return {
       model: first.model,
