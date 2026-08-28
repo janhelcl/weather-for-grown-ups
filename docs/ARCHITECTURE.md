@@ -3,7 +3,7 @@
 Weather for Grown Ups is primarily a **numerical-weather-model access and meteorology product**, not a forecast interpretation layer.
 
 ```text
-NOAA GFS / GEFS / NCEI historical GFS
+NOAA GFS / GEFS / ECMWF IFS / IFS ENS / NCEI historical GFS
       ↓
 dataset-specific catalogs, time semantics and source adapters
       ↓
@@ -26,31 +26,31 @@ The core is the product. CLI and MCP are adapters over it, not independent imple
 
 > **Unify operations and physics; preserve model semantics.**
 
-A common operation does not imply a common source inventory or a flattened result shape. Deterministic GFS and IFS forecasts return deterministic forecast states. Historical Grid 4 returns deterministic analyzed states. GEFS returns member-derived forecast distributions and structural ensemble summaries.
+A common operation does not imply a common source inventory or a flattened result shape. Deterministic GFS and IFS forecasts return deterministic forecast states. Historical Grid 4 returns deterministic analyzed states. GEFS and IFS ENS return member-derived forecast distributions and structural ensemble summaries.
 
-The engine is organized around **operation × dataset**. Point profiles, time series and meteorological diagnostics are operations; operational GFS, GEFS, ECMWF IFS and historical GFS analysis are datasets with explicit role, grid, source and temporal semantics. Public CLI/MCP wrappers may remain dataset-specific when that gives agents a clearer schema, but they should delegate into the shared operation layer rather than grow independent implementations.
+The engine is organized around **operation × dataset** internally, while the public contract is intentionally organized around one query language: `dataset × geometry × time × selection`. Dataset-specific schemas, source adapters and services are implementation details behind that boundary; adding a model must extend the shared vocabulary and capability registry rather than create another public query namespace.
 
-Nonlinear diagnostics are evaluated on each GEFS member before aggregation. WFG does not calculate CAPE, lapse rate, inversion structure or another nonlinear quantity from an ensemble-mean profile and pretend it represents the members.
+Nonlinear diagnostics are evaluated independently on every GEFS or IFS ENS member before aggregation. WFG does not calculate CAPE, lapse rate, inversion structure or another nonlinear quantity from an ensemble-mean profile and pretend it represents the members.
 
 ## Atmospheric dataset capability boundary
 
-`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `gefs`, `ifs`, and `gfs-analysis`.
+`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `gefs`, `ifs`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth.
 
-| Operation | GFS 0.25° / 0.5° forecast | GEFS forecast | IFS 0.25° forecast | GFS Grid 4 0.5° analysis |
-| --- | --- | --- | --- | --- |
-| profile | ✅ deterministic | ✅ member distributions | ✅ deterministic point/instant | ✅ analyzed state |
-| timeseries | ✅ forecast evolution | ✅ ensemble evolution | ✅ native-cadence deterministic evolution | ✅ selected analysis cycles |
-| layer diagnostics | ✅ | ✅ member-first | ✅ same deterministic kernel | ✅ same deterministic kernel |
-| profile diagnostics | ✅ | ✅ member-first | ✅ same deterministic kernel | ✅ same deterministic kernel |
-| parcel diagnostics | ✅ | ✅ member-first | ⏳ | ✅ same parcel engine |
-| diagnostic time series | ✅ | ✅ | ⏳ | ✅ selected analysis cycles |
-| points | ✅ shared S3 slice | ✅ member slices reused | ✅ cached selected-message reuse | ✅ bounded serial NCSS points |
-| points time series | ✅ | ✅ | ✅ bounded point × native-time matrix | ✅ bounded cycle × point matrix |
-| transect | ✅ shared great-circle geometry | ✅ shared great-circle geometry | ✅ shared great-circle geometry | ✅ shared great-circle geometry |
-| area summary | ✅ NOMADS bbox | ✅ member-first | ⏳ | ✅ native NCEI NCSS bbox |
-| run comparison | ✅ | ✅ | ⏳ | — |
-| scalar ensemble distribution | — | ✅ | — | — |
-| aligned model comparison | ✅ GFS-vs-GEFS | ✅ GFS-vs-GEFS | — | ⏳ forecast/analysis comparison remains a history-native verification primitive |
+| Operation | GFS 0.25° / 0.5° forecast | GEFS forecast | IFS 0.25° forecast | IFS ENS 0.25° forecast | GFS Grid 4 0.5° analysis |
+| --- | --- | --- | --- | --- | --- |
+| profile | ✅ deterministic | ✅ member distributions | ✅ deterministic | ✅ member distributions | ✅ analyzed state |
+| timeseries | ✅ forecast evolution | ✅ ensemble evolution | ✅ native-cadence deterministic evolution | ✅ native-cadence ensemble evolution | ✅ selected analysis cycles |
+| layer diagnostics | ✅ | ✅ member-first | ✅ shared kernel | ✅ member-first | ✅ shared kernel |
+| profile diagnostics | ✅ | ✅ member-first | ✅ shared kernel | ✅ member-first | ✅ shared kernel |
+| parcel diagnostics | ✅ | ✅ member-first | ✅ shared kernel | ✅ member-first | ✅ shared kernel |
+| diagnostic time series | ✅ | ✅ compact ensemble summaries | ✅ | ✅ compact ensemble summaries | ✅ selected analysis cycles |
+| points | ✅ shared S3 slice | ✅ member slices reused | ✅ cached selected-message reuse | ✅ member-first | ✅ bounded serial NCSS points |
+| points time series | ✅ | ✅ | ✅ bounded point × native-time matrix | ✅ bounded point × native-time matrix | ✅ bounded cycle × point matrix |
+| transect | ✅ great-circle | ✅ member-first great-circle | ✅ great-circle | ✅ member-first great-circle | ✅ great-circle |
+| area summary | ✅ NOMADS bbox | ✅ member-first | ✅ scalar bbox | ✅ member-first scalar bbox | ✅ native NCEI NCSS bbox |
+| run comparison | ✅ | ✅ distribution shift | ✅ | ✅ distribution shift | — |
+| scalar ensemble distribution | — | ✅ | — | ✅ | — |
+| aligned model comparison | ✅ GFS↔GEFS / GFS↔IFS | ✅ GFS↔GEFS / GEFS↔IFS ENS | ✅ GFS↔IFS | ✅ GEFS↔IFS ENS | —; verification is separate |
 
 The capability registry describes the shared **core operation** behind the compact public vocabulary. Historical analog search and archived forecast verification remain specialized composition primitives, while index build/backfill is CLI-only administration rather than a normal atmospheric query.
 
@@ -61,18 +61,20 @@ It also prevents two failure modes: mechanically copying deterministic behavior 
 Pressure-profile meteorology consumes normalized typed states rather than GRIB records directly.
 
 ```text
-GFS forecast profile --------------------┐
-                                          │
-historical GFS analysis profile ----------├─> normalized pressure states ─> shared physics
-                                          │
-GEFS member profile ─> member ------------┤
-                                          │
-IFS deterministic profile ----------------┘
+GFS forecast profile ---------------------┐
+                                           │
+IFS deterministic profile -----------------┤
+                                           │
+historical GFS analysis profile -----------├─> normalized pressure states ─> shared physics
+                                           │
+GEFS member profile ─> member -------------┤
+                                           │
+IFS ENS member profile ─> member ----------┘
 ```
 
 This keeps physical formulas model-independent while leaving model identity, source inventory, cycle semantics and result shape explicit.
 
-GEFS also exposes mixed pressure/non-isobaric **field bundles**. A bundle may combine pressure-level variables with fields such as 2 m temperature/RH, 10 m wind, precipitation, precipitable water, cloud cover, CAPE/CIN or MSLP. Raw dependencies are merged into one selected slice per member and supported thermodynamics are derived member by member.
+Ensemble datasets expose mixed pressure/non-isobaric **field bundles** where their native source inventory supports them. A bundle may combine pressure-level variables with fields such as 2 m temperature/RH, 10 m wind, precipitation, precipitable water, cloud cover, CAPE/CIN or MSLP. Raw dependencies are resolved by the dataset adapter; derived thermodynamics remain member-first.
 
 ## Shared meteorological kernels
 
@@ -89,9 +91,9 @@ The shared core owns model-independent calculations including:
 - pseudo-adiabatic parcel paths;
 - virtual-temperature buoyancy, CAPE and CIN.
 
-GFS evaluates these once on its deterministic state. GEFS evaluates them independently for each member and summarizes only after those calculations are complete.
+GFS and deterministic IFS evaluate these once on their deterministic state. GEFS and IFS ENS evaluate them independently for each member and summarize only after those calculations are complete.
 
-Parcel definitions remain explicit: `surface_2m`, `mixed_layer_100hpa`, and `most_unstable_300hpa`. GEFS v0.1.0 supports member-first parcel diagnostics and parcel diagnostic time series using its expanded pressure and non-isobaric source contract.
+Parcel definitions remain explicit: `surface_2m`, `mixed_layer_100hpa`, and `most_unstable_300hpa`. Both ensemble datasets keep parcel diagnostics member-first.
 
 ## Ensemble statistics
 
@@ -143,9 +145,17 @@ GEFS composition is **member-first**.
 
 This preserves separate **space**, **time**, and **ensemble-member** axes instead of flattening them into one sample.
 
+### IFS
+
+Deterministic IFS uses the same public geometry/time vocabulary while preserving ECMWF-native cadence, fixed 0.25° model semantics and selected-message cache reuse. Multi-time operations pin one initialization capable of satisfying the complete range; point, multi-point, transect, area, diagnostics and run comparison all stay deterministic.
+
+### IFS ENS
+
+IFS ENS composition is **member-first** across the 50 perturbed members `p01`–`p50`. Point, multi-point, time-series, transect, area and diagnostic operations evaluate each requested member independently before aggregation. Run comparison compares independently summarized distributions across cycles; it does not pair perturbation labels as trajectories. The deterministic post-Cycle-50r1 unperturbed control remains the separate `ifs` dataset.
+
 ## Catalogs and source contracts
 
-Operational GFS, GEFS and historical GFS analysis keep dataset-specific source inventories because their upstream products are not identical. Canonical field IDs and shared physical derivations should converge where the archived quantity is genuinely comparable; unavailable historical fields remain explicit capability differences.
+GFS, GEFS, deterministic IFS, IFS ENS and historical GFS analysis keep dataset-specific source inventories because their upstream products are not identical. Canonical field IDs and shared physical derivations converge where the quantity is genuinely comparable; unavailable fields remain explicit capability differences rather than being fabricated for symmetry.
 
 Catalogs define:
 
@@ -157,19 +167,21 @@ Catalogs define:
 - physical dependencies;
 - model-specific GRIB codes and source units.
 
-Both catalogs are searchable locally from CLI and MCP. Search itself performs no NOAA request.
+The unified catalog is searchable locally from CLI and MCP and reports dataset support for each canonical match. Discovery performs no upstream weather-data request.
 
 ## Run semantics
 
 Run selection is query-aware.
 
-GFS, GEFS and IFS use explicit 00/06/12/18Z initialization cycles. Multi-time operations resolve one cycle capable of satisfying the complete requested range and then keep that cycle fixed. GFS grid selection is orthogonal to run selection: `0p25` is the default and `0p50` is explicit. An old explicit run keeps the public `gfs` identity and routes to the matching historical forecast archive rather than changing datasets.
+GFS, GEFS, deterministic IFS and IFS ENS use explicit 00/06/12/18Z initialization cycles. Multi-time operations resolve one cycle capable of satisfying the complete requested range and then keep that cycle fixed. GFS grid selection is orthogonal to run selection: `0p25` is the default and `0p50` is explicit. An old explicit run keeps the public `gfs` identity and routes to the matching historical forecast archive rather than changing datasets.
 
-IFS Open Data uses deterministic 0.25° `oper` forecasts. Current Cycle 50r1 00/12Z runs publish 3-hourly through `f144` then 6-hourly through `f360`; 06/18Z runs publish 3-hourly through `f144`. `latest` is resolved against the requested field inventory, so partially published new cycles are not mistaken for selection-capable runs.\n\nGEFS uses control `c00` plus `p01`–`p30` on a native three-hour cadence through `f384`. Pressure-level and mixed pressure/field operations use `pgrb2a` 0.5°. Field-only operations select `pgrb2s` 0.25° through `f240`, then fall back to `pgrb2a` 0.5°. Multi-time field operations choose one product from the complete range and keep that grid fixed.
+ECMWF Open Data preserves different deterministic and ensemble horizons. Deterministic `ifs` uses `oper/fc`: 00/12Z runs publish 3-hourly through `f144`, then 6-hourly through `f240`; 06/18Z runs publish 3-hourly through `f90`. `ifs-ens` uses perturbed `enfo/ef`: 00/12Z runs publish 3-hourly through `f144`, then 6-hourly through `f360`; 06/18Z runs publish 3-hourly through `f144`. `latest` is resolved against the requested field inventory so partially published cycles are not mistaken for selection-capable runs.
+
+GEFS uses control `c00` plus `p01`–`p30` on a native three-hour cadence through `f384`. Pressure-level and mixed pressure/field operations use `pgrb2a` 0.5°. Field-only operations select `pgrb2s` 0.25° through `f240`, then fall back to `pgrb2a` 0.5°. Multi-time field operations choose one product from the complete range and keep that grid fixed.
 
 Historical Grid 4 analysis has no forecast initialization/lead axis: its native time coordinate is the exact 00/06/12/18 UTC analysis cycle. Shared operation dispatch preserves that distinction instead of synthesizing run or forecast-hour fields.
 
-Aligned GFS-vs-GEFS comparison resolves one initialization cycle that can satisfy both models at the requested valid time, while preserving their distinct sampled grids.
+Aligned dataset comparisons resolve one initialization cycle that can satisfy both sides at the requested valid time. GFS↔GEFS preserves deterministic-vs-distribution semantics, GFS↔IFS compares deterministic normalized states, and GEFS↔IFS ENS compares independently summarized ensemble distributions without pairing member labels across centers.
 
 ## Data access and caching
 
@@ -191,6 +203,10 @@ GEFS uses member-specific NOAA AWS `pgrb2a` 0.5° and `pgrb2s` 0.25° objects wi
 
 Member work is bounded-concurrent. Multi-point and transect operations deliberately reuse upstream member slices rather than multiplying upstream transfer by point count.
 
+### IFS / IFS ENS
+
+ECMWF access uses official Open Data indexed byte ranges with bounded mirror retry/failover and immutable local caching. Deterministic and ENS products keep their native product, cadence, run and member provenance. The source layer resolves model-specific filenames/messages; the public query layer only sees canonical dataset, geometry, time and selection semantics.
+
 ## GRIB decoding
 
 The normal npm path uses the bundled GRIB2 decoder supplied by `@mattnucc/gribberish`, so users do **not** need to install native `wgrib2` for CLI or MCP use.
@@ -205,7 +221,7 @@ The public contract mirrors the core architecture instead of the order in which 
 
 > **One query language for atmospheric state; datasets preserve their semantics.**
 
-Normal access is `dataset × geometry × time × selection`. Public dataset IDs are `gfs`, `gefs`, and `gfs-analysis`; they map to the explicit internal dataset registry. Dataset-native result semantics remain unchanged.
+Normal access is `dataset × geometry × time × selection`. Public dataset IDs are `gfs`, `gefs`, `ifs`, `ifs-ens`, and `gfs-analysis`; they map to the explicit internal dataset registry. Dataset-native result semantics remain unchanged.
 
 ### CLI
 
