@@ -152,13 +152,7 @@ function registerCompareRunsCommand(program: Command): void {
           ? {}
           : {
               ensemble: {
-                ...(options.members === undefined
-        ? {}
-        : {
-            members: dataset === "gefs"
-              ? parseGefsMembers(options.members)
-              : parseStrings(options.members),
-          }),
+                ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
                 ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
               },
             }),
