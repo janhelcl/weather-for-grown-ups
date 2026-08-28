@@ -150,6 +150,14 @@ class IfsEnsMemberSelectionSource implements IfsSelectionSource {
   ) {}
 
   fetchSelection(request: IfsSelectionRequest): Promise<IfsSubsetFile> {
+    const sharedRunStatic = request.selectors.every((selector) => selector.sourceForecastHour !== undefined);
+    if (sharedRunStatic) {
+      return this.source.fetchSelection({
+        ...request,
+        product: "oper-fc",
+        selectors: request.selectors.map(({ number: _number, ...selector }) => selector),
+      });
+    }
     return this.source.fetchSelection({
       ...request,
       product: "enfo-ef",
