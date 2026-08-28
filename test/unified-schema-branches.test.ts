@@ -207,7 +207,7 @@ describe("unified atmospheric schema capability branches", () => {
       },
     }).diagnostic.kind).toBe("profile");
 
-    expect(() => diagnoseAtmosphereSchema.parse({
+    expect(diagnoseAtmosphereSchema.parse({
       dataset: "ifs",
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
@@ -216,7 +216,7 @@ describe("unified atmospheric schema capability branches", () => {
         pressureLevelsHpa: [925, 850, 700, 500],
         parcel: "surface_2m",
       },
-    })).toThrow("IFS parcel diagnostics are not implemented");
+    }).diagnostic.kind).toBe("parcel");
 
     expect(() => diagnoseAtmosphereSchema.parse({
       dataset: "ifs",

@@ -25,6 +25,29 @@ describe("IFS latest run resolution", () => {
     );
   });
 
+  it("probes run-static selectors at f000 while checking dynamic fields at the requested lead", async () => {
+    const isForecastAvailable = vi.fn(async () => true);
+    const resolver = new IfsLatestRunResolver({
+      probe: { isForecastAvailable },
+      now: () => new Date("2026-08-27T19:00:00Z"),
+    });
+    const staticSelector = {
+      key: "surface_geopotential_height",
+      param: "z",
+      levtype: "sfc" as const,
+      sourceForecastHour: 0,
+    };
+
+    const run = await resolver.resolveLatestRun(
+      new Date("2026-08-27T21:00:00Z"),
+      [...selectors, staticSelector],
+    );
+
+    expect(run.toISOString()).toBe("2026-08-27T18:00:00.000Z");
+    expect(isForecastAvailable).toHaveBeenNthCalledWith(1, run, 3, selectors);
+    expect(isForecastAvailable).toHaveBeenNthCalledWith(2, run, 0, [staticSelector]);
+  });
+
   it("skips candidate cycles whose native horizon cannot reach the valid time", async () => {
     const isForecastAvailable = vi.fn(async () => true);
     const resolver = new IfsLatestRunResolver({

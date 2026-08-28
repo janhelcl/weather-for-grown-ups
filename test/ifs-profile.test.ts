@@ -156,6 +156,49 @@ describe("IFS canonical point profile", () => {
     expect(specificHumidity?.values.specificHumidityKgKg).toBeLessThan(0.01);
   });
 
+  it("composes requested-step fields with run-static surface geopotential", async () => {
+    const fetchSelection = vi.fn(async ({ forecastHour }: any) => ({
+      path: `ifs-f${forecastHour}`,
+      cacheHit: forecastHour === 0,
+    }));
+    const extractPoint = vi.fn(async (path: string): Promise<DecodedValue[]> => {
+      if (path === "ifs-f0") {
+        return [{ code: "z", surface: true, value: 980.665, gridPoint }];
+      }
+      return [
+        { code: "sp", surface: true, value: 100000, gridPoint },
+        { code: "2t", heightAboveGroundM: 2, value: 293.15, gridPoint },
+      ];
+    });
+    const service = new IfsProfileService({
+      source: { fetchSelection },
+      decoder: { engine: "gribberish", extractPoint },
+    });
+
+    const result = await service.getProfile({
+      latitude: 50,
+      longitude: 14,
+      run: "2026-08-27T12:00:00Z",
+      validTime: "2026-08-27T18:00:00Z",
+      fields: ["surface_pressure", "surface_geopotential_height", "temperature_2m"],
+    });
+
+    expect(fetchSelection).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      forecastHour: 6,
+      selectors: expect.arrayContaining([
+        expect.objectContaining({ param: "sp" }),
+        expect.objectContaining({ param: "2t" }),
+      ]),
+    }));
+    expect(fetchSelection).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      forecastHour: 0,
+      selectors: [expect.objectContaining({ param: "z", sourceForecastHour: 0 })],
+    }));
+    expect(result.fields?.find((field) => field.id === "surface_geopotential_height")
+      ?.values.geopotentialHeightGpm).toBeCloseTo(100, 8);
+    expect(result.source.cacheHit).toBe(false);
+  });
+
   it("rejects selected fields that resolve to different IFS grid cells", async () => {
     const service = new IfsProfileService({
       source: { fetchSelection: vi.fn(async () => ({ path: "ifs-drift", cacheHit: false })) },

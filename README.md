@@ -108,7 +108,7 @@ WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-firs
 | Raw and mixed-field time series | ✅ | ✅ | ✅ deterministic |
 | Layer diagnostics | ✅ | ✅ per member → summarized | ✅ deterministic |
 | Whole-profile diagnostics | ✅ | ✅ per member → structural summaries | ✅ deterministic |
-| Parcel / LCL / LFC / EL / CAPE / CIN | ✅ | ✅ per member → summarized | ⏳ |
+| Parcel / LCL / LFC / EL / CAPE / CIN | ✅ | ✅ per member → summarized | ✅ deterministic |
 | Diagnostic time series | ✅ layer/profile/parcel | ✅ layer/profile/parcel | ⏳ |
 | Multi-point queries | ✅ | ✅ | ✅ |
 | Multi-point time series | ✅ | ✅ | ✅ |
@@ -158,7 +158,7 @@ Normal atmospheric access is expressed as:
 dataset × geometry × time × selection
 ```
 
-with short dataset IDs `gfs`, `gefs`, and `gfs-analysis`. The same query structure therefore works for a deterministic forecast, an ensemble forecast, an archived GFS forecast, or an archived analysis while each result preserves its native deterministic/ensemble and forecast/analysis semantics. An archived forecast remains `gfs`; the explicit old `forecast.run` selects the historical state.
+with short dataset IDs `gfs`, `gefs`, `ifs`, and `gfs-analysis`. The same query structure therefore works for a deterministic forecast, an ensemble forecast, an archived GFS forecast, or an archived analysis while each result preserves its native deterministic/ensemble and forecast/analysis semantics. An archived forecast remains `gfs`; the explicit old `forecast.run` selects the historical state.
 
 The MCP vocabulary is intentionally small:
 

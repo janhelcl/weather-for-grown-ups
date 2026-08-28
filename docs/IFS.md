@@ -69,7 +69,7 @@ wfg query \
   --json
 ```
 
-No IFS-specific MCP tool is added. The same `diagnose_atmosphere` / `wfg diagnose` surface also supports IFS layer and whole-profile diagnostics at one valid time.
+No IFS-specific MCP tool is added. The same `diagnose_atmosphere` / `wfg diagnose` surface supports IFS layer, whole-profile, and parcel diagnostics at one valid time.
 
 ## Canonical pressure variables
 
@@ -91,6 +91,7 @@ Where their dependencies are available, WFG reuses the same model-independent de
 The first slice includes:
 
 - surface pressure;
+- run-static surface geopotential height, read from ECMWF `z` at `f000` and normalized from geopotential to gpm;
 - 2 m temperature and dew point;
 - derived 2 m relative humidity and specific humidity (from temperature/dew point, plus surface pressure for specific humidity);
 - 10 m U/V wind and derived wind;
@@ -99,7 +100,7 @@ The first slice includes:
 - total-column water vapour / precipitable water;
 - low, middle, high and total cloud cover.
 
-Units are normalized at the model boundary: temperatures to °C, precipitation metres to millimetres, and fractional cloud cover to percent.
+Units are normalized at the model boundary: temperatures to °C, precipitation metres to millimetres, fractional cloud cover to percent, and surface geopotential to geopotential metres using standard gravity. Run-static fields are fetched from their native source step and composed with the requested forecast step transparently.
 
 ## Composition and source reuse
 
@@ -107,18 +108,22 @@ Time ranges resolve one selection-capable IFS initialization for the complete ra
 
 ## Diagnostics
 
-IFS reuses WFG's normalized deterministic pressure-profile kernels for the full current layer and whole-profile diagnostic catalogs:
+IFS reuses WFG's normalized deterministic kernels for layer, whole-profile, and parcel diagnostics:
 
 - environmental temperature lapse rate;
 - vector wind shear and depth-normalized shear;
 - potential-temperature gradient;
 - freezing-level crossings;
-- sampled temperature-inversion layers.
+- sampled temperature-inversion layers;
+- surface, 100 hPa mixed-layer, and lowest-300 hPa most-unstable parcels;
+- LCL, LFC, equilibrium level, CAPE, CIN, and the explicit parcel path.
+
+Parcel physics are the same model-independent implementation used by deterministic GFS. IFS supplies the environmental sounding from pressure-level temperature, specific humidity and geopotential height; surface initialization uses surface pressure, 2 m temperature, derived 2 m specific humidity, and the run-static surface geopotential field.
 
 The IFS adapter fetches only the required pressure variables and keeps ECMWF run, lead, sampled grid point and source provenance attached to the derived result.
 
 ## Deliberate capability boundary
 
-IFS **area statistics, parcel diagnostics and diagnostic time series** remain unsupported in this slice. Parcel computation is intentionally deferred until the required near-surface humidity and geopotential inputs are verified in the ECMWF Open Data inventory. Unsupported operations fail explicitly rather than being emulated with another model or hidden repeated public calls.
+IFS **area statistics and diagnostic time series** remain unsupported in this slice. Unsupported operations fail explicitly rather than being emulated with another model or hidden repeated public calls.
 
 This keeps the architecture rule intact: **unify operations and physics; preserve model semantics.**

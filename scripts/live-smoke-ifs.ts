@@ -7,7 +7,7 @@ import {
   IfsTimeSeriesService,
   IfsTransectService,
 } from "../src/core/ifs-spatiotemporal.js";
-import { latestIfsCycleAtOrBefore } from "../src/core/ifs-time.js";
+import { ifsValidTimeForForecastHour, latestIfsCycleAtOrBefore } from "../src/core/ifs-time.js";
 
 const validTime = latestIfsCycleAtOrBefore(new Date());
 const service = new IfsProfileService();
@@ -30,6 +30,7 @@ const result = await service.getProfile({
   ],
   pressureLevelsHpa: [850, 500],
   fields: [
+    "surface_geopotential_height",
     "temperature_2m",
     "dew_point_2m",
     "relative_humidity_2m",
@@ -51,6 +52,8 @@ assert(result.levels.every((level) => Number.isFinite(level.windSpeedMs)));
 assert(result.levels.every((level) => Number.isFinite(level.geopotentialHeightGpm)));
 assert(result.levels.every((level) => Number.isFinite(level.absoluteVorticityS1)));
 assert(result.levels.every((level) => Number.isFinite(level.divergenceS1)));
+assert(result.fields?.some((field) =>
+  field.id === "surface_geopotential_height" && Number.isFinite(field.values.geopotentialHeightGpm)));
 assert(result.fields?.some((field) => field.id === "temperature_2m"));
 assert(result.fields?.some((field) =>
   field.id === "relative_humidity_2m" && Number.isFinite(field.values.relativeHumidityPct)));
@@ -176,6 +179,23 @@ for (const diagnostic of layerDiagnostics.diagnostics) {
   assert(Object.values(diagnostic.values).every((value) => Number.isFinite(value)));
 }
 
+const parcelValidTime = ifsValidTimeForForecastHour(new Date(result.run), 6);
+const parcelDiagnostics = await diagnosticsService.getParcelDiagnostics({
+  latitude: 50.08,
+  longitude: 14.43,
+  run: result.run,
+  validTime: parcelValidTime.toISOString(),
+  pressureLevelsHpa: [925, 850, 700, 600, 500, 400, 300],
+  parcel: "surface_2m",
+});
+assert.equal(parcelDiagnostics.model, "ifs_0p25");
+assert.equal(parcelDiagnostics.forecastHour, 6);
+assert.equal(parcelDiagnostics.parcel.startingState.definition, "surface_2m");
+assert(Number.isFinite(parcelDiagnostics.parcel.startingState.geopotentialHeightGpm));
+assert(Number.isFinite(parcelDiagnostics.parcel.startingState.specificHumidityKgKg));
+assert(Number.isFinite(parcelDiagnostics.parcel.capeJkg));
+assert(Number.isFinite(parcelDiagnostics.parcel.cinJkg));
+
 const profileDiagnostics = await diagnosticsService.getProfileDiagnostics({
   latitude: 50.08,
   longitude: 14.43,
@@ -200,6 +220,13 @@ console.log(JSON.stringify({
     layer: layerDiagnostics.diagnostics.map((diagnostic) => diagnostic.id),
     layerDepthGpm: layerDiagnostics.layer.depthGpm,
     profile: profileDiagnostics.diagnostics.map((diagnostic) => diagnostic.id),
+    parcel: {
+      definition: parcelDiagnostics.parcel.startingState.definition,
+      forecastHour: parcelDiagnostics.forecastHour,
+      surfaceGeopotentialHeightGpm: parcelDiagnostics.parcel.startingState.geopotentialHeightGpm,
+      capeJkg: parcelDiagnostics.parcel.capeJkg,
+      cinJkg: parcelDiagnostics.parcel.cinJkg,
+    },
     sampledPressureLevelsHpa: profileDiagnostics.sampledPressureLevelsHpa,
     run: result.run,
   },

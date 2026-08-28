@@ -8,6 +8,10 @@ import {
   historicalParcelQuerySchema,
   historicalParcelResultSchema,
 } from "./history-parcel.js";
+import {
+  ifsParcelDiagnosticsQuerySchema,
+  ifsParcelDiagnosticsResultSchema,
+} from "./ifs-diagnostics.js";
 import { parcelDiagnosticsQuerySchema } from "./query.js";
 import { parcelDiagnosticsResultSchema } from "./result.js";
 
@@ -21,6 +25,10 @@ export const atmosphericParcelDiagnosticsRequestSchema = z.union([
     query: gefsParcelDiagnosticsQuerySchema,
   }),
   z.object({
+    model: z.literal("ifs_0p25"),
+    query: ifsParcelDiagnosticsQuerySchema,
+  }),
+  z.object({
     model: z.literal("gfs_grid4_analysis_0p5"),
     query: historicalParcelQuerySchema,
   }),
@@ -29,6 +37,7 @@ export const atmosphericParcelDiagnosticsRequestSchema = z.union([
 export const atmosphericParcelDiagnosticsResultSchema = z.union([
   parcelDiagnosticsResultSchema,
   gefsParcelDiagnosticsResultSchema,
+  ifsParcelDiagnosticsResultSchema,
   historicalParcelResultSchema,
 ]);
 

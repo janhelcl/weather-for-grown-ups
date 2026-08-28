@@ -248,13 +248,6 @@ export const diagnoseAtmosphereSchema = z.object({
   source: z.enum(["nomads", "s3", "archive"]).optional().describe("GFS-only source override; archive forces the resolution-matched historical backend"),
 }).superRefine((request, context) => {
   validateDatasetModifiers(request, context);
-  if (request.dataset === "ifs" && request.diagnostic.kind === "parcel") {
-    context.addIssue({
-      code: "custom",
-      path: ["diagnostic", "kind"],
-      message: "IFS parcel diagnostics are not implemented yet; they require source-verified near-surface humidity and geopotential inputs",
-    });
-  }
   if (request.dataset === "ifs" && "from" in request.time) {
     context.addIssue({
       code: "custom",
