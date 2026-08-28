@@ -107,7 +107,7 @@ describe("unified atmospheric schema capability branches", () => {
       time: { at: "2026-08-28T12:00:00Z" },
       selection: pressureSelection,
       source: "s3",
-    })).toThrow("source override is only valid for operational gfs");
+    })).toThrow("source override is only valid for gfs");
 
     expect(() => queryAtmosphereSchema.parse({
       dataset: "gfs",
@@ -134,9 +134,25 @@ describe("unified atmospheric schema capability branches", () => {
       selection: pressureSelection,
       forecast: { run: "latest", grid: "0p50" },
     })).toThrow("forecast.grid is only configurable for the gfs dataset");
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "ifs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: pressureSelection,
+      forecast: { run: "latest", grid: "0p25" },
+    })).toThrow("forecast.grid is only configurable for the gfs dataset");
+
+    expect(queryAtmosphereSchema.parse({
+      dataset: "ifs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: pressureSelection,
+      forecast: { run: "latest" },
+    }).forecast).toEqual({ run: "latest" });
   });
 
-  it("accepts IFS point ranges, points and transects while rejecting unsupported area/diagnostics", () => {
+  it("accepts implemented IFS point, spatial and diagnostic capabilities", () => {
     expect(queryAtmosphereSchema.parse({
       dataset: "ifs",
       geometry: point,
