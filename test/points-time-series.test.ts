@@ -124,6 +124,44 @@ describe("PointsTimeSeriesService", () => {
     expect(getPoints.mock.calls.every(([query]) => query.run === run)).toBe(true);
   });
 
+  it("reports progress once per native forecast-file batch", async () => {
+    const getPoints = vi.fn(async (query: BatchPointsQueryInput) => batchFor(query));
+    const onProgress = vi.fn();
+    const service = new PointsTimeSeriesService({
+      batchPointsGetter: { getPoints },
+      concurrency: 1,
+      onProgress,
+    });
+
+    await service.getPointsTimeSeries({
+      ...base,
+      startTime: "2026-08-19T00:00:00Z",
+      endTime: "2026-08-19T02:00:00Z",
+    });
+
+    expect(onProgress.mock.calls[0]?.[0]).toMatchObject({
+      phase: "start",
+      completedSteps: 0,
+      totalSteps: 3,
+      source: "s3",
+    });
+    expect(onProgress.mock.calls.slice(1, 4).map(([progress]) => ({
+      completedSteps: progress.completedSteps,
+      forecastHour: progress.forecastHour,
+      cacheHit: progress.cacheHit,
+    }))).toEqual([
+      { completedSteps: 1, forecastHour: 0, cacheHit: true },
+      { completedSteps: 2, forecastHour: 1, cacheHit: false },
+      { completedSteps: 3, forecastHour: 2, cacheHit: true },
+    ]);
+    expect(onProgress.mock.calls.at(-1)?.[0]).toMatchObject({
+      phase: "complete",
+      completedSteps: 3,
+      totalSteps: 3,
+      source: "s3",
+    });
+  });
+
   it("fails before data access when native steps exceed maxSteps", async () => {
     const getPoints = vi.fn(async (query: BatchPointsQueryInput) => batchFor(query));
     const service = new PointsTimeSeriesService({ batchPointsGetter: { getPoints } });
