@@ -326,7 +326,7 @@ describe("unified atmospheric schema capability branches", () => {
       },
     }).geometry.type).toBe("transect");
 
-    expect(() => queryAtmosphereSchema.parse({
+    expect(queryAtmosphereSchema.parse({
       dataset: "ifs-ens",
       geometry: {
         type: "area",
@@ -337,7 +337,35 @@ describe("unified atmospheric schema capability branches", () => {
       },
       time: { at: "2026-08-28T12:00:00Z" },
       selection: pressureSelection,
-    })).toThrow("IFS ENS currently supports point, multi-point, and transect geometry");
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+      },
+      aggregate: {
+        percentiles: [10, 50, 90],
+        thresholds: [{ operator: "gte", value: 0 }],
+      },
+      limits: {
+        maxGridPoints: 100,
+        maxMemberGridPoints: 200,
+      },
+    }).geometry.type).toBe("area");
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "ifs-ens",
+      geometry: {
+        type: "area",
+        westLongitude: 14,
+        eastLongitude: 14.5,
+        southLatitude: 49.5,
+        northLatitude: 50,
+      },
+      time: {
+        from: "2026-08-28T00:00:00Z",
+        to: "2026-08-28T12:00:00Z",
+      },
+      selection: pressureSelection,
+    })).toThrow("area queries currently support one valid time");
 
     expect(diagnoseAtmosphereSchema.parse({
       dataset: "ifs-ens",
