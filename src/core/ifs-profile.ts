@@ -97,17 +97,26 @@ export class IfsProfileService {
       : parseIfsRun(query.run);
     const forecastHour = ifsForecastHour(run, validTime);
 
-    const cached = await this.source.fetchSelection({
-      run,
-      forecastHour,
-      selectors: selection.map((item) => item.selector),
-    });
-    const decoded = await this.decoder.extractPoint(cached.path, query.longitude, query.latitude);
-    if (decoded.length !== selection.length) {
-      throw new Error(
-        `IFS decoder returned ${decoded.length} values for ${selection.length} selected GRIB messages`,
-      );
+    const decodedSelection: Array<{ item: IfsSelectionItem; sample: DecodedValue }> = [];
+    let allCacheHit = true;
+    for (const [sourceForecastHour, items] of groupSelectionByForecastHour(selection, forecastHour)) {
+      const cached = await this.source.fetchSelection({
+        run,
+        forecastHour: sourceForecastHour,
+        selectors: items.map((item) => item.selector),
+      });
+      const decoded = await this.decoder.extractPoint(cached.path, query.longitude, query.latitude);
+      if (decoded.length !== items.length) {
+        throw new Error(
+          `IFS decoder returned ${decoded.length} values for ${items.length} selected GRIB messages at f${sourceForecastHour}`,
+        );
+      }
+      allCacheHit = allCacheHit && cached.cacheHit;
+      items.forEach((item, index) => {
+        decodedSelection.push({ item, sample: decoded[index]! });
+      });
     }
+    const decoded = decodedSelection.map(({ sample }) => sample);
     const first = decoded[0];
     if (!first) throw new Error("IFS decoder returned no values");
     assertGridConsistency(decoded);
@@ -118,8 +127,7 @@ export class IfsProfileService {
     }
     const fieldValues = new Map<IfsRawFieldId, number>();
 
-    selection.forEach((item, index) => {
-      const sample = decoded[index]!;
+    for (const { item, sample } of decodedSelection) {
       if (item.kind === "pressure") {
         const level = levelMap.get(item.pressureHpa);
         if (!level) throw new Error(`Internal IFS pressure selection mismatch at ${item.pressureHpa} hPa`);
@@ -127,7 +135,7 @@ export class IfsProfileService {
       } else {
         fieldValues.set(item.rawId, sample.value);
       }
-    });
+    }
 
     for (const level of levelMap.values()) {
       applyDerivedPressureValues(level, query.variables ?? []);
@@ -152,7 +160,7 @@ export class IfsProfileService {
         decoder: this.decoder.engine ?? "gribberish",
         product: "ifs_0p25_oper_fc",
         horizontalGridDegrees: 0.25,
-        cacheHit: cached.cacheHit,
+        cacheHit: allCacheHit,
       },
     });
   }
@@ -206,10 +214,27 @@ function prepareSelection(query: ReturnType<typeof ifsPointQuerySchema.parse>): 
         key: rawId,
         param: definition.param,
         levtype: definition.levtype,
+        ...(definition.sourceForecastHour === undefined
+          ? {}
+          : { sourceForecastHour: definition.sourceForecastHour }),
       },
     });
   }
   return items;
+}
+
+function groupSelectionByForecastHour(
+  selection: readonly IfsSelectionItem[],
+  requestedForecastHour: number,
+): Map<number, IfsSelectionItem[]> {
+  const groups = new Map<number, IfsSelectionItem[]>();
+  for (const item of selection) {
+    const sourceForecastHour = item.selector.sourceForecastHour ?? requestedForecastHour;
+    const group = groups.get(sourceForecastHour) ?? [];
+    group.push(item);
+    groups.set(sourceForecastHour, group);
+  }
+  return groups;
 }
 
 function applyRawPressureValue(
@@ -376,6 +401,8 @@ function buildFieldResult(
 
 function normalizeFieldValue(id: IfsRawFieldId, value: number): number {
   switch (id) {
+    case "surface_geopotential_height":
+      return value / 9.80665;
     case "temperature_2m":
     case "dew_point_2m":
       return value - 273.15;

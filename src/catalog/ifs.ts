@@ -60,6 +60,7 @@ export const IFS_RAW_PRESSURE_VARIABLE_CATALOG: Record<IfsRawPressureVariableId,
 
 export const IFS_RAW_FIELD_IDS = [
   "surface_pressure",
+  "surface_geopotential_height",
   "temperature_2m",
   "dew_point_2m",
   "u_wind_10m",
@@ -92,6 +93,7 @@ export interface IfsRawFieldDefinition {
   levtype: "sfc";
   sourceUnit: string;
   temporalSemantics: "instantaneous" | "accumulation";
+  sourceForecastHour?: number;
 }
 
 export interface IfsDerivedFieldDefinition {
@@ -105,6 +107,13 @@ export type IfsFieldDefinition = IfsRawFieldDefinition | IfsDerivedFieldDefiniti
 
 export const IFS_FIELD_CATALOG: Record<IfsFieldId, IfsFieldDefinition> = {
   surface_pressure: rawField("surface_pressure", "sp", "Pa"),
+  surface_geopotential_height: rawField(
+    "surface_geopotential_height",
+    "z",
+    "m^2/s^2",
+    "instantaneous",
+    0,
+  ),
   temperature_2m: rawField("temperature_2m", "2t", "K"),
   dew_point_2m: rawField("dew_point_2m", "2d", "K"),
   relative_humidity_2m: {
@@ -218,7 +227,13 @@ export function getIfsCatalog() {
         temporalSemantics: source.temporalSemantics,
         outputs: canonical.outputs.map((output) => ({ ...output })),
         ...(source.kind === "raw"
-          ? { sourceParam: source.param, sourceLevtype: source.levtype }
+          ? {
+              sourceParam: source.param,
+              sourceLevtype: source.levtype,
+              ...(source.sourceForecastHour === undefined
+                ? {}
+                : { sourceForecastHour: source.sourceForecastHour }),
+            }
           : { dependencies: [...source.dependencies] }),
       };
     }),
@@ -230,6 +245,15 @@ function rawField(
   param: string,
   sourceUnit: string,
   temporalSemantics: "instantaneous" | "accumulation" = "instantaneous",
+  sourceForecastHour?: number,
 ): IfsRawFieldDefinition {
-  return { id, kind: "raw", param, levtype: "sfc", sourceUnit, temporalSemantics };
+  return {
+    id,
+    kind: "raw",
+    param,
+    levtype: "sfc",
+    sourceUnit,
+    temporalSemantics,
+    ...(sourceForecastHour === undefined ? {} : { sourceForecastHour }),
+  };
 }

@@ -48,8 +48,8 @@ export class ParcelDiagnosticsService {
       source: query.source,
     });
 
-    const surface = surfaceEnvironment(profile.fields ?? []);
-    const sampledEnvironment = profile.levels.map(toEnvironmentLevel);
+    const surface = parcelSurfaceEnvironment(profile.fields ?? []);
+    const sampledEnvironment = profile.levels.map(parcelEnvironmentLevel);
     const parcel = deriveParcelComputation(query.parcel, surface, sampledEnvironment);
 
     return {
@@ -67,7 +67,7 @@ export class ParcelDiagnosticsService {
   }
 }
 
-function surfaceEnvironment(fields: readonly NonIsobaricFieldResult[]): ParcelEnvironmentLevel {
+export function parcelSurfaceEnvironment(fields: readonly NonIsobaricFieldResult[]): ParcelEnvironmentLevel {
   return {
     pressureHpa: fieldValue(fields, "surface_pressure", "pressurePa") / 100,
     geopotentialHeightGpm: fieldValue(fields, "surface_geopotential_height", "geopotentialHeightGpm"),
@@ -87,7 +87,7 @@ function fieldValue(
   return value;
 }
 
-function toEnvironmentLevel(level: ProfileLevel): ParcelEnvironmentLevel {
+export function parcelEnvironmentLevel(level: ProfileLevel): ParcelEnvironmentLevel {
   return {
     pressureHpa: level.pressureHpa,
     geopotentialHeightGpm: required(level.geopotentialHeightGpm, "geopotential_height", level.pressureHpa),

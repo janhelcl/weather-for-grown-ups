@@ -12,10 +12,15 @@ import type {
   HistoricalParcelQueryInput,
   HistoricalParcelResult,
 } from "../schema/history-parcel.js";
+import type {
+  IfsParcelDiagnosticsQueryInput,
+  IfsParcelDiagnosticsResult,
+} from "../schema/ifs-diagnostics.js";
 import type { ParcelDiagnosticsQueryInput } from "../schema/query.js";
 import type { ParcelDiagnosticsResult } from "./types.js";
 import { GefsParcelDiagnosticsService } from "./gefs-parcel-diagnostics.js";
 import { HistoricalParcelService } from "./history-parcel.js";
+import { IfsDiagnosticsService } from "./ifs-diagnostics.js";
 import { ParcelDiagnosticsService } from "./parcel-diagnostics.js";
 
 export interface DeterministicParcelDiagnosticsGetter {
@@ -26,6 +31,10 @@ export interface EnsembleParcelDiagnosticsGetter {
   getParcelDiagnostics(query: GefsParcelDiagnosticsQueryInput): Promise<GefsParcelDiagnosticsResult>;
 }
 
+export interface IfsParcelDiagnosticsGetter {
+  getParcelDiagnostics(query: IfsParcelDiagnosticsQueryInput): Promise<IfsParcelDiagnosticsResult>;
+}
+
 export interface HistoricalParcelDiagnosticsGetter {
   getHistoricalParcel(query: HistoricalParcelQueryInput): Promise<HistoricalParcelResult>;
 }
@@ -33,17 +42,20 @@ export interface HistoricalParcelDiagnosticsGetter {
 export interface AtmosphericParcelDiagnosticsServiceOptions {
   gfs?: DeterministicParcelDiagnosticsGetter;
   gefs?: EnsembleParcelDiagnosticsGetter;
+  ifs?: IfsParcelDiagnosticsGetter;
   history?: HistoricalParcelDiagnosticsGetter;
 }
 
 export class AtmosphericParcelDiagnosticsService {
   private readonly gfs: DeterministicParcelDiagnosticsGetter;
   private readonly gefs: EnsembleParcelDiagnosticsGetter;
+  private readonly ifs: IfsParcelDiagnosticsGetter;
   private readonly history: HistoricalParcelDiagnosticsGetter;
 
   constructor(options: AtmosphericParcelDiagnosticsServiceOptions = {}) {
     this.gfs = options.gfs ?? new ParcelDiagnosticsService();
     this.gefs = options.gefs ?? new GefsParcelDiagnosticsService();
+    this.ifs = options.ifs ?? new IfsDiagnosticsService();
     this.history = options.history ?? new HistoricalParcelService();
   }
 
@@ -61,6 +73,8 @@ export class AtmosphericParcelDiagnosticsService {
         return this.gfs.getParcelDiagnostics({ ...request.query, grid: "0p50" });
       case "gefs_0p50":
         return this.gefs.getParcelDiagnostics(request.query);
+      case "ifs_0p25":
+        return this.ifs.getParcelDiagnostics(request.query);
       case "gfs_grid4_analysis_0p5":
         return this.history.getHistoricalParcel(request.query);
     }

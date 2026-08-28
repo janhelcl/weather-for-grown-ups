@@ -17,6 +17,8 @@ export interface IfsIndexSelector {
   param: string;
   levtype: "pl" | "sfc";
   levelist?: number;
+  /** Override the requested forecast step for run-static/source-special fields. */
+  sourceForecastHour?: number;
 }
 
 export const IFS_HTTP_MAX_ATTEMPTS = 4;

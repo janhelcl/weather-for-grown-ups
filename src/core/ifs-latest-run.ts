@@ -71,7 +71,7 @@ export class IfsLatestRunResolver implements IfsLatestRunProvider {
       }
       const lastForecastHour = forecastHours[forecastHours.length - 1];
       if (lastForecastHour === undefined) continue;
-      if (await this.probe.isForecastAvailable(run, lastForecastHour, selectors)) return run;
+      if (await selectionAvailable(this.probe, run, lastForecastHour, selectors)) return run;
     }
 
     throw new Error(
@@ -90,7 +90,7 @@ export class IfsLatestRunResolver implements IfsLatestRunProvider {
       const run = previousIfsCycle(anchor, index);
       const forecastHour = rawForecastHour(run, validTime);
       if (!isNativeIfsForecastHour(run, forecastHour)) continue;
-      if (await this.probe.isForecastAvailable(run, forecastHour, selectors)) return run;
+      if (await selectionAvailable(this.probe, run, forecastHour, selectors)) return run;
     }
 
     // Preserve explicit cadence errors when possible before reporting publication failure.
@@ -99,6 +99,25 @@ export class IfsLatestRunResolver implements IfsLatestRunProvider {
       `No published ECMWF IFS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested valid time and field selection`,
     );
   }
+}
+
+async function selectionAvailable(
+  probe: IfsAvailabilityProbe,
+  run: Date,
+  requestedForecastHour: number,
+  selectors: readonly IfsIndexSelector[],
+): Promise<boolean> {
+  const groups = new Map<number, IfsIndexSelector[]>();
+  for (const selector of selectors) {
+    const sourceForecastHour = selector.sourceForecastHour ?? requestedForecastHour;
+    const group = groups.get(sourceForecastHour) ?? [];
+    group.push(selector);
+    groups.set(sourceForecastHour, group);
+  }
+  for (const [sourceForecastHour, group] of groups) {
+    if (!await probe.isForecastAvailable(run, sourceForecastHour, group)) return false;
+  }
+  return true;
 }
 
 function rawForecastHour(run: Date, validTime: Date): number {
