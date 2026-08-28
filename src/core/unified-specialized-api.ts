@@ -21,6 +21,7 @@ import { ifsRunComparisonQuerySchema } from "../schema/ifs-run-comparison.js";
 import { runComparisonQuerySchema } from "../schema/query.js";
 import {
   compareAtmosphericDatasetsSchema,
+  compareGefsIfsEnsDatasetsSchema,
   compareAtmosphericRunsSchema,
   findAtmosphericAnalogsSchema,
   unifiedSpecializedResultSchema,
@@ -139,17 +140,18 @@ export class UnifiedDatasetComparisonService {
     }
 
     if (request.datasets[0] === "gefs") {
+      const ensembleRequest = compareGefsIfsEnsDatasetsSchema.parse(request);
       const result = await this.gefsIfsEns.compare(gefsIfsEnsComparisonQuerySchema.parse({
-        latitude: request.geometry.latitude,
-        longitude: request.geometry.longitude,
-        run: request.run,
-        validTime: request.time.at,
-        variable: request.variable,
-        pressureLevelHpa: request.pressureLevelHpa,
-        ...(request.gefsMembers === undefined ? {} : { gefsMembers: request.gefsMembers }),
-        ...(request.ifsEnsMembers === undefined ? {} : { ifsEnsMembers: request.ifsEnsMembers }),
-        ...(request.quantiles === undefined ? {} : { quantiles: request.quantiles }),
-        ...(request.thresholdGte === undefined ? {} : { thresholdGte: request.thresholdGte }),
+        latitude: ensembleRequest.geometry.latitude,
+        longitude: ensembleRequest.geometry.longitude,
+        run: ensembleRequest.run,
+        validTime: ensembleRequest.time.at,
+        variable: ensembleRequest.variable,
+        pressureLevelHpa: ensembleRequest.pressureLevelHpa,
+        ...(ensembleRequest.gefsMembers === undefined ? {} : { gefsMembers: ensembleRequest.gefsMembers }),
+        ...(ensembleRequest.ifsEnsMembers === undefined ? {} : { ifsEnsMembers: ensembleRequest.ifsEnsMembers }),
+        ...(ensembleRequest.quantiles === undefined ? {} : { quantiles: ensembleRequest.quantiles }),
+        ...(ensembleRequest.thresholdGte === undefined ? {} : { thresholdGte: ensembleRequest.thresholdGte }),
       }));
       return wrap("compare_datasets", ["gefs", "ifs-ens"], result);
     }
