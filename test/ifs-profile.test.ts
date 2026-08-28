@@ -115,6 +115,47 @@ describe("IFS canonical point profile", () => {
     expect(result.source.cacheHit).toBe(true);
   });
 
+  it("normalizes ECMWF vorticity/divergence and derives canonical 2 m humidity", async () => {
+    const fetchSelection = vi.fn(async () => ({ path: "ifs-expanded", cacheHit: false }));
+    const values: DecodedValue[] = [
+      { code: "vo", pressureHpa: 850, value: 1e-5, gridPoint },
+      { code: "d", pressureHpa: 850, value: -2e-5, gridPoint },
+      { code: "2t", heightAboveGroundM: 2, value: 293.15, gridPoint },
+      { code: "2d", heightAboveGroundM: 2, value: 283.15, gridPoint },
+      { code: "sp", surface: true, value: 100000, gridPoint },
+    ];
+    const service = new IfsProfileService({
+      source: { fetchSelection },
+      decoder: { engine: "gribberish", extractPoint: vi.fn(async () => values) },
+    });
+
+    const result = await service.getProfile({
+      latitude: 50,
+      longitude: 14,
+      run: "2026-08-27T12:00:00Z",
+      validTime: "2026-08-27T18:00:00Z",
+      variables: ["absolute_vorticity", "divergence"],
+      pressureLevelsHpa: [850],
+      fields: ["relative_humidity_2m", "specific_humidity_2m"],
+    });
+
+    const request = fetchSelection.mock.calls[0]?.[0];
+    expect(request.selectors.map((selector: any) => selector.param)).toEqual([
+      "vo", "d", "2t", "2d", "sp",
+    ]);
+
+    const coriolis = 2 * 7.292115e-5 * Math.sin(50 * Math.PI / 180);
+    expect(result.levels[0]?.absoluteVorticityS1).toBeCloseTo(1e-5 + coriolis, 10);
+    expect(result.levels[0]?.divergenceS1).toBe(-2e-5);
+
+    const relativeHumidity = result.fields?.find((field) => field.id === "relative_humidity_2m");
+    const specificHumidity = result.fields?.find((field) => field.id === "specific_humidity_2m");
+    expect(relativeHumidity?.values.relativeHumidityPct).toBeGreaterThan(40);
+    expect(relativeHumidity?.values.relativeHumidityPct).toBeLessThan(60);
+    expect(specificHumidity?.values.specificHumidityKgKg).toBeGreaterThan(0.005);
+    expect(specificHumidity?.values.specificHumidityKgKg).toBeLessThan(0.01);
+  });
+
   it("rejects selected fields that resolve to different IFS grid cells", async () => {
     const service = new IfsProfileService({
       source: { fetchSelection: vi.fn(async () => ({ path: "ifs-drift", cacheHit: false })) },
