@@ -260,7 +260,7 @@ The HTTP server defaults to `127.0.0.1:3000`, serves MCP at `/mcp`, and exposes 
 
 WFG selects only the GRIB messages needed for a query, caches immutable upstream slices, decodes locally, and performs physical transforms and aggregation in the TypeScript core.
 
-- GFS uses NOAA NOMADS where geographic subsetting is useful and NOAA AWS Open Data for reusable selected-message slices.
+- GFS source routing is automatic by default: point/profile, time-series, multi-point, transect, and run-comparison access uses NOAA AWS Open Data selected-message byte ranges; bounded area queries use NOAA NOMADS geographic subsetting. `--source` remains an explicit override where that geometry supports it, and result provenance reports the resolved backend.
 - GEFS uses NOAA AWS Open Data `.idx` inventories and byte-range access per member. Pressure/mixed selections use `pgrb2a` 0.5°; eligible field-only selections use `pgrb2s` 0.25° through `f240`.
 - The npm package ships with a GRIB2 decoder; native `wgrib2` remains an optional compatibility/debug path.
 - Historical GFS analysis uses NOAA NCEI THREDDS/NCSS: grid-as-point for point/profile operations and native bbox/grid subsets for area statistics.
