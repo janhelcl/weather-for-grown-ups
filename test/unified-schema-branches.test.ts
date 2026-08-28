@@ -234,7 +234,7 @@ describe("unified atmospheric schema capability branches", () => {
     }).dataset).toBe("ifs");
   });
 
-  it("accepts IFS ENS point distributions and point ranges while rejecting unfinished spatial shapes", () => {
+  it("accepts IFS ENS point and multi-point distributions/ranges while rejecting unfinished spatial shapes", () => {
     expect(queryAtmosphereSchema.parse({
       dataset: "ifs-ens",
       geometry: point,
@@ -271,15 +271,55 @@ describe("unified atmospheric schema capability branches", () => {
       maxSteps: 5,
     });
 
-    expect(() => queryAtmosphereSchema.parse({
+    expect(queryAtmosphereSchema.parse({
       dataset: "ifs-ens",
       geometry: {
         type: "points",
-        points: [{ latitude: 50, longitude: 14 }],
+        points: [
+          { latitude: 50, longitude: 14 },
+          { latitude: 49.8, longitude: 14.2 },
+        ],
       },
       time: { at: "2026-08-28T12:00:00Z" },
       selection: pressureSelection,
-    })).toThrow("IFS ENS currently supports point geometry");
+      ensemble: {
+        members: ["p01", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+      },
+    }).geometry.type).toBe("points");
+
+    expect(queryAtmosphereSchema.parse({
+      dataset: "ifs-ens",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50, longitude: 14 },
+          { latitude: 49.8, longitude: 14.2 },
+        ],
+      },
+      time: {
+        from: "2026-08-28T00:00:00Z",
+        to: "2026-08-28T12:00:00Z",
+        maxSteps: 5,
+      },
+      selection: pressureSelection,
+      ensemble: {
+        members: ["p01", "p50"],
+        maxMemberSamples: 1000,
+      },
+      limits: { maxPointSteps: 10 },
+    }).time).toMatchObject({ maxSteps: 5 });
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "ifs-ens",
+      geometry: {
+        type: "transect",
+        start: { latitude: 50, longitude: 14 },
+        end: { latitude: 49.8, longitude: 14.2 },
+      },
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: pressureSelection,
+    })).toThrow("IFS ENS currently supports point and multi-point geometry");
 
     expect(diagnoseAtmosphereSchema.parse({
       dataset: "ifs-ens",
