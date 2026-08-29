@@ -67,6 +67,7 @@ function registerQueryCommand(program: Command): void {
     .option("--levels <list>", "Comma-separated pressure levels in hPa")
     .option("--fields <list>", "Comma-separated non-isobaric fields")
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
+    .option("--forecast-kind <operational|reforecast>", "Forecast population; reforecast currently selects GEFSv12 retrospective forecasts")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--source <nomads|s3|archive>", "GFS source override; omit for automatic AWS/NOMADS/archive routing")
     .option("--members <list>", "Ensemble members: GEFS c00,p01..p30 or IFS ENS p01..p50")
@@ -499,9 +500,13 @@ function forecastInput(
   dataset: PublicAtmosphericDataset,
   options: Record<string, any>,
 ): Pick<QueryAtmosphereInput, "forecast"> | {} {
-  if (publicDatasetMetadata(dataset).role === "analysis" || (options.run === undefined && options.grid === undefined)) return {};
+  if (
+    publicDatasetMetadata(dataset).role === "analysis"
+    || (options.run === undefined && options.grid === undefined && options.forecastKind === undefined)
+  ) return {};
   return {
     forecast: {
+      ...(options.forecastKind === undefined ? {} : { kind: String(options.forecastKind) as "operational" | "reforecast" }),
       ...(options.run === undefined ? {} : { run: String(options.run) }),
       ...(options.grid === undefined ? {} : { grid: options.grid }),
     },
