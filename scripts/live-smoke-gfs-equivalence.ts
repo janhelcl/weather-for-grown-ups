@@ -17,7 +17,7 @@ type ComparisonPlan =
     }
   | {
       mode: "historical_archive";
-      archiveStatus: "not_tested_no_overlap";
+      archiveStatus: "not_tested_no_overlap" | "not_tested_upstream_unavailable";
       archiveFailures: string[];
     };
 
@@ -295,8 +295,21 @@ async function comparisonPlan(grid: Grid): Promise<ComparisonPlan> {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (!isUpstreamArchiveAvailabilityError(grid, message)) throw error;
+      const availability = classifyArchiveAvailabilityError(grid, message);
+      if (availability === "other") throw error;
+
       failures.push(`${run}: ${message}`);
+      if (availability === "upstream_unavailable") {
+        console.log(
+          `[${grid}] archive parity NOT TESTED: upstream archive service is temporarily unavailable (${message})`,
+        );
+        return {
+          mode: "historical_archive",
+          archiveStatus: "not_tested_upstream_unavailable",
+          archiveFailures: failures,
+        };
+      }
+
       console.log(`[${grid}] archive overlap unavailable for ${run}: ${message}`);
     }
   }
@@ -324,11 +337,27 @@ function candidateRun(daysAgo: number): Date {
   ));
 }
 
-function isUpstreamArchiveAvailabilityError(grid: Grid, message: string): boolean {
+function classifyArchiveAvailabilityError(
+  grid: Grid,
+  message: string,
+): "no_overlap" | "upstream_unavailable" | "other" {
   if (grid === "0p25") {
-    return /NCAR\/GDEX historical GFS 0\.25 (?:request failed: HTTP (?:502|503|504)|forecast is not available for run)/.test(message);
+    if (/NCAR\/GDEX historical GFS 0\.25 forecast is not available for run/.test(message)) {
+      return "no_overlap";
+    }
+    if (/NCAR\/GDEX historical GFS 0\.25 request failed: HTTP (?:429|500|502|503|504)/.test(message)) {
+      return "upstream_unavailable";
+    }
+    return "other";
   }
-  return /NCEI archived GFS forecast (?:request failed: HTTP (?:500|502|503|504)|is not available online for run)/.test(message);
+
+  if (/NCEI archived GFS forecast is not available online for run/.test(message)) {
+    return "no_overlap";
+  }
+  if (/NCEI archived GFS forecast request failed: HTTP (?:429|500|502|503|504)/.test(message)) {
+    return "upstream_unavailable";
+  }
+  return "other";
 }
 
 async function minimalPoint(grid: Grid, source: Source, run: string, validTime: string): Promise<any> {
