@@ -1,3 +1,4 @@
+import type { GefsReforecastFieldId } from "../catalog/gefs-reforecast.js";
 import { operationalGfsModelId } from "../schema/gfs-grid.js";
 import { AreaSummaryService } from "./area-summary.js";
 import {
@@ -268,7 +269,7 @@ export class UnifiedAtmosphereQueryService {
           ...point,
           run,
           validTime: request.time.at,
-          fields: request.selection.fields ?? [],
+          fields: (request.selection.fields ?? []) as GefsReforecastFieldId[],
           ...(request.ensemble?.members === undefined ? {} : { members: request.ensemble.members as any }),
           ...(request.ensemble?.quantiles === undefined ? {} : { quantiles: request.ensemble.quantiles }),
           ...(request.ensemble?.includeMembers === undefined
