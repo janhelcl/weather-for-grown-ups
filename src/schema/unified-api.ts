@@ -175,8 +175,8 @@ export const atmosphericSelectionSchema = z.object({
 });
 
 export const atmosphericForecastOptionsSchema = z.object({
-  kind: z.enum(["operational", "reforecast"]).default("operational").describe(
-    "Forecast population. 'reforecast' currently selects the GEFSv12 retrospective ensemble rather than an archive of operational cycles.",
+  kind: z.enum(["operational", "reforecast"]).optional().describe(
+    "Forecast population. Omit (or use 'operational') for normal forecasts; 'reforecast' selects the GEFSv12 retrospective ensemble rather than an archive of operational cycles.",
   ),
   run: z.string().min(1).default("latest").describe(
     "Forecast initialization: latest, latest_complete where supported, or an explicit ISO cycle",
