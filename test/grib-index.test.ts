@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseGribIndex, selectPressureByteRanges } from "../src/grib/index.js";
+import {
+  parseGribIndex,
+  selectNonIsobaricByteRangesAtForecastHour,
+  selectPressureByteRanges,
+} from "../src/grib/index.js";
 
 const indexText = [
   "1:0:d=2026081906:TMP:850 mb:6 hour fcst:",
@@ -74,5 +78,48 @@ describe("selectPressureByteRanges", () => {
     expect(() => selectPressureByteRanges(records, ["CAPE"], [850])).toThrow(/CAPE@850mb/);
     expect(() => selectPressureByteRanges(records, ["TMP"], [925])).toThrow(/TMP@925mb/);
     expect(() => selectPressureByteRanges(records, ["TMP", "UGRD"], [500])).toThrow(/UGRD@500mb/);
+  });
+});
+
+
+describe("selectNonIsobaricByteRangesAtForecastHour", () => {
+  it("selects one lead from a retrospective multi-lead variable file without swallowing the next message", () => {
+    const records = parseGribIndex([
+      "1:0:d=2017031400:TMP:2 m above ground:3 hour fcst:",
+      "2:100:d=2017031400:TMP:2 m above ground:6 hour fcst:",
+      "3:210:d=2017031400:TMP:2 m above ground:9 hour fcst:",
+      "4:330:d=2017031400:TMP:2 m above ground:12 hour fcst:",
+      "5:460:d=2017031400:TMP:2 m above ground:15 hour fcst:",
+    ].join("\n"));
+
+    expect(selectNonIsobaricByteRangesAtForecastHour(records, [{
+      id: "temperature_2m",
+      gfsCode: "TMP",
+      level: { gribLevel: "2 m above ground" },
+      temporalSemantics: "instantaneous",
+    }], 12)).toEqual([{ start: 330, end: 459 }]);
+  });
+
+  it("matches the end hour of accumulated and averaged messages", () => {
+    const records = parseGribIndex([
+      "1:0:d=2017031400:APCP:surface:0-3 hour acc fcst:",
+      "2:100:d=2017031400:APCP:surface:3-6 hour acc fcst:",
+      "3:200:d=2017031400:TCDC:entire atmosphere:3-6 hour ave fcst:",
+      "4:300:d=2017031400:TCDC:entire atmosphere:6-9 hour ave fcst:",
+    ].join("\n"));
+
+    expect(selectNonIsobaricByteRangesAtForecastHour(records, [{
+      id: "total_precipitation",
+      gfsCode: "APCP",
+      level: { gribLevel: "surface" },
+      temporalSemantics: "accumulation",
+    }], 6)).toEqual([{ start: 100, end: 199 }]);
+
+    expect(selectNonIsobaricByteRangesAtForecastHour(records, [{
+      id: "total_atmosphere_cloud_cover",
+      gfsCode: "TCDC",
+      level: { gribLevel: "entire atmosphere" },
+      temporalSemantics: "average",
+    }], 6)).toEqual([{ start: 200, end: 299 }]);
   });
 });
