@@ -1,36 +1,11 @@
-import type { GefsPgrb2aFieldId } from "../catalog/gefs-fields.js";
-import type { GefsMember } from "../catalog/gefs.js";
+import type { GefsReforecastFieldId, GefsReforecastMember } from "../catalog/gefs-reforecast.js";
 
 export const GEFS_REFORECAST_S3_BASE_URL = "https://noaa-gefs-retrospective.s3.amazonaws.com";
 export const GEFS_REFORECAST_START_YEAR = 2000;
 export const GEFS_REFORECAST_END_YEAR = 2019;
 export const GEFS_REFORECAST_MAX_FORECAST_HOUR = 384;
 
-export const GEFS_REFORECAST_STANDARD_MEMBERS = [
-  "c00", "p01", "p02", "p03", "p04",
-] as const satisfies readonly GefsMember[];
-
-export const GEFS_REFORECAST_EXTENDED_MEMBERS = [
-  ...GEFS_REFORECAST_STANDARD_MEMBERS,
-  "p05", "p06", "p07", "p08", "p09", "p10",
-] as const satisfies readonly GefsMember[];
-
-export type GefsReforecastMember = (typeof GEFS_REFORECAST_EXTENDED_MEMBERS)[number];
 export type GefsReforecastLeadBlock = "Days:1-10" | "Days:10-16";
-
-export const GEFS_REFORECAST_FIELD_IDS = [
-  "surface_pressure",
-  "temperature_2m",
-  "u_wind_10m",
-  "v_wind_10m",
-  "wind_10m",
-  "total_precipitation",
-  "precipitable_water",
-  "total_atmosphere_cloud_cover",
-  "mean_sea_level_pressure",
-] as const satisfies readonly GefsPgrb2aFieldId[];
-
-export type GefsReforecastFieldId = (typeof GEFS_REFORECAST_FIELD_IDS)[number];
 
 const REFORECAST_FILE_STEMS: Record<
   Exclude<GefsReforecastFieldId, "wind_10m">,
@@ -117,10 +92,6 @@ export function buildGefsReforecastFieldIndexUrl(
   field: Exclude<GefsReforecastFieldId, "wind_10m">,
 ): string {
   return `${buildGefsReforecastFieldUrl(run, member, forecastHour, field)}.idx`;
-}
-
-export function isGefsReforecastFieldId(value: string): value is GefsReforecastFieldId {
-  return (GEFS_REFORECAST_FIELD_IDS as readonly string[]).includes(value);
 }
 
 function yyyymmddhh(date: Date): string {
