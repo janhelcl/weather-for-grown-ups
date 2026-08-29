@@ -3,7 +3,7 @@ import {
   GEFS_REFORECAST_EXTENDED_MEMBERS,
   GEFS_REFORECAST_FIELD_IDS,
   GEFS_REFORECAST_STANDARD_MEMBERS,
-} from "../sources/gefs-reforecast-s3.js";
+} from "../catalog/gefs-reforecast.js";
 import {
   gefsFieldSummarySchema,
   gefsFieldTemporalResultSchema,
