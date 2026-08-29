@@ -34,6 +34,36 @@ describe("unified CLI request builders", () => {
     });
   });
 
+
+  it("builds an explicit GEFSv12 reforecast field query without changing the dataset vocabulary", () => {
+    const request = buildUnifiedQuery({
+      dataset: "gefs",
+      lat: 50.08,
+      lon: 14.43,
+      at: "2017-03-14T12:00:00Z",
+      fields: "temperature_2m,wind_10m",
+      run: "2017-03-14T00:00:00Z",
+      forecastKind: "reforecast",
+      members: "c00,p01,p02,p03,p04",
+      quantiles: "0.1,0.5,0.9",
+    });
+
+    expect(queryAtmosphereSchema.parse(request)).toMatchObject({
+      dataset: "gefs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2017-03-14T12:00:00Z" },
+      selection: { fields: ["temperature_2m", "wind_10m"] },
+      forecast: {
+        kind: "reforecast",
+        run: "2017-03-14T00:00:00Z",
+      },
+      ensemble: {
+        members: ["c00", "p01", "p02", "p03", "p04"],
+        quantiles: [0.1, 0.5, 0.9],
+      },
+    });
+  });
+
   it("builds an ECMWF IFS point query without a GFS grid or source override", () => {
     const request = buildUnifiedQuery({
       dataset: "ifs",
