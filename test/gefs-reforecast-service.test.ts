@@ -53,12 +53,13 @@ describe("GEFSv12 reforecast member-first point service", () => {
         unit: "degC",
         distribution: {
           memberCount: 5,
-          mean: 8.85,
-          min: 6.85,
-          max: 10.85,
         },
       }],
     });
+    const distribution = (result.fieldSummaries[0]!.outputs[0] as any).distribution;
+    expect(distribution.mean).toBeCloseTo(8.85, 8);
+    expect(distribution.min).toBeCloseTo(6.85, 8);
+    expect(distribution.max).toBeCloseTo(10.85, 8);
     expect(result.source).toMatchObject({
       archiveType: "reforecast",
       dataset: "GEFSv12/reforecast",
