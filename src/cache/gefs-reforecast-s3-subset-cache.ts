@@ -86,7 +86,7 @@ export class GefsReforecastS3SubsetCache implements GefsReforecastSelectionSourc
     // Pull exactly the requested forecast-hour message from each immutable
     // variable file using NOAA's sidecar inventory.
     for (const field of request.fields) {
-      if (!isGefsReforecastFieldId(field.id) || field.id === "wind_10m") {
+      if (!isGefsReforecastFieldId(field.id)) {
         throw new Error(`GEFSv12 reforecast does not expose field ${field.id} in the current WFG source contract`);
       }
       const fieldId = field.id as RawReforecastFieldId;
