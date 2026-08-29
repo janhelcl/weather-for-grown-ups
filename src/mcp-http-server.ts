@@ -6,6 +6,7 @@ import {
 } from "@modelcontextprotocol/node";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { createMcpServer } from "./mcp-server.js";
+import { WFG_VERSION } from "./version.js";
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
 
@@ -140,7 +141,7 @@ export function createMcpHttpServer(config: McpHttpConfig): McpHttpServer {
       }
       res.statusCode = 200;
       res.setHeader("content-type", "application/json; charset=utf-8");
-      res.end(JSON.stringify({ status: "ok", service: "weather-for-grown-ups", version: "0.1.0" }));
+      res.end(JSON.stringify({ status: "ok", service: "weather-for-grown-ups", version: WFG_VERSION }));
       return;
     }
 
