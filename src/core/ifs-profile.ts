@@ -107,7 +107,7 @@ export class IfsProfileService {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
     this.source = options.source ?? new IfsOpenDataSubsetCache(join(cacheDir, "ifs-open-data"));
     this.decoder = options.decoder ?? new BundledIfsPointDecoder();
-    this.latestRunProvider = options.latestRunProvider ?? new IfsLatestRunResolver();
+    this.latestRunProvider = options.latestRunProvider ?? new IfsLatestRunResolver({ cacheDir });
   }
 
   async getProfile(input: IfsPointQueryInput): Promise<IfsProfileResult> {

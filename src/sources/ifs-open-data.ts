@@ -2,6 +2,10 @@ import {
   parseGribIndex,
   type GribIndexEntry,
 } from "@mattnucc/gribberish";
+import {
+  isRetryableHttpStatus,
+  waitBeforeHttpRetry,
+} from "./http-retry.js";
 
 export const IFS_OPEN_DATA_BASE_URL = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com";
 export const IFS_OPEN_DATA_MIRRORS = [
@@ -28,22 +32,50 @@ export interface IfsIndexSelector {
 export const IFS_HTTP_MAX_ATTEMPTS = 4;
 export const IFS_HTTP_INITIAL_BACKOFF_MS = 750;
 
+export interface IfsHttpAccessPolicy {
+  run<T>(url: string, operation: () => Promise<T>): Promise<T>;
+}
+
+export interface IfsHttpAttemptResult<T> {
+  status: number;
+  statusText: string;
+  retryAfter: string | null;
+  value?: T;
+}
+
+export async function runIfsHttpWithRetry<T>(
+  operation: () => Promise<IfsHttpAttemptResult<T>>,
+): Promise<IfsHttpAttemptResult<T>> {
+  for (let attempt = 1; attempt <= IFS_HTTP_MAX_ATTEMPTS; attempt += 1) {
+    const result = await operation();
+    if (!isRetryableHttpStatus(result.status) || attempt === IFS_HTTP_MAX_ATTEMPTS) {
+      return result;
+    }
+    await waitBeforeHttpRetry(attempt, result.retryAfter, {
+      baseDelayMs: IFS_HTTP_INITIAL_BACKOFF_MS,
+    });
+  }
+  throw new Error("ECMWF IFS retry loop completed without a result");
+}
+
 export async function fetchIfsWithRetry(
   fetchFn: typeof fetch,
   input: string | URL | Request,
   init?: RequestInit,
 ): Promise<Response> {
-  let lastResponse: Response | undefined;
-  for (let attempt = 0; attempt < IFS_HTTP_MAX_ATTEMPTS; attempt += 1) {
+  const result = await runIfsHttpWithRetry(async () => {
     const response = await fetchFn(input, init);
-    if (!isRetryableStatus(response.status) || attempt === IFS_HTTP_MAX_ATTEMPTS - 1) return response;
-    lastResponse = response;
-    const retryAfterMs = retryAfterMilliseconds(response.headers.get("retry-after"));
-    const delayMs = retryAfterMs ?? IFS_HTTP_INITIAL_BACKOFF_MS * 2 ** attempt;
-    await sleep(delayMs);
+    return {
+      status: response.status,
+      statusText: response.statusText,
+      retryAfter: response.headers.get("retry-after"),
+      value: response,
+    };
+  });
+  if (result.value === undefined) {
+    throw new Error("ECMWF IFS retry loop returned no response");
   }
-  if (lastResponse !== undefined) return lastResponse;
-  throw new Error("ECMWF IFS retry loop completed without a response");
+  return result.value;
 }
 
 export interface IfsAvailabilityProbe {
@@ -136,19 +168,32 @@ export function selectIfsIndexEntries(
 }
 
 export class IfsOpenDataRunProbe implements IfsAvailabilityProbe {
-  constructor(private readonly fetchFn: typeof fetch = globalThis.fetch) {}
+  constructor(
+    private readonly fetchFn: typeof fetch = globalThis.fetch,
+    private readonly accessPolicy?: IfsHttpAccessPolicy,
+  ) {}
 
   isForecastAvailable(
     run: Date,
     forecastHour: number,
     selectors: readonly IfsIndexSelector[],
   ): Promise<boolean> {
-    return isIfsProductAvailable(this.fetchFn, run, forecastHour, selectors, "oper-fc");
+    return isIfsProductAvailable(
+      this.fetchFn,
+      run,
+      forecastHour,
+      selectors,
+      "oper-fc",
+      this.accessPolicy,
+    );
   }
 }
 
 export class IfsEnsOpenDataRunProbe implements IfsAvailabilityProbe {
-  constructor(private readonly fetchFn: typeof fetch = globalThis.fetch) {}
+  constructor(
+    private readonly fetchFn: typeof fetch = globalThis.fetch,
+    private readonly accessPolicy?: IfsHttpAccessPolicy,
+  ) {}
 
   async isForecastAvailable(
     run: Date,
@@ -160,13 +205,27 @@ export class IfsEnsOpenDataRunProbe implements IfsAvailabilityProbe {
 
     if (
       perturbationSelectors.length > 0
-      && !await isIfsProductAvailable(this.fetchFn, run, forecastHour, perturbationSelectors, "enfo-ef")
+      && !await isIfsProductAvailable(
+        this.fetchFn,
+        run,
+        forecastHour,
+        perturbationSelectors,
+        "enfo-ef",
+        this.accessPolicy,
+      )
     ) {
       return false;
     }
     if (sharedRunStatic.length > 0) {
       const deterministicSelectors = sharedRunStatic.map(withoutIfsMemberNumber);
-      if (!await isIfsProductAvailable(this.fetchFn, run, forecastHour, deterministicSelectors, "oper-fc")) {
+      if (!await isIfsProductAvailable(
+        this.fetchFn,
+        run,
+        forecastHour,
+        deterministicSelectors,
+        "oper-fc",
+        this.accessPolicy,
+      )) {
         return false;
       }
     }
@@ -189,19 +248,33 @@ async function isIfsProductAvailable(
   forecastHour: number,
   selectors: readonly IfsIndexSelector[],
   product: IfsOpenDataProduct,
+  accessPolicy?: IfsHttpAccessPolicy,
 ): Promise<boolean> {
   for (const mirror of IFS_OPEN_DATA_MIRRORS) {
     const url = buildIfsOpenDataForecastIndexUrl(run, forecastHour, mirror.baseUrl, product);
-    const response = await fetchIfsWithRetry(fetchFn, url, {
-      headers: { "user-agent": "weather-for-grown-ups/0.2" },
-    });
-    if (response.status === 404 || isRetryableStatus(response.status)) continue;
-    if (!response.ok) {
+    const result = await runIfsHttpWithRetry(() =>
+      runWithIfsAccessPolicy(accessPolicy, url, async () => {
+        const response = await fetchFn(url, {
+          headers: { "user-agent": "weather-for-grown-ups/0.2" },
+        });
+        return {
+          status: response.status,
+          statusText: response.statusText,
+          retryAfter: response.headers.get("retry-after"),
+          ...(response.ok ? { value: await response.text() } : {}),
+        };
+      }),
+    );
+    if (result.status === 404 || isRetryableHttpStatus(result.status)) continue;
+    if (result.status < 200 || result.status >= 300) {
       throw new Error(
-        `ECMWF IFS run discovery failed: HTTP ${response.status} ${response.statusText} for ${url}`,
+        `ECMWF IFS run discovery failed: HTTP ${result.status} ${result.statusText} for ${url}`,
       );
     }
-    const entries = parseIfsOpenDataIndex(await response.text());
+    if (result.value === undefined) {
+      throw new Error(`ECMWF IFS run discovery returned an empty index for ${url}`);
+    }
+    const entries = parseIfsOpenDataIndex(result.value);
     try {
       selectIfsIndexEntries(entries, selectors);
       return true;
@@ -215,25 +288,16 @@ async function isIfsProductAvailable(
   return false;
 }
 
+function runWithIfsAccessPolicy<T>(
+  accessPolicy: IfsHttpAccessPolicy | undefined,
+  url: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  return accessPolicy === undefined ? operation() : accessPolicy.run(url, operation);
+}
+
 function memberSuffix(selector: IfsIndexSelector): string {
   return selector.number === undefined ? "" : `#member${selector.number.toString().padStart(2, "0")}`;
-}
-
-function isRetryableStatus(status: number): boolean {
-  return status === 429 || status === 503 || (status >= 500 && status <= 599);
-}
-
-function retryAfterMilliseconds(value: string | null): number | undefined {
-  if (value === null) return undefined;
-  const seconds = Number(value);
-  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
-  const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) return undefined;
-  return Math.max(0, timestamp - Date.now());
-}
-
-function sleep(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function yyyymmdd(date: Date): string {

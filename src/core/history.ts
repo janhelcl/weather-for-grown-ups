@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_NOMADS_COOLDOWN_MS, FileRateLimiter } from "../cache/file-rate-limiter.js";
+import { FileAccessPolicy, UPSTREAM_ACCESS_POLICIES, withLegacyCooldown } from "../cache/file-access-policy.js";
 import {
   deriveAirDensityKgM3,
   deriveDewPointC,
@@ -150,9 +150,9 @@ export class HistoricalProfileService {
 
   constructor(options: HistoricalProfileServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
-    const limiter = new FileRateLimiter(
+    const limiter = new FileAccessPolicy(
       join(cacheDir, "state"),
-      options.cooldownMs ?? DEFAULT_NOMADS_COOLDOWN_MS,
+      withLegacyCooldown(UPSTREAM_ACCESS_POLICIES.nceiThredds, options.cooldownMs),
     );
     this.source = options.source ?? new NceiGfsHistorySource({
       cacheDir: join(cacheDir, "ncei-history"),

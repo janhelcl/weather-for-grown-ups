@@ -124,10 +124,10 @@ WFG builds larger queries by composing smaller atmospheric primitives while pres
 
 ### Historical GFS analysis
 
-Historical Grid 4 participates in the same profile, time-series, layer-diagnostic, profile-diagnostic, parcel, multi-point, multi-point-time-series, transect and area-summary operation boundaries as operational data. Its source adapter preserves exact 00/06/12/18 UTC analysis semantics, 0.5° sampling, NCEI provenance and bounded serial archive access.
+Historical Grid 4 participates in the same profile, time-series, layer-diagnostic, profile-diagnostic, parcel, multi-point, multi-point-time-series, transect and area-summary operation boundaries as operational data. Its source adapter preserves exact 00/06/12/18 UTC analysis semantics, 0.5° sampling, NCEI provenance and bounded archive access.
 
 - diagnostic time series compose the same layer/profile/parcel kernels over selected analysis cycles;
-- multi-point requests are bounded to 10 coordinates and intentionally serialize NCEI point access under the NOAA courtesy limiter;
+- multi-point requests are bounded to 10 coordinates and use the NCEI THREDDS/NCSS provider policy rather than the NOMADS courtesy interval;
 - multi-point time series bound both analysis steps and the point × step matrix;
 - transects reuse the same great-circle interpolation as GFS/GEFS and delegate samples to the historical multi-point primitive;
 - area statistics use one native NCEI NCSS bbox/grid subset, apply exact vertical-coordinate selection for pressure/height fields, verify the returned vertical coordinate, and reuse the same local spatial distribution kernel as operational GFS.
@@ -191,11 +191,11 @@ WFG supports operational GFS at both 0.25° and 0.5°. Source choice is an inter
 
 Explicit historical GFS runs route by the selected grid: 0.25° uses NCAR/GDEX d084001 through THREDDS/NCSS (archive start 2015-01-15), while 0.5° uses NOAA NCEI Grid 4 through THREDDS/NCSS (archive start 2006-10-10). Both preserve forecast run, lead, valid time, grid and source provenance. Archive availability is not silently substituted across grids.
 
-Physical NOMADS and paced archive requests use their respective shared cross-process courtesy limits. AWS Open Data paths do not use the NOMADS scripted-access limiter. CLI GFS time-range queries emit native-step progress on stderr, including the resolved source and cache-hit state, so courtesy-paced NOMADS misses are visible rather than looking hung.
+Upstream access etiquette is source-specific rather than inherited from NOMADS. NOMADS uses one cross-process slot plus an 11-second minimum interval. NCEI THREDDS/NCSS uses two cross-process slots with no artificial delay, NCAR/GDEX uses four slots (below its published 10-stream ceiling), and IGRA uses four. NOAA AWS and ECMWF cloud/direct transports use their own bounded policies and do not inherit NOMADS pacing. Transient 429/5xx responses are retried with exponential backoff, jitter and `Retry-After` handling where applicable. CLI GFS time-range queries emit native-step progress on stderr, including the resolved source and cache-hit state, so courtesy-paced NOMADS misses are visible rather than looking hung.
 
 ### Historical GFS analysis
 
-Historical analysis uses NOAA NCEI Grid 4 through THREDDS/NCSS. Point/profile operations use grid-as-point requests; area summaries use one native bbox/grid subset. Archive reads are immutable and cached; cache misses remain serial under the NOAA courtesy limiter. Pressure/height area queries request an exact vertical coordinate and reject NCSS nearest-level substitution when the returned coordinate does not match. Source and analysis provenance stay attached to every result.
+Historical analysis uses NOAA NCEI Grid 4 through THREDDS/NCSS. Point/profile operations use grid-as-point requests; area summaries use one native bbox/grid subset. Archive reads are immutable and cached; cache misses are bounded by the NCEI provider policy without the NOMADS 11-second delay. Pressure/height area queries request an exact vertical coordinate and reject NCSS nearest-level substitution when the returned coordinate does not match. Source and analysis provenance stay attached to every result.
 
 ### GEFS
 

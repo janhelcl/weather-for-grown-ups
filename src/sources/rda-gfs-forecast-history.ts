@@ -1,8 +1,13 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NetCDFReader } from "netcdfjs";
-import type { FileRateLimiter } from "../cache/file-rate-limiter.js";
+import type { UpstreamAccessPolicy } from "../cache/file-access-policy.js";
+import {
+  DEFAULT_HTTP_RETRY_MAX_ATTEMPTS,
+  isRetryableHttpStatus,
+  waitBeforeHttpRetry,
+} from "./http-retry.js";
 import type {
   ArchivedGfsForecastAreaDataSource,
   ArchivedGfsForecastAreaRequest,
@@ -15,8 +20,7 @@ export const RDA_GFS_0P25_FORECAST_START = new Date("2015-01-15T00:00:00Z");
 export const RDA_GFS_0P25_NCSS_BASE_URL =
   "https://tds.gdex.ucar.edu/thredds/ncss/grid/files/g/d084001";
 
-const TRANSIENT_GDEX_STATUS_CODES = new Set([502, 503, 504]);
-const GDEX_MAX_ATTEMPTS = 3;
+const GDEX_MAX_ATTEMPTS = DEFAULT_HTTP_RETRY_MAX_ATTEMPTS;
 
 export interface RdaAreaNetcdfReader {
   dimensions: readonly { name: string; size: number }[];
@@ -26,9 +30,11 @@ export interface RdaAreaNetcdfReader {
 
 export interface RdaGfsForecastHistorySourceOptions {
   cacheDir: string;
-  limiter: Pick<FileRateLimiter, "run">;
+  limiter: UpstreamAccessPolicy;
   fetchFn?: typeof fetch;
   netcdfReaderFactory?: (data: Uint8Array) => RdaAreaNetcdfReader;
+  retryBaseDelayMs?: number;
+  retryJitterRatio?: number;
 }
 
 export class RdaGfsForecastHistorySource
@@ -83,14 +89,20 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
         return {
           status: response.status,
           statusText: response.statusText,
+          retryAfter: response.headers.get("retry-after"),
           bytes: response.ok ? new Uint8Array(await response.arrayBuffer()) : undefined,
         };
       });
 
-      if (
-        TRANSIENT_GDEX_STATUS_CODES.has(result.status)
-        && attempt < GDEX_MAX_ATTEMPTS
-      ) {
+      if (isRetryableHttpStatus(result.status) && attempt < GDEX_MAX_ATTEMPTS) {
+        await waitBeforeHttpRetry(attempt, result.retryAfter, {
+          ...(this.options.retryBaseDelayMs === undefined
+            ? {}
+            : { baseDelayMs: this.options.retryBaseDelayMs }),
+          ...(this.options.retryJitterRatio === undefined
+            ? {}
+            : { jitterRatio: this.options.retryJitterRatio }),
+        });
         continue;
       }
       if (result.status === 404) {
@@ -117,7 +129,7 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
         );
       }
 
-      const tempPath = `${cachePath}.${process.pid}.tmp`;
+      const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
       await writeFile(tempPath, csv, "utf8");
       await rename(tempPath, cachePath);
       return { csv, dataset, cacheHit: false };
@@ -151,14 +163,20 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
         return {
           status: response.status,
           statusText: response.statusText,
+          retryAfter: response.headers.get("retry-after"),
           csv: response.ok ? await response.text() : undefined,
         };
       });
 
-      if (
-        TRANSIENT_GDEX_STATUS_CODES.has(result.status)
-        && attempt < GDEX_MAX_ATTEMPTS
-      ) {
+      if (isRetryableHttpStatus(result.status) && attempt < GDEX_MAX_ATTEMPTS) {
+        await waitBeforeHttpRetry(attempt, result.retryAfter, {
+          ...(this.options.retryBaseDelayMs === undefined
+            ? {}
+            : { baseDelayMs: this.options.retryBaseDelayMs }),
+          ...(this.options.retryJitterRatio === undefined
+            ? {}
+            : { jitterRatio: this.options.retryJitterRatio }),
+        });
         continue;
       }
       if (result.status === 404) {
@@ -177,7 +195,7 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
         );
       }
 
-      const tempPath = `${cachePath}.${process.pid}.tmp`;
+      const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
       await writeFile(tempPath, result.csv, "utf8");
       await rename(tempPath, cachePath);
       return { csv: result.csv, dataset, cacheHit: false };

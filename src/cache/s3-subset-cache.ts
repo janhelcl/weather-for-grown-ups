@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  FileAccessPolicy,
+  UPSTREAM_ACCESS_POLICIES,
+  type UpstreamAccessPolicy,
+} from "./file-access-policy.js";
+import {
   mergeByteRanges,
   parseGribIndex,
   selectNonIsobaricByteRanges,
@@ -9,6 +14,11 @@ import {
   type ByteRange,
 } from "../grib/index.js";
 import { buildGfsS3ForecastIndexUrl, buildGfsS3ForecastUrl } from "../sources/gfs-s3.js";
+import {
+  DEFAULT_HTTP_RETRY_MAX_ATTEMPTS,
+  isRetryableHttpStatus,
+  waitBeforeHttpRetry,
+} from "../sources/http-retry.js";
 import type { ProfileDataRequest, ProfileSourceFile } from "../sources/types.js";
 
 export class GfsS3SubsetCache {
@@ -17,6 +27,11 @@ export class GfsS3SubsetCache {
   constructor(
     private readonly rootDir: string,
     private readonly fetchFn: typeof fetch = globalThis.fetch,
+    private readonly rangeConcurrency: number = UPSTREAM_ACCESS_POLICIES.noaaAws.maxConcurrency,
+    private readonly accessPolicy: UpstreamAccessPolicy = new FileAccessPolicy(
+      join(rootDir, "access-state"),
+      UPSTREAM_ACCESS_POLICIES.noaaAws,
+    ),
   ) {}
 
   async fetch(request: ProfileDataRequest): Promise<ProfileSourceFile> {
@@ -50,7 +65,11 @@ export class GfsS3SubsetCache {
     const fieldRanges = selectNonIsobaricByteRanges(records, request.fields ?? []);
     const ranges = mergeByteRanges(pressureRanges, fieldRanges);
 
-    const chunks = await Promise.all(ranges.map((range) => this.fetchRange(gribUrl, range)));
+    const chunks = await mapConcurrent(
+      ranges,
+      this.rangeConcurrency,
+      (range) => this.fetchRange(gribUrl, range),
+    );
     const totalBytes = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
     const combined = new Uint8Array(totalBytes);
     let offset = 0;
@@ -79,34 +98,71 @@ export class GfsS3SubsetCache {
       // Immutable index files are fetched once and then reused locally.
     }
 
-    const response = await this.fetchFn(url, {
-      headers: { "user-agent": "weather-for-grown-ups/0.1" },
-    });
-    if (!response.ok) {
-      throw new Error(`NOAA AWS index request failed: HTTP ${response.status} ${response.statusText}`);
+    for (let attempt = 1; attempt <= DEFAULT_HTTP_RETRY_MAX_ATTEMPTS; attempt += 1) {
+      const result = await this.accessPolicy.run(async () => {
+        const response = await this.fetchFn(url, {
+          headers: { "user-agent": "weather-for-grown-ups/0.1" },
+        });
+        return {
+          status: response.status,
+          statusText: response.statusText,
+          retryAfter: response.headers.get("retry-after"),
+          text: response.ok ? await response.text() : undefined,
+        };
+      });
+
+      if (isRetryableHttpStatus(result.status) && attempt < DEFAULT_HTTP_RETRY_MAX_ATTEMPTS) {
+        await waitBeforeHttpRetry(attempt, result.retryAfter);
+        continue;
+      }
+      if (result.status < 200 || result.status >= 300 || result.text === undefined) {
+        throw new Error(`NOAA AWS index request failed: HTTP ${result.status} ${result.statusText}`);
+      }
+      await writeFile(path, result.text, "utf8");
+      return result.text;
     }
-    const text = await response.text();
-    await writeFile(path, text, "utf8");
-    return text;
+
+    throw new Error("NOAA AWS index retry loop exhausted unexpectedly");
   }
 
   private async fetchRange(url: string, range: ByteRange): Promise<Uint8Array> {
     const rangeValue = `bytes=${range.start}-${range.end ?? ""}`;
-    const response = await this.fetchFn(url, {
-      headers: {
-        range: rangeValue,
-        "user-agent": "weather-for-grown-ups/0.1",
-      },
-    });
-    if (response.status !== 206) {
-      throw new Error(`NOAA AWS range request failed: HTTP ${response.status} ${response.statusText}`);
+
+    for (let attempt = 1; attempt <= DEFAULT_HTTP_RETRY_MAX_ATTEMPTS; attempt += 1) {
+      const result = await this.accessPolicy.run(async () => {
+        const response = await this.fetchFn(url, {
+          headers: {
+            range: rangeValue,
+            "user-agent": "weather-for-grown-ups/0.1",
+          },
+        });
+        return {
+          status: response.status,
+          statusText: response.statusText,
+          retryAfter: response.headers.get("retry-after"),
+          bytes: response.status === 206
+            ? new Uint8Array(await response.arrayBuffer())
+            : undefined,
+        };
+      });
+
+      if (isRetryableHttpStatus(result.status) && attempt < DEFAULT_HTTP_RETRY_MAX_ATTEMPTS) {
+        await waitBeforeHttpRetry(attempt, result.retryAfter);
+        continue;
+      }
+      if (result.status !== 206 || result.bytes === undefined) {
+        throw new Error(`NOAA AWS range request failed: HTTP ${result.status} ${result.statusText}`);
+      }
+      if (
+        result.bytes.length < 4
+        || new TextDecoder().decode(result.bytes.slice(0, 4)) !== "GRIB"
+      ) {
+        throw new Error(`NOAA AWS range did not start with a GRIB message (${rangeValue})`);
+      }
+      return result.bytes;
     }
 
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
-      throw new Error(`NOAA AWS range did not start with a GRIB message (${rangeValue})`);
-    }
-    return bytes;
+    throw new Error("NOAA AWS range retry loop exhausted unexpectedly");
   }
 }
 
@@ -120,6 +176,31 @@ function subsetKey(request: ProfileDataRequest): string {
     fields: [...new Set((request.fields ?? []).map((field) => field.id))].sort(),
   });
   return createHash("sha256").update(canonical).digest("hex");
+}
+
+async function mapConcurrent<T, U>(
+  values: readonly T[],
+  concurrency: number,
+  fn: (value: T) => Promise<U>,
+): Promise<U[]> {
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new Error("NOAA AWS range concurrency must be a positive integer");
+  }
+  const result = new Array<U>(values.length);
+  let next = 0;
+
+  async function worker(): Promise<void> {
+    for (;;) {
+      const index = next;
+      next += 1;
+      if (index >= values.length) return;
+      result[index] = await fn(values[index]!);
+    }
+  }
+
+  const workerCount = Math.min(concurrency, values.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return result;
 }
 
 async function exists(path: string): Promise<boolean> {

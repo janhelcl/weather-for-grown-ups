@@ -1,14 +1,17 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { UpstreamAccessPolicy } from "./file-access-policy.js";
+import { IfsOpenDataAccessPolicy } from "./ifs-open-data-access-policy.js";
 import {
   buildIfsOpenDataForecastIndexUrl,
   buildIfsOpenDataForecastUrl,
-  fetchIfsWithRetry,
   IFS_OPEN_DATA_MIRRORS,
   parseIfsOpenDataIndex,
+  runIfsHttpWithRetry,
   selectIfsIndexEntries,
   type IfsIndexSelector,
+  type IfsHttpAccessPolicy,
   type IfsOpenDataProduct,
 } from "../sources/ifs-open-data.js";
 
@@ -31,12 +34,21 @@ export interface IfsSelectionSource {
 export class IfsOpenDataSubsetCache implements IfsSelectionSource {
   private readonly inFlight = new Map<string, Promise<IfsSubsetFile>>();
   private readonly indexInFlight = new Map<string, Promise<string>>();
+  private readonly accessPolicy: IfsHttpAccessPolicy;
 
   constructor(
     private readonly rootDir: string,
     private readonly fetchFn: typeof fetch = globalThis.fetch,
     private readonly rangeConcurrency = 3,
-  ) {}
+    cloudAccessPolicy?: UpstreamAccessPolicy,
+    directAccessPolicy?: UpstreamAccessPolicy,
+  ) {
+    this.accessPolicy = new IfsOpenDataAccessPolicy(
+      join(rootDir, "access-state"),
+      cloudAccessPolicy,
+      directAccessPolicy,
+    );
+  }
 
   async fetchSelection(request: IfsSelectionRequest): Promise<IfsSubsetFile> {
     if (request.selectors.length === 0) throw new Error("IFS subset request selected no fields");
@@ -94,7 +106,7 @@ export class IfsOpenDataSubsetCache implements IfsSelectionSource {
       offset += chunk.byteLength;
     }
 
-    const tempPath = `${path}.${process.pid}.tmp`;
+    const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
     try {
       await writeFile(tempPath, combined);
       await rename(tempPath, path);
@@ -124,38 +136,61 @@ export class IfsOpenDataSubsetCache implements IfsSelectionSource {
   }
 
   private async downloadIndex(url: string, path: string): Promise<string> {
-    const response = await fetchIfsWithRetry(this.fetchFn, url, {
-      headers: { "user-agent": "weather-for-grown-ups/0.2" },
-    });
-    if (!response.ok) {
+    const result = await runIfsHttpWithRetry(() =>
+      this.accessPolicy.run(url, async () => {
+        const response = await this.fetchFn(url, {
+          headers: { "user-agent": "weather-for-grown-ups/0.2" },
+        });
+        return {
+          status: response.status,
+          statusText: response.statusText,
+          retryAfter: response.headers.get("retry-after"),
+          ...(response.ok ? { value: await response.text() } : {}),
+        };
+      }),
+    );
+    if (result.status < 200 || result.status >= 300 || result.value === undefined) {
       throw new Error(
-        `ECMWF IFS index request failed: HTTP ${response.status} ${response.statusText} for ${url}`,
+        `ECMWF IFS index request failed: HTTP ${result.status} ${result.statusText} for ${url}`,
       );
     }
-    const text = await response.text();
-    await writeFile(path, text, "utf8");
-    return text;
+    await writeFile(path, result.value, "utf8");
+    return result.value;
   }
 
   private async fetchRange(url: string, start: number, length: number): Promise<Uint8Array> {
     const end = start + length - 1;
     const rangeValue = `bytes=${start}-${end}`;
-    const response = await fetchIfsWithRetry(this.fetchFn, url, {
-      headers: {
-        range: rangeValue,
-        "user-agent": "weather-for-grown-ups/0.2",
-      },
-    });
-    if (response.status !== 206) {
+    const result = await runIfsHttpWithRetry(() =>
+      this.accessPolicy.run(url, async () => {
+        const response = await this.fetchFn(url, {
+          headers: {
+            range: rangeValue,
+            "user-agent": "weather-for-grown-ups/0.2",
+          },
+        });
+        return {
+          status: response.status,
+          statusText: response.statusText,
+          retryAfter: response.headers.get("retry-after"),
+          ...(response.status === 206
+            ? { value: new Uint8Array(await response.arrayBuffer()) }
+            : {}),
+        };
+      }),
+    );
+    if (result.status !== 206 || result.value === undefined) {
       throw new Error(
-        `ECMWF IFS range request failed: HTTP ${response.status} ${response.statusText} for ${rangeValue}`,
+        `ECMWF IFS range request failed: HTTP ${result.status} ${result.statusText} for ${rangeValue}`,
       );
     }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
+    if (
+      result.value.length < 4
+      || new TextDecoder().decode(result.value.slice(0, 4)) !== "GRIB"
+    ) {
       throw new Error(`ECMWF IFS range did not start with a GRIB message (${rangeValue})`);
     }
-    return bytes;
+    return result.value;
   }
 }
 

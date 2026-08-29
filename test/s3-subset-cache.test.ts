@@ -51,9 +51,12 @@ describe("GfsS3SubsetCache", () => {
     expect(result.cacheHit).toBe(false);
     expect(Buffer.from(await readFile(result.path)).toString()).toBe("GRIB0000GRIB1111");
     expect(fetchFn.mock.calls.filter(([input]) => String(input).endsWith(".idx"))).toHaveLength(1);
-    expect(fetchFn.mock.calls.map(([, init]) => new Headers(init?.headers).get("range")).filter(Boolean)).toEqual([
-      "bytes=0-7", "bytes=8-15",
-    ]);
+    expect(fetchFn.mock.calls
+      .map(([, init]) => new Headers(init?.headers).get("range"))
+      .filter((range): range is string => range !== null)
+      .sort()).toEqual([
+        "bytes=0-7", "bytes=8-15",
+      ]);
   });
 
   it("returns a disk cache hit without any upstream requests", async () => {
@@ -93,9 +96,36 @@ describe("GfsS3SubsetCache", () => {
     expect(fetchFn.mock.calls.filter(([, init]) => new Headers(init?.headers).has("range"))).toHaveLength(2);
   });
 
+  it("bounds concurrent range requests", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const fetchFn = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith(".idx")) return new Response(indexText, { status: 200 });
+      const range = new Headers(init?.headers).get("range");
+      const body = range === null ? undefined : chunks[range];
+      if (!body) return new Response("missing", { status: 416 });
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      active -= 1;
+      return new Response(new TextEncoder().encode(body), { status: 206 });
+    });
+    const cache = new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch, 2);
+
+    await cache.fetch(request(["temperature", "relative_humidity"], [850, 700]));
+
+    expect(maxActive).toBe(2);
+  });
+
   it("fails on an unavailable index", async () => {
-    const fetchFn = vi.fn(async () => new Response("no", { status: 503, statusText: "Unavailable" }));
-    await expect(new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch).fetch(request())).rejects.toThrow(/index request failed: HTTP 503/);
+    const fetchFn = vi.fn(async () => new Response("no", {
+      status: 503,
+      statusText: "Unavailable",
+      headers: { "retry-after": "0" },
+    }));
+    await expect(new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch).fetch(request()))
+      .rejects.toThrow(/index request failed: HTTP 503/);
+    expect(fetchFn).toHaveBeenCalledTimes(3);
   });
 
   it("fails rather than accepting a server that ignores the Range header", async () => {

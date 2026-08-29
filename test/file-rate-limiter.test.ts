@@ -23,7 +23,7 @@ describe("FileRateLimiter", () => {
   });
 
   it("runs an operation, persists completion time, and releases the lock", async () => {
-    const limiter = new FileRateLimiter(rootDir, 0);
+    const limiter = new FileRateLimiter(rootDir, 1);
     await expect(limiter.run(async () => 42)).resolves.toBe(42);
 
     const state = JSON.parse(await readFile(join(rootDir, "nomads-state.json"), "utf8")) as {
@@ -66,7 +66,7 @@ describe("FileRateLimiter", () => {
   });
 
   it("records completion and releases the lock even when the operation fails", async () => {
-    const limiter = new FileRateLimiter(rootDir, 0);
+    const limiter = new FileRateLimiter(rootDir, 1);
     await expect(
       limiter.run(async () => {
         throw new Error("upstream failed");
