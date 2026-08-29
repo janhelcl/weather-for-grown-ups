@@ -12,12 +12,12 @@ import {
   type GefsReforecastPointQueryInput,
   type GefsReforecastPointResult,
 } from "../schema/gefs-reforecast.js";
+import type { GefsReforecastMember } from "../catalog/gefs-reforecast.js";
 import {
   gefsReforecastForecastHour,
   gefsReforecastHorizontalGridDegrees,
   gefsReforecastLeadBlock,
   parseGefsReforecastRun,
-  type GefsReforecastMember,
 } from "../sources/gefs-reforecast-s3.js";
 import { mapConcurrent } from "./concurrency.js";
 import {
