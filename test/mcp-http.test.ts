@@ -6,6 +6,7 @@ import {
   loadMcpHttpConfig,
   type McpHttpServer,
 } from "../src/mcp-http-server.js";
+import { WFG_VERSION } from "../src/version.js";
 
 const realFetch = globalThis.fetch;
 const openServers: McpHttpServer[] = [];
@@ -55,6 +56,19 @@ describe("Streamable HTTP MCP", () => {
       WFG_MCP_HOST: "0.0.0.0",
       WFG_MCP_ALLOWED_HOSTS: "weather.example.com, api.weather.example.com",
     }).allowedHosts).toEqual(["weather.example.com", "api.weather.example.com"]);
+  });
+
+  it("reports the package version from the health endpoint", async () => {
+    const instance = createMcpHttpServer(loadMcpHttpConfig({}));
+    const url = await listenOnLoopback(instance);
+    const response = await realFetch(new URL("/healthz", url));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      status: "ok",
+      service: "weather-for-grown-ups",
+      version: WFG_VERSION,
+    });
   });
 
   it("serves the same registered tool catalog over Streamable HTTP", async () => {
