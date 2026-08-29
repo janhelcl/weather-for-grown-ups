@@ -18,11 +18,13 @@ import {
   waitBeforeHttpRetry,
 } from "../sources/http-retry.js";
 import {
-  buildGefsReforecastFieldIndexUrl,
-  buildGefsReforecastFieldUrl,
   isGefsReforecastFieldId,
   type GefsReforecastFieldId,
   type GefsReforecastMember,
+} from "../catalog/gefs-reforecast.js";
+import {
+  buildGefsReforecastFieldIndexUrl,
+  buildGefsReforecastFieldUrl,
 } from "../sources/gefs-reforecast-s3.js";
 
 type RawReforecastFieldId = Exclude<GefsReforecastFieldId, "wind_10m">;
