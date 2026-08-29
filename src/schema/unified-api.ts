@@ -1,5 +1,9 @@
 import * as z from "zod/v4";
 import { LAYER_DIAGNOSTIC_IDS } from "../catalog/layer-diagnostics.js";
+import {
+  GEFS_REFORECAST_EXTENDED_MEMBERS,
+  GEFS_REFORECAST_FIELD_IDS,
+} from "../catalog/gefs-reforecast.js";
 import { PARCEL_DEFINITION_IDS } from "../catalog/parcel-diagnostics.js";
 import { PROFILE_DIAGNOSTIC_IDS } from "../catalog/profile-diagnostics.js";
 import {
@@ -171,6 +175,9 @@ export const atmosphericSelectionSchema = z.object({
 });
 
 export const atmosphericForecastOptionsSchema = z.object({
+  kind: z.enum(["operational", "reforecast"]).default("operational").describe(
+    "Forecast population. 'reforecast' currently selects the GEFSv12 retrospective ensemble rather than an archive of operational cycles.",
+  ),
   run: z.string().min(1).default("latest").describe(
     "Forecast initialization: latest, latest_complete where supported, or an explicit ISO cycle",
   ),
@@ -266,6 +273,7 @@ export const UNIFIED_ATMOSPHERE_INTERNAL_DATASET_IDS = [
   ...ATMOSPHERIC_DATASET_IDS,
   "gfs_0p25_forecast_archive",
   "gfs_grid4_forecast_0p5_archive",
+  "gefs_v12_reforecast",
 ] as const;
 
 export const unifiedAtmosphereResultSchema = z.object({
@@ -346,6 +354,75 @@ function validateDatasetModifiers(
   context: z.RefinementCtx,
 ): void {
   const metadata = publicDatasetMetadata(request.dataset as PublicAtmosphericDataset);
+  const isReforecast = request.forecast?.kind === "reforecast";
+
+  if (isReforecast) {
+    if (request.dataset !== "gefs") {
+      context.addIssue({
+        code: "custom",
+        path: ["forecast", "kind"],
+        message: "forecast.kind=reforecast is currently available only for dataset=gefs",
+      });
+    }
+    if (request.forecast?.run === "latest" || request.forecast?.run === "latest_complete") {
+      context.addIssue({
+        code: "custom",
+        path: ["forecast", "run"],
+        message: "GEFSv12 reforecast queries require an explicit historical 00Z initialization",
+      });
+    }
+    if (request.geometry?.type !== "point") {
+      context.addIssue({
+        code: "custom",
+        path: ["geometry"],
+        message: "GEFSv12 reforecast support currently covers point geometry; other geometries will be added without changing the public query vocabulary",
+      });
+    }
+    if (request.time !== undefined && "from" in request.time) {
+      context.addIssue({
+        code: "custom",
+        path: ["time"],
+        message: "GEFSv12 reforecast support currently covers one valid time per query",
+      });
+    }
+    if (request.diagnostic !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["diagnostic"],
+        message: "GEFSv12 reforecast diagnostics are not yet exposed; query raw/derived supported fields first",
+      });
+    }
+    if (request.selection !== undefined) {
+      if (request.selection.variables !== undefined || request.selection.pressureLevelsHpa !== undefined) {
+        context.addIssue({
+          code: "custom",
+          path: ["selection"],
+          message: "Initial GEFSv12 reforecast support is field-only; pressure/profile support is the next source layer",
+        });
+      }
+      const fields = request.selection.fields ?? [];
+      const supported = new Set<string>(GEFS_REFORECAST_FIELD_IDS);
+      const unsupported = fields.filter((field: string) => !supported.has(field));
+      if (unsupported.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["selection", "fields"],
+          message: `GEFSv12 reforecast fields not yet supported: ${unsupported.join(", ")}`,
+        });
+      }
+    }
+    if (request.ensemble?.members !== undefined) {
+      const supportedMembers = new Set<string>(GEFS_REFORECAST_EXTENDED_MEMBERS);
+      const unsupported = request.ensemble.members.filter((member: string) => !supportedMembers.has(member));
+      if (unsupported.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["ensemble", "members"],
+          message: `GEFSv12 reforecast members are c00,p01..p10; unsupported: ${unsupported.join(", ")}`,
+        });
+      }
+    }
+  }
   if (metadata.role === "analysis" && request.forecast !== undefined) {
     context.addIssue({
       code: "custom",
