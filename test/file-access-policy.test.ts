@@ -5,8 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   FileAccessPolicy,
   UPSTREAM_ACCESS_POLICIES,
-  withLegacyCooldown,
-} from "../src/cache/file-access-policy.js";
+} from "../src/access/access-policy.js";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -132,16 +131,6 @@ describe("FileAccessPolicy", () => {
 
     await Promise.all([firstRun, secondRun]);
     expect(maxActive).toBe(1);
-  });
-
-  it("turns the legacy cooldown override into a serial interval policy only when requested", () => {
-    expect(withLegacyCooldown(UPSTREAM_ACCESS_POLICIES.gdex, undefined))
-      .toBe(UPSTREAM_ACCESS_POLICIES.gdex);
-    expect(withLegacyCooldown(UPSTREAM_ACCESS_POLICIES.gdex, 25)).toMatchObject({
-      id: "gdex",
-      maxConcurrency: 1,
-      minIntervalMs: 25,
-    });
   });
 
   it("rejects an ambiguous interval-plus-concurrency policy", () => {
