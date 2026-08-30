@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import {
+  createAtmosphericQueryAdapterRegistry,
+  type AtmosphericQueryRegistryOptions,
+} from "../src/core/query-adapters/registry.js";
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
 import {
   UnifiedAtmosphereDiagnosticService,
@@ -13,6 +17,12 @@ import {
 import {
   queryAtmosphereSchema,
 } from "../src/schema/unified-api.js";
+
+function createQueryService(options: AtmosphericQueryRegistryOptions = {}) {
+  return createQueryService({
+    adapters: createAtmosphericQueryAdapterRegistry(options),
+  });
+}
 
 const point = { type: "point" as const, latitude: 50.08, longitude: 14.43 };
 const selection = {
@@ -137,7 +147,7 @@ describe("unified atmospheric routing", () => {
     const historyProfile = { getHistoricalProfile: vi.fn(async () => ({ route: "history-profile" })) };
     const historyFields = { getHistoricalFields: vi.fn(async () => ({ route: "history-fields" })) };
 
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gfsProfile: gfsProfile as any,
       gefsBundle: gefsBundle as any,
       ifsProfile: ifsProfile as any,
@@ -223,7 +233,7 @@ describe("unified atmospheric routing", () => {
         grid: query.grid,
       })),
     };
-    const service = new UnifiedAtmosphereQueryService({ gfsProfile: gfsProfile as any });
+    const service = createQueryService({ gfsProfile: gfsProfile as any });
     const result = await service.query({
       dataset: "gfs",
       geometry: point,
@@ -246,7 +256,7 @@ describe("unified atmospheric routing", () => {
         route: "archive-0p25",
       })),
     };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       archivedGfs: archivedGfs as any,
       now: () => new Date("2026-08-27T12:00:00Z"),
     });
@@ -270,7 +280,7 @@ describe("unified atmospheric routing", () => {
         route: "archived-gfs",
       })),
     };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gfsProfile: gfsProfile as any,
       archivedGfs: archivedGfs as any,
       now: () => new Date("2026-08-27T12:00:00Z"),
@@ -310,7 +320,7 @@ describe("unified atmospheric routing", () => {
     const ifsTimeSeries = { getTimeSeries: vi.fn(async () => ({ route: "ifs-series" })) };
     const historyTimeSeries = { getHistoricalTimeSeries: vi.fn(async () => ({ route: "history-series" })) };
 
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gfsTimeSeries: gfsTimeSeries as any,
       gefsTimeSeries: gefsTimeSeries as any,
       ifsEnsTimeSeries: ifsEnsTimeSeries as any,
@@ -799,7 +809,7 @@ describe("unified geometry routing coverage", () => {
       getPointsTimeSeries: vi.fn(async () => ({ route: "ifs-ens-points-series" })),
     };
     const historyPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "history-points-series" })) };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gfsPoints: gfsPoints as any,
       gefsPoints: gefsPoints as any,
       ifsPoints: ifsPoints as any,
@@ -916,7 +926,7 @@ describe("unified geometry routing coverage", () => {
     const ifsTransect = { getTransect: vi.fn(async () => ({ route: "ifs-transect" })) };
     const ifsEnsTransect = { getTransect: vi.fn(async () => ({ route: "ifs-ens-transect" })) };
     const historyTransect = { getTransect: vi.fn(async () => ({ route: "history-transect" })) };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gfsTransect: gfsTransect as any,
       gefsTransect: gefsTransect as any,
       ifsTransect: ifsTransect as any,
@@ -993,7 +1003,7 @@ describe("unified geometry routing coverage", () => {
     const ifsArea = { summarize: vi.fn(async () => ({ route: "ifs-area" })) };
     const ifsEnsArea = { summarize: vi.fn(async () => ({ route: "ifs-ens-area" })) };
     const historyArea = { summarize: vi.fn(async () => ({ route: "history-area" })) };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gfsArea: gfsArea as any,
       gefsArea: gefsArea as any,
       ifsArea: ifsArea as any,
