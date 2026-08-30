@@ -2,7 +2,10 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FileRateLimiter } from "../src/cache/file-rate-limiter.js";
+import {
+  FileAccessPolicy,
+  UPSTREAM_ACCESS_POLICIES,
+} from "../src/access/access-policy.js";
 import { NomadsCache } from "../src/cache/nomads-cache.js";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -21,7 +24,13 @@ afterEach(async () => {
   await rm(rootDir, { recursive: true, force: true });
 });
 
-const makeCache = () => new NomadsCache(cacheDir, new FileRateLimiter(join(rootDir, "state"), 0));
+const makeCache = () => new NomadsCache(
+  cacheDir,
+  new FileAccessPolicy(join(rootDir, "state"), {
+    ...UPSTREAM_ACCESS_POLICIES.nomads,
+    minIntervalMs: 0,
+  }),
+);
 
 describe("NomadsCache", () => {
   it("downloads GRIB once, stores it atomically, and serves subsequent cache hits", async () => {
