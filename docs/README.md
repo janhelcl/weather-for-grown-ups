@@ -1,51 +1,72 @@
 # Documentation
 
-Detailed documentation for **Weather for Grown Ups** lives here so the repository root can stay focused on the project itself.
+The root [README](../README.md) explains **why Weather for Grown Ups exists**. This directory explains how to use it, how the model semantics differ, and how the implementation stays true to one query language across multiple sources.
 
 ## Start here
 
-- [INSTALL.md](INSTALL.md) — npx, npm, Docker, stdio MCP, Streamable HTTP MCP, hosting and release packaging.
-- [UNIFIED_API.md](UNIFIED_API.md) — preferred dataset × geometry × time × selection query language for CLI and MCP.
-- [ARCHITECTURE.md](ARCHITECTURE.md) — shared core, model adapters, member-first physics, data access and public surfaces.
-- [TESTING.md](TESTING.md) — deterministic unit/integration coverage and test organization.
-- [LIVE_SMOKE.md](LIVE_SMOKE.md) — bounded live-source smoke tests across NOAA and ECMWF data paths.
-- [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md) — physical validation and numerical expectations.
-- [RELEASES.md](RELEASES.md) — release notes and compatibility changes.
+| If you want to… | Read |
+| --- | --- |
+| run WFG locally or host MCP | [INSTALL.md](INSTALL.md) |
+| understand the public query language | [UNIFIED_API.md](UNIFIED_API.md) |
+| understand the layering and design rules | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| discover fields and capabilities | [CATALOG_SEARCH.md](CATALOG_SEARCH.md) |
+| contribute or debug tests | [TESTING.md](TESTING.md) |
+| understand physical/numerical validation | [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md) |
+| see release-level compatibility changes | [RELEASES.md](RELEASES.md) |
 
-## Discovery and shared operations
+## Dataset and source semantics
 
-- [CATALOG_SEARCH.md](CATALOG_SEARCH.md) — unified catalog discovery across GFS, GEFS, IFS, IFS ENS, and GFS analysis.
-- [HISTORY.md](HISTORY.md) — historical GFS Grid 4 analysis profiles from the NOAA NCEI archive.
-- [DIAGNOSTIC_TIME_SERIES.md](DIAGNOSTIC_TIME_SERIES.md) — deterministic GFS diagnostic series semantics.
-- [RUN_COMPARISON.md](RUN_COMPARISON.md) — deterministic GFS run-to-run comparison.
-- [TRANSECT.md](TRANSECT.md) — deterministic GFS transects.
-- [AREA_SUMMARY.md](AREA_SUMMARY.md) — bounded deterministic GFS area summaries.
-- [AREA_DISTRIBUTION.md](AREA_DISTRIBUTION.md) — richer deterministic area distribution semantics.
-- [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md) — aligned deterministic-vs-ensemble comparison.
-- [GFS_IFS_COMPARISON.md](GFS_IFS_COMPARISON.md) — aligned deterministic GFS-vs-IFS comparison with normalized deltas.
-- [GEFS_IFS_ENS_COMPARISON.md](GEFS_IFS_ENS_COMPARISON.md) — aligned ensemble-vs-ensemble distribution comparison without cross-model member pairing.
+These documents describe **what the upstream model/archive actually means**. They are intentionally separate from the model-neutral public query vocabulary.
 
-## ECMWF reference
+- [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — operational GEFS plus the explicit GEFSv12 reforecast population, member sets, products, grids, cadence and member-first semantics.
+- [IFS.md](IFS.md) — deterministic IFS and IFS ENS Open Data products, cadence, 50-perturbation semantics and ECMWF access behavior.
+- [HISTORY.md](HISTORY.md) — historical GFS Grid 4 analysis, archived GFS forecasts, analog workflows and verification semantics.
+- [HISTORY_FIELDS.md](HISTORY_FIELDS.md) — historical field availability and archive-specific constraints.
+- [HISTORY_PARCEL.md](HISTORY_PARCEL.md) — parcel diagnostics over historical GFS analysis.
 
-- [IFS.md](IFS.md) — deterministic IFS and member-first IFS ENS source, cadence, query, diagnostic, spatial, and comparison semantics.
+Operational GFS source routing is described in [ARCHITECTURE.md](ARCHITECTURE.md#data-access-and-caching) and the public grid/archive behavior in [UNIFIED_API.md](UNIFIED_API.md).
 
-## GEFS ensemble reference
+## Shared operation deep dives
 
-- [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — GEFS contract and member-first surface guide.
-- [GEFS_FIELD_BUNDLES.md](GEFS_FIELD_BUNDLES.md) — mixed pressure/non-isobaric field bundles and time series.
+Use these when the unified API contract is clear but the meteorological/statistical semantics of a composed operation need more detail.
+
+- [RUN_COMPARISON.md](RUN_COMPARISON.md) — deterministic run-to-run deltas.
+- [DIAGNOSTIC_TIME_SERIES.md](DIAGNOSTIC_TIME_SERIES.md) — deterministic diagnostics through time.
+- [TRANSECT.md](TRANSECT.md) — great-circle transect semantics.
+- [AREA_SUMMARY.md](AREA_SUMMARY.md) and [AREA_DISTRIBUTION.md](AREA_DISTRIBUTION.md) — bounded spatial statistics.
+- [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md) — deterministic forecast positioned in an aligned ensemble.
+- [GFS_IFS_COMPARISON.md](GFS_IFS_COMPARISON.md) — aligned deterministic cross-model differences.
+- [GEFS_IFS_ENS_COMPARISON.md](GEFS_IFS_ENS_COMPARISON.md) — ensemble-distribution shifts without cross-center member pairing.
+- [IFS_IFS_ENS_COMPARISON.md](IFS_IFS_ENS_COMPARISON.md) — deterministic IFS control positioned in its 50-perturbation ENS distribution.
+
+## GEFS ensemble deep dives
+
+The files below document ensemble-specific composition details. They should not redefine the public API; [UNIFIED_API.md](UNIFIED_API.md) remains the public contract.
+
+- [GEFS_FIELD_BUNDLES.md](GEFS_FIELD_BUNDLES.md) — mixed pressure/non-isobaric field bundles.
 - [GEFS_MULTI_POINT.md](GEFS_MULTI_POINT.md) — member-first multi-point distributions.
-- [GEFS_MULTI_POINT_TIME_SERIES.md](GEFS_MULTI_POINT_TIME_SERIES.md) — member-first spatial × temporal queries.
-- [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md) — freezing-level and inversion structure summaries.
-- [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md) — ensemble layer/profile/parcel diagnostics through time.
-- [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md) — distribution shifts across initialization cycles.
-- [GEFS_TRANSECT.md](GEFS_TRANSECT.md) — ensemble-native mixed-field transects.
+- [GEFS_MULTI_POINT_TIME_SERIES.md](GEFS_MULTI_POINT_TIME_SERIES.md) — spatial × temporal ensemble queries.
+- [GEFS_PROFILE_DIAGNOSTICS.md](GEFS_PROFILE_DIAGNOSTICS.md) — freezing-level and inversion summaries.
+- [GEFS_DIAGNOSTIC_TIME_SERIES.md](GEFS_DIAGNOSTIC_TIME_SERIES.md) — layer/profile/parcel diagnostics through time.
+- [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md) — distribution shifts across forecast cycles.
+- [GEFS_TRANSECT.md](GEFS_TRANSECT.md) — member-first great-circle transects.
 
-## Documentation conventions
+## Engineering and validation
 
-WFG documentation distinguishes between three layers:
+- [ARCHITECTURE.md](ARCHITECTURE.md) — dependency direction, adapter registries, source/access/cache boundaries and CLI/MCP parity.
+- [TESTING.md](TESTING.md) — deterministic unit/integration coverage and test organization.
+- [LIVE_SMOKE.md](LIVE_SMOKE.md) — bounded live-source checks across NOAA and ECMWF.
+- [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md) — physical invariants and numerical expectations.
+- [RELEASES.md](RELEASES.md) — release history and public compatibility notes.
 
-1. **WFG output** — structured model data, diagnostics, provenance and explicit ensemble statistics.
-2. **Meteorological interpretation** — reasoning a consuming agent may perform from those outputs.
-3. **Domain decisions** — aviation, mountaineering, energy or other activity-specific judgments, which remain outside the WFG core.
+## Documentation rules
 
-GEFS member fractions and spread are raw ensemble evidence unless a future validated calibration layer explicitly says otherwise.
+A few rules keep the documentation from drifting back into model-by-model API silos:
+
+1. **The root README sells the product; it is not the reference manual.**
+2. **UNIFIED_API.md owns the public vocabulary.** Dataset documents explain capability/source differences, not alternative public APIs.
+3. **ARCHITECTURE.md owns layering decisions.** Source etiquette, cache policy and decoder choices should not be re-explained differently in every feature document.
+4. **Model-specific documents preserve native semantics.** Do not manufacture symmetry that the upstream datasets do not have.
+5. **Examples distinguish WFG output from agent interpretation.** WFG returns structured model evidence; downstream domain judgment stays downstream.
+
+For ensembles, member fractions and spread are raw ensemble evidence unless an explicitly validated calibration layer says otherwise.
