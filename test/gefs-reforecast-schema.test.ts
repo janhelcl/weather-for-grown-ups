@@ -21,13 +21,34 @@ describe("unified GEFS reforecast branch", () => {
       forecast: { kind: "reforecast", run: "latest" },
     })).toThrow("explicit historical 00Z initialization");
 
+    expect(queryAtmosphereSchema.parse({
+      ...base,
+      geometry: {
+        type: "points",
+        points: [{ latitude: 50.08, longitude: 14.43 }, { latitude: 49.2, longitude: 16.61 }],
+      },
+    })).toMatchObject({
+      geometry: { type: "points" },
+    });
+
+    expect(() => queryAtmosphereSchema.parse({
+      ...base,
+      geometry: {
+        type: "transect",
+        start: { latitude: 50.08, longitude: 14.43 },
+        end: { latitude: 49.2, longitude: 16.61 },
+        samples: 10,
+      },
+    })).toThrow("point and multi-point geometry");
+
     expect(() => queryAtmosphereSchema.parse({
       ...base,
       geometry: {
         type: "points",
         points: [{ latitude: 50.08, longitude: 14.43 }, { latitude: 49.2, longitude: 16.61 }],
       },
-    })).toThrow("currently covers point geometry");
+      time: { from: "2017-03-14T03:00:00Z", to: "2017-03-14T12:00:00Z" },
+    })).toThrow("multi-point queries currently support one valid time");
 
     expect(queryAtmosphereSchema.parse({
       ...base,
