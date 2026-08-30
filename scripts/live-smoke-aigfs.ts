@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-api.js";
-import { floorToAigfsCycle } from "../src/sources/aigfs.js";
+import { aigfsValidTime, floorToAigfsCycle } from "../src/sources/aigfs.js";
 
-const twelveHoursAgo = new Date(Date.now() - 12 * 3_600_000);
-const validTime = floorToAigfsCycle(twelveHoursAgo);
+const safelyPublishedRun = floorToAigfsCycle(new Date(Date.now() - 18 * 3_600_000));
+const validTime = aigfsValidTime(safelyPublishedRun, 6);
 
 const result = await new UnifiedAtmosphereQueryService().query({
   dataset: "aigfs",
@@ -14,7 +14,7 @@ const result = await new UnifiedAtmosphereQueryService().query({
     pressureLevelsHpa: [850, 700],
     fields: ["temperature_2m", "wind_10m", "mean_sea_level_pressure", "total_precipitation"],
   },
-  forecast: { run: "latest" },
+  forecast: { run: safelyPublishedRun.toISOString() },
 });
 
 assert.equal(result.dataset, "aigfs");
