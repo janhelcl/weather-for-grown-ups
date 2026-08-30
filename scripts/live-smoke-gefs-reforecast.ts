@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
-import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-api.js";
+import {
+  UnifiedAtmosphereDiagnosticService,
+  UnifiedAtmosphereQueryService,
+} from "../src/core/unified-atmosphere-api.js";
 
 const service = new UnifiedAtmosphereQueryService();
+const diagnosticService = new UnifiedAtmosphereDiagnosticService();
 const result = await service.query({
   dataset: "gefs",
   geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
@@ -242,6 +246,83 @@ for (const step of pointsRange.series) {
   }
 }
 
+const profileDiagnosticResult = await diagnosticService.diagnose({
+  dataset: "gefs",
+  geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+  time: { at: "2017-03-14T12:00:00Z" },
+  diagnostic: {
+    kind: "profile",
+    pressureLevelsHpa: [1000, 925, 850, 700, 500],
+    diagnostics: ["freezing_level_crossings", "temperature_inversion_layers"],
+  },
+  forecast: {
+    kind: "reforecast",
+    run: "2017-03-14T00:00:00Z",
+  },
+  ensemble: {
+    members: ["c00", "p01"],
+    quantiles: [0.5],
+  },
+});
+const profileDiagnostic = profileDiagnosticResult.result as any;
+assert.equal(profileDiagnosticResult.internalDatasetId, "gefs_v12_reforecast");
+assert.equal(profileDiagnostic.model, "gefs_v12_reforecast");
+assert.deepEqual(
+  profileDiagnostic.selection.diagnostics,
+  ["freezing_level_crossings", "temperature_inversion_layers"],
+);
+assert.equal(profileDiagnostic.source.archiveType, "reforecast");
+assert.equal(profileDiagnostic.source.profileGridPolicy, "coherent_0p50");
+assert.equal(profileDiagnostic.summaries.length, 2);
+assert(profileDiagnostic.summaries.some((summary: any) =>
+  summary.id === "freezing_level_crossings"));
+assert(profileDiagnostic.summaries.some((summary: any) =>
+  summary.id === "temperature_inversion_layers"));
+
+const layerDiagnosticRangeResult = await diagnosticService.diagnose({
+  dataset: "gefs",
+  geometry: { type: "point", latitude: 50.13, longitude: 14.37 },
+  time: {
+    from: "2017-03-23T21:00:00Z",
+    to: "2017-03-24T06:00:00Z",
+    maxSteps: 3,
+  },
+  diagnostic: {
+    kind: "layer",
+    lowerPressureHpa: 850,
+    upperPressureHpa: 700,
+    diagnostics: ["temperature_lapse_rate"],
+  },
+  forecast: {
+    kind: "reforecast",
+    run: "2017-03-14T00:00:00Z",
+  },
+  ensemble: {
+    members: ["c00", "p01"],
+    quantiles: [0.5],
+  },
+});
+const layerDiagnosticRange = layerDiagnosticRangeResult.result as any;
+assert.equal(layerDiagnosticRangeResult.internalDatasetId, "gefs_v12_reforecast");
+assert.equal(layerDiagnosticRangeResult.timeType, "range");
+assert.deepEqual(
+  layerDiagnosticRange.series.map((step: any) => step.forecastHour),
+  [237, 240, 246],
+);
+assert.deepEqual(
+  layerDiagnosticRange.series.map((step: any) => step.source.horizontalGridDegrees),
+  [0.25, 0.25, 0.5],
+);
+assert.deepEqual(
+  layerDiagnosticRange.series.map((step: any) => step.source.profileGridPolicy),
+  ["native_0p25", "native_0p25", "native_0p50"],
+);
+for (const step of layerDiagnosticRange.series) {
+  assert.equal(step.kind, "layer");
+  assert.equal(step.summaries[0].id, "temperature_lapse_rate");
+  assert(Number.isFinite(step.summaries[0].distribution.mean));
+}
+
 console.log(JSON.stringify({
   dataset: result.dataset,
   internalDatasetId: result.internalDatasetId,
@@ -276,5 +357,15 @@ console.log(JSON.stringify({
     selection: pointsRange.selection,
     series: pointsRange.series,
     source: pointsRange.source,
+  },
+  profileDiagnostic: {
+    selection: profileDiagnostic.selection,
+    summaries: profileDiagnostic.summaries,
+    source: profileDiagnostic.source,
+  },
+  layerDiagnosticRange: {
+    selection: layerDiagnosticRange.selection,
+    series: layerDiagnosticRange.series,
+    source: layerDiagnosticRange.source,
   },
 }, null, 2));
