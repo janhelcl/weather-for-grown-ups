@@ -22,6 +22,11 @@ import { GefsPointsBundleTimeSeriesService } from "./gefs-points-bundle-timeseri
 import { GefsPointsBundleService } from "./gefs-points-bundle.js";
 import { GefsReforecastPointService } from "./gefs-reforecast.js";
 import {
+  GefsReforecastDiagnosticTimeSeriesService,
+  GefsReforecastLayerDiagnosticsService,
+  GefsReforecastProfileDiagnosticsService,
+} from "./gefs-reforecast-diagnostics.js";
+import {
   GefsReforecastMixedPointService,
   GefsReforecastMixedPointsService,
   GefsReforecastMixedTimeSeriesService,
@@ -905,6 +910,9 @@ export interface UnifiedAtmosphereDiagnosticServiceOptions {
     "getLayerDiagnostics" | "getProfileDiagnostics" | "getParcelDiagnostics"
   >;
   ifsEnsTimeSeries?: Pick<IfsEnsDiagnosticTimeSeriesService, "getDiagnosticTimeSeries">;
+  gefsReforecastLayer?: Pick<GefsReforecastLayerDiagnosticsService, "getLayerDiagnostics">;
+  gefsReforecastProfile?: Pick<GefsReforecastProfileDiagnosticsService, "getProfileDiagnostics">;
+  gefsReforecastTimeSeries?: Pick<GefsReforecastDiagnosticTimeSeriesService, "getDiagnosticTimeSeries">;
   archivedGfs?: Pick<ArchivedGfsForecastDiagnosticService, "diagnose">;
   now?: () => Date;
 }
@@ -919,6 +927,9 @@ export class UnifiedAtmosphereDiagnosticService {
     "getLayerDiagnostics" | "getProfileDiagnostics" | "getParcelDiagnostics"
   >;
   private readonly ifsEnsTimeSeries: Pick<IfsEnsDiagnosticTimeSeriesService, "getDiagnosticTimeSeries">;
+  private readonly gefsReforecastLayer: Pick<GefsReforecastLayerDiagnosticsService, "getLayerDiagnostics">;
+  private readonly gefsReforecastProfile: Pick<GefsReforecastProfileDiagnosticsService, "getProfileDiagnostics">;
+  private readonly gefsReforecastTimeSeries: Pick<GefsReforecastDiagnosticTimeSeriesService, "getDiagnosticTimeSeries">;
   private readonly archivedGfs: Pick<ArchivedGfsForecastDiagnosticService, "diagnose">;
   private readonly now: () => Date;
 
@@ -929,6 +940,12 @@ export class UnifiedAtmosphereDiagnosticService {
     this.timeSeries = options.timeSeries ?? new AtmosphericDiagnosticTimeSeriesService();
     this.ifsEns = options.ifsEns ?? new IfsEnsDiagnosticsService();
     this.ifsEnsTimeSeries = options.ifsEnsTimeSeries ?? new IfsEnsDiagnosticTimeSeriesService();
+    this.gefsReforecastLayer =
+      options.gefsReforecastLayer ?? new GefsReforecastLayerDiagnosticsService();
+    this.gefsReforecastProfile =
+      options.gefsReforecastProfile ?? new GefsReforecastProfileDiagnosticsService();
+    this.gefsReforecastTimeSeries =
+      options.gefsReforecastTimeSeries ?? new GefsReforecastDiagnosticTimeSeriesService();
     this.archivedGfs = options.archivedGfs ?? new ArchivedGfsForecastDiagnosticService();
     this.now = options.now ?? (() => new Date());
   }
@@ -945,6 +962,32 @@ export class UnifiedAtmosphereDiagnosticService {
 
   private instant(request: DiagnoseAtmosphereRequest): Promise<unknown> {
     if (!("at" in request.time)) throw new Error("Internal routing error: expected instant diagnostic");
+    if (request.dataset === "gefs" && request.forecast?.kind === "reforecast") {
+      const common = {
+        latitude: request.geometry.latitude,
+        longitude: request.geometry.longitude,
+        run: request.forecast.run,
+        validTime: request.time.at,
+        ...(request.ensemble?.members === undefined ? {} : { members: request.ensemble.members }),
+        ...(request.ensemble?.quantiles === undefined ? {} : { quantiles: request.ensemble.quantiles }),
+        ...(request.ensemble?.includeMembers === undefined
+          ? {}
+          : { includeMembers: request.ensemble.includeMembers }),
+      };
+      if (request.diagnostic.kind === "layer") {
+        return this.gefsReforecastLayer.getLayerDiagnostics({
+          ...common,
+          ...request.diagnostic,
+        } as any);
+      }
+      if (request.diagnostic.kind === "profile") {
+        return this.gefsReforecastProfile.getProfileDiagnostics({
+          ...common,
+          ...request.diagnostic,
+        } as any);
+      }
+      throw new Error("Internal routing error: GEFSv12 reforecast parcel diagnostics are unsupported");
+    }
     if (request.dataset === "ifs-ens") {
       const common = {
         latitude: request.geometry.latitude,
@@ -1001,6 +1044,15 @@ export class UnifiedAtmosphereDiagnosticService {
       diagnostic: request.diagnostic,
       ...(request.time.maxSteps === undefined ? {} : { maxSteps: request.time.maxSteps }),
     };
+
+    if (request.dataset === "gefs" && request.forecast?.kind === "reforecast") {
+      return this.gefsReforecastTimeSeries.getDiagnosticTimeSeries({
+        ...common,
+        run: request.forecast.run,
+        ...(request.ensemble?.members === undefined ? {} : { members: request.ensemble.members }),
+        ...(request.ensemble?.quantiles === undefined ? {} : { quantiles: request.ensemble.quantiles }),
+      } as any);
+    }
 
     if (request.dataset === "ifs-ens") {
       return this.ifsEnsTimeSeries.getDiagnosticTimeSeries(

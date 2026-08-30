@@ -224,6 +224,10 @@ function gefsReforecastEntries(): CatalogEntry[] {
         temporalSemantics: definition.temporalSemantics,
         outputs: definition.outputs.map((output) => ({ ...output })),
       })),
+    ...catalog.layerDiagnostics.map((definition) =>
+      diagnosticEntry("gefs", "layer_diagnostics", definition)),
+    ...catalog.profileDiagnostics.map((definition) =>
+      diagnosticEntry("gefs", "profile_diagnostics", definition)),
   ];
 }
 
@@ -371,7 +375,7 @@ function supportSemantics(
       return "deterministic operational forecast";
     case "gefs":
       return forecastKind === "reforecast"
-        ? "GEFSv12 retrospective ensemble forecast; 2000-2019 point and multi-point field, pressure, or mixed selections at one valid time or across bounded native-cadence ranges; mixed results preserve pressure and field grid points separately"
+        ? "GEFSv12 retrospective ensemble forecast; 2000-2019 point and multi-point field, pressure, or mixed selections plus native layer/profile diagnostics; ranges preserve native cadence and per-step grid provenance"
         : "member-first ensemble forecast distribution";
     case "ifs":
       return "deterministic ECMWF IFS 0.25° operational forecast";

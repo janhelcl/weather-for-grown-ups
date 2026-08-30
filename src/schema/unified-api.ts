@@ -394,11 +394,14 @@ function validateDatasetModifiers(
         message: "GEFSv12 reforecast time ranges return compact member-first summaries; use one valid time to include raw member payloads",
       });
     }
-    if (request.diagnostic !== undefined) {
+    if (
+      request.diagnostic !== undefined
+      && request.diagnostic.kind === "parcel"
+    ) {
       context.addIssue({
         code: "custom",
         path: ["diagnostic"],
-        message: "GEFSv12 reforecast diagnostics are not yet exposed; query raw/derived supported fields first",
+        message: "GEFSv12 reforecast parcel diagnostics are not exposed because the current retrospective subset lacks the required moisture/surface inputs",
       });
     }
     if (request.selection !== undefined) {

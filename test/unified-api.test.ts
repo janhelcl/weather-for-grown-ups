@@ -421,7 +421,16 @@ describe("unified catalog branch coverage", () => {
       sections: ["layer_diagnostics", "profile_diagnostics", "parcel_definitions"],
       limit: 30,
     });
-    expect(diagnostics.totalMatches).toBe(0);
+    expect(diagnostics.matches.map((match) => match.id).sort()).toEqual([
+      "freezing_level_crossings",
+      "potential_temperature_gradient",
+      "temperature_inversion_layers",
+      "temperature_lapse_rate",
+      "wind_shear",
+    ]);
+    expect(diagnostics.matches.every((match) =>
+      match.section !== "parcel_definitions")).toBe(true);
+    expect(diagnostics.matches[0]?.support[0]?.semantics).toContain("layer/profile diagnostics");
   });
 
   it("rejects ambiguous forecast-kind catalog filtering outside GEFS-only discovery", () => {
