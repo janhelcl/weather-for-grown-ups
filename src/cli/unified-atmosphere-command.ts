@@ -48,7 +48,7 @@ function registerQueryCommand(program: Command): void {
   program
     .command("query")
     .description("Query atmospheric state through dataset × geometry × time × selection")
-    .option("--dataset <gfs|gefs|ifs|ifs-ens|gfs-analysis>", "Atmospheric dataset", "gfs")
+    .option("--dataset <gfs|aigfs|gefs|ifs|ifs-ens|gfs-analysis>", "Atmospheric dataset", "gfs")
     .option("--lat <number>", "Point latitude", Number)
     .option("--lon <number>", "Point longitude", Number)
     .option("--point <lat,lon>", "Multi-point coordinate; repeat as needed", collectPoint)
@@ -97,7 +97,7 @@ function registerDiagnoseCommand(program: Command): void {
   program
     .command("diagnose")
     .description("Derive layer, profile, or parcel meteorology from any atmospheric dataset")
-    .option("--dataset <gfs|gefs|ifs|ifs-ens|gfs-analysis>", "Atmospheric dataset", "gfs")
+    .option("--dataset <gfs|aigfs|gefs|ifs|ifs-ens|gfs-analysis>", "Atmospheric dataset", "gfs")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--kind <layer|profile|parcel>", "Diagnostic family")
@@ -456,12 +456,12 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
 
 function parseForecastDataset(
   value: unknown,
-): Exclude<PublicAtmosphericDataset, "gfs-analysis"> {
+): "gfs" | "gefs" | "ifs" | "ifs-ens" {
   const dataset = parseDataset(value);
-  if (publicDatasetMetadata(dataset).role === "forecast") {
-    return dataset as Exclude<PublicAtmosphericDataset, "gfs-analysis">;
+  if (dataset === "gfs" || dataset === "gefs" || dataset === "ifs" || dataset === "ifs-ens") {
+    return dataset;
   }
-  throw new Error(`Expected a forecast dataset, received: ${value}`);
+  throw new Error(`Run comparison supports gfs|gefs|ifs|ifs-ens, received: ${value}`);
 }
 
 function parseDataset(value: unknown): PublicAtmosphericDataset {
