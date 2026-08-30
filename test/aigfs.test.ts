@@ -489,6 +489,18 @@ describe("AIGFS deterministic service composition", () => {
     expect(range.series.every((step: any) => step.kind === "layer")).toBe(true);
   });
 
+  it("rejects total precipitation at f000 before touching the source", async () => {
+    cache.fetch.mockClear();
+    await expect(service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2026-08-30T00:00:00Z" },
+      selection: { fields: ["total_precipitation"] },
+      forecast: { run: "2026-08-30T00:00:00Z" },
+    }))).rejects.toThrow("total_precipitation is not published at f000");
+    expect(cache.fetch).not.toHaveBeenCalled();
+  });
+
   it("enforces service guardrails even below the schema layer", async () => {
     await expect(service().query(queryAtmosphereSchema.parse({
       dataset: "aigfs",
