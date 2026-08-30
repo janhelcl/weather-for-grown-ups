@@ -380,11 +380,15 @@ function validateDatasetModifiers(
         message: "GEFSv12 reforecast support currently covers point geometry; other geometries will be added without changing the public query vocabulary",
       });
     }
-    if (request.time !== undefined && "from" in request.time) {
+    if (
+      request.time !== undefined
+      && "from" in request.time
+      && request.ensemble?.includeMembers === true
+    ) {
       context.addIssue({
         code: "custom",
-        path: ["time"],
-        message: "GEFSv12 reforecast support currently covers one valid time per query",
+        path: ["ensemble", "includeMembers"],
+        message: "GEFSv12 reforecast time ranges return compact member-first summaries; use one valid time to include raw member payloads",
       });
     }
     if (request.diagnostic !== undefined) {
