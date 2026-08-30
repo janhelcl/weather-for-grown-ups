@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { FileRateLimiter } from "./file-rate-limiter.js";
@@ -37,7 +37,7 @@ export class NomadsCache {
         throw new Error(`NOMADS returned non-GRIB content: ${preview}`);
       }
 
-      const tempPath = `${path}.${process.pid}.tmp`;
+      const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
       await writeFile(tempPath, bytes);
       await rename(tempPath, path);
       return { path, cacheHit: false };
