@@ -5,6 +5,7 @@ import {
 } from "../src/core/unified-atmosphere-api.js";
 import { ArchivedGfsForecastQueryService } from "../src/core/archived-gfs-query.js";
 import { ArchivedGfsForecastDiagnosticService } from "../src/core/archived-gfs-diagnostics.js";
+import { createAtmosphericQueryAdapterRegistry } from "../src/core/query-adapters/registry.js";
 
 type Grid = "0p25" | "0p50";
 type Source = "nomads" | "s3" | "archive";
@@ -58,7 +59,9 @@ const archivedState = new ArchivedGfsForecastQueryService({
   fetchFn: archiveParityFetch,
 });
 const queryService = new UnifiedAtmosphereQueryService({
-  archivedGfs: archivedState,
+  adapters: createAtmosphericQueryAdapterRegistry({
+    archivedGfs: archivedState,
+  }),
 });
 const diagnosticService = new UnifiedAtmosphereDiagnosticService({
   archivedGfs: new ArchivedGfsForecastDiagnosticService({ state: archivedState }),
