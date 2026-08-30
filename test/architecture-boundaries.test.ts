@@ -1,0 +1,34 @@
+import { readFile } from "node:fs/promises";
+import { describe, expect, it } from "vitest";
+import { createAtmosphericQueryAdapterRegistry } from "../src/core/query-adapters/registry.js";
+import { PUBLIC_ATMOSPHERIC_DATASET_IDS } from "../src/schema/unified-api.js";
+
+describe("architecture boundaries", () => {
+  it("keeps one query adapter registered for every public atmospheric dataset", () => {
+    const registry = createAtmosphericQueryAdapterRegistry();
+    expect(Object.keys(registry).sort()).toEqual([...PUBLIC_ATMOSPHERIC_DATASET_IDS].sort());
+  });
+
+  it("keeps CLI and MCP on unified application services instead of dataset-specific core services", async () => {
+    const [cli, mcp] = await Promise.all([
+      readFile("src/cli/unified-atmosphere-command.ts", "utf8"),
+      readFile("src/mcp-unified-tool.ts", "utf8"),
+    ]);
+
+    for (const surface of [cli, mcp]) {
+      expect(surface).toContain("UnifiedAtmosphereQueryService");
+      expect(surface).toContain("queryAtmosphereSchema");
+      expect(surface).not.toMatch(
+        /core\/(?:gfs|gefs|ifs|history|archived-gfs)-(?!unified)[^"']+\.js/,
+      );
+    }
+  });
+
+  it("keeps the public unified API module as a composition barrel", async () => {
+    const api = await readFile("src/core/unified-atmosphere-api.ts", "utf8");
+    expect(api).toContain("./unified-atmosphere-query.js");
+    expect(api).toContain("./unified-atmosphere-diagnostics.js");
+    expect(api).not.toContain("query-adapters/");
+    expect(api).not.toMatch(/Gefs|Ifs|Historical|ArchivedGfs/);
+  });
+});
