@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { IfsOpenDataAccessPolicy } from "../cache/ifs-open-data-access-policy.js";
+import { IfsOpenDataAccessPolicy } from "../sources/ifs-open-data-access-policy.js";
 import {
   IfsEnsOpenDataRunProbe,
   type IfsAvailabilityProbe,
