@@ -3,6 +3,10 @@ import {
   gefsReforecastPointsTimeSeriesQuerySchema,
   gefsReforecastTimeSeriesQuerySchema,
 } from "../src/schema/gefs-reforecast.js";
+import {
+  gefsReforecastMixedPointQuerySchema,
+  gefsReforecastMixedPointsTimeSeriesQuerySchema,
+} from "../src/schema/gefs-reforecast-mixed.js";
 import { queryAtmosphereSchema } from "../src/schema/unified-api.js";
 
 const base = {
@@ -92,14 +96,76 @@ describe("unified GEFS reforecast branch", () => {
       },
     })).toThrow("specific_humidity at 50 hPa");
 
-    expect(() => queryAtmosphereSchema.parse({
+    expect(queryAtmosphereSchema.parse({
       ...base,
       selection: {
         variables: ["temperature"],
         pressureLevelsHpa: [850],
         fields: ["temperature_2m"],
       },
-    })).toThrow("either a pressure profile or non-isobaric fields");
+    })).toMatchObject({
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+        fields: ["temperature_2m"],
+      },
+    });
+  });
+
+  it("validates direct mixed retrospective contracts", () => {
+    const mixed = {
+      latitude: 50.08,
+      longitude: 14.43,
+      run: "2017-03-14T00:00:00Z",
+      validTime: "2017-03-14T12:00:00Z",
+      variables: ["temperature" as const],
+      pressureLevelsHpa: [850, 500],
+      fields: ["temperature_2m" as const],
+      members: ["c00" as const, "p01" as const],
+      quantiles: [0.5],
+    };
+    expect(gefsReforecastMixedPointQuerySchema.parse(mixed)).toMatchObject({
+      pressureLevelsHpa: [850, 500],
+      fields: ["temperature_2m"],
+    });
+    expect(() => gefsReforecastMixedPointQuerySchema.parse({
+      ...mixed,
+      fields: ["temperature_2m", "temperature_2m"],
+    })).toThrow("mixed fields must not contain duplicates");
+    expect(() => gefsReforecastMixedPointQuerySchema.parse({
+      ...mixed,
+      variables: ["temperature", "temperature"],
+    })).toThrow("mixed variables must not contain duplicates");
+    expect(() => gefsReforecastMixedPointQuerySchema.parse({
+      ...mixed,
+      pressureLevelsHpa: [850, 850],
+    })).toThrow("mixed pressure levels must not contain duplicates");
+    expect(() => gefsReforecastMixedPointQuerySchema.parse({
+      ...mixed,
+      members: ["c00", "c00"],
+    })).toThrow("members must not contain duplicates");
+    expect(() => gefsReforecastMixedPointQuerySchema.parse({
+      ...mixed,
+      quantiles: [0.5, 0.5],
+    })).toThrow("Quantiles must not contain duplicates");
+
+    expect(() => gefsReforecastMixedPointQuerySchema.parse({
+      ...mixed,
+      variables: ["specific_humidity"],
+      pressureLevelsHpa: [50],
+    })).toThrow("specific_humidity at 50 hPa");
+
+    expect(() => gefsReforecastMixedPointsTimeSeriesQuerySchema.parse({
+      points: [{ latitude: 50.08, longitude: 14.43 }],
+      run: mixed.run,
+      startTime: "2017-03-14T06:00:00Z",
+      endTime: "2017-03-14T03:00:00Z",
+      variables: mixed.variables,
+      pressureLevelsHpa: mixed.pressureLevelsHpa,
+      fields: mixed.fields,
+      members: mixed.members,
+      quantiles: mixed.quantiles,
+    })).toThrow("endTime must be at or after startTime");
   });
 
   it("rejects fields and members whose retrospective semantics are not implemented", () => {

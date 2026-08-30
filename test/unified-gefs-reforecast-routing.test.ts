@@ -85,6 +85,78 @@ describe("unified GEFS reforecast routing", () => {
     expect(fields.getPoint).not.toHaveBeenCalled();
   });
 
+  it("routes mixed reforecast point selections through the dedicated wrapper", async () => {
+    const mixed = { getPoint: vi.fn(async () => ({ route: "mixed-point" })) };
+    const profile = { getProfile: vi.fn() };
+    const fields = { getPoint: vi.fn() };
+    const service = new UnifiedAtmosphereQueryService({
+      gefsReforecastMixed: mixed as any,
+      gefsReforecastProfile: profile as any,
+      gefsReforecast: fields as any,
+    });
+
+    const result = await service.query({
+      dataset: "gefs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2017-03-14T12:00:00Z" },
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [850, 500],
+        fields: ["temperature_2m"],
+      },
+      forecast: { kind: "reforecast", run: "2017-03-14T00:00:00Z" },
+      ensemble: { members: ["c00", "p01"], quantiles: [0.5] },
+    });
+
+    expect(result.result).toEqual({ route: "mixed-point" });
+    expect(mixed.getPoint).toHaveBeenCalledWith(expect.objectContaining({
+      variables: ["temperature"],
+      pressureLevelsHpa: [850, 500],
+      fields: ["temperature_2m"],
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+    }));
+    expect(profile.getProfile).not.toHaveBeenCalled();
+    expect(fields.getPoint).not.toHaveBeenCalled();
+  });
+
+  it("routes mixed reforecast point ranges through the dedicated wrapper", async () => {
+    const mixed = { getTimeSeries: vi.fn(async () => ({ route: "mixed-range" })) };
+    const legacy = { getTimeSeries: vi.fn() };
+    const service = new UnifiedAtmosphereQueryService({
+      gefsReforecastMixedTimeSeries: mixed as any,
+      gefsReforecastTimeSeries: legacy as any,
+    });
+
+    const result = await service.query({
+      dataset: "gefs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: {
+        from: "2017-03-14T03:00:00Z",
+        to: "2017-03-14T09:00:00Z",
+        maxSteps: 3,
+      },
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+        fields: ["temperature_2m"],
+      },
+      forecast: { kind: "reforecast", run: "2017-03-14T00:00:00Z" },
+      ensemble: { members: ["c00", "p01"], quantiles: [0.5] },
+    });
+
+    expect(result.result).toEqual({ route: "mixed-range" });
+    expect(mixed.getTimeSeries).toHaveBeenCalledWith(expect.objectContaining({
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T09:00:00Z",
+      maxSteps: 3,
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+      fields: ["temperature_2m"],
+    }));
+    expect(legacy.getTimeSeries).not.toHaveBeenCalled();
+  });
+
   it("routes compact reforecast field ranges without falling through to operational GEFS", async () => {
     const operational = { getTimeSeries: vi.fn() };
     const reforecastRange = {
@@ -291,6 +363,92 @@ describe("unified GEFS reforecast routing", () => {
     }));
   });
 
+
+  it("routes mixed reforecast multi-point selections through the dedicated wrapper", async () => {
+    const mixed = { getPoints: vi.fn(async () => ({ route: "mixed-points" })) };
+    const legacy = { getPoints: vi.fn() };
+    const service = new UnifiedAtmosphereQueryService({
+      gefsReforecastMixedPoints: mixed as any,
+      gefsReforecastPoints: legacy as any,
+    });
+
+    const result = await service.query({
+      dataset: "gefs",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50.08, longitude: 14.43 },
+          { latitude: 49.2, longitude: 16.61 },
+        ],
+      },
+      time: { at: "2017-03-14T12:00:00Z" },
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+        fields: ["temperature_2m"],
+      },
+      forecast: { kind: "reforecast", run: "2017-03-14T00:00:00Z" },
+      ensemble: {
+        members: ["c00", "p01"],
+        quantiles: [0.5],
+        maxMemberSamples: 100,
+      },
+    });
+
+    expect(result.result).toEqual({ route: "mixed-points" });
+    expect(mixed.getPoints).toHaveBeenCalledWith(expect.objectContaining({
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+      fields: ["temperature_2m"],
+      maxMemberSamples: 100,
+    }));
+    expect(legacy.getPoints).not.toHaveBeenCalled();
+  });
+
+  it("routes mixed reforecast multi-point ranges through the dedicated wrapper", async () => {
+    const mixed = {
+      getPointsTimeSeries: vi.fn(async () => ({ route: "mixed-points-range" })),
+    };
+    const legacy = { getPointsTimeSeries: vi.fn() };
+    const service = new UnifiedAtmosphereQueryService({
+      gefsReforecastMixedPointsTimeSeries: mixed as any,
+      gefsReforecastPointsTimeSeries: legacy as any,
+    });
+
+    const result = await service.query({
+      dataset: "gefs",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50.08, longitude: 14.43 },
+          { latitude: 49.2, longitude: 16.61 },
+        ],
+      },
+      time: {
+        from: "2017-03-14T03:00:00Z",
+        to: "2017-03-14T09:00:00Z",
+        maxSteps: 3,
+      },
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+        fields: ["temperature_2m"],
+      },
+      forecast: { kind: "reforecast", run: "2017-03-14T00:00:00Z" },
+      ensemble: { members: ["c00", "p01"], quantiles: [0.5] },
+      limits: { maxPointSteps: 6 },
+    });
+
+    expect(result.result).toEqual({ route: "mixed-points-range" });
+    expect(mixed.getPointsTimeSeries).toHaveBeenCalledWith(expect.objectContaining({
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+      fields: ["temperature_2m"],
+      maxSteps: 3,
+      maxPointSteps: 6,
+    }));
+    expect(legacy.getPointsTimeSeries).not.toHaveBeenCalled();
+  });
 
   it("routes reforecast multi-point ranges without operational GEFS fallback", async () => {
     const operational = { getPointsTimeSeries: vi.fn() };

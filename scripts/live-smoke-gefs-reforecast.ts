@@ -73,6 +73,38 @@ assert.equal(profile.source.profileGridPolicy, "coherent_0p50");
 assert.deepEqual(profile.gridPoint, { latitude: 50, longitude: 14.5 });
 
 
+const mixedResult = await service.query({
+  dataset: "gefs",
+  geometry: { type: "point", latitude: 50.13, longitude: 14.37 },
+  time: { at: "2017-03-14T12:00:00Z" },
+  selection: {
+    variables: ["temperature"],
+    pressureLevelsHpa: [850, 500],
+    fields: ["temperature_2m"],
+  },
+  forecast: {
+    kind: "reforecast",
+    run: "2017-03-14T00:00:00Z",
+  },
+  ensemble: {
+    members: ["c00", "p01"],
+    quantiles: [0.5],
+  },
+});
+const mixed = mixedResult.result as any;
+assert.equal(mixedResult.internalDatasetId, "gefs_v12_reforecast");
+assert.equal(mixed.kind, "mixed");
+assert.deepEqual(mixed.selection.variables, ["temperature"]);
+assert.deepEqual(mixed.selection.pressureLevelsHpa, [850, 500]);
+assert.deepEqual(mixed.selection.fields, ["temperature_2m"]);
+assert.equal(mixed.pressure.source.horizontalGridDegrees, 0.5);
+assert.equal(mixed.pressure.source.profileGridPolicy, "coherent_0p50");
+assert.equal(mixed.fields.source.horizontalGridDegrees, 0.25);
+assert.equal(mixed.source.gridSemantics, "pressure_and_field_grids_reported_separately");
+assert.notDeepEqual(mixed.pressure.gridPoint, mixed.fields.gridPoint);
+assert(Number.isFinite(mixed.pressure.summaries[0].mean));
+assert(Number.isFinite(mixed.fields.fieldSummaries[0].outputs[0].distribution.mean));
+
 const rangeResult = await service.query({
   dataset: "gefs",
   geometry: { type: "point", latitude: 50.13, longitude: 14.37 },
@@ -223,6 +255,12 @@ console.log(JSON.stringify({
     selection: profile.selection,
     summaries: profile.summaries,
     source: profile.source,
+  },
+  mixed: {
+    selection: mixed.selection,
+    pressure: mixed.pressure,
+    fields: mixed.fields,
+    source: mixed.source,
   },
   range: {
     selection: range.selection,
