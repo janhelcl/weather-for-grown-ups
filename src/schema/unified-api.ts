@@ -1,4 +1,10 @@
 import * as z from "zod/v4";
+import {
+  AIGFS_AREA_FIELD_IDS,
+  AIGFS_PRESSURE_LEVELS_HPA,
+  AIGFS_PRESSURE_VARIABLE_IDS,
+  AIGFS_RAW_PRESSURE_VARIABLE_IDS,
+} from "../catalog/aigfs.js";
 import { LAYER_DIAGNOSTIC_IDS } from "../catalog/layer-diagnostics.js";
 import {
   GEFS_REFORECAST_EXTENDED_MEMBERS,
@@ -17,13 +23,15 @@ import {
   type AtmosphericDatasetId,
   type AtmosphericDatasetKind,
   type AtmosphericDatasetRole,
+  type AtmosphericModelClass,
+  type AtmosphericProvider,
   type AtmosphericRunSelectorId,
 } from "../catalog/models.js";
 import { areaThresholdSchema } from "./area-summary.js";
 import { gfsGridSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 
-export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "gefs", "ifs", "ifs-ens", "gfs-analysis"] as const;
+export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "aigfs", "gefs", "ifs", "ifs-ens", "gfs-analysis"] as const;
 export const publicAtmosphericDatasetSchema = z.enum(PUBLIC_ATMOSPHERIC_DATASET_IDS);
 export type PublicAtmosphericDataset = z.infer<typeof publicAtmosphericDatasetSchema>;
 
@@ -31,17 +39,22 @@ function datasetMetadata<Id extends AtmosphericDatasetId>(internalDatasetId: Id)
   internalDatasetId: Id;
   role: AtmosphericDatasetRole;
   kind: AtmosphericDatasetKind;
+  modelClass: AtmosphericModelClass;
+  provider: AtmosphericProvider;
 } {
   const dataset = ATMOSPHERIC_DATASET_CATALOG[internalDatasetId];
   return {
     internalDatasetId,
     role: dataset.role,
     kind: dataset.kind,
+    modelClass: dataset.modelClass,
+    provider: dataset.provider,
   };
 }
 
 export const PUBLIC_DATASET_METADATA = {
   gfs: datasetMetadata("gfs_0p25"),
+  aigfs: datasetMetadata("aigfs_0p25"),
   gefs: datasetMetadata("gefs_0p50"),
   ifs: datasetMetadata("ifs_0p25"),
   "ifs-ens": datasetMetadata("ifs_ens_0p25"),
@@ -308,6 +321,11 @@ export interface PublicAtmosphericDatasetCapabilities {
   dataset: PublicAtmosphericDataset;
   role: AtmosphericDatasetRole;
   kind: AtmosphericDatasetKind;
+  modelClass: AtmosphericModelClass;
+  provider: AtmosphericProvider;
+  horizontalGridDegrees: number;
+  maxForecastHour?: number;
+  nativeForecastIntervalHours?: number;
   forecastKinds: readonly PublicForecastKind[];
   runSelectors: readonly AtmosphericRunSelectorId[];
   operations: readonly string[];
@@ -336,6 +354,11 @@ export function publicDatasetCapabilities(
     dataset,
     role: metadata.role,
     kind: metadata.kind,
+    modelClass: definition.modelClass,
+    provider: definition.provider,
+    horizontalGridDegrees: definition.horizontalGridDegrees,
+    ...(definition.maxForecastHour === undefined ? {} : { maxForecastHour: definition.maxForecastHour }),
+    ...(definition.nativeForecastIntervalHours === undefined ? {} : { nativeForecastIntervalHours: definition.nativeForecastIntervalHours }),
     forecastKinds,
     runSelectors,
     operations,
@@ -502,6 +525,11 @@ function validateDatasetModifiers(
       }
     }
   }
+
+  if (request.dataset === "aigfs") {
+    validateAigfsModifiers(request, context);
+  }
+
   if (metadata.role === "forecast" && !isReforecast) {
     const run = request.forecast?.run ?? "latest";
     const selector = runSelectorCapability(run);
@@ -551,6 +579,99 @@ function validateDatasetModifiers(
       path: ["source"],
       message: "source override is only valid for gfs",
     });
+  }
+}
+
+
+function validateAigfsModifiers(
+  request: any,
+  context: z.RefinementCtx,
+): void {
+  const variableSet = new Set<string>(AIGFS_PRESSURE_VARIABLE_IDS);
+  const rawVariableSet = new Set<string>(AIGFS_RAW_PRESSURE_VARIABLE_IDS);
+  const pressureLevelSet = new Set<number>(AIGFS_PRESSURE_LEVELS_HPA);
+  const areaFieldSet = new Set<string>(AIGFS_AREA_FIELD_IDS);
+
+  if (request.selection !== undefined) {
+    const variables = request.selection.variables ?? [];
+    const pressureLevelsHpa = request.selection.pressureLevelsHpa ?? [];
+    const fields = request.selection.fields ?? [];
+
+    const unsupportedVariables = variables.filter((variable: string) => !variableSet.has(variable));
+    if (unsupportedVariables.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "variables"],
+        message: `AIGFS pressure variables not supported: ${unsupportedVariables.join(", ")}`,
+      });
+    }
+
+    const unsupportedLevels = pressureLevelsHpa.filter((level: number) => !pressureLevelSet.has(level));
+    if (unsupportedLevels.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "pressureLevelsHpa"],
+        message: `AIGFS pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
+      });
+    }
+
+    const supportedFields = new Set<string>([
+      "temperature_2m",
+      "u_wind_10m",
+      "v_wind_10m",
+      "wind_10m",
+      "mean_sea_level_pressure",
+      "total_precipitation",
+    ]);
+    const unsupportedFields = fields.filter((field: string) => !supportedFields.has(field));
+    if (unsupportedFields.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "fields"],
+        message: `AIGFS fields not supported: ${unsupportedFields.join(", ")}`,
+      });
+    }
+
+    if (request.geometry?.type === "area") {
+      const derivedAreaVariables = variables.filter((variable: string) => !rawVariableSet.has(variable));
+      if (derivedAreaVariables.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["selection", "variables"],
+          message: `AIGFS area summaries require a native scalar pressure variable; derived variables not supported for area geometry: ${derivedAreaVariables.join(", ")}`,
+        });
+      }
+      const unsupportedAreaFields = fields.filter((field: string) => !areaFieldSet.has(field));
+      if (unsupportedAreaFields.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["selection", "fields"],
+          message: `AIGFS area summaries require a native scalar field; unsupported: ${unsupportedAreaFields.join(", ")}`,
+        });
+      }
+    }
+  }
+
+  if (request.diagnostic !== undefined) {
+    if (request.diagnostic.kind === "parcel") {
+      context.addIssue({
+        code: "custom",
+        path: ["diagnostic"],
+        message: "AIGFS parcel diagnostics are not exposed because the operational surface product lacks surface pressure, surface geopotential height, and 2 m specific humidity",
+      });
+      return;
+    }
+    const levels = request.diagnostic.kind === "layer"
+      ? [request.diagnostic.lowerPressureHpa, request.diagnostic.upperPressureHpa]
+      : request.diagnostic.pressureLevelsHpa;
+    const unsupportedLevels = levels.filter((level: number) => !pressureLevelSet.has(level));
+    if (unsupportedLevels.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["diagnostic"],
+        message: `AIGFS diagnostic pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
+      });
+    }
   }
 }
 
