@@ -5,8 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   FileAccessPolicy,
   UPSTREAM_ACCESS_POLICIES,
-  withLegacyCooldown,
-} from "../src/cache/file-access-policy.js";
+} from "../src/access/access-policy.js";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -134,14 +133,24 @@ describe("FileAccessPolicy", () => {
     expect(maxActive).toBe(1);
   });
 
-  it("turns the legacy cooldown override into a serial interval policy only when requested", () => {
-    expect(withLegacyCooldown(UPSTREAM_ACCESS_POLICIES.gdex, undefined))
-      .toBe(UPSTREAM_ACCESS_POLICIES.gdex);
-    expect(withLegacyCooldown(UPSTREAM_ACCESS_POLICIES.gdex, 25)).toMatchObject({
-      id: "gdex",
+  it("rejects malformed provider policy definitions", () => {
+    expect(() => new FileAccessPolicy(rootDir, {
+      id: "Bad Provider",
       maxConcurrency: 1,
-      minIntervalMs: 25,
-    });
+      minIntervalMs: 0,
+    })).toThrow(/policy id/);
+
+    expect(() => new FileAccessPolicy(rootDir, {
+      id: "bad-concurrency",
+      maxConcurrency: 0,
+      minIntervalMs: 0,
+    })).toThrow(/maxConcurrency/);
+
+    expect(() => new FileAccessPolicy(rootDir, {
+      id: "bad-interval",
+      maxConcurrency: 1,
+      minIntervalMs: -1,
+    })).toThrow(/minIntervalMs/);
   });
 
   it("rejects an ambiguous interval-plus-concurrency policy", () => {

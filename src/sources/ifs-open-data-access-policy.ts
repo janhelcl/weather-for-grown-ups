@@ -2,11 +2,11 @@ import {
   FileAccessPolicy,
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
-} from "./file-access-policy.js";
+} from "../access/access-policy.js";
 import {
   IFS_OPEN_DATA_MIRRORS,
   type IfsHttpAccessPolicy,
-} from "../sources/ifs-open-data.js";
+} from "./ifs-open-data.js";
 
 export class IfsOpenDataAccessPolicy implements IfsHttpAccessPolicy {
   private readonly cloudPolicy: UpstreamAccessPolicy;

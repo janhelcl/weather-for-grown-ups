@@ -1,4 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import {
+  createAtmosphericQueryAdapterRegistry,
+  type AtmosphericQueryRegistryOptions,
+} from "../src/core/query-adapters/registry.js";
+import {
+  createAtmosphericDiagnosticAdapterRegistry,
+  type AtmosphericDiagnosticRegistryOptions,
+} from "../src/core/diagnostic-adapters/registry.js";
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
 import {
   UnifiedAtmosphereDiagnosticService,
@@ -13,6 +21,18 @@ import {
 import {
   queryAtmosphereSchema,
 } from "../src/schema/unified-api.js";
+
+function createQueryService(options: AtmosphericQueryRegistryOptions = {}) {
+  return new UnifiedAtmosphereQueryService({
+    adapters: createAtmosphericQueryAdapterRegistry(options),
+  });
+}
+
+function createDiagnosticService(options: AtmosphericDiagnosticRegistryOptions = {}) {
+  return new UnifiedAtmosphereDiagnosticService({
+    adapters: createAtmosphericDiagnosticAdapterRegistry(options),
+  });
+}
 
 const point = { type: "point" as const, latitude: 50.08, longitude: 14.43 };
 const selection = {
@@ -137,7 +157,7 @@ describe("unified atmospheric routing", () => {
     const historyProfile = { getHistoricalProfile: vi.fn(async () => ({ route: "history-profile" })) };
     const historyFields = { getHistoricalFields: vi.fn(async () => ({ route: "history-fields" })) };
 
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gfsProfile: gfsProfile as any,
       gefsBundle: gefsBundle as any,
       ifsProfile: ifsProfile as any,
@@ -223,7 +243,7 @@ describe("unified atmospheric routing", () => {
         grid: query.grid,
       })),
     };
-    const service = new UnifiedAtmosphereQueryService({ gfsProfile: gfsProfile as any });
+    const service = createQueryService({ gfsProfile: gfsProfile as any });
     const result = await service.query({
       dataset: "gfs",
       geometry: point,
@@ -246,7 +266,7 @@ describe("unified atmospheric routing", () => {
         route: "archive-0p25",
       })),
     };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       archivedGfs: archivedGfs as any,
       now: () => new Date("2026-08-27T12:00:00Z"),
     });
@@ -270,7 +290,7 @@ describe("unified atmospheric routing", () => {
         route: "archived-gfs",
       })),
     };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gfsProfile: gfsProfile as any,
       archivedGfs: archivedGfs as any,
       now: () => new Date("2026-08-27T12:00:00Z"),
@@ -310,7 +330,7 @@ describe("unified atmospheric routing", () => {
     const ifsTimeSeries = { getTimeSeries: vi.fn(async () => ({ route: "ifs-series" })) };
     const historyTimeSeries = { getHistoricalTimeSeries: vi.fn(async () => ({ route: "history-series" })) };
 
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gfsTimeSeries: gfsTimeSeries as any,
       gefsTimeSeries: gefsTimeSeries as any,
       ifsEnsTimeSeries: ifsEnsTimeSeries as any,
@@ -509,278 +529,142 @@ describe("unified catalog branch coverage", () => {
 });
 
 describe("unified specialized operations", () => {
-  it("keeps compare-runs dataset-aware while delegating to native semantics", async () => {
-    const gfs = { compareRuns: vi.fn(async (query) => ({ route: "gfs-runs", query })) };
-    const gefs = { compareRuns: vi.fn(async (query) => ({ route: "gefs-runs", query })) };
-    const ifs = { compareRuns: vi.fn(async (query) => ({ route: "ifs-runs", query })) };
-    const ifsEns = { compareRuns: vi.fn(async (query) => ({ route: "ifs-ens-runs", query })) };
-    const service = new UnifiedRunComparisonService(gfs as any, gefs as any, ifs as any, ifsEns as any);
+  it("dispatches run comparisons by dataset through shared-request adapters", async () => {
+    const routes = Object.fromEntries(
+      ["gfs", "gefs", "ifs", "ifs-ens"].map((dataset) => [
+        dataset,
+        { compare: vi.fn(async (request) => ({ route: dataset, request })) },
+      ]),
+    ) as any;
+    const service = new UnifiedRunComparisonService({ adapters: routes });
 
-    const gfsResult = await service.compare({
-      dataset: "gfs",
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection,
-      cycles: 3,
-    });
-    expect((gfsResult.result as any).route).toBe("gfs-runs");
-    expect(gfs.compareRuns).toHaveBeenCalledOnce();
+    for (const dataset of ["gfs", "ifs"] as const) {
+      const result = await service.compare({
+        dataset,
+        geometry: point,
+        time: { at: "2026-08-28T12:00:00Z" },
+        selection,
+      });
+      expect((result.result as any).route).toBe(dataset);
+    }
 
-    const gefsResult = await service.compare({
-      dataset: "gefs",
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection,
-      cycles: 3,
-    });
-    expect((gefsResult.result as any).route).toBe("gefs-runs");
-    expect(gefs.compareRuns).toHaveBeenCalledOnce();
-
-    const ifsResult = await service.compare({
-      dataset: "ifs",
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection: {
-        variables: ["temperature", "wind"],
-        pressureLevelsHpa: [850],
-        fields: ["wind_10m"],
-      },
-      cycles: 2,
-    });
-    expect((ifsResult.result as any).route).toBe("ifs-runs");
-    expect(ifs.compareRuns).toHaveBeenCalledWith(expect.objectContaining({
-      variables: ["temperature", "wind"],
-      pressureLevelsHpa: [850],
-      fields: ["wind_10m"],
-      cycles: 2,
-    }));
-
-    const ifsEnsResult = await service.compare({
-      dataset: "ifs-ens",
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection,
-      anchorRun: "2026-08-27T12:00:00Z",
-      cycles: 3,
-      cycleStrideHours: 12,
-      ensemble: {
-        members: ["p01", "p50"],
-        quantiles: [0.1, 0.5, 0.9],
-      },
-      thresholdGte: 10,
-    });
-    expect((ifsEnsResult.result as any).route).toBe("ifs-ens-runs");
-    expect(ifsEns.compareRuns).toHaveBeenCalledWith(expect.objectContaining({
-      members: ["p01", "p50"],
-      quantiles: [0.1, 0.5, 0.9],
-      thresholdGte: 10,
-      cycleStrideHours: 12,
-      cycles: 3,
-    }));
+    for (const dataset of ["gefs", "ifs-ens"] as const) {
+      const result = await service.compare({
+        dataset,
+        geometry: point,
+        time: { at: "2026-08-28T12:00:00Z" },
+        selection,
+        ensemble: { quantiles: [0.1, 0.9] },
+      });
+      expect((result.result as any).route).toBe(dataset);
+    }
   });
 
-  it("rejects a GFS grid selector on GEFS run comparison", async () => {
-    const service = new UnifiedRunComparisonService(
-      { compareRuns: vi.fn() } as any,
-      { compareRuns: vi.fn() } as any,
-    );
+  it("validates run-comparison constraints before adapter dispatch", async () => {
+    const adapter = { compare: vi.fn() };
+    const service = new UnifiedRunComparisonService({
+      adapters: { gefs: adapter as any, gfs: adapter as any },
+    });
     await expect(service.compare({
       dataset: "gefs",
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       selection,
       gfsGrid: "0p50",
-      cycles: 2,
     })).rejects.toThrow("gfsGrid is only valid for GFS run comparison");
-  });
-
-  it("rejects ensemble controls on deterministic GFS run comparison", async () => {
-    const service = new UnifiedRunComparisonService(
-      { compareRuns: vi.fn() } as any,
-      { compareRuns: vi.fn() } as any,
-    );
-    await expect(service.compare({
-      dataset: "gfs",
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection,
-      ensemble: { members: ["c00", "p01"] },
-    })).rejects.toThrow("ensemble controls are only valid for gefs or ifs-ens run comparison");
-  });
-
-  it("rejects GEFS run comparison selections outside one raw pressure variable", async () => {
-    const service = new UnifiedRunComparisonService(
-      { compareRuns: vi.fn() } as any,
-      { compareRuns: vi.fn() } as any,
-    );
-
-    await expect(service.compare({
-      dataset: "gefs",
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection: { fields: ["temperature_2m"] },
-    })).rejects.toThrow(
-      "Ensemble run comparison currently requires exactly one pressure variable at one pressure level",
-    );
-
-    await expect(service.compare({
-      dataset: "gefs",
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection: {
-        variables: ["temperature", "u_wind"],
-        pressureLevelsHpa: [850],
-      },
-    })).rejects.toThrow(
-      "Ensemble run comparison currently requires exactly one pressure variable at one pressure level",
-    );
-  });
-
-  it("passes explicit GEFS comparison controls without member-trajectory semantics", async () => {
-    const gfs = { compareRuns: vi.fn() };
-    const gefs = { compareRuns: vi.fn(async (query) => ({ route: "gefs-runs", query })) };
-    const service = new UnifiedRunComparisonService(gfs as any, gefs as any);
-
-    const result = await service.compare({
-      dataset: "gefs",
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection,
-      anchorRun: "2026-08-27T12:00:00Z",
-      cycles: 4,
-      ensemble: {
-        members: ["c00", "p01"],
-        quantiles: [0.1, 0.9],
-      },
-      thresholdGte: 5,
-    });
-
-    expect((result.result as any).route).toBe("gefs-runs");
-    expect(gefs.compareRuns).toHaveBeenCalledWith(expect.objectContaining({
-      members: ["c00", "p01"],
-      quantiles: [0.1, 0.9],
-      thresholdGte: 5,
-      cycles: 4,
-    }));
-  });
-
-  it("rejects member payload controls on GEFS run comparison", async () => {
-    const service = new UnifiedRunComparisonService(
-      { compareRuns: vi.fn() } as any,
-      { compareRuns: vi.fn() } as any,
-    );
 
     await expect(service.compare({
       dataset: "gefs",
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       selection,
-      ensemble: {
-        quantiles: [0.1, 0.9],
-        includeMembers: true,
-      },
+      ensemble: { includeMembers: true },
     })).rejects.toThrow("includeMembers/maxMemberSamples are not applicable");
 
-    await expect(service.compare({
-      dataset: "gefs",
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection,
-      ensemble: {
-        quantiles: [0.1, 0.9],
-        maxMemberSamples: 100,
-      },
-    })).rejects.toThrow("includeMembers/maxMemberSamples are not applicable");
+    expect(adapter.compare).not.toHaveBeenCalled();
   });
 
-  it("passes optional GFS fields and cross-dataset member controls", async () => {
-    const gfs = { compareRuns: vi.fn(async (query) => ({ route: "gfs-runs", query })) };
-    const runService = new UnifiedRunComparisonService(gfs as any, { compareRuns: vi.fn() } as any);
+  it("dispatches each dataset comparison pair through its pair adapter", async () => {
+    const pairs = {
+      "gfs:gefs": { compare: vi.fn(async () => ({ route: "gfs:gefs" })) },
+      "gfs:ifs": { compare: vi.fn(async () => ({ route: "gfs:ifs" })) },
+      "gefs:ifs-ens": { compare: vi.fn(async () => ({ route: "gefs:ifs-ens" })) },
+      "ifs:ifs-ens": { compare: vi.fn(async () => ({ route: "ifs:ifs-ens" })) },
+    };
+    const service = new UnifiedDatasetComparisonService({ adapters: pairs as any });
 
-    await runService.compare({
-      dataset: "gfs",
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection: { fields: ["temperature_2m"] },
-      gfsGrid: "0p50",
-      cycles: 2,
-    });
-    expect(gfs.compareRuns).toHaveBeenCalledWith(expect.objectContaining({
-      fields: ["temperature_2m"],
-      grid: "0p50",
-      cycles: 2,
-    }));
-
-    const compare = { compare: vi.fn(async (query) => ({ route: "dataset-compare", query })) };
-    const datasetService = new UnifiedDatasetComparisonService(compare as any);
-    await datasetService.compare({
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      variable: "temperature",
-      pressureLevelHpa: 850,
-      gfsGrid: "0p50",
-      members: ["c00", "p01"],
-      quantiles: [0.25, 0.75],
-    });
-    expect(compare.compare).toHaveBeenCalledWith(expect.objectContaining({
-      gfsGrid: "0p50",
-      members: ["c00", "p01"],
-      quantiles: [0.25, 0.75],
-    }));
-  });
-
-  it("rejects historical verification leads off the native six-hour analysis cadence", async () => {
-    const service = new UnifiedForecastVerificationService({ verify: vi.fn() } as any);
-    await expect(service.verify({
-      geometry: point,
-      time: { at: "2017-05-09T12:00:00Z" },
-      leadHours: 5,
-      variables: ["temperature"],
-      pressureLevelsHpa: [850],
-    })).rejects.toThrow("leadHours must be a multiple of 6");
-  });
-
-  it("maps generic dataset comparison, verification and analog operations to existing primitives", async () => {
-    const compare = { compare: vi.fn(async (query) => ({ route: "dataset-compare", query })) };
-    const verify = { verify: vi.fn(async (query) => ({ route: "verify", query })) };
-    const analog = { findAnalogs: vi.fn(async (query) => ({ route: "analogs", query })) };
-
-    const compared = await new UnifiedDatasetComparisonService(compare as any).compare({
+    const gfsGefs = await service.compare({
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       variable: "temperature",
       pressureLevelHpa: 850,
     });
-    expect((compared.result as any).route).toBe("dataset-compare");
-    expect(compare.compare).toHaveBeenCalledWith(expect.objectContaining({
-      validTime: "2026-08-28T12:00:00Z",
+    expect((gfsGefs.result as any).route).toBe("gfs:gefs");
+
+    const gfsIfs = await service.compare({
+      datasets: ["gfs", "ifs"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
       variable: "temperature",
       pressureLevelHpa: 850,
-    }));
+    });
+    expect((gfsIfs.result as any).route).toBe("gfs:ifs");
 
-    const verified = await new UnifiedForecastVerificationService(verify as any).verify({
+    const gefsIfsEns = await service.compare({
+      datasets: ["gefs", "ifs-ens"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
+    expect((gefsIfsEns.result as any).route).toBe("gefs:ifs-ens");
+
+    const ifsIfsEns = await service.compare({
+      datasets: ["ifs", "ifs-ens"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
+    expect((ifsIfsEns.result as any).route).toBe("ifs:ifs-ens");
+  });
+
+  it("dispatches verification by reference dataset and analogs by analysis dataset", async () => {
+    const analysis = { verify: vi.fn(async () => ({ route: "analysis" })) };
+    const igra = { verify: vi.fn(async () => ({ route: "igra" })) };
+    const verification = new UnifiedForecastVerificationService({
+      adapters: { "gfs-analysis": analysis as any, igra: igra as any },
+    });
+
+    const verified = await verification.verify({
       geometry: point,
       time: { at: "2019-12-26T18:00:00Z" },
       leadHours: 54,
       variables: ["temperature"],
       pressureLevelsHpa: [850],
     });
-    expect((verified.result as any).route).toBe("verify");
-    expect(verify.verify).toHaveBeenCalledWith(expect.objectContaining({
-      validTime: "2019-12-26T18:00:00Z",
-      leadHours: 54,
-    }));
+    expect((verified.result as any).route).toBe("analysis");
 
-    const analogs = await new UnifiedAnalogService(analog as any).find({
+    const igraVerified = await verification.verify({
+      referenceDataset: "igra",
+      geometry: point,
+      time: { at: "2026-08-24T12:00:00Z" },
+      leadHours: 48,
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    });
+    expect((igraVerified.result as any).route).toBe("igra");
+
+    const analog = { find: vi.fn(async (request) => ({ route: "analogs", request })) };
+    const analogs = await new UnifiedAnalogService({
+      adapters: { "gfs-analysis": analog as any },
+    }).find({
       geometry: point,
       time: { at: "2017-05-09T12:00:00Z" },
       variables: ["temperature"],
       pressureLevelsHpa: [850],
     });
     expect((analogs.result as any).route).toBe("analogs");
-    expect(analog.findAnalogs).toHaveBeenCalledWith(expect.objectContaining({
-      targetTime: "2017-05-09T12:00:00Z",
-    }));
   });
 });
 
@@ -799,7 +683,7 @@ describe("unified geometry routing coverage", () => {
       getPointsTimeSeries: vi.fn(async () => ({ route: "ifs-ens-points-series" })),
     };
     const historyPointsTimeSeries = { getPointsTimeSeries: vi.fn(async () => ({ route: "history-points-series" })) };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gfsPoints: gfsPoints as any,
       gefsPoints: gefsPoints as any,
       ifsPoints: ifsPoints as any,
@@ -916,7 +800,7 @@ describe("unified geometry routing coverage", () => {
     const ifsTransect = { getTransect: vi.fn(async () => ({ route: "ifs-transect" })) };
     const ifsEnsTransect = { getTransect: vi.fn(async () => ({ route: "ifs-ens-transect" })) };
     const historyTransect = { getTransect: vi.fn(async () => ({ route: "history-transect" })) };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gfsTransect: gfsTransect as any,
       gefsTransect: gefsTransect as any,
       ifsTransect: ifsTransect as any,
@@ -993,7 +877,7 @@ describe("unified geometry routing coverage", () => {
     const ifsArea = { summarize: vi.fn(async () => ({ route: "ifs-area" })) };
     const ifsEnsArea = { summarize: vi.fn(async () => ({ route: "ifs-ens-area" })) };
     const historyArea = { summarize: vi.fn(async () => ({ route: "history-area" })) };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gfsArea: gfsArea as any,
       gefsArea: gefsArea as any,
       ifsArea: ifsArea as any,
@@ -1097,7 +981,7 @@ describe("unified archived forecast diagnostic routing", () => {
         route: "archive-diagnostic",
       })),
     };
-    const service = new UnifiedAtmosphereDiagnosticService({
+    const service = createDiagnosticService({
       layer: operational as any,
       archivedGfs: archivedGfs as any,
       now: () => new Date("2026-08-27T12:00:00Z"),
@@ -1151,7 +1035,7 @@ describe("unified diagnostic routing coverage", () => {
       getParcelDiagnostics: vi.fn(async () => ({ route: "ifs-ens-parcel" })),
     };
     const timeSeries = { getDiagnosticTimeSeries: vi.fn(async () => ({ route: "series" })) };
-    const service = new UnifiedAtmosphereDiagnosticService({
+    const service = createDiagnosticService({
       layer: layer as any,
       profile: profile as any,
       parcel: parcel as any,
@@ -1285,7 +1169,7 @@ describe("unified diagnostic routing coverage", () => {
   it("routes diagnostic ranges while preserving dataset time semantics", async () => {
     const timeSeries = { getDiagnosticTimeSeries: vi.fn(async (input) => ({ route: input.model })) };
     const ifsEnsTimeSeries = { getDiagnosticTimeSeries: vi.fn(async () => ({ route: "ifs-ens-series" })) };
-    const service = new UnifiedAtmosphereDiagnosticService({
+    const service = createDiagnosticService({
       timeSeries: timeSeries as any,
       ifsEnsTimeSeries: ifsEnsTimeSeries as any,
     });

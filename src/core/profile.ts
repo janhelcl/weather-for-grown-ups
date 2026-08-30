@@ -1,6 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_NOMADS_COOLDOWN_MS, FileRateLimiter } from "../cache/file-rate-limiter.js";
+import {
+  FileAccessPolicy,
+  UPSTREAM_ACCESS_POLICIES,
+  type UpstreamAccessPolicy,
+} from "../access/access-policy.js";
 import { NomadsCache, type CachedFile } from "../cache/nomads-cache.js";
 import { GfsS3SubsetCache } from "../cache/s3-subset-cache.js";
 import {
@@ -59,7 +63,7 @@ export interface PointDecoder {
 
 export interface ProfileServiceOptions {
   cacheDir?: string;
-  cooldownMs?: number;
+  nomadsAccessPolicy?: UpstreamAccessPolicy;
   wgrib2Path?: string;
   cache?: ProfileCache;
   decoder?: PointDecoder;
@@ -74,11 +78,10 @@ export class ProfileService {
 
   constructor(options: ProfileServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
-    const limiter = new FileRateLimiter(
-      join(cacheDir, "state"),
-      options.cooldownMs ?? DEFAULT_NOMADS_COOLDOWN_MS,
-    );
-    const nomadsCache = options.cache ?? new NomadsCache(join(cacheDir, "grib"), limiter);
+    const nomadsAccessPolicy = options.nomadsAccessPolicy
+      ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nomads);
+    const nomadsCache = options.cache
+      ?? new NomadsCache(join(cacheDir, "grib"), nomadsAccessPolicy);
 
     this.sources = {
       nomads: new NomadsProfileSource(nomadsCache as NomadsCache),

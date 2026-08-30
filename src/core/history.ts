@@ -1,6 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { FileAccessPolicy, UPSTREAM_ACCESS_POLICIES, withLegacyCooldown } from "../cache/file-access-policy.js";
+import {
+  FileAccessPolicy,
+  UPSTREAM_ACCESS_POLICIES,
+  type UpstreamAccessPolicy,
+} from "../access/access-policy.js";
 import {
   deriveAirDensityKgM3,
   deriveDewPointC,
@@ -133,7 +137,7 @@ const NATIVE_SPECIFIC_HUMIDITY_DEPENDENCIES: Partial<
 
 export interface HistoricalProfileServiceOptions {
   cacheDir?: string;
-  cooldownMs?: number;
+  accessPolicy?: UpstreamAccessPolicy;
   source?: HistoricalAnalysisDataSource;
   now?: () => Date;
   allowNonAnalysisCycle?: boolean;
@@ -150,13 +154,11 @@ export class HistoricalProfileService {
 
   constructor(options: HistoricalProfileServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
-    const limiter = new FileAccessPolicy(
-      join(cacheDir, "state"),
-      withLegacyCooldown(UPSTREAM_ACCESS_POLICIES.nceiThredds, options.cooldownMs),
-    );
+    const accessPolicy = options.accessPolicy
+      ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
     this.source = options.source ?? new NceiGfsHistorySource({
       cacheDir: join(cacheDir, "ncei-history"),
-      limiter,
+      limiter: accessPolicy,
     });
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;

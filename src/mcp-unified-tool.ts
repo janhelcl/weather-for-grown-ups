@@ -1,15 +1,13 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { searchAtmosphereCatalog } from "./catalog/unified-search.js";
 import {
+  UnifiedAnalogService,
   UnifiedAtmosphereDiagnosticService,
   UnifiedAtmosphereQueryService,
-} from "./core/unified-atmosphere-api.js";
-import {
-  UnifiedAnalogService,
   UnifiedDatasetComparisonService,
   UnifiedForecastVerificationService,
   UnifiedRunComparisonService,
-} from "./core/unified-specialized-api.js";
+} from "./core/unified-atmosphere-api.js";
 import {
   diagnoseAtmosphereSchema,
   queryAtmosphereSchema,

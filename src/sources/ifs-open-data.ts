@@ -2,10 +2,7 @@ import {
   parseGribIndex,
   type GribIndexEntry,
 } from "@mattnucc/gribberish";
-import {
-  isRetryableHttpStatus,
-  waitBeforeHttpRetry,
-} from "./http-retry.js";
+import { isRetryableHttpStatus, runWithHttpRetry } from "../access/http-retry.js";
 
 export const IFS_OPEN_DATA_BASE_URL = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com";
 export const IFS_OPEN_DATA_MIRRORS = [
@@ -43,19 +40,13 @@ export interface IfsHttpAttemptResult<T> {
   value?: T;
 }
 
-export async function runIfsHttpWithRetry<T>(
+export function runIfsHttpWithRetry<T>(
   operation: () => Promise<IfsHttpAttemptResult<T>>,
 ): Promise<IfsHttpAttemptResult<T>> {
-  for (let attempt = 1; attempt <= IFS_HTTP_MAX_ATTEMPTS; attempt += 1) {
-    const result = await operation();
-    if (!isRetryableHttpStatus(result.status) || attempt === IFS_HTTP_MAX_ATTEMPTS) {
-      return result;
-    }
-    await waitBeforeHttpRetry(attempt, result.retryAfter, {
-      baseDelayMs: IFS_HTTP_INITIAL_BACKOFF_MS,
-    });
-  }
-  throw new Error("ECMWF IFS retry loop completed without a result");
+  return runWithHttpRetry(operation, {
+    maxAttempts: IFS_HTTP_MAX_ATTEMPTS,
+    baseDelayMs: IFS_HTTP_INITIAL_BACKOFF_MS,
+  });
 }
 
 export async function fetchIfsWithRetry(

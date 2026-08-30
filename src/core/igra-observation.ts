@@ -1,6 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { FileAccessPolicy, UPSTREAM_ACCESS_POLICIES, withLegacyCooldown } from "../cache/file-access-policy.js";
+import {
+  FileAccessPolicy,
+  UPSTREAM_ACCESS_POLICIES,
+  type UpstreamAccessPolicy,
+} from "../access/access-policy.js";
 import type { IgraVerificationVariable } from "../schema/igra-verification.js";
 import type { ProfileLevel } from "./types.js";
 import {
@@ -46,7 +50,7 @@ export interface IgraObservationSource {
 
 export interface IgraObservationProfileServiceOptions {
   cacheDir?: string;
-  cooldownMs?: number;
+  accessPolicy?: UpstreamAccessPolicy;
   source?: IgraObservationSource;
   now?: () => Date;
 }
@@ -57,13 +61,11 @@ export class IgraObservationProfileService {
 
   constructor(options: IgraObservationProfileServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
-    const limiter = new FileAccessPolicy(
-      join(cacheDir, "state"),
-      withLegacyCooldown(UPSTREAM_ACCESS_POLICIES.nceiIgra, options.cooldownMs),
-    );
+    const accessPolicy = options.accessPolicy
+      ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiIgra);
     this.source = options.source ?? new NceiIgraSource({
       cacheDir: join(cacheDir, "igra"),
-      limiter,
+      limiter: accessPolicy,
       ...(options.now === undefined ? {} : { now: options.now }),
     });
     this.now = options.now ?? (() => new Date());

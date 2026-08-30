@@ -1,6 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_NOMADS_COOLDOWN_MS, FileRateLimiter } from "../cache/file-rate-limiter.js";
+import {
+  FileAccessPolicy,
+  UPSTREAM_ACCESS_POLICIES,
+  type UpstreamAccessPolicy,
+} from "../access/access-policy.js";
 import {
   HISTORICAL_AREA_FIELD_CATALOG,
   HISTORICAL_AREA_PRESSURE_CATALOG,
@@ -28,7 +32,7 @@ const CAVEAT = "GFS model analysis area statistics; not direct observations or h
 
 export interface HistoricalAreaSummaryServiceOptions {
   cacheDir?: string;
-  cooldownMs?: number;
+  accessPolicy?: UpstreamAccessPolicy;
   source?: HistoricalAnalysisAreaDataSource;
   now?: () => Date;
   allowNonAnalysisCycle?: boolean;
@@ -45,13 +49,11 @@ export class HistoricalAreaSummaryService {
 
   constructor(options: HistoricalAreaSummaryServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
-    const limiter = new FileRateLimiter(
-      join(cacheDir, "state"),
-      options.cooldownMs ?? DEFAULT_NOMADS_COOLDOWN_MS,
-    );
+    const accessPolicy = options.accessPolicy
+      ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
     this.source = options.source ?? new NceiGfsHistorySource({
       cacheDir: join(cacheDir, "ncei-history"),
-      limiter,
+      limiter: accessPolicy,
     });
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;

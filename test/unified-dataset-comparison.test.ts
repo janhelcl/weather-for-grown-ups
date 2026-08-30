@@ -1,133 +1,179 @@
 import { describe, expect, it, vi } from "vitest";
-import { UnifiedDatasetComparisonService } from "../src/core/unified-specialized-api.js";
+import {
+  GefsIfsEnsDatasetComparisonAdapter,
+  GfsGefsDatasetComparisonAdapter,
+  GfsIfsDatasetComparisonAdapter,
+  IfsIfsEnsDatasetComparisonAdapter,
+} from "../src/core/specialized-adapters/dataset-comparison.js";
 import { compareAtmosphericDatasetsSchema } from "../src/schema/unified-specialized.js";
 
 const point = { type: "point" as const, latitude: 50.08, longitude: 14.43 };
 
-describe("unified dataset comparison", () => {
-  it("preserves GFS/GEFS as the default comparison branch", async () => {
-    const gfsGefs = { compare: vi.fn(async (query) => ({ route: "gfs-gefs", query })) };
-    const gfsIfs = { compare: vi.fn(async (query) => ({ route: "gfs-ifs", query })) };
-    const service = new UnifiedDatasetComparisonService(gfsGefs as any, gfsIfs as any);
-
-    const result = await service.compare({
+describe("unified dataset-comparison adapters", () => {
+  it("maps GFS/GEFS into native aligned comparison semantics", async () => {
+    const native = { compare: vi.fn(async (query) => ({ route: "gfs-gefs", query })) };
+    const adapter = new GfsGefsDatasetComparisonAdapter(native as any);
+    const request = compareAtmosphericDatasetsSchema.parse({
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       variable: "temperature",
       pressureLevelHpa: 850,
       members: ["c00", "p01"],
+      quantiles: [0.25, 0.75],
     });
-
-    expect(result.datasets).toEqual(["gfs", "gefs"]);
-    expect((result.result as any).route).toBe("gfs-gefs");
-    expect(gfsGefs.compare).toHaveBeenCalledOnce();
-    expect(gfsIfs.compare).not.toHaveBeenCalled();
+    const result = await adapter.compare(request);
+    expect((result as any).route).toBe("gfs-gefs");
+    expect(native.compare).toHaveBeenCalledWith(expect.objectContaining({
+      validTime: "2026-08-28T12:00:00Z",
+      members: ["c00", "p01"],
+      quantiles: [0.25, 0.75],
+    }));
   });
 
-  it("routes GFS/IFS through deterministic comparison semantics", async () => {
-    const gfsGefs = { compare: vi.fn() };
-    const gfsIfs = { compare: vi.fn(async (query) => ({ route: "gfs-ifs", query })) };
-    const service = new UnifiedDatasetComparisonService(gfsGefs as any, gfsIfs as any);
-
-    const result = await service.compare({
+  it("maps GFS/IFS into deterministic comparison semantics", async () => {
+    const native = { compare: vi.fn(async (query) => ({ route: "gfs-ifs", query })) };
+    const adapter = new GfsIfsDatasetComparisonAdapter(native as any);
+    const request = compareAtmosphericDatasetsSchema.parse({
       datasets: ["gfs", "ifs"],
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       variable: "wind",
       pressureLevelHpa: 850,
-      run: "latest",
       gfsGrid: "0p50",
     });
-
-    expect(result.datasets).toEqual(["gfs", "ifs"]);
-    expect((result.result as any).route).toBe("gfs-ifs");
-    expect(gfsIfs.compare).toHaveBeenCalledWith(expect.objectContaining({
-      validTime: "2026-08-28T12:00:00Z",
+    await adapter.compare(request);
+    expect(native.compare).toHaveBeenCalledWith(expect.objectContaining({
       variable: "wind",
       pressureLevelHpa: 850,
       gfsGrid: "0p50",
     }));
-    expect(gfsGefs.compare).not.toHaveBeenCalled();
   });
 
-
-  it("routes GEFS/IFS ENS through independent ensemble distribution semantics", async () => {
-    const gfsGefs = { compare: vi.fn() };
-    const gfsIfs = { compare: vi.fn() };
-    const gefsIfsEns = { compare: vi.fn(async (query) => ({ route: "gefs-ifs-ens", query })) };
-    const service = new UnifiedDatasetComparisonService(
-      gfsGefs as any,
-      gfsIfs as any,
-      gefsIfsEns as any,
-    );
-
-    const result = await service.compare({
+  it("maps GEFS/IFS ENS without inventing member trajectories", async () => {
+    const native = { compare: vi.fn(async (query) => ({ route: "gefs-ifs-ens", query })) };
+    const adapter = new GefsIfsEnsDatasetComparisonAdapter(native as any);
+    const request = compareAtmosphericDatasetsSchema.parse({
       datasets: ["gefs", "ifs-ens"],
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       variable: "temperature",
       pressureLevelHpa: 850,
-      run: "latest",
       gefsMembers: ["c00", "p01"],
       ifsEnsMembers: ["p01", "p50"],
       quantiles: [0.1, 0.5, 0.9],
       thresholdGte: 0,
     });
-
-    expect(result.datasets).toEqual(["gefs", "ifs-ens"]);
-    expect((result.result as any).route).toBe("gefs-ifs-ens");
-    expect(gefsIfsEns.compare).toHaveBeenCalledWith(expect.objectContaining({
-      validTime: "2026-08-28T12:00:00Z",
-      variable: "temperature",
-      pressureLevelHpa: 850,
+    await adapter.compare(request);
+    expect(native.compare).toHaveBeenCalledWith(expect.objectContaining({
       gefsMembers: ["c00", "p01"],
       ifsEnsMembers: ["p01", "p50"],
       thresholdGte: 0,
     }));
-    expect(gfsGefs.compare).not.toHaveBeenCalled();
-    expect(gfsIfs.compare).not.toHaveBeenCalled();
   });
 
-  it("routes deterministic IFS against its own perturbed ENS distribution", async () => {
-    const gfsGefs = { compare: vi.fn() };
-    const gfsIfs = { compare: vi.fn() };
-    const gefsIfsEns = { compare: vi.fn() };
-    const ifsIfsEns = {
-      compare: vi.fn(async (query) => ({ route: "ifs-ifs-ens", query })),
-    };
-    const service = new UnifiedDatasetComparisonService(
-      gfsGefs as any,
-      gfsIfs as any,
-      gefsIfsEns as any,
-      ifsIfsEns as any,
-    );
-
-    const result = await service.compare({
+  it("maps deterministic IFS against the IFS ENS distribution", async () => {
+    const native = { compare: vi.fn(async (query) => ({ route: "ifs-ifs-ens", query })) };
+    const adapter = new IfsIfsEnsDatasetComparisonAdapter(native as any);
+    const request = compareAtmosphericDatasetsSchema.parse({
       datasets: ["ifs", "ifs-ens"],
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       variable: "absolute_vorticity",
       pressureLevelHpa: 850,
-      run: "latest",
       ifsEnsMembers: ["p01", "p50"],
       quantiles: [0.1, 0.5, 0.9],
     });
-
-    expect(result.datasets).toEqual(["ifs", "ifs-ens"]);
-    expect((result.result as any).route).toBe("ifs-ifs-ens");
-    expect(ifsIfsEns.compare).toHaveBeenCalledWith(expect.objectContaining({
-      validTime: "2026-08-28T12:00:00Z",
-      variable: "absolute_vorticity",
-      pressureLevelHpa: 850,
+    await adapter.compare(request);
+    expect(native.compare).toHaveBeenCalledWith(expect.objectContaining({
       members: ["p01", "p50"],
       quantiles: [0.1, 0.5, 0.9],
     }));
-    expect(gfsGefs.compare).not.toHaveBeenCalled();
-    expect(gfsIfs.compare).not.toHaveBeenCalled();
-    expect(gefsIfsEns.compare).not.toHaveBeenCalled();
   });
 
-  it("rejects invalid controls on IFS/IFS ENS comparison", () => {
+  it("preserves omitted pair-specific controls", async () => {
+    const native = { compare: vi.fn(async (query) => query) };
+
+    const gfsGefs = new GfsGefsDatasetComparisonAdapter(native as any);
+    await gfsGefs.compare(compareAtmosphericDatasetsSchema.parse({
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      gfsGrid: "0p50",
+    }));
+    expect(native.compare.mock.calls.at(-1)![0]).toMatchObject({
+      gfsGrid: "0p50",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
+
+    const gfsIfs = new GfsIfsDatasetComparisonAdapter(native as any);
+    await gfsIfs.compare(compareAtmosphericDatasetsSchema.parse({
+      datasets: ["gfs", "ifs"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    }));
+    expect(native.compare.mock.calls.at(-1)![0]).not.toHaveProperty("gfsGrid");
+
+    const gefsIfsEns = new GefsIfsEnsDatasetComparisonAdapter(native as any);
+    await gefsIfsEns.compare(compareAtmosphericDatasetsSchema.parse({
+      datasets: ["gefs", "ifs-ens"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    }));
+    expect(native.compare.mock.calls.at(-1)![0]).toMatchObject({
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
+
+    const ifsIfsEns = new IfsIfsEnsDatasetComparisonAdapter(native as any);
+    await ifsIfsEns.compare(compareAtmosphericDatasetsSchema.parse({
+      datasets: ["ifs", "ifs-ens"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    }));
+    expect(native.compare.mock.calls.at(-1)![0]).toMatchObject({
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
+  });
+
+  it("guards each adapter against the wrong comparison pair", async () => {
+    const native = { compare: vi.fn(async () => undefined) };
+    const gfsGefs = new GfsGefsDatasetComparisonAdapter(native as any);
+    const gfsIfs = new GfsIfsDatasetComparisonAdapter(native as any);
+    const gefsIfsEns = new GefsIfsEnsDatasetComparisonAdapter(native as any);
+    const ifsIfsEns = new IfsIfsEnsDatasetComparisonAdapter(native as any);
+    const request = compareAtmosphericDatasetsSchema.parse({
+      datasets: ["gfs", "ifs"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
+    expect(() => gfsGefs.compare(request)).toThrow("datasets=gfs,gefs");
+    expect(() => gefsIfsEns.compare(request)).toThrow("datasets=gefs,ifs-ens");
+    expect(() => ifsIfsEns.compare(request)).toThrow("datasets=ifs,ifs-ens");
+    await expect(gfsIfs.compare(request)).resolves.toBeUndefined();
+
+    const gfsGefsRequest = compareAtmosphericDatasetsSchema.parse({
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
+    expect(() => gfsIfs.compare(gfsGefsRequest)).toThrow("datasets=gfs,ifs");
+  });
+});
+
+describe("unified dataset-comparison schema", () => {
+  it("rejects invalid IFS/IFS ENS controls", () => {
     const base = {
       datasets: ["ifs", "ifs-ens"] as const,
       geometry: point,
@@ -135,29 +181,21 @@ describe("unified dataset comparison", () => {
       variable: "temperature" as const,
       pressureLevelHpa: 850,
     };
-
     expect(() => compareAtmosphericDatasetsSchema.parse({
       ...base,
       ifsEnsMembers: ["p01", "p01"],
     })).toThrow("IFS ENS member selection must not contain duplicates");
-
     expect(() => compareAtmosphericDatasetsSchema.parse({
       ...base,
       quantiles: [0.5, 0.5],
     })).toThrow("Quantile selection must not contain duplicates");
-
     expect(() => compareAtmosphericDatasetsSchema.parse({
       ...base,
       gfsGrid: "0p25",
     })).toThrow();
-
-    expect(() => compareAtmosphericDatasetsSchema.parse({
-      ...base,
-      variable: "wind",
-    })).toThrow();
   });
 
-  it("rejects duplicate member and quantile selections on GEFS/IFS ENS", () => {
+  it("rejects invalid GEFS/IFS ENS controls and unsupported selections", () => {
     const base = {
       datasets: ["gefs", "ifs-ens"] as const,
       geometry: point,
@@ -165,43 +203,29 @@ describe("unified dataset comparison", () => {
       variable: "temperature" as const,
       pressureLevelHpa: 850,
     };
-
     expect(() => compareAtmosphericDatasetsSchema.parse({
       ...base,
       gefsMembers: ["p01", "p01"],
     })).toThrow("GEFS member selection must not contain duplicates");
-
     expect(() => compareAtmosphericDatasetsSchema.parse({
       ...base,
       ifsEnsMembers: ["p01", "p01"],
     })).toThrow("IFS ENS member selection must not contain duplicates");
-
     expect(() => compareAtmosphericDatasetsSchema.parse({
       ...base,
       quantiles: [0.5, 0.5],
     })).toThrow("Quantile selection must not contain duplicates");
-  });
-
-  it("rejects GFS-only controls and unsupported pressure selections on GEFS/IFS ENS", () => {
     expect(() => compareAtmosphericDatasetsSchema.parse({
-      datasets: ["gefs", "ifs-ens"],
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      variable: "temperature",
-      pressureLevelHpa: 850,
+      ...base,
       gfsGrid: "0p25",
     })).toThrow();
-
     expect(() => compareAtmosphericDatasetsSchema.parse({
-      datasets: ["gefs", "ifs-ens"],
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      variable: "temperature",
+      ...base,
       pressureLevelHpa: 600,
     })).toThrow();
   });
 
-  it("rejects ensemble controls on deterministic GFS/IFS comparisons", () => {
+  it("rejects ensemble controls and GFS-only variables on deterministic GFS/IFS", () => {
     expect(() => compareAtmosphericDatasetsSchema.parse({
       datasets: ["gfs", "ifs"],
       geometry: point,
@@ -210,9 +234,6 @@ describe("unified dataset comparison", () => {
       pressureLevelHpa: 850,
       members: ["c00", "p01"],
     })).toThrow();
-  });
-
-  it("rejects GFS-only pressure variables that IFS does not publish", () => {
     expect(() => compareAtmosphericDatasetsSchema.parse({
       datasets: ["gfs", "ifs"],
       geometry: point,

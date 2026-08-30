@@ -65,6 +65,16 @@ export const compareAtmosphericRunsSchema = z.object({
     });
   }
   if (request.dataset === "gefs" || request.dataset === "ifs-ens") {
+    if (
+      request.ensemble?.includeMembers !== undefined
+      || request.ensemble?.maxMemberSamples !== undefined
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["ensemble"],
+        message: "Ensemble run comparison returns distribution shifts only; includeMembers/maxMemberSamples are not applicable",
+      });
+    }
     const variables = request.selection.variables?.length ?? 0;
     const levels = request.selection.pressureLevelsHpa?.length ?? 0;
     const fields = request.selection.fields?.length ?? 0;
@@ -310,7 +320,11 @@ export const unifiedSpecializedResultSchema = z.object({
 });
 
 export type CompareAtmosphericRunsInput = z.input<typeof compareAtmosphericRunsSchema>;
+export type CompareAtmosphericRunsRequest = z.infer<typeof compareAtmosphericRunsSchema>;
 export type CompareAtmosphericDatasetsInput = z.input<typeof compareAtmosphericDatasetsSchema>;
+export type CompareAtmosphericDatasetsRequest = z.infer<typeof compareAtmosphericDatasetsSchema>;
 export type VerifyAtmosphericForecastInput = z.input<typeof verifyAtmosphericForecastSchema>;
+export type VerifyAtmosphericForecastRequest = z.infer<typeof verifyAtmosphericForecastSchema>;
 export type FindAtmosphericAnalogsInput = z.input<typeof findAtmosphericAnalogsSchema>;
+export type FindAtmosphericAnalogsRequest = z.infer<typeof findAtmosphericAnalogsSchema>;
 export type UnifiedSpecializedResult = z.infer<typeof unifiedSpecializedResultSchema>;

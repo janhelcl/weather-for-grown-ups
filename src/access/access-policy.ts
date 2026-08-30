@@ -17,42 +17,19 @@ export interface UpstreamAccessPolicyDefinition {
   staleLockMs?: number;
 }
 
+/**
+ * Provider etiquette and concurrency limits live here, independently of cache
+ * implementation. A source/cache client may reuse these policies, but it must
+ * not invent provider pacing of its own.
+ */
 export const UPSTREAM_ACCESS_POLICIES = {
-  nomads: {
-    id: "nomads",
-    maxConcurrency: 1,
-    minIntervalMs: 11_000,
-  },
-  noaaAws: {
-    id: "noaa-aws",
-    maxConcurrency: 8,
-    minIntervalMs: 0,
-  },
-  ecmwfCloud: {
-    id: "ecmwf-cloud",
-    maxConcurrency: 8,
-    minIntervalMs: 0,
-  },
-  ecmwfDirect: {
-    id: "ecmwf-direct",
-    maxConcurrency: 4,
-    minIntervalMs: 0,
-  },
-  nceiThredds: {
-    id: "ncei-thredds",
-    maxConcurrency: 2,
-    minIntervalMs: 0,
-  },
-  gdex: {
-    id: "gdex",
-    maxConcurrency: 4,
-    minIntervalMs: 0,
-  },
-  nceiIgra: {
-    id: "ncei-igra",
-    maxConcurrency: 4,
-    minIntervalMs: 0,
-  },
+  nomads: { id: "nomads", maxConcurrency: 1, minIntervalMs: 11_000 },
+  noaaAws: { id: "noaa-aws", maxConcurrency: 8, minIntervalMs: 0 },
+  ecmwfCloud: { id: "ecmwf-cloud", maxConcurrency: 8, minIntervalMs: 0 },
+  ecmwfDirect: { id: "ecmwf-direct", maxConcurrency: 4, minIntervalMs: 0 },
+  nceiThredds: { id: "ncei-thredds", maxConcurrency: 2, minIntervalMs: 0 },
+  gdex: { id: "gdex", maxConcurrency: 4, minIntervalMs: 0 },
+  nceiIgra: { id: "ncei-igra", maxConcurrency: 4, minIntervalMs: 0 },
 } as const satisfies Record<string, UpstreamAccessPolicyDefinition>;
 
 interface State {
@@ -86,7 +63,6 @@ export class FileAccessPolicy implements UpstreamAccessPolicy {
     await mkdir(this.rootDir, { recursive: true });
     const slot = await this.acquireSlot();
     const stopHeartbeat = this.startHeartbeat(slot);
-
     try {
       if (this.definition.minIntervalMs > 0) {
         const state = await this.readState();
@@ -96,7 +72,6 @@ export class FileAccessPolicy implements UpstreamAccessPolicy {
         );
         if (waitMs > 0) await sleep(waitMs);
       }
-
       try {
         return await operation();
       } finally {
@@ -134,7 +109,6 @@ export class FileAccessPolicy implements UpstreamAccessPolicy {
           return slot;
         } catch (error) {
           if (!isAlreadyExists(error)) throw error;
-
           try {
             const lockStat = await stat(path);
             if (Date.now() - lockStat.mtimeMs > this.staleLockMs) {
@@ -150,10 +124,9 @@ export class FileAccessPolicy implements UpstreamAccessPolicy {
   }
 
   private slotPath(slot: number): string {
-    if (this.definition.maxConcurrency === 1) {
-      return join(this.rootDir, `${this.definition.id}.lock`);
-    }
-    return join(this.rootDir, `${this.definition.id}.slot-${slot}.lock`);
+    return this.definition.maxConcurrency === 1
+      ? join(this.rootDir, `${this.definition.id}.lock`)
+      : join(this.rootDir, `${this.definition.id}.slot-${slot}.lock`);
   }
 
   private statePath(): string {
@@ -167,18 +140,6 @@ export class FileAccessPolicy implements UpstreamAccessPolicy {
       return { lastRequestCompletedAt: 0 };
     }
   }
-}
-
-export function withLegacyCooldown(
-  definition: UpstreamAccessPolicyDefinition,
-  cooldownMs: number | undefined,
-): UpstreamAccessPolicyDefinition {
-  if (cooldownMs === undefined) return definition;
-  return {
-    ...definition,
-    maxConcurrency: 1,
-    minIntervalMs: cooldownMs,
-  };
 }
 
 function isAlreadyExists(error: unknown): error is NodeJS.ErrnoException {

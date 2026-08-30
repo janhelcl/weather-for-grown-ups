@@ -2,7 +2,10 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FileRateLimiter } from "../src/cache/file-rate-limiter.js";
+import {
+  FileAccessPolicy,
+  UPSTREAM_ACCESS_POLICIES,
+} from "../src/access/access-policy.js";
 import { NomadsCache } from "../src/cache/nomads-cache.js";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -21,7 +24,15 @@ afterEach(async () => {
   await rm(rootDir, { recursive: true, force: true });
 });
 
-const makeCache = () => new NomadsCache(cacheDir, new FileRateLimiter(join(rootDir, "state"), 0));
+const makeCache = () => new NomadsCache(
+  cacheDir,
+  new FileAccessPolicy(join(rootDir, "state"), {
+    ...UPSTREAM_ACCESS_POLICIES.nomads,
+    minIntervalMs: 0,
+  }),
+  globalThis.fetch,
+  { baseDelayMs: 0, jitterRatio: 0 },
+);
 
 describe("NomadsCache", () => {
   it("downloads GRIB once, stores it atomically, and serves subsequent cache hits", async () => {
@@ -72,6 +83,21 @@ describe("NomadsCache", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("retries transient HTTP failures through the shared retry executor", async () => {
+    let attempt = 0;
+    const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => {
+      attempt += 1;
+      return attempt === 1
+        ? new Response("busy", { status: 503, statusText: "Service Unavailable" })
+        : gribResponse("recovered");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await makeCache().fetch("https://example.test/retry");
+
+    expect(result.cacheHit).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects HTTP errors and does not poison the cache", async () => {
     const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) =>
       new Response("down", { status: 503, statusText: "Service Unavailable" }),
@@ -80,6 +106,7 @@ describe("NomadsCache", () => {
     const cache = makeCache();
 
     await expect(cache.fetch("https://example.test/down")).rejects.toThrow(/HTTP 503 Service Unavailable/);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect((await readdir(cacheDir)).filter((name) => name.endsWith(".grib2"))).toEqual([]);
   });
 
