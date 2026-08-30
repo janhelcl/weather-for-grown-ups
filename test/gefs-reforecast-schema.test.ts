@@ -221,6 +221,14 @@ describe("unified GEFS reforecast branch", () => {
         pressureLevelsHpa: [50],
       },
     })).toThrow("specific_humidity at 50 hPa");
+    expect(() => gefsReforecastPointsTimeSeriesQuerySchema.parse({
+      ...range,
+      selection: {
+        kind: "profile",
+        variables: ["temperature"],
+        pressureLevelsHpa: [850, 850],
+      },
+    })).toThrow("pressure levels must not contain duplicates");
   });
 
 });
