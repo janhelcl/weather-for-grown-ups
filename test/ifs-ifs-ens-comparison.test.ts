@@ -356,6 +356,68 @@ describe("IfsIfsEnsComparisonService", () => {
     })).rejects.toThrow("is missing comparison output temperatureC");
   });
 
+  it("rejects an ensemble result missing the requested pressure summary", async () => {
+    const ensemble = ifsEnsResult(
+      "temperature",
+      "temperatureC",
+      "degC",
+      [4, 5, 6],
+    );
+    const service = new IfsIfsEnsComparisonService({
+      ifsGetter: { getProfile: async () => ifsResult("temperature", 5) },
+      ifsEnsGetter: {
+        getBundle: async () => ({ ...ensemble, pressureSummaries: [] }),
+      },
+      alignedRunProvider: {
+        resolveLatestAlignedRun: async () => new Date(run),
+      },
+    });
+
+    await expect(service.compare({
+      ...requestedPoint,
+      run: "latest",
+      validTime,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["p01", "p02", "p03"],
+      quantiles: [0.5],
+    })).rejects.toThrow("IFS ENS comparison is missing temperature@850hPa");
+  });
+
+  it("rejects an ensemble result missing the requested numeric output", async () => {
+    const ensemble = ifsEnsResult(
+      "temperature",
+      "temperatureC",
+      "degC",
+      [4, 5, 6],
+    );
+    const service = new IfsIfsEnsComparisonService({
+      ifsGetter: { getProfile: async () => ifsResult("temperature", 5) },
+      ifsEnsGetter: {
+        getBundle: async () => ({
+          ...ensemble,
+          pressureSummaries: [{
+            ...ensemble.pressureSummaries[0]!,
+            outputs: [],
+          }],
+        }),
+      },
+      alignedRunProvider: {
+        resolveLatestAlignedRun: async () => new Date(run),
+      },
+    });
+
+    await expect(service.compare({
+      ...requestedPoint,
+      run: "latest",
+      validTime,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["p01", "p02", "p03"],
+      quantiles: [0.5],
+    })).rejects.toThrow("missing numeric output temperatureC");
+  });
+
   it("rejects drift between deterministic and ensemble metadata", async () => {
     const ensemble = ifsEnsResult(
       "temperature",
