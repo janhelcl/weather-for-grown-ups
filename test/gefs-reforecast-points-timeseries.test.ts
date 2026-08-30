@@ -378,4 +378,36 @@ describe("GEFSv12 reforecast multi-point ranges", () => {
     })).rejects.toThrow("changed decoder between forecast steps");
   });
 
+
+  it("rejects equal-length profile selection drift", async () => {
+    const getPoints = vi.fn(async (query: any) => {
+      const batch = profileBatch(query.validTime);
+      return {
+        ...batch,
+        selection: {
+          ...batch.selection,
+          variables: ["specific_humidity"] as const,
+        },
+      };
+    });
+    const service = new GefsReforecastPointsTimeSeriesService({
+      pointsGetter: { getPoints } as any,
+    });
+
+    await expect(service.getPointsTimeSeries({
+      points: requestedPoints,
+      run: run.toISOString(),
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T03:00:00Z",
+      selection: {
+        kind: "profile",
+        variables: ["temperature"],
+        pressureLevelsHpa: [850, 500],
+      },
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+      maxPointSteps: 2,
+    })).rejects.toThrow("changed selection between forecast steps");
+  });
+
 });
