@@ -18,7 +18,10 @@ import {
   type SearchAtmosphereCatalogInput,
   type UnifiedCatalogResult,
 } from "../schema/unified-catalog.js";
-import type { PublicAtmosphericDataset } from "../schema/unified-api.js";
+import {
+  publicDatasetCapabilities,
+  type PublicAtmosphericDataset,
+} from "../schema/unified-api.js";
 
 type UnifiedSection =
   | "variables"
@@ -110,6 +113,8 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
   const limited = matches.slice(0, query.limit);
   return unifiedCatalogResultSchema.parse({
     query,
+    datasetCapabilities: query.datasets.map((dataset) =>
+      publicDatasetCapabilities(dataset, query.forecastKind)),
     totalMatches: matches.length,
     truncated: matches.length > query.limit,
     matches: limited,
