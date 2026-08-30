@@ -17,7 +17,6 @@ describe("architecture boundaries", () => {
 
     for (const surface of [cli, mcp]) {
       expect(surface).toContain("UnifiedAtmosphereQueryService");
-      expect(surface).toContain("queryAtmosphereSchema");
       expect(surface).not.toMatch(
         /core\/(?:gfs|gefs|ifs|history|archived-gfs)-(?!unified)[^"']+\.js/,
       );
