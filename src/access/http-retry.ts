@@ -3,6 +3,15 @@ export const DEFAULT_HTTP_RETRY_MAX_DELAY_MS = 10_000;
 export const DEFAULT_HTTP_RETRY_MAX_ATTEMPTS = 3;
 export const DEFAULT_HTTP_RETRY_JITTER_RATIO = 0.2;
 
+export interface HttpRetryAttemptResult {
+  status: number;
+  retryAfter: string | null;
+}
+
+export interface HttpRetryExecutionOptions extends HttpRetryWaitOptions {
+  maxAttempts?: number;
+}
+
 export interface HttpRetryWaitOptions {
   baseDelayMs?: number;
   maxDelayMs?: number;
@@ -57,6 +66,32 @@ export function exponentialBackoffMilliseconds(
   const exponential = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
   const jitter = exponential * jitterRatio * (2 * randomFn() - 1);
   return Math.max(0, Math.round(exponential + jitter));
+}
+
+export async function runWithHttpRetry<T extends HttpRetryAttemptResult>(
+  operation: () => Promise<T>,
+  options: HttpRetryExecutionOptions = {},
+): Promise<T> {
+  const maxAttempts = options.maxAttempts ?? DEFAULT_HTTP_RETRY_MAX_ATTEMPTS;
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+    throw new Error("HTTP maxAttempts must be a positive integer");
+  }
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const result = await operation();
+      if (isRetryableHttpStatus(result.status) && attempt < maxAttempts) {
+        await waitBeforeHttpRetry(attempt, result.retryAfter, options);
+        continue;
+      }
+      return result;
+    } catch (error) {
+      if (!isRetryableHttpTransportError(error) || attempt >= maxAttempts) throw error;
+      await waitBeforeHttpRetry(attempt, null, options);
+    }
+  }
+
+  throw new Error("HTTP retry loop exhausted unexpectedly");
 }
 
 export async function waitBeforeHttpRetry(
