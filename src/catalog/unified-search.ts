@@ -371,7 +371,7 @@ function supportSemantics(
       return "deterministic operational forecast";
     case "gefs":
       return forecastKind === "reforecast"
-        ? "GEFSv12 retrospective ensemble forecast; 2000-2019 point/instant native field and pressure subset with explicit retrospective cadence/grid semantics"
+        ? "GEFSv12 retrospective ensemble forecast; 2000-2019 point and multi-point native field/pressure subset at one valid time or across bounded native-cadence ranges, with explicit retrospective grid semantics"
         : "member-first ensemble forecast distribution";
     case "ifs":
       return "deterministic ECMWF IFS 0.25° operational forecast";
