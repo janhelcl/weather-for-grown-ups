@@ -1,7 +1,7 @@
 {
   "name": "weather-for-grown-ups",
   "version": "0.3.0",
-  "description": "Unified agent-native access to NOAA GFS/GEFS, ECMWF IFS/IFS ENS, and historical GFS analysis.",
+  "description": "Unified agent-native access to NOAA GFS/AIGFS/GEFS, ECMWF IFS/IFS ENS, and historical GFS analysis.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -14,6 +14,7 @@
   "homepage": "https://github.com/janhelcl/weather-for-grown-ups#readme",
   "keywords": [
     "gfs",
+    "aigfs",
     "gefs",
     "ifs",
     "ecmwf",
@@ -59,7 +60,7 @@
     "test:live:gefs": "tsx scripts/live-smoke-gefs.ts && tsx scripts/live-smoke-gefs-points-timeseries.ts && tsx scripts/live-smoke-gefs-points-bundle-timeseries.ts && tsx scripts/live-smoke-gefs-transect.ts",
     "test:live:gefs-runs": "tsx scripts/live-smoke-gefs-run-comparison.ts",
     "test:live:area": "tsx scripts/live-smoke-area.ts",
-    "test:live:all": "npm run test:live:bundled && npm run test:live:s3 && npm run test:live:history && npm run test:live:gfs-equivalence && npm run test:live:ifs && npm run test:live:gefs && npm run test:live:gefs-reforecast && npm run test:live:gefs-runs && npm run test:live:area && npm run test:live:igra && npm run test:live:igra-skill",
+    "test:live:all": "npm run test:live:bundled && npm run test:live:s3 && npm run test:live:aigfs && npm run test:live:history && npm run test:live:gfs-equivalence && npm run test:live:ifs && npm run test:live:gefs && npm run test:live:gefs-reforecast && npm run test:live:gefs-runs && npm run test:live:area && npm run test:live:igra && npm run test:live:igra-skill",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "pack:check": "npm pack --dry-run",
     "prepack": "npm run build",
@@ -68,7 +69,8 @@
     "test:live:gfs-archive-equivalence": "tsx scripts/live-smoke-gfs-equivalence.ts",
     "test:live:igra": "tsx scripts/live-smoke-igra-verification.ts",
     "test:live:igra-skill": "tsx scripts/live-smoke-igra-skill.ts",
-    "test:live:gefs-reforecast": "tsx scripts/live-smoke-gefs-reforecast.ts"
+    "test:live:gefs-reforecast": "tsx scripts/live-smoke-gefs-reforecast.ts",
+    "test:live:aigfs": "tsx scripts/live-smoke-aigfs.ts"
   },
   "dependencies": {
     "@mattnucc/gribberish": "^1.6.0",
