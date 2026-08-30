@@ -5,7 +5,7 @@ import {
   FileAccessPolicy,
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
-} from "./file-access-policy.js";
+} from "../access/access-policy.js";
 import type { GefsMember } from "../catalog/gefs.js";
 import type { GfsCode } from "../catalog/variables.js";
 import {
@@ -20,7 +20,7 @@ import {
   DEFAULT_HTTP_RETRY_MAX_ATTEMPTS,
   isRetryableHttpStatus,
   waitBeforeHttpRetry,
-} from "../sources/http-retry.js";
+} from "../access/http-retry.js";
 import {
   buildGefsS3ForecastIndexUrl,
   buildGefsS3ForecastUrl,
