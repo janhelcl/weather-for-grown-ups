@@ -705,6 +705,11 @@ function dataRequest(
   forecastHour: number,
   selection: ExpandedSelection,
 ): AigfsDataRequest {
+  if (forecastHour === 0 && selection.fieldIds.includes("total_precipitation")) {
+    throw new Error(
+      "AIGFS total_precipitation is not published at f000; request a positive native forecast lead",
+    );
+  }
   return {
     run,
     forecastHour,
