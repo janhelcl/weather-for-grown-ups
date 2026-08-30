@@ -19,7 +19,7 @@ import {
 } from "../src/schema/unified-api.js";
 
 function createQueryService(options: AtmosphericQueryRegistryOptions = {}) {
-  return createQueryService({
+  return new UnifiedAtmosphereQueryService({
     adapters: createAtmosphericQueryAdapterRegistry(options),
   });
 }
