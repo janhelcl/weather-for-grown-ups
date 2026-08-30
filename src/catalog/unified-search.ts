@@ -196,21 +196,21 @@ function gefsEntries(): CatalogEntry[] {
 
 function gefsReforecastEntries(): CatalogEntry[] {
   const catalog = getGefsCatalog();
-  const variables = new Set<string>(GEFS_REFORECAST_PRESSURE_VARIABLE_IDS);
   const fields = new Set<string>(GEFS_REFORECAST_FIELD_IDS);
   return [
-    ...catalog.variables
-      .filter((definition) => variables.has(definition.id))
-      .map((definition) => ({
+    ...GEFS_REFORECAST_PRESSURE_VARIABLE_IDS.map((id) => {
+      const definition = VARIABLE_CATALOG[id];
+      return {
         dataset: "gefs" as const,
         section: "variables" as const,
-        id: definition.id,
-        classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
-        kind: definition.kind,
+        id,
+        classification: "raw" as const,
+        kind: "raw",
         description: definition.description,
         verticalSemantics: definition.levelType,
         outputs: definition.outputs.map((output) => ({ ...output })),
-      })),
+      };
+    }),
     ...catalog.fields
       .filter((definition) => fields.has(definition.id))
       .map((definition) => ({
