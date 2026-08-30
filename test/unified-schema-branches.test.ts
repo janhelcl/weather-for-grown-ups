@@ -7,6 +7,10 @@ import {
   diagnoseAtmosphereSchema,
   queryAtmosphereSchema,
 } from "../src/schema/unified-api.js";
+import {
+  compareAtmosphericDatasetsSchema,
+  compareAtmosphericRunsSchema,
+} from "../src/schema/unified-specialized.js";
 
 const point = { type: "point" as const, latitude: 50.08, longitude: 14.43 };
 const pressureSelection = {
@@ -150,6 +154,59 @@ describe("unified atmospheric schema capability branches", () => {
       selection: pressureSelection,
       forecast: { run: "latest" },
     }).forecast).toEqual({ run: "latest" });
+  });
+
+  it("keeps run-selector semantics dataset-specific across unified operations", () => {
+    expect(queryAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: pressureSelection,
+      forecast: { run: "latest_complete" },
+    }).forecast?.run).toBe("latest_complete");
+
+    for (const dataset of ["gefs", "ifs", "ifs-ens"] as const) {
+      expect(() => queryAtmosphereSchema.parse({
+        dataset,
+        geometry: point,
+        time: { at: "2026-08-28T12:00:00Z" },
+        selection: pressureSelection,
+        forecast: { run: "latest_complete" },
+      })).toThrow(`dataset=${dataset} does not support run=latest_complete`);
+    }
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: pressureSelection,
+      forecast: { run: "newest" },
+    })).toThrow();
+
+    expect(compareAtmosphericRunsSchema.parse({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: pressureSelection,
+      anchorRun: "latest_complete",
+    }).anchorRun).toBe("latest_complete");
+
+    expect(() => compareAtmosphericRunsSchema.parse({
+      dataset: "gefs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: pressureSelection,
+      anchorRun: "latest_complete",
+    })).toThrow("run=latest_complete is not supported by dataset(s): gefs");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      datasets: ["gfs", "gefs"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      run: "latest_complete",
+    })).toThrow("run=latest_complete is not supported by dataset(s): gefs");
   });
 
   it("accepts implemented IFS point, spatial and diagnostic capabilities", () => {
