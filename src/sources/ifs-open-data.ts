@@ -5,7 +5,7 @@ import {
 import {
   isRetryableHttpStatus,
   waitBeforeHttpRetry,
-} from "./http-retry.js";
+} from "../access/http-retry.js";
 
 export const IFS_OPEN_DATA_BASE_URL = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com";
 export const IFS_OPEN_DATA_MIRRORS = [
