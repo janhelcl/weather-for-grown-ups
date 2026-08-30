@@ -405,14 +405,6 @@ function validateDatasetModifiers(
       const variables = request.selection.variables ?? [];
       const pressureLevelsHpa = request.selection.pressureLevelsHpa ?? [];
       const fields = request.selection.fields ?? [];
-      if (variables.length > 0 && fields.length > 0) {
-        context.addIssue({
-          code: "custom",
-          path: ["selection"],
-          message: "GEFSv12 reforecast point queries currently support either a pressure profile or non-isobaric fields per query, not a mixed bundle",
-        });
-      }
-
       const supportedFields = new Set<string>(GEFS_REFORECAST_FIELD_IDS);
       const unsupportedFields = fields.filter((field: string) => !supportedFields.has(field));
       if (unsupportedFields.length > 0) {
