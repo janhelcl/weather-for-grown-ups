@@ -1,6 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_NOMADS_COOLDOWN_MS, FileRateLimiter } from "../cache/file-rate-limiter.js";
+import {
+  FileAccessPolicy,
+  UPSTREAM_ACCESS_POLICIES,
+  type UpstreamAccessPolicy,
+} from "../access/access-policy.js";
 import { NomadsCache } from "../cache/nomads-cache.js";
 import {
   NON_ISOBARIC_FIELD_CATALOG,
@@ -68,7 +72,7 @@ export interface AreaGridDecoder {
 }
 export interface AreaSummaryServiceOptions {
   cacheDir?: string;
-  cooldownMs?: number;
+  nomadsAccessPolicy?: UpstreamAccessPolicy;
   wgrib2Path?: string;
   cache?: AreaFileCache;
   decoder?: AreaStatsDecoder;
@@ -84,8 +88,9 @@ export class AreaSummaryService {
 
   constructor(options: AreaSummaryServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
-    const limiter = new FileRateLimiter(join(cacheDir, "state"), options.cooldownMs ?? DEFAULT_NOMADS_COOLDOWN_MS);
-    this.cache = options.cache ?? new NomadsCache(join(cacheDir, "grib"), limiter);
+    const nomadsAccessPolicy = options.nomadsAccessPolicy
+      ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nomads);
+    this.cache = options.cache ?? new NomadsCache(join(cacheDir, "grib"), nomadsAccessPolicy);
     this.decoder = options.decoder ?? new Wgrib2StatsDecoder(options.wgrib2Path);
     this.gridDecoder = options.gridDecoder ?? new Wgrib2GridDecoder(options.wgrib2Path);
     this.latestRunProvider = options.latestRunProvider ?? new LatestRunResolver();
