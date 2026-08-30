@@ -1,4 +1,7 @@
-import type { GefsReforecastFieldId } from "../catalog/gefs-reforecast.js";
+import type {
+  GefsReforecastFieldId,
+  GefsReforecastPressureVariableId,
+} from "../catalog/gefs-reforecast.js";
 import { operationalGfsModelId } from "../schema/gfs-grid.js";
 import { AreaSummaryService } from "./area-summary.js";
 import {
@@ -18,6 +21,7 @@ import { GefsMemberBundleService } from "./gefs-member-bundle.js";
 import { GefsPointsBundleTimeSeriesService } from "./gefs-points-bundle-timeseries.js";
 import { GefsPointsBundleService } from "./gefs-points-bundle.js";
 import { GefsReforecastPointService } from "./gefs-reforecast.js";
+import { GefsReforecastProfileService } from "./gefs-reforecast-profile.js";
 import { GefsTransectService } from "./gefs-transect.js";
 import { HistoricalAreaSummaryService } from "./history-area-summary.js";
 import { HistoricalFieldsTimeSeriesService } from "./history-fields-timeseries.js";
@@ -114,6 +118,7 @@ export interface UnifiedAtmosphereQueryServiceOptions {
   gefsTransect?: Pick<GefsTransectService, "getTransect">;
   gefsArea?: Pick<GefsAreaSummaryService, "summarize">;
   gefsReforecast?: Pick<GefsReforecastPointService, "getPoint">;
+  gefsReforecastProfile?: Pick<GefsReforecastProfileService, "getProfile">;
   ifsProfile?: Pick<IfsProfileService, "getProfile">;
   ifsEnsBundle?: Pick<IfsEnsMemberBundleService, "getBundle">;
   ifsEnsTimeSeries?: Pick<IfsEnsTimeSeriesService, "getTimeSeries">;
@@ -153,6 +158,7 @@ export class UnifiedAtmosphereQueryService {
   private readonly gefsTransect: Pick<GefsTransectService, "getTransect">;
   private readonly gefsArea: Pick<GefsAreaSummaryService, "summarize">;
   private readonly gefsReforecast: Pick<GefsReforecastPointService, "getPoint">;
+  private readonly gefsReforecastProfile: Pick<GefsReforecastProfileService, "getProfile">;
   private readonly ifsProfile: Pick<IfsProfileService, "getProfile">;
   private readonly ifsEnsBundle: Pick<IfsEnsMemberBundleService, "getBundle">;
   private readonly ifsEnsTimeSeries: Pick<IfsEnsTimeSeriesService, "getTimeSeries">;
@@ -194,6 +200,8 @@ export class UnifiedAtmosphereQueryService {
     this.gefsTransect = options.gefsTransect ?? new GefsTransectService();
     this.gefsArea = options.gefsArea ?? new GefsAreaSummaryService();
     this.gefsReforecast = options.gefsReforecast ?? new GefsReforecastPointService();
+    this.gefsReforecastProfile =
+      options.gefsReforecastProfile ?? new GefsReforecastProfileService();
     this.ifsProfile = options.ifsProfile ?? new IfsProfileService();
     this.ifsEnsBundle = options.ifsEnsBundle ?? new IfsEnsMemberBundleService();
     this.ifsEnsTimeSeries = options.ifsEnsTimeSeries ?? new IfsEnsTimeSeriesService();
@@ -265,16 +273,31 @@ export class UnifiedAtmosphereQueryService {
 
     if (request.dataset === "gefs") {
       if (request.forecast?.kind === "reforecast") {
-        return this.gefsReforecast.getPoint({
+        const common = {
           ...point,
           run,
           validTime: request.time.at,
-          fields: (request.selection.fields ?? []) as GefsReforecastFieldId[],
-          ...(request.ensemble?.members === undefined ? {} : { members: request.ensemble.members as any }),
-          ...(request.ensemble?.quantiles === undefined ? {} : { quantiles: request.ensemble.quantiles }),
+          ...(request.ensemble?.members === undefined
+            ? {}
+            : { members: request.ensemble.members as any }),
+          ...(request.ensemble?.quantiles === undefined
+            ? {}
+            : { quantiles: request.ensemble.quantiles }),
           ...(request.ensemble?.includeMembers === undefined
             ? {}
             : { includeMembers: request.ensemble.includeMembers }),
+        };
+        if (request.selection.variables !== undefined) {
+          return this.gefsReforecastProfile.getProfile({
+            ...common,
+            variables:
+              request.selection.variables as GefsReforecastPressureVariableId[],
+            pressureLevelsHpa: request.selection.pressureLevelsHpa ?? [],
+          });
+        }
+        return this.gefsReforecast.getPoint({
+          ...common,
+          fields: (request.selection.fields ?? []) as GefsReforecastFieldId[],
         });
       }
       const query = gefsMemberBundleQuerySchema.parse({
