@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { UnifiedAtmosphereDiagnosticService } from "../src/core/unified-atmosphere-api.js";
+import {
+  createAtmosphericDiagnosticAdapterRegistry,
+  type AtmosphericDiagnosticRegistryOptions,
+} from "../src/core/diagnostic-adapters/registry.js";
 import { diagnoseAtmosphereSchema } from "../src/schema/unified-api.js";
+
+function createDiagnosticService(options: AtmosphericDiagnosticRegistryOptions = {}) {
+  return new UnifiedAtmosphereDiagnosticService({
+    adapters: createAtmosphericDiagnosticAdapterRegistry(options),
+  });
+}
 
 const base = {
   dataset: "gefs" as const,
@@ -56,7 +66,7 @@ describe("unified GEFSv12 retrospective diagnostic routing", () => {
       getLayerDiagnostics: vi.fn(async () => ({ route: "reforecast-layer" })),
     };
     const profile = { getProfileDiagnostics: vi.fn() };
-    const result = await new UnifiedAtmosphereDiagnosticService({
+    const result = await createDiagnosticService({
       gefsReforecastLayer: layer as any,
       gefsReforecastProfile: profile as any,
     }).diagnose({
@@ -94,7 +104,7 @@ describe("unified GEFSv12 retrospective diagnostic routing", () => {
     const profile = {
       getProfileDiagnostics: vi.fn(async () => ({ route: "reforecast-profile" })),
     };
-    const result = await new UnifiedAtmosphereDiagnosticService({
+    const result = await createDiagnosticService({
       gefsReforecastLayer: layer as any,
       gefsReforecastProfile: profile as any,
     }).diagnose({
@@ -120,7 +130,7 @@ describe("unified GEFSv12 retrospective diagnostic routing", () => {
       getDiagnosticTimeSeries: vi.fn(async () => ({ route: "reforecast-diagnostic-range" })),
     };
     const operational = { getDiagnosticTimeSeries: vi.fn() };
-    const result = await new UnifiedAtmosphereDiagnosticService({
+    const result = await createDiagnosticService({
       gefsReforecastTimeSeries: range as any,
       timeSeries: operational as any,
     }).diagnose({
