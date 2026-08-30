@@ -22,6 +22,9 @@ export const searchAtmosphereCatalogSchema = z.object({
     .optional(),
   classification: z.enum(["raw", "derived"]).optional(),
   temporalSemantics: z.enum(["instantaneous", "accumulation", "average"]).optional(),
+  forecastKind: z.enum(["operational", "reforecast"]).optional().describe(
+    "Forecast population filter. Currently supported only with datasets=[gefs]; reforecast selects the GEFSv12 retrospective capability subset.",
+  ),
   limit: z.number().int().min(1).max(100).default(30),
 }).superRefine((query, context) => {
   if (new Set(query.datasets).size !== query.datasets.length) {
@@ -29,6 +32,16 @@ export const searchAtmosphereCatalogSchema = z.object({
   }
   if (query.sections !== undefined && new Set(query.sections).size !== query.sections.length) {
     context.addIssue({ code: "custom", path: ["sections"], message: "sections must not contain duplicates" });
+  }
+  if (
+    query.forecastKind !== undefined
+    && (query.datasets.length !== 1 || query.datasets[0] !== "gefs")
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["forecastKind"],
+      message: "forecastKind catalog filtering currently requires datasets=[gefs]",
+    });
   }
 });
 
