@@ -391,6 +391,53 @@ describe("unified catalog", () => {
 
 
 describe("unified catalog branch coverage", () => {
+  it("exposes dataset run selectors and operation capabilities explicitly", () => {
+    const operational = searchAtmosphereCatalog({
+      datasets: ["gfs", "gefs", "ifs", "ifs-ens", "gfs-analysis"],
+      sections: ["variables"],
+      limit: 1,
+    });
+
+    expect(operational.datasetCapabilities).toEqual([
+      expect.objectContaining({
+        dataset: "gfs",
+        runSelectors: ["latest", "latest_complete", "explicit"],
+      }),
+      expect.objectContaining({
+        dataset: "gefs",
+        runSelectors: ["latest", "explicit"],
+      }),
+      expect.objectContaining({
+        dataset: "ifs",
+        runSelectors: ["latest", "explicit"],
+      }),
+      expect.objectContaining({
+        dataset: "ifs-ens",
+        runSelectors: ["latest", "explicit"],
+      }),
+      expect.objectContaining({
+        dataset: "gfs-analysis",
+        forecastKinds: [],
+        runSelectors: [],
+      }),
+    ]);
+
+    const reforecast = searchAtmosphereCatalog({
+      datasets: ["gefs"],
+      forecastKind: "reforecast",
+      sections: ["variables"],
+      limit: 1,
+    });
+    expect(reforecast.datasetCapabilities[0]).toMatchObject({
+      dataset: "gefs",
+      forecastKinds: ["operational", "reforecast"],
+      runSelectors: ["explicit"],
+    });
+    expect(reforecast.datasetCapabilities[0]?.operations).toContain("profile");
+    expect(reforecast.datasetCapabilities[0]?.operations).not.toContain("area_summary");
+    expect(reforecast.datasetCapabilities[0]?.operations).not.toContain("run_comparison");
+  });
+
   it("supports GEFS-only search without a GFS representative", () => {
     const result = searchAtmosphereCatalog({
       datasets: ["gefs"],
