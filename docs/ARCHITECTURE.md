@@ -37,7 +37,7 @@ Nonlinear diagnostics are evaluated independently on every GEFS or IFS ENS membe
 The implementation is split by responsibility rather than by whichever dataset was added first:
 
 - `schema/` defines the public query vocabulary and result contracts.
-- `core/query-adapters/` and `core/diagnostic-adapters/` translate the common vocabulary into dataset-native application services. The unified query and diagnostic services validate once, dispatch by dataset, and wrap the result; they do not contain model-specific routing branches.
+- `core/query-adapters/`, `core/diagnostic-adapters/`, and `core/specialized-adapters/` translate the common vocabulary into dataset-native application services. Public unified services validate once, dispatch through an operation-specific adapter registry, and wrap the result; they do not contain model-specific routing branches. Specialized operations such as run comparison, cross-dataset comparison, verification, and analog search use the same rule rather than being exceptions.
 - `core/` owns meteorological/application composition: profiles, time series, spatial composition, diagnostic kernels, comparisons and archive services.
 - `sources/` owns provider/product semantics: URLs, object naming, upstream inventories, archive endpoints and ECMWF mirror selection.
 - `access/` owns transport policy: provider concurrency/pacing and retry/backoff. Cache code and meteorology code do not invent their own provider etiquette.
@@ -48,7 +48,7 @@ The implementation is split by responsibility rather than by whichever dataset w
 
 The dependency direction is intentionally inward: public surfaces depend on unified application services; unified query and diagnostic dispatch depend on dataset adapters; adapters depend on dataset-native core services; core services depend on source/cache/decoder abstractions. Provider policy does not depend on meteorology, and meteorological kernels do not depend on provider transport.
 
-A practical rule for new datasets is: **add capabilities to the catalog and the relevant query/diagnostic adapters; do not add a new public namespace or dataset branch to a unified dispatcher.** A practical rule for new upstream backends is: **add or change a source/access implementation; do not change the public query language.**
+A practical rule for new datasets is: **add capabilities to the catalog and the relevant operation adapters; do not add a new public namespace or dataset branch to a unified dispatcher.** A practical rule for new upstream backends is: **add or change a source/access implementation; do not change the public query language.**
 
 ## Atmospheric dataset capability boundary
 

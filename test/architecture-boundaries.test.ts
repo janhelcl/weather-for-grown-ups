@@ -1,7 +1,13 @@
 import { readFile, readdir } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { createAtmosphericQueryAdapterRegistry } from "../src/core/query-adapters/registry.js";
 import { createAtmosphericDiagnosticAdapterRegistry } from "../src/core/diagnostic-adapters/registry.js";
+import { createAtmosphericQueryAdapterRegistry } from "../src/core/query-adapters/registry.js";
+import {
+  createAtmosphericAnalogAdapterRegistry,
+  createAtmosphericDatasetComparisonAdapterRegistry,
+  createAtmosphericRunComparisonAdapterRegistry,
+  createAtmosphericVerificationAdapterRegistry,
+} from "../src/core/specialized-adapters/registry.js";
 import { PUBLIC_ATMOSPHERIC_DATASET_IDS } from "../src/schema/unified-api.js";
 
 describe("architecture boundaries", () => {
@@ -9,6 +15,19 @@ describe("architecture boundaries", () => {
     const expected = [...PUBLIC_ATMOSPHERIC_DATASET_IDS].sort();
     expect(Object.keys(createAtmosphericQueryAdapterRegistry()).sort()).toEqual(expected);
     expect(Object.keys(createAtmosphericDiagnosticAdapterRegistry()).sort()).toEqual(expected);
+  });
+
+  it("keeps specialized operation variants behind explicit adapter registries", () => {
+    expect(Object.keys(createAtmosphericRunComparisonAdapterRegistry()).sort()).toEqual(
+      ["gefs", "gfs", "ifs", "ifs-ens"],
+    );
+    expect(Object.keys(createAtmosphericDatasetComparisonAdapterRegistry()).sort()).toEqual(
+      ["gefs:ifs-ens", "gfs:gefs", "gfs:ifs", "ifs:ifs-ens"],
+    );
+    expect(Object.keys(createAtmosphericVerificationAdapterRegistry()).sort()).toEqual(
+      ["gfs-analysis", "igra"],
+    );
+    expect(Object.keys(createAtmosphericAnalogAdapterRegistry())).toEqual(["gfs-analysis"]);
   });
 
   it("keeps CLI and MCP on unified application services instead of dataset-specific core services", async () => {
@@ -41,10 +60,21 @@ describe("architecture boundaries", () => {
     );
   });
 
-  it("keeps dataset adapters above transport and decoding details", async () => {
+  it("keeps dataset-native routing out of the public specialized services", async () => {
+    const service = await readFile("src/core/unified-specialized-api.ts", "utf8");
+    expect(service).toContain("specialized-adapters/registry.js");
+    expect(service).toContain("adapters?: Partial<AtmosphericRunComparisonAdapterRegistry>");
+    expect(service).not.toMatch(
+      /from ["']\.\/(?:gfs|gefs|ifs|history|igra|run-comparison)[^"']*\.js/,
+    );
+    expect(service).not.toMatch(/request\.(?:dataset|referenceDataset)\s*===/);
+  });
+
+  it("keeps operation adapters above transport and decoding details", async () => {
     const files = [
       ...await tsFiles("src/core/query-adapters"),
       ...await tsFiles("src/core/diagnostic-adapters"),
+      ...await tsFiles("src/core/specialized-adapters"),
     ];
     for (const path of files) {
       const source = await readFile(path, "utf8");
