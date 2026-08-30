@@ -404,7 +404,7 @@ function errorChainMessage(error: unknown): string {
 }
 
 function isTransientNetworkFailure(error: unknown): boolean {
-  return /fetch failed|headers timeout|UND_ERR_HEADERS_TIMEOUT|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up/i
+  return /fetch failed|headers timeout|UND_ERR_HEADERS_TIMEOUT|TimeoutError|aborted due to timeout|operation was aborted|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up/i
     .test(errorChainMessage(error));
 }
 
