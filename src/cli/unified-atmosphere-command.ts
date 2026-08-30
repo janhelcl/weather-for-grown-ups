@@ -177,18 +177,19 @@ function registerCompareRunsCommand(program: Command): void {
 function registerCompareDatasetsCommand(program: Command): void {
   program
     .command("compare-datasets")
-    .description("Compare aligned GFS↔GEFS, GFS↔IFS, or GEFS↔IFS ENS forecasts")
+    .description("Compare aligned deterministic or ensemble forecast datasets")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--at <iso>", "Forecast valid time")
-    .option("--against <gefs|ifs|ifs-ens>", "Comparison branch: gefs=GFS↔GEFS, ifs=GFS↔IFS, ifs-ens=GEFS↔IFS ENS", "gefs")
+    .option("--dataset <gfs|gefs|ifs>", "Left-side dataset; omit to preserve legacy --against defaults")
+    .option("--against <gefs|ifs|ifs-ens>", "Right-side dataset: gefs, ifs, or ifs-ens", "gefs")
     .requiredOption("--var <id>", "Canonical pressure-level variable")
     .requiredOption("--level <hpa>", "Pressure level in hPa", Number)
     .option("--run <iso|latest>", "Shared aligned initialization", "latest")
     .option("--grid <0p25|0p50>", "GFS horizontal grid; GFS comparison branches only")
     .option("--members <list>", "GFS↔GEFS only: GEFS members (c00,p01..p30)")
     .option("--gefs-members <list>", "GEFS↔IFS ENS only: GEFS members (c00,p01..p30)")
-    .option("--ifs-ens-members <list>", "GEFS↔IFS ENS only: IFS ENS perturbations (p01..p50)")
+    .option("--ifs-ens-members <list>", "IFS ENS perturbations (p01..p50) for GEFS↔IFS ENS or IFS↔IFS ENS")
     .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
     .option("--gte <number>", "GEFS↔IFS ENS only: compare raw member fractions at or above this threshold", Number)
     .option("--json", "Output JSON")
@@ -196,6 +197,25 @@ function registerCompareDatasetsCommand(program: Command): void {
       const against = String(options.against).trim().toLowerCase();
       if (against !== "gefs" && against !== "ifs" && against !== "ifs-ens") {
         throw new Error(`Expected --against gefs|ifs|ifs-ens, received: ${options.against}`);
+      }
+      const requestedLeft = options.dataset === undefined
+        ? undefined
+        : String(options.dataset).trim().toLowerCase();
+      if (
+        requestedLeft !== undefined
+        && requestedLeft !== "gfs"
+        && requestedLeft !== "gefs"
+        && requestedLeft !== "ifs"
+      ) {
+        throw new Error(`Expected --dataset gfs|gefs|ifs, received: ${options.dataset}`);
+      }
+      const left = requestedLeft ?? (against === "ifs-ens" ? "gefs" : "gfs");
+      const supportedPair =
+        (left === "gfs" && (against === "gefs" || against === "ifs"))
+        || (left === "gefs" && against === "ifs-ens")
+        || (left === "ifs" && against === "ifs-ens");
+      if (!supportedPair) {
+        throw new Error(`Unsupported comparison pair: ${left}↔${against}`);
       }
 
       const base = {
@@ -207,7 +227,16 @@ function registerCompareDatasetsCommand(program: Command): void {
       };
 
       let request: CompareAtmosphericDatasetsInput;
-      if (against === "ifs-ens") {
+      if (left === "ifs") {
+        request = {
+          ...base,
+          datasets: ["ifs", "ifs-ens"],
+          ...(options.ifsEnsMembers === undefined
+            ? {}
+            : { ifsEnsMembers: parseIfsEnsMembers(options.ifsEnsMembers) }),
+          ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
+        };
+      } else if (left === "gefs") {
         request = {
           ...base,
           datasets: ["gefs", "ifs-ens"],
