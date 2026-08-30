@@ -1,6 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { FileAccessPolicy, UPSTREAM_ACCESS_POLICIES, withLegacyCooldown } from "../cache/file-access-policy.js";
+import {
+  FileAccessPolicy,
+  UPSTREAM_ACCESS_POLICIES,
+  type UpstreamAccessPolicy,
+} from "../access/access-policy.js";
 import {
   historicalAnalysisTimeSchema,
   type HistoricalGfsVariableId,
@@ -60,7 +64,8 @@ export interface ArchivedGfsForecastProfileResult {
 
 export interface ArchivedGfsForecastProfileServiceOptions {
   cacheDir?: string;
-  cooldownMs?: number;
+  nceiAccessPolicy?: UpstreamAccessPolicy;
+  gdexAccessPolicy?: UpstreamAccessPolicy;
   source?: ArchivedGfsForecastDataSource;
   rdaSource?: ArchivedGfsForecastDataSource;
   now?: () => Date;
@@ -73,14 +78,10 @@ export class ArchivedGfsForecastProfileService {
 
   constructor(options: ArchivedGfsForecastProfileServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
-    const nceiAccessPolicy = new FileAccessPolicy(
-      join(cacheDir, "state"),
-      withLegacyCooldown(UPSTREAM_ACCESS_POLICIES.nceiThredds, options.cooldownMs),
-    );
-    const gdexAccessPolicy = new FileAccessPolicy(
-      join(cacheDir, "state"),
-      withLegacyCooldown(UPSTREAM_ACCESS_POLICIES.gdex, options.cooldownMs),
-    );
+    const nceiAccessPolicy = options.nceiAccessPolicy
+      ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
+    const gdexAccessPolicy = options.gdexAccessPolicy
+      ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.gdex);
     this.nceiSource = options.source ?? new NceiGfsForecastHistorySource({
       cacheDir: join(cacheDir, "ncei-forecast-history"),
       limiter: nceiAccessPolicy,
