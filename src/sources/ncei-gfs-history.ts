@@ -123,6 +123,11 @@ export class NceiGfsHistorySource implements HistoricalAnalysisDataSource, Histo
         `NCEI historical GFS analysis is not available for ${analysisTime.toISOString()} (${dataset})`,
       );
     }
+    if (result.status >= 500 && result.status <= 599) {
+      throw new Error(
+        `NCEI historical GFS source unavailable: HTTP ${result.status} ${result.statusText} after retries; this is an upstream availability failure, not an unsupported dataset`,
+      );
+    }
     if (result.status < 200 || result.status >= 300 || result.csv === undefined) {
       throw new Error(
         `NCEI historical GFS request failed: HTTP ${result.status} ${result.statusText}`,
