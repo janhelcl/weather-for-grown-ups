@@ -88,10 +88,10 @@ WFG currently targets Node.js 20 or newer.
 
 Docker remains useful for pinned/reproducible deployments. The image contains Node.js 24 and native `wgrib2 3.8.0` from conda-forge.
 
-After a tagged image is published to GHCR:
+The release workflow publishes both an exact semver image and a moving minor-version alias. The examples below use the current `0.2` alias:
 
 ```bash
-docker run --rm ghcr.io/janhelcl/weather-for-grown-ups:0.2.0 catalog --search cloud --json
+docker run --rm ghcr.io/janhelcl/weather-for-grown-ups:0.2 catalog --search cloud --json
 ```
 
 The image entrypoint runs the `wfg` CLI by default, so all normal CLI arguments follow the image name.
@@ -99,7 +99,7 @@ The image entrypoint runs the `wfg` CLI by default, so all normal CLI arguments 
 For the stdio MCP surface:
 
 ```bash
-docker run -i --rm ghcr.io/janhelcl/weather-for-grown-ups:0.2.0 mcp
+docker run -i --rm ghcr.io/janhelcl/weather-for-grown-ups:0.2 mcp
 ```
 
 Example stdio MCP client configuration:
@@ -111,7 +111,7 @@ Example stdio MCP client configuration:
     "run",
     "-i",
     "--rm",
-    "ghcr.io/janhelcl/weather-for-grown-ups:0.2.0",
+    "ghcr.io/janhelcl/weather-for-grown-ups:0.2",
     "mcp"
   ]
 }
@@ -123,7 +123,7 @@ For Streamable HTTP:
 docker run --rm -p 3000:3000 \
   -e WFG_MCP_HOST=0.0.0.0 \
   -e WFG_MCP_ALLOWED_HOSTS=localhost,127.0.0.1 \
-  ghcr.io/janhelcl/weather-for-grown-ups:0.2.0 mcp-http
+  ghcr.io/janhelcl/weather-for-grown-ups:0.2 mcp-http
 ```
 
 ## Publishing
@@ -133,7 +133,7 @@ docker run --rm -p 3000:3000 \
 Tags matching `v*` drive both release surfaces:
 
 - `.github/workflows/release-image.yml` publishes the matching multi-architecture image to GitHub Container Registry.
-- `.github/workflows/release-npm.yml` verifies that the tag exactly matches `package.json` (for example `v0.2.0`), verifies the packed npm payload, and publishes the package to npm.
+- `.github/workflows/release-npm.yml` verifies that a `vX.Y.Z` tag exactly matches the `X.Y.Z` version in `package.json`, verifies the packed npm payload, and publishes the package to npm.
 
 The npm workflow is set up for npm Trusted Publishing through GitHub Actions OIDC. Configure the package's npm Trusted Publisher with:
 
@@ -144,12 +144,6 @@ The npm workflow is set up for npm Trusted Publishing through GitHub Actions OID
 - allowed action: `npm publish`
 
 No long-lived npm publish token is stored in GitHub once Trusted Publishing is configured. The workflow uses GitHub's `id-token: write` permission and Node.js 24. npm automatically attaches provenance for a public package published from this public GitHub repository through Trusted Publishing.
-
-### First npm release
-
-npm requires a package to already exist before a Trusted Publisher can be attached. For the first-ever publication of `weather-for-grown-ups`, bootstrap package ownership once with an authenticated manual `npm publish` from a clean, tested checkout (npm requires account 2FA or an appropriately configured granular token for direct publishing). Then configure the Trusted Publisher above before relying on tag-driven releases.
-
-The tag workflow is intentionally idempotent: if that exact package version already exists on npm because it was used for the bootstrap publication, the workflow treats it as already released instead of attempting an impossible duplicate publish. Subsequent versions should be published only through the trusted tag workflow.
 
 ## Licensing note
 
