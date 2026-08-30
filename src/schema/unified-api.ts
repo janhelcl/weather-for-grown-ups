@@ -3,7 +3,9 @@ import { LAYER_DIAGNOSTIC_IDS } from "../catalog/layer-diagnostics.js";
 import {
   GEFS_REFORECAST_EXTENDED_MEMBERS,
   GEFS_REFORECAST_FIELD_IDS,
+  GEFS_REFORECAST_OPERATION_IDS,
   GEFS_REFORECAST_PRESSURE_VARIABLE_IDS,
+  GEFS_REFORECAST_RUN_SELECTOR_IDS,
   isSupportedGefsReforecastPressureSelection,
 } from "../catalog/gefs-reforecast.js";
 import { PARCEL_DEFINITION_IDS } from "../catalog/parcel-diagnostics.js";
@@ -324,19 +326,10 @@ export function publicDatasetCapabilities(
       : ["operational"];
   const isGefsReforecast = forecastKind === "reforecast" && dataset === "gefs";
   const runSelectors: readonly AtmosphericRunSelectorId[] = isGefsReforecast
-    ? ["explicit"]
+    ? GEFS_REFORECAST_RUN_SELECTOR_IDS
     : definition.runSelectors;
   const operations = isGefsReforecast
-    ? [
-        "profile",
-        "timeseries",
-        "layer_diagnostics",
-        "profile_diagnostics",
-        "diagnostic_timeseries",
-        "points",
-        "points_timeseries",
-        "ensemble_distribution",
-      ] as const
+    ? GEFS_REFORECAST_OPERATION_IDS
     : definition.operations;
 
   return {
