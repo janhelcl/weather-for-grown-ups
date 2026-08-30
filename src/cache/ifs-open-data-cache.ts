@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { UpstreamAccessPolicy } from "./file-access-policy.js";
-import { IfsOpenDataAccessPolicy } from "./ifs-open-data-access-policy.js";
+import type { UpstreamAccessPolicy } from "../access/access-policy.js";
+import { IfsOpenDataAccessPolicy } from "../sources/ifs-open-data-access-policy.js";
 import {
   buildIfsOpenDataForecastIndexUrl,
   buildIfsOpenDataForecastUrl,
