@@ -60,13 +60,14 @@ export class GefsReforecastTimeSeriesService {
     };
 
     if (query.selection.kind === "fields") {
+      const fields = [...query.selection.fields];
       const results = await mapConcurrent(
         times,
         this.stepConcurrency,
         async (validTime) => this.pointGetter.getPoint({
           ...common,
           validTime: validTime.toISOString(),
-          fields: [...query.selection.fields],
+          fields,
         }),
       );
       assertStepInvariants(run, times, results);
@@ -91,7 +92,7 @@ export class GefsReforecastTimeSeriesService {
         },
         selection: {
           kind: "fields",
-          fields: query.selection.fields,
+          fields,
           members,
           quantiles,
         },
@@ -114,6 +115,7 @@ export class GefsReforecastTimeSeriesService {
       });
     }
 
+    const variables = [...query.selection.variables];
     const pressureLevelsHpa = [...query.selection.pressureLevelsHpa]
       .sort((a, b) => b - a);
     const results = await mapConcurrent(
@@ -122,7 +124,7 @@ export class GefsReforecastTimeSeriesService {
       async (validTime) => this.profileGetter.getProfile({
         ...common,
         validTime: validTime.toISOString(),
-        variables: [...query.selection.variables],
+        variables,
         pressureLevelsHpa,
       }),
     );
@@ -148,7 +150,7 @@ export class GefsReforecastTimeSeriesService {
       },
       selection: {
         kind: "profile",
-        variables: query.selection.variables,
+        variables,
         pressureLevelsHpa,
         members,
         quantiles,
