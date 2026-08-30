@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import {
+  createAtmosphericQueryAdapterRegistry,
+  type AtmosphericQueryRegistryOptions,
+} from "../src/core/query-adapters/registry.js";
 import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-api.js";
 
 describe("unified GEFS reforecast routing", () => {
@@ -10,7 +14,7 @@ describe("unified GEFS reforecast routing", () => {
         route: "reforecast",
       })),
     };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gefsBundle: operational as any,
       gefsReforecast: reforecast as any,
     });
@@ -52,7 +56,7 @@ describe("unified GEFS reforecast routing", () => {
         route: "profile",
       })),
     };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gefsReforecast: fields as any,
       gefsReforecastProfile: profile as any,
     });
@@ -89,7 +93,7 @@ describe("unified GEFS reforecast routing", () => {
     const mixed = { getPoint: vi.fn(async () => ({ route: "mixed-point" })) };
     const profile = { getProfile: vi.fn() };
     const fields = { getPoint: vi.fn() };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gefsReforecastMixed: mixed as any,
       gefsReforecastProfile: profile as any,
       gefsReforecast: fields as any,
@@ -123,7 +127,7 @@ describe("unified GEFS reforecast routing", () => {
   it("routes mixed reforecast point ranges through the dedicated wrapper", async () => {
     const mixed = { getTimeSeries: vi.fn(async () => ({ route: "mixed-range" })) };
     const legacy = { getTimeSeries: vi.fn() };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gefsReforecastMixedTimeSeries: mixed as any,
       gefsReforecastTimeSeries: legacy as any,
     });
@@ -162,7 +166,7 @@ describe("unified GEFS reforecast routing", () => {
     const reforecastRange = {
       getTimeSeries: vi.fn(async () => ({ route: "reforecast-range" })),
     };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gefsTimeSeries: operational as any,
       gefsReforecastTimeSeries: reforecastRange as any,
     });
@@ -208,7 +212,7 @@ describe("unified GEFS reforecast routing", () => {
     const reforecastRange = {
       getTimeSeries: vi.fn(async () => ({ route: "profile-range" })),
     };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gefsReforecastTimeSeries: reforecastRange as any,
     });
 
@@ -270,7 +274,7 @@ describe("unified GEFS reforecast routing", () => {
         route: "reforecast-points",
       })),
     };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gefsPoints: operational as any,
       gefsReforecastPoints: reforecastPoints as any,
     });
@@ -326,7 +330,7 @@ describe("unified GEFS reforecast routing", () => {
         route: "reforecast-profile-points",
       })),
     };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gefsReforecastPoints: reforecastPoints as any,
     });
 
@@ -367,7 +371,7 @@ describe("unified GEFS reforecast routing", () => {
   it("routes mixed reforecast multi-point selections through the dedicated wrapper", async () => {
     const mixed = { getPoints: vi.fn(async () => ({ route: "mixed-points" })) };
     const legacy = { getPoints: vi.fn() };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gefsReforecastMixedPoints: mixed as any,
       gefsReforecastPoints: legacy as any,
     });
@@ -410,7 +414,7 @@ describe("unified GEFS reforecast routing", () => {
       getPointsTimeSeries: vi.fn(async () => ({ route: "mixed-points-range" })),
     };
     const legacy = { getPointsTimeSeries: vi.fn() };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gefsReforecastMixedPointsTimeSeries: mixed as any,
       gefsReforecastPointsTimeSeries: legacy as any,
     });
@@ -458,7 +462,7 @@ describe("unified GEFS reforecast routing", () => {
         route: "reforecast-points-range",
       })),
     };
-    const service = new UnifiedAtmosphereQueryService({
+    const service = createQueryService({
       gefsPointsTimeSeries: operational as any,
       gefsReforecastPointsTimeSeries: reforecastRange as any,
     });
