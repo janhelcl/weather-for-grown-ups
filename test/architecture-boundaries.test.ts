@@ -1,12 +1,14 @@
 import { readFile, readdir } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { createAtmosphericQueryAdapterRegistry } from "../src/core/query-adapters/registry.js";
+import { createAtmosphericDiagnosticAdapterRegistry } from "../src/core/diagnostic-adapters/registry.js";
 import { PUBLIC_ATMOSPHERIC_DATASET_IDS } from "../src/schema/unified-api.js";
 
 describe("architecture boundaries", () => {
-  it("keeps one query adapter registered for every public atmospheric dataset", () => {
-    const registry = createAtmosphericQueryAdapterRegistry();
-    expect(Object.keys(registry).sort()).toEqual([...PUBLIC_ATMOSPHERIC_DATASET_IDS].sort());
+  it("keeps one query and diagnostic adapter registered for every public atmospheric dataset", () => {
+    const expected = [...PUBLIC_ATMOSPHERIC_DATASET_IDS].sort();
+    expect(Object.keys(createAtmosphericQueryAdapterRegistry()).sort()).toEqual(expected);
+    expect(Object.keys(createAtmosphericDiagnosticAdapterRegistry()).sort()).toEqual(expected);
   });
 
   it("keeps CLI and MCP on unified application services instead of dataset-specific core services", async () => {
@@ -31,8 +33,19 @@ describe("architecture boundaries", () => {
     );
   });
 
+  it("keeps dataset-native diagnostic wiring out of the public diagnostic service", async () => {
+    const service = await readFile("src/core/unified-atmosphere-diagnostics.ts", "utf8");
+    expect(service).toContain("adapters?: Partial<AtmosphericDiagnosticAdapterRegistry>");
+    expect(service).not.toMatch(
+      /ifsEns|gefsReforecast|archivedGfs|AtmosphericLayerDiagnosticsService/,
+    );
+  });
+
   it("keeps dataset adapters above transport and decoding details", async () => {
-    const files = await tsFiles("src/core/query-adapters");
+    const files = [
+      ...await tsFiles("src/core/query-adapters"),
+      ...await tsFiles("src/core/diagnostic-adapters"),
+    ];
     for (const path of files) {
       const source = await readFile(path, "utf8");
       expect(source, path).not.toMatch(
