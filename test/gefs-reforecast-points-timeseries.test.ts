@@ -231,4 +231,151 @@ describe("GEFSv12 reforecast multi-point ranges", () => {
   it("constructs default collaborators without eager upstream access", () => {
     expect(() => new GefsReforecastPointsTimeSeriesService()).not.toThrow();
   });
+
+  it("rejects decoder drift between field forecast steps", async () => {
+    let call = 0;
+    const getPoints = vi.fn(async (query: any) => {
+      const batch = fieldBatch(query.validTime);
+      call += 1;
+      return call === 1
+        ? batch
+        : {
+            ...batch,
+            source: { ...batch.source, decoder: "gribberish" as const },
+          };
+    });
+    const service = new GefsReforecastPointsTimeSeriesService({
+      pointsGetter: { getPoints } as any,
+      stepConcurrency: 1,
+    });
+
+    await expect(service.getPointsTimeSeries({
+      points: requestedPoints,
+      run: run.toISOString(),
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T06:00:00Z",
+      selection: { kind: "fields", fields: ["temperature_2m"] },
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+      maxPointSteps: 4,
+    })).rejects.toThrow("changed decoder between forecast steps");
+  });
+
+  it("rejects field selection drift from a composed point batch", async () => {
+    const getPoints = vi.fn(async (query: any) => {
+      const batch = fieldBatch(query.validTime);
+      return {
+        ...batch,
+        selection: {
+          ...batch.selection,
+          fields: ["temperature_2m", "wind_10m"] as const,
+        },
+      };
+    });
+    const service = new GefsReforecastPointsTimeSeriesService({
+      pointsGetter: { getPoints } as any,
+    });
+
+    await expect(service.getPointsTimeSeries({
+      points: requestedPoints,
+      run: run.toISOString(),
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T03:00:00Z",
+      selection: { kind: "fields", fields: ["temperature_2m"] },
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+      maxPointSteps: 2,
+    })).rejects.toThrow("changed selection between forecast steps");
+  });
+
+  it("rejects run-time drift from a composed point batch", async () => {
+    const getPoints = vi.fn(async (query: any) => {
+      const batch = fieldBatch(query.validTime);
+      return {
+        ...batch,
+        validTime: new Date(new Date(query.validTime).getTime() + 3_600_000).toISOString(),
+      };
+    });
+    const service = new GefsReforecastPointsTimeSeriesService({
+      pointsGetter: { getPoints } as any,
+    });
+
+    await expect(service.getPointsTimeSeries({
+      points: requestedPoints,
+      run: run.toISOString(),
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T03:00:00Z",
+      selection: { kind: "fields", fields: ["temperature_2m"] },
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+      maxPointSteps: 2,
+    })).rejects.toThrow("drifted in run, valid time or forecast hour");
+  });
+
+  it("rejects point-count and requested-point ordering drift", async () => {
+    const countGetter = vi.fn(async (query: any) => {
+      const batch = fieldBatch(query.validTime);
+      return { ...batch, points: batch.points.slice(0, 1) };
+    });
+    const countService = new GefsReforecastPointsTimeSeriesService({
+      pointsGetter: { getPoints: countGetter } as any,
+    });
+    const input = {
+      points: requestedPoints,
+      run: run.toISOString(),
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T03:00:00Z",
+      selection: { kind: "fields" as const, fields: ["temperature_2m" as const] },
+      members: ["c00" as const, "p01" as const],
+      quantiles: [0.5],
+      maxPointSteps: 2,
+    };
+
+    await expect(countService.getPointsTimeSeries(input))
+      .rejects.toThrow("changed point count between forecast steps");
+
+    const orderGetter = vi.fn(async (query: any) => {
+      const batch = fieldBatch(query.validTime);
+      return { ...batch, points: [...batch.points].reverse() };
+    });
+    const orderService = new GefsReforecastPointsTimeSeriesService({
+      pointsGetter: { getPoints: orderGetter } as any,
+    });
+    await expect(orderService.getPointsTimeSeries(input))
+      .rejects.toThrow("changed requested point ordering");
+  });
+
+  it("rejects decoder drift between profile forecast steps", async () => {
+    let call = 0;
+    const getPoints = vi.fn(async (query: any) => {
+      const batch = profileBatch(query.validTime);
+      call += 1;
+      return call === 1
+        ? batch
+        : {
+            ...batch,
+            source: { ...batch.source, decoder: "wgrib2" as const },
+          };
+    });
+    const service = new GefsReforecastPointsTimeSeriesService({
+      pointsGetter: { getPoints } as any,
+      stepConcurrency: 1,
+    });
+
+    await expect(service.getPointsTimeSeries({
+      points: requestedPoints,
+      run: run.toISOString(),
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T06:00:00Z",
+      selection: {
+        kind: "profile",
+        variables: ["temperature"],
+        pressureLevelsHpa: [850, 500],
+      },
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+      maxPointSteps: 4,
+    })).rejects.toThrow("changed decoder between forecast steps");
+  });
+
 });
