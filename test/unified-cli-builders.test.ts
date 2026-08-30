@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildUnifiedDiagnostic,
   buildUnifiedQuery,
+  buildUnifiedRunComparison,
 } from "../src/cli/unified-atmosphere-command.js";
 import {
   diagnoseAtmosphereSchema,
   queryAtmosphereSchema,
 } from "../src/schema/unified-api.js";
+import { compareAtmosphericRunsSchema } from "../src/schema/unified-specialized.js";
 
 describe("unified CLI request builders", () => {
   it("builds a deterministic point forecast with explicit pressure selection", () => {
@@ -178,6 +180,29 @@ describe("unified CLI request builders", () => {
     });
 
     expect(queryAtmosphereSchema.parse(request)).toMatchObject({
+      dataset: "ifs-ens",
+      ensemble: {
+        members: ["p31", "p50"],
+        quantiles: [0.1, 0.5, 0.9],
+      },
+    });
+  });
+
+  it("uses IFS ENS member semantics for compare-runs as well as query", () => {
+    const request = buildUnifiedRunComparison({
+      dataset: "ifs-ens",
+      lat: 50.08,
+      lon: 14.43,
+      at: "2026-08-28T12:00:00Z",
+      vars: "temperature",
+      levels: "850",
+      anchorRun: "latest",
+      cycles: 3,
+      members: "p31,p50",
+      quantiles: "0.1,0.5,0.9",
+    });
+
+    expect(compareAtmosphericRunsSchema.parse(request)).toMatchObject({
       dataset: "ifs-ens",
       ensemble: {
         members: ["p31", "p50"],
