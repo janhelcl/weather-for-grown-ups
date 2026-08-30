@@ -116,8 +116,16 @@ export class GefsReforecastProfileService {
                 && value.pressureHpa === pressureLevelHpa,
             );
             if (!candidate) {
+              const availableLevels = [...new Set(
+                decoded
+                  .filter((value) =>
+                    value.code === definition.gfsCode
+                    && typeof value.pressureHpa === "number"
+                  )
+                  .map((value) => value.pressureHpa as number),
+              )].sort((a, b) => b - a);
               throw new Error(
-                `Decoded GEFSv12 reforecast ${member} profile is missing ${definition.gfsCode}@${pressureLevelHpa}mb`,
+                `GEFSv12 reforecast archive file for ${member}, run ${run.toISOString()}, f${forecastHour} is missing ${id}@${pressureLevelHpa}mb (${definition.gfsCode}); available ${definition.gfsCode} levels in this decoded file: ${availableLevels.length > 0 ? availableLevels.join(", ") : "none"}. This is run-local archive availability, not a global catalog capability`,
               );
             }
             if (
