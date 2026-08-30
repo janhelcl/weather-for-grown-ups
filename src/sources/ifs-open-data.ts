@@ -2,7 +2,7 @@ import {
   parseGribIndex,
   type GribIndexEntry,
 } from "@mattnucc/gribberish";
-import { runWithHttpRetry } from "../access/http-retry.js";
+import { isRetryableHttpStatus, runWithHttpRetry } from "../access/http-retry.js";
 
 export const IFS_OPEN_DATA_BASE_URL = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com";
 export const IFS_OPEN_DATA_MIRRORS = [
