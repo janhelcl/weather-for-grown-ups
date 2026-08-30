@@ -1,6 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_NOMADS_COOLDOWN_MS, FileRateLimiter } from "../cache/file-rate-limiter.js";
+import {
+  FileAccessPolicy,
+  UPSTREAM_ACCESS_POLICIES,
+  type UpstreamAccessPolicy,
+} from "../access/access-policy.js";
 import type { HistoricalGfsFieldId } from "../schema/history-fields.js";
 import {
   archivedGfsModelId,
@@ -70,7 +74,8 @@ interface ArchivedPointResult {
 
 export interface ArchivedGfsForecastQueryServiceOptions {
   cacheDir?: string;
-  cooldownMs?: number;
+  nceiAccessPolicy?: UpstreamAccessPolicy;
+  gdexAccessPolicy?: UpstreamAccessPolicy;
   fetchFn?: typeof fetch;
   source?: ArchivedGfsForecastDataSource & ArchivedGfsForecastAreaDataSource;
   rdaSource?: ArchivedGfsForecastDataSource & ArchivedGfsForecastAreaDataSource;
@@ -86,18 +91,18 @@ export class ArchivedGfsForecastQueryService {
 
   constructor(options: ArchivedGfsForecastQueryServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
-    const limiter = new FileRateLimiter(
-      join(cacheDir, "state"),
-      options.cooldownMs ?? DEFAULT_NOMADS_COOLDOWN_MS,
-    );
+    const nceiAccessPolicy = options.nceiAccessPolicy
+      ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
+    const gdexAccessPolicy = options.gdexAccessPolicy
+      ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.gdex);
     this.nceiSource = options.source ?? new NceiGfsForecastHistorySource({
       cacheDir: join(cacheDir, "ncei-forecast-history"),
-      limiter,
+      limiter: nceiAccessPolicy,
       ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),
     });
     this.rdaSource = options.rdaSource ?? new RdaGfsForecastHistorySource({
       cacheDir: join(cacheDir, "rda-forecast-history"),
-      limiter,
+      limiter: gdexAccessPolicy,
       ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),
     });
     this.now = options.now ?? (() => new Date());
