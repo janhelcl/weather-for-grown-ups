@@ -6,6 +6,7 @@ import {
 import { ArchivedGfsForecastQueryService } from "../src/core/archived-gfs-query.js";
 import { ArchivedGfsForecastDiagnosticService } from "../src/core/archived-gfs-diagnostics.js";
 import { createAtmosphericQueryAdapterRegistry } from "../src/core/query-adapters/registry.js";
+import { createAtmosphericDiagnosticAdapterRegistry } from "../src/core/diagnostic-adapters/registry.js";
 
 type Grid = "0p25" | "0p50";
 type Source = "nomads" | "s3" | "archive";
@@ -64,7 +65,9 @@ const queryService = new UnifiedAtmosphereQueryService({
   }),
 });
 const diagnosticService = new UnifiedAtmosphereDiagnosticService({
-  archivedGfs: new ArchivedGfsForecastDiagnosticService({ state: archivedState }),
+  adapters: createAtmosphericDiagnosticAdapterRegistry({
+    archivedGfs: new ArchivedGfsForecastDiagnosticService({ state: archivedState }),
+  }),
 });
 
 class ArchiveParityUpstreamUnavailable extends Error {
