@@ -18,7 +18,6 @@ import {
 } from "./ifs-ifs-ens-aligned-run.js";
 import { IfsProfileService } from "./ifs-profile.js";
 import { ifsEnsForecastHour, ifsForecastHour, parseIfsRun } from "./ifs-time.js";
-import type { ProfileLevel } from "./types.js";
 
 export interface IfsComparisonProfileGetter {
   getProfile(query: IfsPointQueryInput): Promise<IfsProfileResult>;
@@ -209,7 +208,7 @@ function assertAlignedMetadata(
 }
 
 function requiredProfileOutput(
-  level: ProfileLevel,
+  level: IfsProfileResult["levels"][number],
   outputField: string,
   variable: string,
 ): number {
