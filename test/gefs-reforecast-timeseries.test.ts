@@ -255,4 +255,133 @@ describe("GEFSv12 reforecast time ranges", () => {
     })).rejects.toThrow("drifted between model runs");
   });
 
+
+  it("rejects profile decoder drift across one retrospective range", async () => {
+    let call = 0;
+    const service = new GefsReforecastTimeSeriesService({
+      pointGetter: { getPoint: vi.fn() } as any,
+      profileGetter: {
+        getProfile: vi.fn(async (query: any) => {
+          call += 1;
+          const validTime = new Date(query.validTime);
+          const forecastHour = (validTime.getTime() - run.getTime()) / 3_600_000;
+          return {
+            model: "gefs_v12_reforecast",
+            run: run.toISOString(),
+            validTime: validTime.toISOString(),
+            forecastHour,
+            gridPoint: { latitude: 50, longitude: 14.5 },
+            summaries: [{
+              variable: "temperature",
+              gfsCode: "TMP",
+              pressureLevelHpa: 850,
+              outputField: "temperatureC",
+              unit: "degC",
+              ...distribution(10),
+            }],
+            source: {
+              decoder: call === 1 ? "wgrib2" as const : "gribberish" as const,
+              leadBlock: "Days:1-10" as const,
+              horizontalGridDegrees: 0.25 as const,
+              profileGridPolicy: "native_0p25" as const,
+              allCacheHit: true,
+            },
+          };
+        }),
+      } as any,
+      stepConcurrency: 1,
+    });
+
+    await expect(service.getTimeSeries({
+      latitude: 50,
+      longitude: 14,
+      run: run.toISOString(),
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T06:00:00Z",
+      selection: {
+        kind: "profile",
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+      },
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+    })).rejects.toThrow("changed decoder within one range");
+  });
+
+  it("rejects a collaborator result with a mismatched valid time", async () => {
+    const service = new GefsReforecastTimeSeriesService({
+      pointGetter: {
+        getPoint: vi.fn(async (query: any) => {
+          const requested = new Date(query.validTime);
+          const forecastHour = (requested.getTime() - run.getTime()) / 3_600_000;
+          return {
+            model: "gefs_v12_reforecast",
+            run: run.toISOString(),
+            validTime: new Date(requested.getTime() + 3_600_000).toISOString(),
+            forecastHour,
+            gridPoint: { latitude: 50, longitude: 14.5 },
+            fieldSummaries: [],
+            source: {
+              decoder: "wgrib2" as const,
+              leadBlock: "Days:1-10" as const,
+              horizontalGridDegrees: 0.25 as const,
+              allCacheHit: true,
+            },
+          };
+        }),
+      } as any,
+      profileGetter: { getProfile: vi.fn() } as any,
+      stepConcurrency: 1,
+    });
+
+    await expect(service.getTimeSeries({
+      latitude: 50,
+      longitude: 14,
+      run: run.toISOString(),
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T03:00:00Z",
+      selection: { kind: "fields", fields: ["temperature_2m"] },
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+    })).rejects.toThrow("inconsistent valid time or forecast hour");
+  });
+
+  it("rejects a collaborator result with a mismatched forecast hour", async () => {
+    const service = new GefsReforecastTimeSeriesService({
+      pointGetter: {
+        getPoint: vi.fn(async (query: any) => {
+          const validTime = new Date(query.validTime);
+          const forecastHour = (validTime.getTime() - run.getTime()) / 3_600_000;
+          return {
+            model: "gefs_v12_reforecast",
+            run: run.toISOString(),
+            validTime: validTime.toISOString(),
+            forecastHour: forecastHour + 3,
+            gridPoint: { latitude: 50, longitude: 14.5 },
+            fieldSummaries: [],
+            source: {
+              decoder: "wgrib2" as const,
+              leadBlock: "Days:1-10" as const,
+              horizontalGridDegrees: 0.25 as const,
+              allCacheHit: true,
+            },
+          };
+        }),
+      } as any,
+      profileGetter: { getProfile: vi.fn() } as any,
+      stepConcurrency: 1,
+    });
+
+    await expect(service.getTimeSeries({
+      latitude: 50,
+      longitude: 14,
+      run: run.toISOString(),
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T03:00:00Z",
+      selection: { kind: "fields", fields: ["temperature_2m"] },
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+    })).rejects.toThrow("inconsistent valid time or forecast hour");
+  });
+
 });
