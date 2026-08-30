@@ -3,6 +3,8 @@ import {
   UnifiedAtmosphereDiagnosticService,
   UnifiedAtmosphereQueryService,
 } from "../src/core/unified-atmosphere-api.js";
+import { ArchivedGfsForecastQueryService } from "../src/core/archived-gfs-query.js";
+import { ArchivedGfsForecastDiagnosticService } from "../src/core/archived-gfs-diagnostics.js";
 
 type Grid = "0p25" | "0p50";
 type Source = "nomads" | "s3" | "archive";
@@ -46,8 +48,21 @@ const NATIVE_HUMIDITY_PROFILE_VARIABLES = [
   "equivalent_potential_temperature",
 ] as const;
 
-const queryService = new UnifiedAtmosphereQueryService();
-const diagnosticService = new UnifiedAtmosphereDiagnosticService();
+const ARCHIVE_PARITY_FETCH_TIMEOUT_MS = 20_000;
+const archiveParityFetch: typeof fetch = (input, init) =>
+  globalThis.fetch(input, {
+    ...(init ?? {}),
+    signal: AbortSignal.timeout(ARCHIVE_PARITY_FETCH_TIMEOUT_MS),
+  });
+const archivedState = new ArchivedGfsForecastQueryService({
+  fetchFn: archiveParityFetch,
+});
+const queryService = new UnifiedAtmosphereQueryService({
+  archivedGfs: archivedState,
+});
+const diagnosticService = new UnifiedAtmosphereDiagnosticService({
+  archivedGfs: new ArchivedGfsForecastDiagnosticService({ state: archivedState }),
+});
 
 class ArchiveParityUpstreamUnavailable extends Error {
   constructor(readonly upstreamError: unknown) {
