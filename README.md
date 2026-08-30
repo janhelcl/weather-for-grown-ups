@@ -180,7 +180,7 @@ Start here:
 - [ECMWF IFS / IFS ENS semantics](docs/IFS.md)
 - [Historical GFS, archives and verification](docs/HISTORY.md)
 - [Testing](docs/TESTING.md) and [meteorology validation](docs/METEOROLOGY_VALIDATION.md)
-- [Release notes](docs/RELEASES.md)
+- [Release notes](docs/RELEASES.md)\n- [Roadmap](docs/ROADMAP.md)
 
 ## Scope
 
