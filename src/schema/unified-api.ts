@@ -373,11 +373,25 @@ function validateDatasetModifiers(
         message: "GEFSv12 reforecast queries require an explicit historical 00Z initialization",
       });
     }
-    if (request.geometry?.type !== "point") {
+    if (
+      request.geometry?.type !== "point"
+      && request.geometry?.type !== "points"
+    ) {
       context.addIssue({
         code: "custom",
         path: ["geometry"],
-        message: "GEFSv12 reforecast support currently covers point geometry; other geometries will be added without changing the public query vocabulary",
+        message: "GEFSv12 reforecast support currently covers point and multi-point geometry; transect and area support will be added without changing the public query vocabulary",
+      });
+    }
+    if (
+      request.geometry?.type === "points"
+      && request.time !== undefined
+      && "from" in request.time
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["time"],
+        message: "GEFSv12 reforecast multi-point queries currently support one valid time; use point geometry for retrospective time ranges",
       });
     }
     if (
