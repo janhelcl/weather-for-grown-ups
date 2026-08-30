@@ -117,7 +117,7 @@ export class HistoricalIndexService {
     if (!target) {
       if (!query.fetchTargetIfMissing) {
         throw new Error(
-          `Target ${query.targetTime} is not materialized in ${this.store.path} for the requested point/selection`,
+          `Target ${query.targetTime} is not materialized in ${this.store.path} for the requested point/selection. Materialize it first with the index build/backfill workflow, or set fetchTargetIfMissing=true to fetch and persist only the target`,
         );
       }
       const profile = await this.profileGetter.getHistoricalProfile({
