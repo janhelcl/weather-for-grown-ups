@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   exponentialBackoffMilliseconds,
   isRetryableHttpStatus,
+  isRetryableHttpTransportError,
   retryAfterMilliseconds,
   waitBeforeHttpRetry,
 } from "../src/sources/http-retry.js";
@@ -14,6 +15,15 @@ describe("HTTP retry helpers", () => {
     for (const status of [400, 401, 403, 404, 409]) {
       expect(isRetryableHttpStatus(status)).toBe(false);
     }
+  });
+
+  it("recognizes fetch transport failures without treating arbitrary errors as retryable", () => {
+    const socketError = new TypeError("fetch failed") as TypeError & { cause?: unknown };
+    socketError.cause = { code: "UND_ERR_SOCKET" };
+    expect(isRetryableHttpTransportError(socketError)).toBe(true);
+    expect(isRetryableHttpTransportError(new TypeError("network request failed"))).toBe(true);
+    expect(isRetryableHttpTransportError(new TypeError("bad application input"))).toBe(false);
+    expect(isRetryableHttpTransportError(new Error("fetch failed"))).toBe(false);
   });
 
   it("computes exponential backoff with deterministic jitter injection", () => {
