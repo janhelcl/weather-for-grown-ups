@@ -108,6 +108,64 @@ describe("specialized run-comparison adapters", () => {
     }));
   });
 
+  it("preserves omitted optional controls instead of inventing defaults", async () => {
+    const gfsNative = { compareRuns: vi.fn(async (query) => query) };
+    const gfs = new GfsRunComparisonAdapter(gfsNative as any);
+    await gfs.compare(compareAtmosphericRunsSchema.parse({
+      dataset: "gfs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    }));
+    expect(gfsNative.compareRuns).toHaveBeenCalledWith(expect.objectContaining({
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+    }));
+    expect(gfsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("fields");
+    expect(gfsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("grid");
+
+    const ifsNative = { compareRuns: vi.fn(async (query) => query) };
+    const ifs = new IfsRunComparisonAdapter(ifsNative as any);
+    await ifs.compare(compareAtmosphericRunsSchema.parse({
+      dataset: "ifs",
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { fields: ["temperature_2m"] },
+    }));
+    expect(ifsNative.compareRuns.mock.calls[0]![0]).toMatchObject({
+      fields: ["temperature_2m"],
+    });
+    expect(ifsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("variables");
+    expect(ifsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("pressureLevelsHpa");
+
+    const gefsNative = { compareRuns: vi.fn(async (query) => query) };
+    await new GefsRunComparisonAdapter(gefsNative as any).compare(
+      compareAtmosphericRunsSchema.parse({
+        dataset: "gefs",
+        geometry: point,
+        time: { at: "2026-08-28T12:00:00Z" },
+        selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      }),
+    );
+    expect(gefsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("members");
+    expect(gefsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("quantiles");
+    expect(gefsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("thresholdGte");
+
+    const ifsEnsNative = { compareRuns: vi.fn(async (query) => query) };
+    await new IfsEnsRunComparisonAdapter(ifsEnsNative as any).compare(
+      compareAtmosphericRunsSchema.parse({
+        dataset: "ifs-ens",
+        geometry: point,
+        time: { at: "2026-08-28T12:00:00Z" },
+        selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      }),
+    );
+    expect(ifsEnsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("members");
+    expect(ifsEnsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("quantiles");
+    expect(ifsEnsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("thresholdGte");
+    expect(ifsEnsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("cycleStrideHours");
+  });
+
   it("guards adapter ownership explicitly", () => {
     const gfsRequest = compareAtmosphericRunsSchema.parse({
       dataset: "gfs",

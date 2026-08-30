@@ -7,7 +7,7 @@ import { registerUnifiedAtmosphereCommands } from "./unified-atmosphere-command.
 export function createCliProgram(): Command {
   const program = new Command()
     .name("wfg")
-    .description("Weather for Grown Ups — agent-native NOAA atmospheric data access")
+    .description("Weather for Grown Ups — agent-native numerical weather model access")
     .version(WFG_VERSION);
 
   registerCatalogCommand(program);

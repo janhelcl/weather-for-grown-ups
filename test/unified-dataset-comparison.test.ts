@@ -90,6 +90,57 @@ describe("unified dataset-comparison adapters", () => {
     }));
   });
 
+  it("preserves omitted pair-specific controls", async () => {
+    const native = { compare: vi.fn(async (query) => query) };
+
+    const gfsGefs = new GfsGefsDatasetComparisonAdapter(native as any);
+    await gfsGefs.compare(compareAtmosphericDatasetsSchema.parse({
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      gfsGrid: "0p50",
+    }));
+    expect(native.compare.mock.calls.at(-1)![0]).toMatchObject({ gfsGrid: "0p50" });
+    expect(native.compare.mock.calls.at(-1)![0]).not.toHaveProperty("members");
+    expect(native.compare.mock.calls.at(-1)![0]).not.toHaveProperty("quantiles");
+
+    const gfsIfs = new GfsIfsDatasetComparisonAdapter(native as any);
+    await gfsIfs.compare(compareAtmosphericDatasetsSchema.parse({
+      datasets: ["gfs", "ifs"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    }));
+    expect(native.compare.mock.calls.at(-1)![0]).not.toHaveProperty("gfsGrid");
+
+    const gefsIfsEns = new GefsIfsEnsDatasetComparisonAdapter(native as any);
+    await gefsIfsEns.compare(compareAtmosphericDatasetsSchema.parse({
+      datasets: ["gefs", "ifs-ens"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    }));
+    const ensemblePair = native.compare.mock.calls.at(-1)![0];
+    expect(ensemblePair).not.toHaveProperty("gefsMembers");
+    expect(ensemblePair).not.toHaveProperty("ifsEnsMembers");
+    expect(ensemblePair).not.toHaveProperty("quantiles");
+    expect(ensemblePair).not.toHaveProperty("thresholdGte");
+
+    const ifsIfsEns = new IfsIfsEnsDatasetComparisonAdapter(native as any);
+    await ifsIfsEns.compare(compareAtmosphericDatasetsSchema.parse({
+      datasets: ["ifs", "ifs-ens"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    }));
+    expect(native.compare.mock.calls.at(-1)![0]).not.toHaveProperty("members");
+    expect(native.compare.mock.calls.at(-1)![0]).not.toHaveProperty("quantiles");
+  });
+
   it("guards each adapter against the wrong comparison pair", async () => {
     const native = { compare: vi.fn(async () => undefined) };
     const gfsGefs = new GfsGefsDatasetComparisonAdapter(native as any);
@@ -107,6 +158,14 @@ describe("unified dataset-comparison adapters", () => {
     expect(() => gefsIfsEns.compare(request)).toThrow("datasets=gefs,ifs-ens");
     expect(() => ifsIfsEns.compare(request)).toThrow("datasets=ifs,ifs-ens");
     await expect(gfsIfs.compare(request)).resolves.toBeUndefined();
+
+    const gfsGefsRequest = compareAtmosphericDatasetsSchema.parse({
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
+    expect(() => gfsIfs.compare(gfsGefsRequest)).toThrow("datasets=gfs,ifs");
   });
 });
 
