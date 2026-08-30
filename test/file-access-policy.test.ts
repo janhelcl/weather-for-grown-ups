@@ -133,6 +133,26 @@ describe("FileAccessPolicy", () => {
     expect(maxActive).toBe(1);
   });
 
+  it("rejects malformed provider policy definitions", () => {
+    expect(() => new FileAccessPolicy(rootDir, {
+      id: "Bad Provider",
+      maxConcurrency: 1,
+      minIntervalMs: 0,
+    })).toThrow(/policy id/);
+
+    expect(() => new FileAccessPolicy(rootDir, {
+      id: "bad-concurrency",
+      maxConcurrency: 0,
+      minIntervalMs: 0,
+    })).toThrow(/maxConcurrency/);
+
+    expect(() => new FileAccessPolicy(rootDir, {
+      id: "bad-interval",
+      maxConcurrency: 1,
+      minIntervalMs: -1,
+    })).toThrow(/minIntervalMs/);
+  });
+
   it("rejects an ambiguous interval-plus-concurrency policy", () => {
     expect(() => new FileAccessPolicy(rootDir, {
       id: "invalid",
