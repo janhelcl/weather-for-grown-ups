@@ -44,6 +44,36 @@ describe("provider transport retries", () => {
     expect(run).toHaveBeenCalledTimes(2);
   });
 
+  it("classifies exhausted NCEI 5xx responses as upstream unavailability", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-ncei-unavailable-"));
+    roots.push(cacheDir);
+    const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
+    const fetchFn = vi.fn(async () =>
+      new Response("busy", {
+        status: 503,
+        statusText: "Service Unavailable",
+        headers: { "retry-after": "0" },
+      })
+    );
+    const source = new NceiGfsHistorySource({
+      cacheDir,
+      limiter: { run },
+      fetchFn,
+      retryBaseDelayMs: 0,
+      retryJitterRatio: 0,
+    });
+
+    await expect(source.fetch({
+      analysisTime: new Date("2017-05-09T00:00:00Z"),
+      latitude: 50,
+      longitude: 14,
+      variables: ["Temperature_isobaric"],
+    })).rejects.toThrow(
+      /source unavailable: HTTP 503 Service Unavailable after retries.*upstream availability failure/i,
+    );
+    expect(fetchFn.mock.calls.length).toBeGreaterThan(1);
+  });
+
   it("handles concurrent identical NCEI cache misses without temp-file collisions", async () => {
     const cacheDir = await mkdtemp(join(tmpdir(), "wfg-ncei-concurrent-"));
     roots.push(cacheDir);
