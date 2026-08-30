@@ -2,12 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NetCDFReader } from "netcdfjs";
-import type { UpstreamAccessPolicy } from "../cache/file-access-policy.js";
+import type { UpstreamAccessPolicy } from "../access/access-policy.js";
 import {
   DEFAULT_HTTP_RETRY_MAX_ATTEMPTS,
   isRetryableHttpStatus,
   waitBeforeHttpRetry,
-} from "./http-retry.js";
+} from "../access/http-retry.js";
 import type {
   ArchivedGfsForecastAreaDataSource,
   ArchivedGfsForecastAreaRequest,
