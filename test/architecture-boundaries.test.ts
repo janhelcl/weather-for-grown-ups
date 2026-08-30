@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { createAtmosphericQueryAdapterRegistry } from "../src/core/query-adapters/registry.js";
 import { PUBLIC_ATMOSPHERIC_DATASET_IDS } from "../src/schema/unified-api.js";
@@ -31,6 +31,37 @@ describe("architecture boundaries", () => {
     );
   });
 
+  it("keeps dataset adapters above transport and decoding details", async () => {
+    const files = await tsFiles("src/core/query-adapters");
+    for (const path of files) {
+      const source = await readFile(path, "utf8");
+      expect(source, path).not.toMatch(
+        /from ["']\.\.\/\.\.\/(?:access|sources|cache|grib|derived)\//,
+      );
+    }
+  });
+
+  it("keeps provider sources independent of application core", async () => {
+    const files = await tsFiles("src/sources");
+    for (const path of files) {
+      const source = await readFile(path, "utf8");
+      expect(source, path).not.toMatch(/from ["']\.\.\/(?:core|cli)\//);
+      expect(source, path).not.toMatch(/from ["'][^"']*mcp[^"']*["']/);
+    }
+  });
+
+  it("keeps HTTP retry execution centralized in access", async () => {
+    const files = [
+      ...await tsFiles("src/sources"),
+      ...await tsFiles("src/cache"),
+    ];
+    for (const path of files) {
+      const source = await readFile(path, "utf8");
+      expect(source, path).not.toMatch(/waitBeforeHttpRetry/);
+      expect(source, path).not.toMatch(/for\s*\([^)]*\battempt\b[^)]*\)/);
+    }
+  });
+
   it("keeps the public unified API module as a composition barrel", async () => {
     const api = await readFile("src/core/unified-atmosphere-api.ts", "utf8");
     expect(api).toContain("./unified-atmosphere-query.js");
@@ -39,3 +70,9 @@ describe("architecture boundaries", () => {
     expect(api).not.toMatch(/Gefs|Ifs|Historical|ArchivedGfs/);
   });
 });
+
+async function tsFiles(directory: string): Promise<string[]> {
+  return (await readdir(directory))
+    .filter((name) => name.endsWith(".ts"))
+    .map((name) => `${directory}/${name}`);
+}
