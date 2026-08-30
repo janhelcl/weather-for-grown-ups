@@ -194,6 +194,33 @@ describe("unified GEFS reforecast branch", () => {
       ...range,
       members: ["c00", "c00"],
     })).toThrow("members must not contain duplicates");
+    expect(() => gefsReforecastPointsTimeSeriesQuerySchema.parse({
+      ...range,
+      quantiles: [0.5, 0.5],
+    })).toThrow("Quantiles must not contain duplicates");
+    expect(() => gefsReforecastPointsTimeSeriesQuerySchema.parse({
+      ...range,
+      selection: {
+        kind: "fields",
+        fields: ["temperature_2m", "temperature_2m"],
+      },
+    })).toThrow("fields must not contain duplicates");
+    expect(() => gefsReforecastPointsTimeSeriesQuerySchema.parse({
+      ...range,
+      selection: {
+        kind: "profile",
+        variables: ["temperature", "temperature"],
+        pressureLevelsHpa: [850, 850],
+      },
+    })).toThrow();
+    expect(() => gefsReforecastPointsTimeSeriesQuerySchema.parse({
+      ...range,
+      selection: {
+        kind: "profile",
+        variables: ["specific_humidity"],
+        pressureLevelsHpa: [50],
+      },
+    })).toThrow("specific_humidity at 50 hPa");
   });
 
 });
