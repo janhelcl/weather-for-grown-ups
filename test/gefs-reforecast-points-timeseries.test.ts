@@ -454,7 +454,7 @@ describe("GEFSv12 reforecast multi-point ranges", () => {
     for (const mutateSelection of [
       (selection: ReturnType<typeof fieldBatch>["selection"]) => ({
         ...selection,
-        members: ["c00"] as const,
+        members: ["p01", "c00"] as const,
       }),
       (selection: ReturnType<typeof fieldBatch>["selection"]) => ({
         ...selection,
@@ -493,7 +493,7 @@ describe("GEFSv12 reforecast multi-point ranges", () => {
       }),
       (selection: ReturnType<typeof profileBatch>["selection"]) => ({
         ...selection,
-        members: ["c00"] as const,
+        members: ["p01", "c00"] as const,
       }),
       (selection: ReturnType<typeof profileBatch>["selection"]) => ({
         ...selection,
