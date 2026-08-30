@@ -88,6 +88,6 @@ describe("dataset query adapter composition", () => {
     });
 
     expect(() => adapter.query({ dataset: "gfs" } as any))
-      .toThrow("Historical GFS analysis query adapter only accepts dataset=gfs-analysis");
+      .toThrow("GFS analysis query adapter only accepts dataset=gfs-analysis");
   });
 });
