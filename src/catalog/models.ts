@@ -1,6 +1,7 @@
 export const ATMOSPHERIC_DATASET_IDS = [
   "gfs_0p25",
   "gfs_0p50",
+  "aigfs_0p25",
   "gefs_0p50",
   "ifs_0p25",
   "ifs_ens_0p25",
@@ -10,6 +11,8 @@ export const ATMOSPHERIC_DATASET_IDS = [
 export type AtmosphericDatasetId = (typeof ATMOSPHERIC_DATASET_IDS)[number];
 export type AtmosphericDatasetKind = "deterministic" | "ensemble";
 export type AtmosphericDatasetRole = "forecast" | "analysis";
+export type AtmosphericModelClass = "physics" | "ai" | "hybrid";
+export type AtmosphericProvider = "noaa" | "ecmwf";
 
 export const ATMOSPHERIC_RUN_SELECTOR_IDS = ["latest", "latest_complete", "explicit"] as const;
 export type AtmosphericRunSelectorId = (typeof ATMOSPHERIC_RUN_SELECTOR_IDS)[number];
@@ -34,11 +37,14 @@ export type AtmosphericOperationId = (typeof ATMOSPHERIC_OPERATION_IDS)[number];
 
 export interface AtmosphericDatasetDefinition {
   id: AtmosphericDatasetId;
-  family: "gfs" | "gefs" | "ifs";
+  family: "gfs" | "gefs" | "ifs" | "aigfs";
+  provider: AtmosphericProvider;
+  modelClass: AtmosphericModelClass;
   kind: AtmosphericDatasetKind;
   role: AtmosphericDatasetRole;
   horizontalGridDegrees: number;
   maxForecastHour?: number;
+  nativeForecastIntervalHours?: number;
   members?: number;
   runSelectors: readonly AtmosphericRunSelectorId[];
   operations: readonly AtmosphericOperationId[];
@@ -48,6 +54,8 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
   gfs_0p25: {
     id: "gfs_0p25",
     family: "gfs",
+    provider: "noaa",
+    modelClass: "physics",
     kind: "deterministic",
     role: "forecast",
     horizontalGridDegrees: 0.25,
@@ -71,6 +79,8 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
   gfs_0p50: {
     id: "gfs_0p50",
     family: "gfs",
+    provider: "noaa",
+    modelClass: "physics",
     kind: "deterministic",
     role: "forecast",
     horizontalGridDegrees: 0.5,
@@ -91,9 +101,34 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "aligned_model_comparison",
     ],
   },
+  aigfs_0p25: {
+    id: "aigfs_0p25",
+    family: "aigfs",
+    provider: "noaa",
+    modelClass: "ai",
+    kind: "deterministic",
+    role: "forecast",
+    horizontalGridDegrees: 0.25,
+    maxForecastHour: 384,
+    nativeForecastIntervalHours: 6,
+    runSelectors: ["latest", "latest_complete", "explicit"],
+    operations: [
+      "profile",
+      "timeseries",
+      "layer_diagnostics",
+      "profile_diagnostics",
+      "diagnostic_timeseries",
+      "points",
+      "points_timeseries",
+      "transect",
+      "area_summary",
+    ],
+  },
   gefs_0p50: {
     id: "gefs_0p50",
     family: "gefs",
+    provider: "noaa",
+    modelClass: "physics",
     kind: "ensemble",
     role: "forecast",
     horizontalGridDegrees: 0.5,
@@ -119,6 +154,8 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
   ifs_0p25: {
     id: "ifs_0p25",
     family: "ifs",
+    provider: "ecmwf",
+    modelClass: "physics",
     kind: "deterministic",
     role: "forecast",
     horizontalGridDegrees: 0.25,
@@ -141,6 +178,8 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
   ifs_ens_0p25: {
     id: "ifs_ens_0p25",
     family: "ifs",
+    provider: "ecmwf",
+    modelClass: "physics",
     kind: "ensemble",
     role: "forecast",
     horizontalGridDegrees: 0.25,
@@ -166,6 +205,8 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
   gfs_grid4_analysis_0p5: {
     id: "gfs_grid4_analysis_0p5",
     family: "gfs",
+    provider: "noaa",
+    modelClass: "physics",
     kind: "deterministic",
     role: "analysis",
     horizontalGridDegrees: 0.5,
@@ -207,6 +248,7 @@ export function datasetSupportsOperation(
 export const ATMOSPHERIC_MODEL_IDS = [
   "gfs_0p25",
   "gfs_0p50",
+  "aigfs_0p25",
   "gefs_0p50",
   "ifs_0p25",
   "ifs_ens_0p25",
@@ -217,6 +259,7 @@ export type AtmosphericModelDefinition = AtmosphericDatasetDefinition;
 export const ATMOSPHERIC_MODEL_CATALOG: Record<AtmosphericModelId, AtmosphericDatasetDefinition> = {
   gfs_0p25: ATMOSPHERIC_DATASET_CATALOG.gfs_0p25,
   gfs_0p50: ATMOSPHERIC_DATASET_CATALOG.gfs_0p50,
+  aigfs_0p25: ATMOSPHERIC_DATASET_CATALOG.aigfs_0p25,
   gefs_0p50: ATMOSPHERIC_DATASET_CATALOG.gefs_0p50,
   ifs_0p25: ATMOSPHERIC_DATASET_CATALOG.ifs_0p25,
   ifs_ens_0p25: ATMOSPHERIC_DATASET_CATALOG.ifs_ens_0p25,
