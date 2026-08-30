@@ -13,6 +13,7 @@ import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
 import {
   createAtmosphericQueryAdapterRegistry,
 } from "../src/core/query-adapters/registry.js";
+import { AigfsForecastService } from "../src/core/aigfs.js";
 import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-query.js";
 import {
   AIGFS_NATIVE_FORECAST_HOURS,
@@ -22,6 +23,7 @@ import {
   buildAigfsNomadsUrl,
 } from "../src/sources/aigfs.js";
 import { diagnoseAtmosphereSchema, queryAtmosphereSchema } from "../src/schema/unified-api.js";
+import type { DecodedValue } from "../src/core/types.js";
 
 const passthroughPolicy: UpstreamAccessPolicy = {
   run: async <T>(operation: () => Promise<T>) => operation(),
@@ -241,3 +243,328 @@ describe("AIGFS unified contract", () => {
     expect(catalog.matches.some((match) => match.section === "parcel_definitions")).toBe(false);
   });
 });
+
+
+describe("AIGFS deterministic service composition", () => {
+  const run = new Date("2026-08-30T00:00:00Z");
+  const runProvider = {
+    resolveLatestRun: vi.fn(async () => run),
+    resolveLatestCompleteRun: vi.fn(async () => run),
+  };
+  const cache = {
+    fetch: vi.fn(async () => ({ path: "/tmp/aigfs-test.grib2", cacheHit: false })),
+  };
+  const decoder = {
+    engine: "gribberish" as const,
+    extractPoint: vi.fn(async (_path: string, longitude: number, latitude: number) =>
+      fakeDecodedValues(longitude, latitude)),
+  };
+  const areaDecoder = {
+    engine: "gribberish" as const,
+    summarizeBox: vi.fn(async () => fakeStats(280, 278, 282)),
+    summarizeSelectedMessage: vi.fn(async (_path: string, _box: unknown, selector: any) => ({
+      ...fakeStats(selector.code === "TMP" ? 280 : 101_325, selector.code === "TMP" ? 278 : 101_000, selector.code === "TMP" ? 282 : 101_700),
+      temporal: { type: "instantaneous" as const },
+    })),
+  };
+  const areaGridDecoder = {
+    engine: "gribberish" as const,
+    extractBox: vi.fn(async () => [
+      { longitude: 14, latitude: 49, value: 278 },
+      { longitude: 14.25, latitude: 49, value: 280 },
+      { longitude: 14.5, latitude: 49, value: 282 },
+    ]),
+    extractSelectedMessage: vi.fn(async (_path: string, _box: unknown, selector: any) => ({
+      points: [
+        { longitude: 14, latitude: 49, value: selector.code === "TMP" ? 278 : 101_000 },
+        { longitude: 14.25, latitude: 49, value: selector.code === "TMP" ? 280 : 101_325 },
+        { longitude: 14.5, latitude: 49, value: selector.code === "TMP" ? 282 : 101_700 },
+      ],
+      temporal: { type: "instantaneous" as const },
+    })),
+  };
+
+  function service() {
+    return new AigfsForecastService({
+      cache: cache as any,
+      decoder,
+      runProvider,
+      areaDecoder: areaDecoder as any,
+      areaGridDecoder: areaGridDecoder as any,
+    });
+  }
+
+  it("normalizes mixed point state and preserves requested derived fields", async () => {
+    const result = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: {
+        variables: ["temperature", "wind", "specific_humidity"],
+        pressureLevelsHpa: [850, 700],
+        fields: ["temperature_2m", "wind_10m", "mean_sea_level_pressure", "total_precipitation"],
+      },
+      forecast: { run: "latest" },
+    })) as any;
+
+    expect(result).toMatchObject({
+      model: "aigfs_0p25",
+      run: "2026-08-30T00:00:00.000Z",
+      validTime: "2026-08-30T06:00:00.000Z",
+      forecastHour: 6,
+      source: { provider: "NOAA NOMADS", access: "nomads_range", decoder: "gribberish" },
+    });
+    expect(result.levels).toHaveLength(2);
+    expect(result.levels[0]).toMatchObject({
+      pressureHpa: 850,
+      temperatureC: expect.any(Number),
+      windSpeedMs: expect.any(Number),
+      specificHumidityKgKg: expect.any(Number),
+    });
+    expect(result.fields.map((field: any) => field.id)).toEqual([
+      "temperature_2m", "wind_10m", "mean_sea_level_pressure", "total_precipitation",
+    ]);
+    expect(result.fields.find((field: any) => field.id === "temperature_2m").values.temperatureC)
+      .toBeCloseTo(16.85, 8);
+  });
+
+  it("composes native-cadence point and multi-point ranges", async () => {
+    const pointRange = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: {
+        from: "2026-08-30T06:00:00Z",
+        to: "2026-08-30T12:00:00Z",
+        maxSteps: 2,
+      },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    })) as any;
+    expect(pointRange.series.map((step: any) => step.forecastHour)).toEqual([6, 12]);
+
+    const matrix = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50.08, longitude: 14.43 },
+          { latitude: 49.2, longitude: 16.61 },
+        ],
+      },
+      time: {
+        from: "2026-08-30T06:00:00Z",
+        to: "2026-08-30T12:00:00Z",
+        maxSteps: 2,
+      },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      limits: { maxPointSteps: 4 },
+    })) as any;
+    expect(matrix.series).toHaveLength(2);
+    expect(matrix.series.every((step: any) => step.points.length === 2)).toBe(true);
+  });
+
+  it("reuses one fetched slice for multi-point and transect sampling", async () => {
+    cache.fetch.mockClear();
+    const points = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50.08, longitude: 14.43 },
+          { latitude: 49.2, longitude: 16.61 },
+        ],
+      },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { variables: ["temperature", "wind"], pressureLevelsHpa: [850] },
+    })) as any;
+    expect(points.points).toHaveLength(2);
+    expect(cache.fetch).toHaveBeenCalledTimes(1);
+
+    cache.fetch.mockClear();
+    const transect = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: {
+        type: "transect",
+        start: { latitude: 49, longitude: 14 },
+        end: { latitude: 50, longitude: 15 },
+        samples: 3,
+      },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    })) as any;
+    expect(transect.samples).toHaveLength(3);
+    expect(transect.totalDistanceKm).toBeGreaterThan(0);
+    expect(cache.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("supports scalar area statistics and rich distributions", async () => {
+    const pressure = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: {
+        type: "area",
+        westLongitude: 14,
+        eastLongitude: 14.5,
+        southLatitude: 49,
+        northLatitude: 49.5,
+      },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    })) as any;
+    expect(pressure.variable).toMatchObject({ id: "temperature", pressureHpa: 850, unit: "degC" });
+    expect(pressure.statistics.mean).toBeCloseTo(6.85, 8);
+
+    const distribution = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: {
+        type: "area",
+        westLongitude: 14,
+        eastLongitude: 14.5,
+        southLatitude: 49,
+        northLatitude: 49.5,
+      },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { fields: ["temperature_2m"] },
+      aggregate: {
+        percentiles: [50],
+        thresholds: [{ operator: "gte", value: 6 }],
+        includeExtremaLocations: true,
+      },
+    })) as any;
+    expect(distribution.field.id).toBe("temperature_2m");
+    expect(distribution.statistics.mean).toBeCloseTo(6.85, 8);
+    expect(distribution.distribution.percentiles[0].value).toBeCloseTo(6.85, 8);
+    expect(distribution.distribution.extrema.min.gridPoint).toEqual({ latitude: 49, longitude: 14 });
+  });
+
+  it("derives layer/profile diagnostics at one time and through a range", async () => {
+    const layer = await service().diagnose(diagnoseAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2026-08-30T06:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 700,
+        diagnostics: ["temperature_lapse_rate", "wind_shear"],
+      },
+    })) as any;
+    expect(layer.diagnostics).toHaveLength(2);
+    expect(layer.layer.depthGpm).toBeGreaterThan(0);
+
+    const profile = await service().diagnose(diagnoseAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2026-08-30T06:00:00Z" },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [1000, 925, 850, 700, 500],
+        diagnostics: ["freezing_level_crossings", "temperature_inversion_layers"],
+      },
+    })) as any;
+    expect(profile.diagnostics).toHaveLength(2);
+
+    const range = await service().diagnose(diagnoseAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: {
+        from: "2026-08-30T06:00:00Z",
+        to: "2026-08-30T12:00:00Z",
+        maxSteps: 2,
+      },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 700,
+        diagnostics: ["temperature_lapse_rate"],
+      },
+    })) as any;
+    expect(range.series.map((step: any) => step.forecastHour)).toEqual([6, 12]);
+    expect(range.series.every((step: any) => step.kind === "layer")).toBe(true);
+  });
+
+  it("enforces service guardrails even below the schema layer", async () => {
+    await expect(service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50, longitude: 14 },
+          { latitude: 51, longitude: 15 },
+        ],
+      },
+      time: {
+        from: "2026-08-30T06:00:00Z",
+        to: "2026-08-30T12:00:00Z",
+      },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      limits: { maxPointSteps: 3 },
+    }))).rejects.toThrow("exceeding maxPointSteps=3");
+
+    await expect(service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: {
+        type: "area",
+        westLongitude: 0,
+        eastLongitude: 10,
+        southLatitude: 0,
+        northLatitude: 10,
+      },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      limits: { maxGridPoints: 10 },
+    }))).rejects.toThrow("exceeding maxGridPoints=10");
+  });
+});
+
+function fakeDecodedValues(longitude: number, latitude: number): DecodedValue[] {
+  const gridPoint = { longitude, latitude };
+  const temperaturesK = new Map([
+    [1000, 290],
+    [925, 285],
+    [850, 280],
+    [700, 268],
+    [500, 250],
+  ]);
+  const heights = new Map([
+    [1000, 100],
+    [925, 750],
+    [850, 1500],
+    [700, 3000],
+    [500, 5600],
+  ]);
+  const pressureValues: DecodedValue[] = [];
+  for (const [pressureHpa, temperatureK] of temperaturesK) {
+    pressureValues.push(
+      { code: "TMP", pressureHpa, value: temperatureK, gridPoint },
+      { code: "UGRD", pressureHpa, value: 5 + pressureHpa / 1000, gridPoint },
+      { code: "VGRD", pressureHpa, value: 2, gridPoint },
+      { code: "HGT", pressureHpa, value: heights.get(pressureHpa)!, gridPoint },
+      { code: "SPFH", pressureHpa, value: 0.004, gridPoint },
+      { code: "VVEL", pressureHpa, value: -0.1, gridPoint },
+    );
+  }
+  return [
+    ...pressureValues,
+    { code: "TMP", heightAboveGroundM: 2, value: 290, gridPoint },
+    { code: "UGRD", heightAboveGroundM: 10, value: 5, gridPoint },
+    { code: "VGRD", heightAboveGroundM: 10, value: 2, gridPoint },
+    { code: "PRMSL", namedVertical: "mean sea level", value: 101_325, gridPoint },
+    {
+      code: "APCP",
+      surface: true,
+      accumulation: { startForecastHour: 0, endForecastHour: 6 },
+      value: 1.5,
+      gridPoint,
+    },
+  ];
+}
+
+function fakeStats(mean: number, min: number, max: number) {
+  return {
+    totalGridPoints: 9,
+    undefinedGridPoints: 0,
+    definedGridPoints: 9,
+    mean,
+    min,
+    max,
+  };
+}
