@@ -23,6 +23,7 @@ import { GefsPointsBundleService } from "./gefs-points-bundle.js";
 import { GefsReforecastPointService } from "./gefs-reforecast.js";
 import { GefsReforecastProfileService } from "./gefs-reforecast-profile.js";
 import { GefsReforecastPointsService } from "./gefs-reforecast-points.js";
+import { GefsReforecastPointsTimeSeriesService } from "./gefs-reforecast-points-timeseries.js";
 import { GefsReforecastTimeSeriesService } from "./gefs-reforecast-timeseries.js";
 import { GefsTransectService } from "./gefs-transect.js";
 import { HistoricalAreaSummaryService } from "./history-area-summary.js";
@@ -122,6 +123,7 @@ export interface UnifiedAtmosphereQueryServiceOptions {
   gefsReforecast?: Pick<GefsReforecastPointService, "getPoint">;
   gefsReforecastProfile?: Pick<GefsReforecastProfileService, "getProfile">;
   gefsReforecastPoints?: Pick<GefsReforecastPointsService, "getPoints">;
+  gefsReforecastPointsTimeSeries?: Pick<GefsReforecastPointsTimeSeriesService, "getPointsTimeSeries">;
   gefsReforecastTimeSeries?: Pick<GefsReforecastTimeSeriesService, "getTimeSeries">;
   ifsProfile?: Pick<IfsProfileService, "getProfile">;
   ifsEnsBundle?: Pick<IfsEnsMemberBundleService, "getBundle">;
@@ -164,6 +166,7 @@ export class UnifiedAtmosphereQueryService {
   private readonly gefsReforecast: Pick<GefsReforecastPointService, "getPoint">;
   private readonly gefsReforecastProfile: Pick<GefsReforecastProfileService, "getProfile">;
   private readonly gefsReforecastPoints: Pick<GefsReforecastPointsService, "getPoints">;
+  private readonly gefsReforecastPointsTimeSeries: Pick<GefsReforecastPointsTimeSeriesService, "getPointsTimeSeries">;
   private readonly gefsReforecastTimeSeries: Pick<GefsReforecastTimeSeriesService, "getTimeSeries">;
   private readonly ifsProfile: Pick<IfsProfileService, "getProfile">;
   private readonly ifsEnsBundle: Pick<IfsEnsMemberBundleService, "getBundle">;
@@ -210,6 +213,8 @@ export class UnifiedAtmosphereQueryService {
       options.gefsReforecastProfile ?? new GefsReforecastProfileService();
     this.gefsReforecastPoints =
       options.gefsReforecastPoints ?? new GefsReforecastPointsService();
+    this.gefsReforecastPointsTimeSeries =
+      options.gefsReforecastPointsTimeSeries ?? new GefsReforecastPointsTimeSeriesService();
     this.gefsReforecastTimeSeries =
       options.gefsReforecastTimeSeries ?? new GefsReforecastTimeSeriesService();
     this.ifsProfile = options.ifsProfile ?? new IfsProfileService();
@@ -588,6 +593,44 @@ export class UnifiedAtmosphereQueryService {
       }));
     }
     if (request.dataset === "gefs") {
+      if (request.forecast?.kind === "reforecast") {
+        const common = {
+          points: request.geometry.points,
+          run,
+          startTime: request.time.from,
+          endTime: request.time.to,
+          ...(request.ensemble?.members === undefined
+            ? {}
+            : { members: request.ensemble.members as any }),
+          ...(request.ensemble?.quantiles === undefined
+            ? {}
+            : { quantiles: request.ensemble.quantiles }),
+          ...(request.time.maxSteps === undefined
+            ? {}
+            : { maxSteps: request.time.maxSteps }),
+          ...(request.limits?.maxPointSteps === undefined
+            ? {}
+            : { maxPointSteps: request.limits.maxPointSteps }),
+        };
+        if (request.selection.variables !== undefined) {
+          return this.gefsReforecastPointsTimeSeries.getPointsTimeSeries({
+            ...common,
+            selection: {
+              kind: "profile",
+              variables:
+                request.selection.variables as GefsReforecastPressureVariableId[],
+              pressureLevelsHpa: request.selection.pressureLevelsHpa ?? [],
+            },
+          });
+        }
+        return this.gefsReforecastPointsTimeSeries.getPointsTimeSeries({
+          ...common,
+          selection: {
+            kind: "fields",
+            fields: (request.selection.fields ?? []) as GefsReforecastFieldId[],
+          },
+        });
+      }
       return this.gefsPointsTimeSeries.getPointsTimeSeries(gefsPointsBundleTimeSeriesQuerySchema.parse({
         points: request.geometry.points,
         run,
