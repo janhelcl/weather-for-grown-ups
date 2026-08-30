@@ -5,6 +5,12 @@ import {
 } from "../src/core/query-adapters/registry.js";
 import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-api.js";
 
+function createQueryService(options: AtmosphericQueryRegistryOptions = {}) {
+  return new UnifiedAtmosphereQueryService({
+    adapters: createAtmosphericQueryAdapterRegistry(options),
+  });
+}
+
 describe("unified GEFS reforecast routing", () => {
   it("routes forecast.kind=reforecast without changing the public dataset id", async () => {
     const operational = { getBundle: vi.fn(async () => ({ route: "operational" })) };
