@@ -5,7 +5,7 @@ import {
   isRetryableHttpTransportError,
   retryAfterMilliseconds,
   waitBeforeHttpRetry,
-} from "../src/sources/http-retry.js";
+} from "../src/access/http-retry.js";
 
 describe("HTTP retry helpers", () => {
   it("retries throttling and transient server failures but not terminal statuses", () => {
