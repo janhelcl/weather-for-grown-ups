@@ -11,6 +11,9 @@ export type AtmosphericDatasetId = (typeof ATMOSPHERIC_DATASET_IDS)[number];
 export type AtmosphericDatasetKind = "deterministic" | "ensemble";
 export type AtmosphericDatasetRole = "forecast" | "analysis";
 
+export const ATMOSPHERIC_RUN_SELECTOR_IDS = ["latest", "latest_complete", "explicit"] as const;
+export type AtmosphericRunSelectorId = (typeof ATMOSPHERIC_RUN_SELECTOR_IDS)[number];
+
 export const ATMOSPHERIC_OPERATION_IDS = [
   "profile",
   "timeseries",
@@ -37,6 +40,7 @@ export interface AtmosphericDatasetDefinition {
   horizontalGridDegrees: number;
   maxForecastHour?: number;
   members?: number;
+  runSelectors: readonly AtmosphericRunSelectorId[];
   operations: readonly AtmosphericOperationId[];
 }
 
@@ -48,6 +52,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     role: "forecast",
     horizontalGridDegrees: 0.25,
     maxForecastHour: 384,
+    runSelectors: ["latest", "latest_complete", "explicit"],
     operations: [
       "profile",
       "timeseries",
@@ -70,6 +75,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     role: "forecast",
     horizontalGridDegrees: 0.5,
     maxForecastHour: 384,
+    runSelectors: ["latest", "latest_complete", "explicit"],
     operations: [
       "profile",
       "timeseries",
@@ -93,6 +99,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     horizontalGridDegrees: 0.5,
     maxForecastHour: 384,
     members: 31,
+    runSelectors: ["latest", "explicit"],
     operations: [
       "profile",
       "timeseries",
@@ -116,6 +123,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     role: "forecast",
     horizontalGridDegrees: 0.25,
     maxForecastHour: 240,
+    runSelectors: ["latest", "explicit"],
     operations: [
       "profile",
       "timeseries",
@@ -138,6 +146,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     horizontalGridDegrees: 0.25,
     maxForecastHour: 360,
     members: 50,
+    runSelectors: ["latest", "explicit"],
     operations: [
       "profile",
       "timeseries",
@@ -160,6 +169,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "deterministic",
     role: "analysis",
     horizontalGridDegrees: 0.5,
+    runSelectors: [],
     operations: [
       "profile",
       "timeseries",
@@ -174,6 +184,13 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     ],
   },
 };
+
+export function datasetSupportsRunSelector(
+  dataset: AtmosphericDatasetId,
+  selector: AtmosphericRunSelectorId,
+): boolean {
+  return ATMOSPHERIC_DATASET_CATALOG[dataset].runSelectors.includes(selector);
+}
 
 export function datasetSupportsOperation(
   dataset: AtmosphericDatasetId,
