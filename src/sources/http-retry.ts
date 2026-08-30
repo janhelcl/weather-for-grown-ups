@@ -15,6 +15,31 @@ export function isRetryableHttpStatus(status: number): boolean {
   return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
 }
 
+const RETRYABLE_TRANSPORT_ERROR_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "UND_ERR_SOCKET",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+]);
+
+export function isRetryableHttpTransportError(error: unknown): boolean {
+  if (!(error instanceof TypeError)) return false;
+  const cause = (error as TypeError & { cause?: unknown }).cause;
+  const code = typeof cause === "object" && cause !== null && "code" in cause
+    ? (cause as { code?: unknown }).code
+    : undefined;
+  if (typeof code === "string" && RETRYABLE_TRANSPORT_ERROR_CODES.has(code)) {
+    return true;
+  }
+  return /fetch failed|network|socket/i.test(error.message);
+}
+
 export function retryAfterMilliseconds(
   value: string | null,
   now = Date.now(),

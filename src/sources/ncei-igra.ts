@@ -6,6 +6,7 @@ import type { UpstreamAccessPolicy } from "../cache/file-access-policy.js";
 import {
   DEFAULT_HTTP_RETRY_MAX_ATTEMPTS,
   isRetryableHttpStatus,
+  isRetryableHttpTransportError,
   waitBeforeHttpRetry,
 } from "./http-retry.js";
 import { deriveSaturationVaporPressureHpa } from "../derived/thermodynamics.js";
@@ -112,60 +113,79 @@ export class NceiIgraSource {
           : { bytes: new Uint8Array(await readFile(cachePath)), cacheHit: true };
       }
 
-      const result: {
+      let result: {
         status: number;
         statusText: string;
         retryAfter: string | null;
         text?: string;
         bytes?: Uint8Array;
         cacheHit: boolean;
-      } = await this.options.limiter.run(async () => {
-        if (await isFresh(cachePath, ttlMs)) {
-          return kind === "text"
-            ? {
-                status: 200,
-                statusText: "cache-hit",
-                retryAfter: null,
-                text: await readFile(cachePath, "utf8"),
-                cacheHit: true,
-              }
-            : {
-                status: 200,
-                statusText: "cache-hit",
-                retryAfter: null,
-                bytes: new Uint8Array(await readFile(cachePath)),
-                cacheHit: true,
-              };
-        }
+      };
+      try {
+        result = await this.options.limiter.run(async () => {
+          if (await isFresh(cachePath, ttlMs)) {
+            return kind === "text"
+              ? {
+                  status: 200,
+                  statusText: "cache-hit",
+                  retryAfter: null,
+                  text: await readFile(cachePath, "utf8"),
+                  cacheHit: true,
+                }
+              : {
+                  status: 200,
+                  statusText: "cache-hit",
+                  retryAfter: null,
+                  bytes: new Uint8Array(await readFile(cachePath)),
+                  cacheHit: true,
+                };
+          }
 
-        const response = await this.fetchFn(url, {
-          headers: { "user-agent": "weather-for-grown-ups/0.2" },
-        });
-        if (!response.ok) {
-          return {
-            status: response.status,
-            statusText: response.statusText,
-            retryAfter: response.headers.get("retry-after"),
-            cacheHit: false,
-          };
-        }
-
-        return kind === "text"
-          ? {
+          const response = await this.fetchFn(url, {
+            headers: { "user-agent": "weather-for-grown-ups/0.2" },
+          });
+          if (!response.ok) {
+            return {
               status: response.status,
               statusText: response.statusText,
               retryAfter: response.headers.get("retry-after"),
-              text: await response.text(),
-              cacheHit: false,
-            }
-          : {
-              status: response.status,
-              statusText: response.statusText,
-              retryAfter: response.headers.get("retry-after"),
-              bytes: new Uint8Array(await response.arrayBuffer()),
               cacheHit: false,
             };
-      });
+          }
+
+          return kind === "text"
+            ? {
+                status: response.status,
+                statusText: response.statusText,
+                retryAfter: response.headers.get("retry-after"),
+                text: await response.text(),
+                cacheHit: false,
+              }
+            : {
+                status: response.status,
+                statusText: response.statusText,
+                retryAfter: response.headers.get("retry-after"),
+                bytes: new Uint8Array(await response.arrayBuffer()),
+                cacheHit: false,
+              };
+        });
+      } catch (error) {
+        if (
+          isRetryableHttpTransportError(error)
+          && attempt < DEFAULT_HTTP_RETRY_MAX_ATTEMPTS
+        ) {
+          await waitBeforeHttpRetry(attempt, null, {
+            ...(this.options.retryBaseDelayMs === undefined
+              ? {}
+              : { baseDelayMs: this.options.retryBaseDelayMs }),
+            ...(this.options.retryJitterRatio === undefined
+              ? {}
+              : { jitterRatio: this.options.retryJitterRatio }),
+          });
+          continue;
+        }
+        throw error;
+      }
 
       if (result.cacheHit) {
         if (kind === "text") {
