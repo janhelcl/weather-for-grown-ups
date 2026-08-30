@@ -21,6 +21,12 @@ import { GefsMemberBundleService } from "./gefs-member-bundle.js";
 import { GefsPointsBundleTimeSeriesService } from "./gefs-points-bundle-timeseries.js";
 import { GefsPointsBundleService } from "./gefs-points-bundle.js";
 import { GefsReforecastPointService } from "./gefs-reforecast.js";
+import {
+  GefsReforecastMixedPointService,
+  GefsReforecastMixedPointsService,
+  GefsReforecastMixedTimeSeriesService,
+  GefsReforecastMixedPointsTimeSeriesService,
+} from "./gefs-reforecast-mixed.js";
 import { GefsReforecastProfileService } from "./gefs-reforecast-profile.js";
 import { GefsReforecastPointsService } from "./gefs-reforecast-points.js";
 import { GefsReforecastPointsTimeSeriesService } from "./gefs-reforecast-points-timeseries.js";
@@ -121,6 +127,10 @@ export interface UnifiedAtmosphereQueryServiceOptions {
   gefsTransect?: Pick<GefsTransectService, "getTransect">;
   gefsArea?: Pick<GefsAreaSummaryService, "summarize">;
   gefsReforecast?: Pick<GefsReforecastPointService, "getPoint">;
+  gefsReforecastMixed?: Pick<GefsReforecastMixedPointService, "getPoint">;
+  gefsReforecastMixedPoints?: Pick<GefsReforecastMixedPointsService, "getPoints">;
+  gefsReforecastMixedTimeSeries?: Pick<GefsReforecastMixedTimeSeriesService, "getTimeSeries">;
+  gefsReforecastMixedPointsTimeSeries?: Pick<GefsReforecastMixedPointsTimeSeriesService, "getPointsTimeSeries">;
   gefsReforecastProfile?: Pick<GefsReforecastProfileService, "getProfile">;
   gefsReforecastPoints?: Pick<GefsReforecastPointsService, "getPoints">;
   gefsReforecastPointsTimeSeries?: Pick<GefsReforecastPointsTimeSeriesService, "getPointsTimeSeries">;
@@ -164,6 +174,10 @@ export class UnifiedAtmosphereQueryService {
   private readonly gefsTransect: Pick<GefsTransectService, "getTransect">;
   private readonly gefsArea: Pick<GefsAreaSummaryService, "summarize">;
   private readonly gefsReforecast: Pick<GefsReforecastPointService, "getPoint">;
+  private readonly gefsReforecastMixed: Pick<GefsReforecastMixedPointService, "getPoint">;
+  private readonly gefsReforecastMixedPoints: Pick<GefsReforecastMixedPointsService, "getPoints">;
+  private readonly gefsReforecastMixedTimeSeries: Pick<GefsReforecastMixedTimeSeriesService, "getTimeSeries">;
+  private readonly gefsReforecastMixedPointsTimeSeries: Pick<GefsReforecastMixedPointsTimeSeriesService, "getPointsTimeSeries">;
   private readonly gefsReforecastProfile: Pick<GefsReforecastProfileService, "getProfile">;
   private readonly gefsReforecastPoints: Pick<GefsReforecastPointsService, "getPoints">;
   private readonly gefsReforecastPointsTimeSeries: Pick<GefsReforecastPointsTimeSeriesService, "getPointsTimeSeries">;
@@ -209,6 +223,14 @@ export class UnifiedAtmosphereQueryService {
     this.gefsTransect = options.gefsTransect ?? new GefsTransectService();
     this.gefsArea = options.gefsArea ?? new GefsAreaSummaryService();
     this.gefsReforecast = options.gefsReforecast ?? new GefsReforecastPointService();
+    this.gefsReforecastMixed =
+      options.gefsReforecastMixed ?? new GefsReforecastMixedPointService();
+    this.gefsReforecastMixedPoints =
+      options.gefsReforecastMixedPoints ?? new GefsReforecastMixedPointsService();
+    this.gefsReforecastMixedTimeSeries =
+      options.gefsReforecastMixedTimeSeries ?? new GefsReforecastMixedTimeSeriesService();
+    this.gefsReforecastMixedPointsTimeSeries =
+      options.gefsReforecastMixedPointsTimeSeries ?? new GefsReforecastMixedPointsTimeSeriesService();
     this.gefsReforecastProfile =
       options.gefsReforecastProfile ?? new GefsReforecastProfileService();
     this.gefsReforecastPoints =
@@ -302,6 +324,18 @@ export class UnifiedAtmosphereQueryService {
             ? {}
             : { includeMembers: request.ensemble.includeMembers }),
         };
+        if (
+          request.selection.variables !== undefined
+          && (request.selection.fields?.length ?? 0) > 0
+        ) {
+          return this.gefsReforecastMixed.getPoint({
+            ...common,
+            variables:
+              request.selection.variables as GefsReforecastPressureVariableId[],
+            pressureLevelsHpa: request.selection.pressureLevelsHpa ?? [],
+            fields: (request.selection.fields ?? []) as GefsReforecastFieldId[],
+          });
+        }
         if (request.selection.variables !== undefined) {
           return this.gefsReforecastProfile.getProfile({
             ...common,
@@ -401,6 +435,18 @@ export class UnifiedAtmosphereQueryService {
             ? {}
             : { maxSteps: request.time.maxSteps }),
         };
+        if (
+          request.selection.variables !== undefined
+          && (request.selection.fields?.length ?? 0) > 0
+        ) {
+          return this.gefsReforecastMixedTimeSeries.getTimeSeries({
+            ...common,
+            variables:
+              request.selection.variables as GefsReforecastPressureVariableId[],
+            pressureLevelsHpa: request.selection.pressureLevelsHpa ?? [],
+            fields: (request.selection.fields ?? []) as GefsReforecastFieldId[],
+          });
+        }
         if (request.selection.variables !== undefined) {
           return this.gefsReforecastTimeSeries.getTimeSeries({
             ...common,
@@ -517,6 +563,18 @@ export class UnifiedAtmosphereQueryService {
             ? {}
             : { maxMemberSamples: request.ensemble.maxMemberSamples }),
         };
+        if (
+          request.selection.variables !== undefined
+          && (request.selection.fields?.length ?? 0) > 0
+        ) {
+          return this.gefsReforecastMixedPoints.getPoints({
+            ...common,
+            variables:
+              request.selection.variables as GefsReforecastPressureVariableId[],
+            pressureLevelsHpa: request.selection.pressureLevelsHpa ?? [],
+            fields: (request.selection.fields ?? []) as GefsReforecastFieldId[],
+          });
+        }
         if (request.selection.variables !== undefined) {
           return this.gefsReforecastPoints.getPoints({
             ...common,
@@ -612,6 +670,18 @@ export class UnifiedAtmosphereQueryService {
             ? {}
             : { maxPointSteps: request.limits.maxPointSteps }),
         };
+        if (
+          request.selection.variables !== undefined
+          && (request.selection.fields?.length ?? 0) > 0
+        ) {
+          return this.gefsReforecastMixedPointsTimeSeries.getPointsTimeSeries({
+            ...common,
+            variables:
+              request.selection.variables as GefsReforecastPressureVariableId[],
+            pressureLevelsHpa: request.selection.pressureLevelsHpa ?? [],
+            fields: (request.selection.fields ?? []) as GefsReforecastFieldId[],
+          });
+        }
         if (request.selection.variables !== undefined) {
           return this.gefsReforecastPointsTimeSeries.getPointsTimeSeries({
             ...common,
