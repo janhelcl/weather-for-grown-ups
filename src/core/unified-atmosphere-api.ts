@@ -374,33 +374,6 @@ export class UnifiedAtmosphereQueryService {
       }));
     }
 
-    if (request.dataset === "gefs" && request.forecast?.kind === "reforecast") {
-      const common = {
-        latitude: request.geometry.latitude,
-        longitude: request.geometry.longitude,
-        run: request.forecast.run,
-        validTime: request.time.at,
-        ...(request.ensemble?.members === undefined ? {} : { members: request.ensemble.members }),
-        ...(request.ensemble?.quantiles === undefined ? {} : { quantiles: request.ensemble.quantiles }),
-        ...(request.ensemble?.includeMembers === undefined
-          ? {}
-          : { includeMembers: request.ensemble.includeMembers }),
-      };
-      if (request.diagnostic.kind === "layer") {
-        return this.gefsReforecastLayer.getLayerDiagnostics({
-          ...common,
-          ...request.diagnostic,
-        } as any);
-      }
-      if (request.diagnostic.kind === "profile") {
-        return this.gefsReforecastProfile.getProfileDiagnostics({
-          ...common,
-          ...request.diagnostic,
-        } as any);
-      }
-      throw new Error("Internal routing error: GEFSv12 reforecast parcel diagnostics are unsupported");
-    }
-
     if (request.dataset === "ifs-ens") {
       return this.ifsEnsBundle.getBundle(ifsEnsMemberBundleQuerySchema.parse({
         ...point,
@@ -989,6 +962,32 @@ export class UnifiedAtmosphereDiagnosticService {
 
   private instant(request: DiagnoseAtmosphereRequest): Promise<unknown> {
     if (!("at" in request.time)) throw new Error("Internal routing error: expected instant diagnostic");
+    if (request.dataset === "gefs" && request.forecast?.kind === "reforecast") {
+      const common = {
+        latitude: request.geometry.latitude,
+        longitude: request.geometry.longitude,
+        run: request.forecast.run,
+        validTime: request.time.at,
+        ...(request.ensemble?.members === undefined ? {} : { members: request.ensemble.members }),
+        ...(request.ensemble?.quantiles === undefined ? {} : { quantiles: request.ensemble.quantiles }),
+        ...(request.ensemble?.includeMembers === undefined
+          ? {}
+          : { includeMembers: request.ensemble.includeMembers }),
+      };
+      if (request.diagnostic.kind === "layer") {
+        return this.gefsReforecastLayer.getLayerDiagnostics({
+          ...common,
+          ...request.diagnostic,
+        } as any);
+      }
+      if (request.diagnostic.kind === "profile") {
+        return this.gefsReforecastProfile.getProfileDiagnostics({
+          ...common,
+          ...request.diagnostic,
+        } as any);
+      }
+      throw new Error("Internal routing error: GEFSv12 reforecast parcel diagnostics are unsupported");
+    }
     if (request.dataset === "ifs-ens") {
       const common = {
         latitude: request.geometry.latitude,
