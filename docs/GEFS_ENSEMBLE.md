@@ -26,7 +26,7 @@ The reforecast branch deliberately exposes only combinations whose source semant
 
 - NOAA AWS Open Data `GEFSv12/reforecast`, public years 2000–2019;
 - explicit daily 00Z initialization;
-- point + one valid time;
+- point + one valid time or a bounded compact valid-time range;
 - default five-member daily ensemble `c00,p01..p04`;
 - optional `p05..p10` where the weekly extended run publishes them;
 - supported single-level fields: surface pressure, 2 m temperature, 10 m U/V/wind, total precipitation, precipitable water, total-atmosphere cloud cover and mean-sea-level pressure;
@@ -35,7 +35,7 @@ The reforecast branch deliberately exposes only combinations whose source semant
 
 The retrospective pressure archive is not one uniform horizontal grid. Through +240 h, pressure levels at/below 700 hPa are published in the 0.25° base files while levels above 700 hPa are in 0.5° `_abv700mb` files. WFG therefore keeps lower-only profiles on 0.25°, upper-only profiles on 0.5°, and samples mixed profiles on a shared 0.5° point so the returned vertical column has one truthful `gridPoint`. After +240 h, the standard retrospective horizon is 0.5° / 6-hour output.
 
-A reforecast query is **not** an archived operational GEFS query. Time ranges, multi-point/transect/area operations, diagnostics, derived pressure thermodynamics, calibration metrics and the weekly +35-day horizon are follow-up layers. Until implemented, those combinations fail explicitly.
+A reforecast query is **not** an archived operational GEFS query. Point ranges preserve the retrospective native cadence: 3-hour steps from f003 through f240, then 6-hour steps from f246 through f384. Grid point and horizontal-grid provenance are reported per step because lower-air field/profile ranges can cross the 0.25° → 0.5° transition. Raw member payloads remain single-time only; ranges return compact member-first summaries. Multi-point/transect/area operations, diagnostics, derived pressure thermodynamics, calibration metrics and the weekly +35-day horizon remain follow-up layers and fail explicitly.
 
 ## Current GEFS capabilities
 
@@ -151,6 +151,24 @@ wfg query \
 ```
 
 The request shape is identical to an operational GEFS profile except for the explicit reforecast population. Result provenance adds `profileGridPolicy` so a caller can distinguish native 0.25°/0.5° profiles from a coherent 0.5° column assembled across the retrospective archive's pressure-file split.
+
+### Retrospective time range
+
+```bash
+wfg query \
+  --dataset gefs \
+  --forecast-kind reforecast \
+  --run 2017-03-14T00:00:00Z \
+  --lat 50.13 --lon 14.37 \
+  --from 2017-03-23T21:00:00Z \
+  --to 2017-03-24T12:00:00Z \
+  --fields temperature_2m \
+  --members c00,p01 \
+  --quantiles 0.5 \
+  --json
+```
+
+This range crosses the retrospective day-10 boundary. The returned forecast hours are f237, f240, f246 and f252: there is intentionally no f243. Each step carries its own `gridPoint`, `horizontalGridDegrees` and lead-block provenance, so the 0.25°/3-hour to 0.5°/6-hour source transition is visible rather than normalized away. Pressure-profile ranges use the same public range vocabulary and retain `profileGridPolicy` per step. Use a single valid time when raw member payloads are required.
 
 ### Scalar ensemble distribution
 

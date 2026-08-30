@@ -22,6 +22,7 @@ import { GefsPointsBundleTimeSeriesService } from "./gefs-points-bundle-timeseri
 import { GefsPointsBundleService } from "./gefs-points-bundle.js";
 import { GefsReforecastPointService } from "./gefs-reforecast.js";
 import { GefsReforecastProfileService } from "./gefs-reforecast-profile.js";
+import { GefsReforecastTimeSeriesService } from "./gefs-reforecast-timeseries.js";
 import { GefsTransectService } from "./gefs-transect.js";
 import { HistoricalAreaSummaryService } from "./history-area-summary.js";
 import { HistoricalFieldsTimeSeriesService } from "./history-fields-timeseries.js";
@@ -119,6 +120,7 @@ export interface UnifiedAtmosphereQueryServiceOptions {
   gefsArea?: Pick<GefsAreaSummaryService, "summarize">;
   gefsReforecast?: Pick<GefsReforecastPointService, "getPoint">;
   gefsReforecastProfile?: Pick<GefsReforecastProfileService, "getProfile">;
+  gefsReforecastTimeSeries?: Pick<GefsReforecastTimeSeriesService, "getTimeSeries">;
   ifsProfile?: Pick<IfsProfileService, "getProfile">;
   ifsEnsBundle?: Pick<IfsEnsMemberBundleService, "getBundle">;
   ifsEnsTimeSeries?: Pick<IfsEnsTimeSeriesService, "getTimeSeries">;
@@ -159,6 +161,7 @@ export class UnifiedAtmosphereQueryService {
   private readonly gefsArea: Pick<GefsAreaSummaryService, "summarize">;
   private readonly gefsReforecast: Pick<GefsReforecastPointService, "getPoint">;
   private readonly gefsReforecastProfile: Pick<GefsReforecastProfileService, "getProfile">;
+  private readonly gefsReforecastTimeSeries: Pick<GefsReforecastTimeSeriesService, "getTimeSeries">;
   private readonly ifsProfile: Pick<IfsProfileService, "getProfile">;
   private readonly ifsEnsBundle: Pick<IfsEnsMemberBundleService, "getBundle">;
   private readonly ifsEnsTimeSeries: Pick<IfsEnsTimeSeriesService, "getTimeSeries">;
@@ -202,6 +205,8 @@ export class UnifiedAtmosphereQueryService {
     this.gefsReforecast = options.gefsReforecast ?? new GefsReforecastPointService();
     this.gefsReforecastProfile =
       options.gefsReforecastProfile ?? new GefsReforecastProfileService();
+    this.gefsReforecastTimeSeries =
+      options.gefsReforecastTimeSeries ?? new GefsReforecastTimeSeriesService();
     this.ifsProfile = options.ifsProfile ?? new IfsProfileService();
     this.ifsEnsBundle = options.ifsEnsBundle ?? new IfsEnsMemberBundleService();
     this.ifsEnsTimeSeries = options.ifsEnsTimeSeries ?? new IfsEnsTimeSeriesService();
@@ -370,6 +375,41 @@ export class UnifiedAtmosphereQueryService {
     }
 
     if (request.dataset === "gefs") {
+      if (request.forecast?.kind === "reforecast") {
+        const common = {
+          ...point,
+          run,
+          startTime: request.time.from,
+          endTime: request.time.to,
+          ...(request.ensemble?.members === undefined
+            ? {}
+            : { members: request.ensemble.members as any }),
+          ...(request.ensemble?.quantiles === undefined
+            ? {}
+            : { quantiles: request.ensemble.quantiles }),
+          ...(request.time.maxSteps === undefined
+            ? {}
+            : { maxSteps: request.time.maxSteps }),
+        };
+        if (request.selection.variables !== undefined) {
+          return this.gefsReforecastTimeSeries.getTimeSeries({
+            ...common,
+            selection: {
+              kind: "profile",
+              variables:
+                request.selection.variables as GefsReforecastPressureVariableId[],
+              pressureLevelsHpa: request.selection.pressureLevelsHpa ?? [],
+            },
+          });
+        }
+        return this.gefsReforecastTimeSeries.getTimeSeries({
+          ...common,
+          selection: {
+            kind: "fields",
+            fields: (request.selection.fields ?? []) as GefsReforecastFieldId[],
+          },
+        });
+      }
       const query = gefsBundleTimeSeriesQuerySchema.parse({
         ...point,
         run,
@@ -959,13 +999,15 @@ function wrapResult(
   result: unknown,
 ): UnifiedAtmosphereResult {
   const metadata = publicDatasetMetadata(request.dataset);
-  const internalDatasetId = isArchivedGfsForecastResult(result)
-    ? (result as { model: "gfs_0p25_forecast_archive" | "gfs_grid4_forecast_0p5_archive" }).model
-    : isOperationalGfsResult(result)
-      ? (result as { model: "gfs_0p25" | "gfs_0p50" }).model
-      : isGefsReforecastResult(result)
-        ? "gefs_v12_reforecast"
-        : metadata.internalDatasetId;
+  const internalDatasetId = request.forecast?.kind === "reforecast"
+    ? "gefs_v12_reforecast"
+    : isArchivedGfsForecastResult(result)
+      ? (result as { model: "gfs_0p25_forecast_archive" | "gfs_grid4_forecast_0p5_archive" }).model
+      : isOperationalGfsResult(result)
+        ? (result as { model: "gfs_0p25" | "gfs_0p50" }).model
+        : isGefsReforecastResult(result)
+          ? "gefs_v12_reforecast"
+          : metadata.internalDatasetId;
   return unifiedAtmosphereResultSchema.parse({
     dataset: request.dataset,
     internalDatasetId,

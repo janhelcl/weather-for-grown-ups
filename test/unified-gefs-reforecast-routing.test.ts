@@ -84,4 +84,108 @@ describe("unified GEFS reforecast routing", () => {
     }));
     expect(fields.getPoint).not.toHaveBeenCalled();
   });
+
+  it("routes compact reforecast field ranges without falling through to operational GEFS", async () => {
+    const operational = { getTimeSeries: vi.fn() };
+    const reforecastRange = {
+      getTimeSeries: vi.fn(async () => ({ route: "reforecast-range" })),
+    };
+    const service = new UnifiedAtmosphereQueryService({
+      gefsTimeSeries: operational as any,
+      gefsReforecastTimeSeries: reforecastRange as any,
+    });
+
+    const result = await service.query({
+      dataset: "gefs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: {
+        from: "2017-03-23T21:00:00Z",
+        to: "2017-03-24T12:00:00Z",
+        maxSteps: 4,
+      },
+      selection: { fields: ["temperature_2m"] },
+      forecast: {
+        kind: "reforecast",
+        run: "2017-03-14T00:00:00Z",
+      },
+      ensemble: {
+        members: ["c00", "p01"],
+        quantiles: [0.5],
+      },
+    });
+
+    expect(result.internalDatasetId).toBe("gefs_v12_reforecast");
+    expect(result.timeType).toBe("range");
+    expect(result.result).toEqual({ route: "reforecast-range" });
+    expect(reforecastRange.getTimeSeries).toHaveBeenCalledWith(expect.objectContaining({
+      run: "2017-03-14T00:00:00Z",
+      startTime: "2017-03-23T21:00:00Z",
+      endTime: "2017-03-24T12:00:00Z",
+      maxSteps: 4,
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+      selection: {
+        kind: "fields",
+        fields: ["temperature_2m"],
+      },
+    }));
+    expect(operational.getTimeSeries).not.toHaveBeenCalled();
+  });
+
+  it("routes reforecast profile ranges and rejects raw member payloads for ranges", async () => {
+    const reforecastRange = {
+      getTimeSeries: vi.fn(async () => ({ route: "profile-range" })),
+    };
+    const service = new UnifiedAtmosphereQueryService({
+      gefsReforecastTimeSeries: reforecastRange as any,
+    });
+
+    await service.query({
+      dataset: "gefs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: {
+        from: "2017-03-14T03:00:00Z",
+        to: "2017-03-14T06:00:00Z",
+      },
+      selection: {
+        variables: ["temperature", "specific_humidity"],
+        pressureLevelsHpa: [850, 500],
+      },
+      forecast: {
+        kind: "reforecast",
+        run: "2017-03-14T00:00:00Z",
+      },
+      ensemble: {
+        members: ["c00", "p01"],
+        quantiles: [0.5],
+      },
+    });
+
+    expect(reforecastRange.getTimeSeries).toHaveBeenCalledWith(expect.objectContaining({
+      selection: {
+        kind: "profile",
+        variables: ["temperature", "specific_humidity"],
+        pressureLevelsHpa: [850, 500],
+      },
+    }));
+
+    await expect(service.query({
+      dataset: "gefs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: {
+        from: "2017-03-14T03:00:00Z",
+        to: "2017-03-14T06:00:00Z",
+      },
+      selection: { fields: ["temperature_2m"] },
+      forecast: {
+        kind: "reforecast",
+        run: "2017-03-14T00:00:00Z",
+      },
+      ensemble: {
+        members: ["c00", "p01"],
+        includeMembers: true,
+      },
+    })).rejects.toThrow("time ranges return compact member-first summaries");
+  });
+
 });

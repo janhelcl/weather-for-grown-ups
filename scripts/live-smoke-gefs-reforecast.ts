@@ -72,6 +72,46 @@ assert.equal(profile.source.horizontalGridDegrees, 0.5);
 assert.equal(profile.source.profileGridPolicy, "coherent_0p50");
 assert.deepEqual(profile.gridPoint, { latitude: 50, longitude: 14.5 });
 
+
+const rangeResult = await service.query({
+  dataset: "gefs",
+  geometry: { type: "point", latitude: 50.13, longitude: 14.37 },
+  time: {
+    from: "2017-03-23T21:00:00Z",
+    to: "2017-03-24T06:00:00Z",
+    maxSteps: 3,
+  },
+  selection: { fields: ["temperature_2m"] },
+  forecast: {
+    kind: "reforecast",
+    run: "2017-03-14T00:00:00Z",
+  },
+  ensemble: {
+    members: ["c00", "p01"],
+    quantiles: [0.5],
+  },
+});
+const range = rangeResult.result as any;
+assert.equal(rangeResult.internalDatasetId, "gefs_v12_reforecast");
+assert.equal(rangeResult.timeType, "range");
+assert.deepEqual(
+  range.series.map((step: any) => step.forecastHour),
+  [237, 240, 246],
+);
+assert.deepEqual(
+  range.series.map((step: any) => step.source.horizontalGridDegrees),
+  [0.25, 0.25, 0.5],
+);
+assert.deepEqual(range.source.nativeCadence, [
+  { fromForecastHour: 3, throughForecastHour: 240, stepHours: 3 },
+  { fromForecastHour: 246, throughForecastHour: 384, stepHours: 6 },
+]);
+for (const step of range.series) {
+  assert.equal(step.kind, "fields");
+  assert.equal(step.fieldSummaries[0].field, "temperature_2m");
+  assert(Number.isFinite(step.fieldSummaries[0].outputs[0].distribution.mean));
+}
+
 console.log(JSON.stringify({
   dataset: result.dataset,
   internalDatasetId: result.internalDatasetId,
@@ -85,5 +125,10 @@ console.log(JSON.stringify({
     selection: profile.selection,
     summaries: profile.summaries,
     source: profile.source,
+  },
+  range: {
+    selection: range.selection,
+    series: range.series,
+    source: range.source,
   },
 }, null, 2));
