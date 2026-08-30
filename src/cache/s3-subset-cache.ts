@@ -5,7 +5,7 @@ import {
   FileAccessPolicy,
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
-} from "./file-access-policy.js";
+} from "../access/access-policy.js";
 import {
   mergeByteRanges,
   parseGribIndex,
@@ -18,7 +18,7 @@ import {
   DEFAULT_HTTP_RETRY_MAX_ATTEMPTS,
   isRetryableHttpStatus,
   waitBeforeHttpRetry,
-} from "../sources/http-retry.js";
+} from "../access/http-retry.js";
 import type { ProfileDataRequest, ProfileSourceFile } from "../sources/types.js";
 
 export class GfsS3SubsetCache {
