@@ -8,6 +8,7 @@ export const GEFS_REFORECAST_S3_BASE_URL = "https://noaa-gefs-retrospective.s3.a
 export const GEFS_REFORECAST_START_YEAR = 2000;
 export const GEFS_REFORECAST_END_YEAR = 2019;
 export const GEFS_REFORECAST_MAX_FORECAST_HOUR = 384;
+export const GEFS_REFORECAST_TOTAL_NATIVE_STEPS = 104;
 
 export type GefsReforecastLeadBlock = "Days:1-10" | "Days:10-16";
 export type GefsReforecastPressureFileGroup = "base" | "above_700mb";
@@ -77,6 +78,38 @@ export function gefsReforecastForecastHour(run: Date, validTime: Date): number {
     );
   }
   return hours;
+}
+
+export function nativeGefsReforecastValidTimesInRange(
+  run: Date,
+  startTime: Date,
+  endTime: Date,
+  maxSteps: number,
+): Date[] {
+  if (endTime.getTime() < startTime.getTime()) {
+    throw new Error("GEFSv12 reforecast time-series endTime must be at or after startTime");
+  }
+  const startForecastHour = gefsReforecastForecastHour(run, startTime);
+  const endForecastHour = gefsReforecastForecastHour(run, endTime);
+  const forecastHours: number[] = [];
+  for (
+    let forecastHour = startForecastHour;
+    forecastHour <= endForecastHour;
+    forecastHour += forecastHour < 240 ? 3 : 6
+  ) {
+    forecastHours.push(forecastHour);
+  }
+  if (forecastHours.at(-1) !== endForecastHour) {
+    throw new Error("GEFSv12 reforecast time-series bounds do not align to one native cadence sequence");
+  }
+  if (forecastHours.length > maxSteps) {
+    throw new Error(
+      `GEFSv12 reforecast time series would contain ${forecastHours.length} steps, exceeding maxSteps=${maxSteps}`,
+    );
+  }
+  return forecastHours.map(
+    (forecastHour) => new Date(run.getTime() + forecastHour * 3_600_000),
+  );
 }
 
 export function gefsReforecastLeadBlock(forecastHour: number): GefsReforecastLeadBlock {
