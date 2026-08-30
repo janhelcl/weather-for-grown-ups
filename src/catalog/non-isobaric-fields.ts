@@ -4,6 +4,7 @@ export const NON_ISOBARIC_FIELD_IDS = [
   "surface_pressure",
   "surface_geopotential_height",
   "surface_temperature",
+  "mean_sea_level_pressure",
   "wind_gust",
   "surface_cape",
   "surface_cin",
@@ -84,6 +85,7 @@ export const NON_ISOBARIC_NAMED_LAYER_IDS = [
 ] as const;
 
 export const NON_ISOBARIC_NAMED_LEVEL_IDS = [
+  "mean_sea_level",
   "cloud_ceiling",
   "convective_cloud_base",
   "low_cloud_base",
@@ -187,6 +189,7 @@ const namedLevels = {
     "boundary layer cloud layer",
     "boundary_layer_cloud_layer",
   ),
+  meanSeaLevel: namedLevel("mean_sea_level", "mean sea level", "mean_sea_level"),
   cloudCeiling: namedLevel("cloud_ceiling", "cloud ceiling", "cloud_ceiling"),
   convectiveCloudBase: namedLevel(
     "convective_cloud_base",
@@ -253,6 +256,7 @@ const definitions: NonIsobaricFieldDefinition[] = [
   raw("surface_pressure", "PRES", surface(), "Pa", "Atmospheric pressure at the model surface", "pressurePa", "Pa", "Surface pressure"),
   raw("surface_geopotential_height", "HGT", surface(), "gpm", "Geopotential height of the model surface", "geopotentialHeightGpm", "gpm", "Surface geopotential height"),
   raw("surface_temperature", "TMP", surface(), "K", "Temperature at the model surface", "temperatureC", "degC", "Surface temperature converted to degrees Celsius"),
+  raw("mean_sea_level_pressure", "PRMSL", namedLevels.meanSeaLevel, "Pa", "Pressure reduced to mean sea level", "pressurePa", "Pa", "Mean sea-level pressure"),
   raw("wind_gust", "GUST", surface(), "m/s", "Surface wind gust", "windGustMs", "m/s", "Wind gust speed"),
   raw("surface_cape", "CAPE", surface(), "J/kg", "Surface-based convective available potential energy", "capeJkg", "J/kg", "Surface-based CAPE"),
   raw("surface_cin", "CIN", surface(), "J/kg", "Surface-based convective inhibition", "cinJkg", "J/kg", "Surface-based CIN"),
