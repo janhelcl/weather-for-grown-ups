@@ -285,6 +285,24 @@ describe("GEFSv12 retrospective layer diagnostics", () => {
     });
   });
 
+  it("keeps member audit payloads opt-in", async () => {
+    const result = await new GefsReforecastLayerDiagnosticsService({
+      profileGetter: { getProfile: async () => layerProfileResult() },
+    }).getLayerDiagnostics({
+      ...point,
+      run,
+      validTime,
+      lowerPressureHpa: 850,
+      upperPressureHpa: 500,
+      diagnostics: ["temperature_lapse_rate"],
+      members: [...members],
+      quantiles,
+    });
+
+    expect(result.members).toBeUndefined();
+    expect(result.summaries[0]?.id).toBe("temperature_lapse_rate");
+  });
+
   it("fails if the profile adapter omits raw member payloads", async () => {
     const profile = layerProfileResult();
     const { members: _members, ...compact } = profile;
