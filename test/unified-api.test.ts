@@ -413,6 +413,10 @@ describe("unified catalog branch coverage", () => {
       "vertical_velocity",
     ]);
     expect(variables.matches.some((match) => match.id === "relative_humidity")).toBe(false);
+    expect(variables.matches.find((match) => match.id === "specific_humidity")).toMatchObject({
+      classification: "raw",
+      kind: "raw",
+    });
     expect(variables.matches[0]?.support[0]?.semantics).toContain("GEFSv12 retrospective ensemble forecast");
 
     const fields = searchAtmosphereCatalog({
