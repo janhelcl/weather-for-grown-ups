@@ -3,6 +3,7 @@ import {
   parseGribIndex,
   selectNonIsobaricByteRangesAtForecastHour,
   selectPressureByteRanges,
+  selectPressureByteRangesAtForecastHour,
 } from "../src/grib/index.js";
 
 const indexText = [
@@ -121,5 +122,35 @@ describe("selectNonIsobaricByteRangesAtForecastHour", () => {
       level: { gribLevel: "entire atmosphere" },
       temporalSemantics: "average",
     }], 6)).toEqual([{ start: 200, end: 299 }]);
+  });
+});
+
+
+describe("selectPressureByteRangesAtForecastHour", () => {
+  it("selects pressure messages for one lead from a retrospective multi-lead variable file", () => {
+    const records = parseGribIndex([
+      "1:0:d=2017031400:TMP:850 mb:9 hour fcst:",
+      "2:100:d=2017031400:TMP:500 mb:9 hour fcst:",
+      "3:200:d=2017031400:TMP:850 mb:12 hour fcst:",
+      "4:310:d=2017031400:TMP:500 mb:12 hour fcst:",
+      "5:430:d=2017031400:TMP:850 mb:15 hour fcst:",
+    ].join("\n"));
+
+    expect(selectPressureByteRangesAtForecastHour(
+      records, ["TMP"], [850, 500], 12,
+    )).toEqual([
+      { start: 200, end: 309 },
+      { start: 310, end: 429 },
+    ]);
+  });
+
+  it("reports a missing variable-level pair at the requested lead", () => {
+    const records = parseGribIndex([
+      "1:0:d=2017031400:TMP:850 mb:9 hour fcst:",
+      "2:100:d=2017031400:TMP:500 mb:12 hour fcst:",
+    ].join("\n"));
+    expect(() => selectPressureByteRangesAtForecastHour(
+      records, ["TMP"], [850], 12,
+    )).toThrow(/TMP@850mb@f12/);
   });
 });
