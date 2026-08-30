@@ -322,10 +322,22 @@ export function publicDatasetCapabilities(
     : dataset === "gefs"
       ? ["operational", "reforecast"]
       : ["operational"];
-  const runSelectors: readonly AtmosphericRunSelectorId[] =
-    forecastKind === "reforecast" && dataset === "gefs"
-      ? ["explicit"]
-      : definition.runSelectors;
+  const isGefsReforecast = forecastKind === "reforecast" && dataset === "gefs";
+  const runSelectors: readonly AtmosphericRunSelectorId[] = isGefsReforecast
+    ? ["explicit"]
+    : definition.runSelectors;
+  const operations = isGefsReforecast
+    ? [
+        "profile",
+        "timeseries",
+        "layer_diagnostics",
+        "profile_diagnostics",
+        "diagnostic_timeseries",
+        "points",
+        "points_timeseries",
+        "ensemble_distribution",
+      ] as const
+    : definition.operations;
 
   return {
     dataset,
@@ -333,7 +345,7 @@ export function publicDatasetCapabilities(
     kind: metadata.kind,
     forecastKinds,
     runSelectors,
-    operations: definition.operations,
+    operations,
   };
 }
 
