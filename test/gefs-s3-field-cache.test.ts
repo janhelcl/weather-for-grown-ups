@@ -50,6 +50,40 @@ describe("GEFS non-isobaric subset cache", () => {
     expect(String(fetchFn.mock.calls[0]?.[0])).toContain(".pgrb2s.0p25.f003.idx");
   });
 
+  it("writes safely when separate cache instances download the same selection concurrently", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wfg-gefs-fields-race-"));
+    roots.push(root);
+    const index = [
+      "1:0:d=2026082312:TMP:2 m above ground:3 hour fcst:",
+      "2:100:d=2026082312:PRMSL:mean sea level:3 hour fcst:",
+    ].join("\n");
+    const fetchFn = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith(".idx")) return new Response(index, { status: 200 });
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      expect(init?.headers).toEqual(expect.objectContaining({ range: expect.stringMatching(/^bytes=/) }));
+      return new Response(new TextEncoder().encode("GRIB"), { status: 206 });
+    }) as typeof fetch;
+    const field = GEFS_PGRB2A_FIELD_CATALOG.temperature_2m;
+    if (field.kind !== "raw") throw new Error("expected raw fixture");
+    const request = {
+      run: new Date("2026-08-23T12:00:00Z"),
+      forecastHour: 3,
+      member: "c00" as const,
+      variableCodes: [],
+      pressureLevelsHpa: [],
+      fields: [field],
+    };
+
+    const firstCache = new GefsS3SubsetCache(root, fetchFn);
+    const secondCache = new GefsS3SubsetCache(root, fetchFn);
+    const [first, second] = await Promise.all([
+      firstCache.fetchSelection(request),
+      secondCache.fetchSelection(request),
+    ]);
+
+    expect(first.path).toBe(second.path);
+  });
+
   it("keeps mixed pressure-and-field selections on the 0.5 product", async () => {
     const root = await mkdtemp(join(tmpdir(), "wfg-gefs-mixed-fields-"));
     roots.push(root);
