@@ -1,5 +1,9 @@
 import * as z from "zod/v4";
 import {
+  ATMOSPHERIC_OPERATION_IDS,
+  ATMOSPHERIC_RUN_SELECTOR_IDS,
+} from "../catalog/models.js";
+import {
   PUBLIC_ATMOSPHERIC_DATASET_IDS,
   publicAtmosphericDatasetSchema,
 } from "./unified-api.js";
@@ -65,8 +69,18 @@ export const unifiedCatalogMatchSchema = z.object({
   score: z.number().nonnegative(),
 });
 
+export const unifiedDatasetCapabilitiesSchema = z.object({
+  dataset: publicAtmosphericDatasetSchema,
+  role: z.enum(["forecast", "analysis"]),
+  kind: z.enum(["deterministic", "ensemble"]),
+  forecastKinds: z.array(z.enum(["operational", "reforecast"])),
+  runSelectors: z.array(z.enum(ATMOSPHERIC_RUN_SELECTOR_IDS)),
+  operations: z.array(z.enum(ATMOSPHERIC_OPERATION_IDS)),
+});
+
 export const unifiedCatalogResultSchema = z.object({
   query: searchAtmosphereCatalogSchema,
+  datasetCapabilities: z.array(unifiedDatasetCapabilitiesSchema).min(1),
   totalMatches: z.number().int().nonnegative(),
   truncated: z.boolean(),
   matches: z.array(unifiedCatalogMatchSchema),

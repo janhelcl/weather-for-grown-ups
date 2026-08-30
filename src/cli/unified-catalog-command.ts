@@ -67,6 +67,14 @@ function parseSections(value: unknown): UnifiedSection[] {
 }
 
 function printCatalog(result: UnifiedCatalogResult): void {
+  console.log("Dataset capabilities:");
+  console.table(result.datasetCapabilities.map((capability) => ({
+    dataset: capability.dataset,
+    role: capability.role,
+    kind: capability.kind,
+    forecastKinds: capability.forecastKinds.join(","),
+    runSelectors: capability.runSelectors.join(","),
+  })));
   console.log(`Atmospheric catalog: ${result.totalMatches} canonical matches${result.truncated ? `, showing ${result.matches.length}` : ""}`);
   console.table(result.matches.map((match) => ({
     section: match.section,

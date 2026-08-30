@@ -140,6 +140,19 @@ For `gfs-analysis`, a range may select native analysis cycles:
 }
 ```
 
+Run selection is capability-driven rather than syntactically pretending every forecast source is identical:
+
+| Dataset / population | Run selectors |
+| --- | --- |
+| GFS operational | `latest`, `latest_complete`, explicit ISO cycle |
+| GEFS operational | `latest`, explicit ISO cycle |
+| IFS operational | `latest`, explicit ISO cycle |
+| IFS ENS operational | `latest`, explicit ISO cycle |
+| GEFSv12 reforecast | explicit historical 00Z cycle only |
+| GFS analysis | no forecast run axis |
+
+`latest` means the newest published cycle that can satisfy the requested valid time/selection. GFS additionally exposes `latest_complete` for callers that specifically require a run published through its full horizon. Unsupported selectors fail at the dataset capability boundary; WFG does not manufacture equivalent semantics for sources that do not provide them. The same rule applies to query, diagnostic, run-comparison, and cross-dataset comparison surfaces.
+
 The caller always asks for an atmospheric state valid at a time. Dataset-native time semantics stay in the result:
 
 - forecasts retain initialization/run and lead;
@@ -191,6 +204,8 @@ The compact public vocabulary is:
 | `compare_datasets` | Compare aligned datasets: GFS↔GEFS context, deterministic GFS↔IFS deltas, GEFS↔IFS ENS distribution shifts, or deterministic IFS control vs its IFS ENS perturbation distribution |
 | `verify_forecast` | Compare an archived GFS forecast with later GFS analysis or an IGRA radiosonde |
 | `find_analogs` | Search materialized historical atmospheric analogs |
+
+`search_catalog` returns a top-level `datasetCapabilities` section alongside field/diagnostic matches. It exposes each selected dataset's role, deterministic/ensemble kind, forecast populations, supported run selectors, and operations; the CLI `wfg catalog` prints the same capability summary before its match table. This is the canonical discovery surface for source differences rather than requiring callers to learn dataset-specific exceptions.
 
 `search_catalog` defaults to operational capabilities. To plan a GEFSv12 retrospective query, pass `datasets: ["gefs"]` and `forecastKind: "reforecast"`. The result contains only capabilities currently exposed by the reforecast path: the verified retrospective single-level fields, six native pressure variables, three layer diagnostics and two structural profile diagnostics. Derived pressure thermodynamics and parcel diagnostics remain absent because the retrospective source subset does not expose the dependencies needed to support them truthfully. The CLI equivalent is `wfg catalog --dataset gefs --forecast-kind reforecast`.
 
@@ -504,7 +519,9 @@ Examples:
 - archived GFS forecasts preserve grid-native cadence and inventory: 0.25° GDEX uses 3-hour steps through +240 h then 12-hour steps through +384 h, while 0.5° Grid 4 uses 3-hour steps through +192 h;
 - historical analysis does not expose forecast accumulation products as if they were instantaneous analysis state;
 - ensemble-only controls are rejected for deterministic datasets;
-- forecast run controls are rejected for `gfs-analysis`.
+- forecast run controls are rejected for `gfs-analysis`;
+- transport failures remain distinct from capability failures: an exhausted NCEI 5xx response is reported as upstream source unavailability rather than "unsupported data";
+- retrospective archive inventory can vary by run/file even inside a globally supported capability; those errors report the requested variable/level and what the decoded file actually contains.
 
 The unified dispatcher delegates to the existing dataset-specific schemas after interpreting the common request. Unsupported combinations therefore fail explicitly at the capability boundary.
 

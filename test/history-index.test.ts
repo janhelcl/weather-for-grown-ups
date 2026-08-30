@@ -224,7 +224,7 @@ describe("HistoricalIndexService.findAnalogs", () => {
       variables: ["temperature"],
       pressureLevelsHpa: [850],
       fetchTargetIfMissing: false,
-    })).rejects.toThrow(/not materialized/);
+    })).rejects.toThrow(/not materialized.*index build\/backfill.*fetchTargetIfMissing=true/);
   });
 });
 

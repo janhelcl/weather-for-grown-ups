@@ -153,12 +153,33 @@ export class GefsReforecastS3SubsetCache implements GefsReforecastSelectionSourc
           fileGroup,
         );
         const records = parseGribIndex(await this.fetchIndex(indexUrl));
-        const ranges = selectPressureByteRangesAtForecastHour(
-          records,
-          [variable.gfsCode],
-          pressureLevelsHpa,
-          request.forecastHour,
-        );
+        let ranges: ByteRange[];
+        try {
+          ranges = selectPressureByteRangesAtForecastHour(
+            records,
+            [variable.gfsCode],
+            pressureLevelsHpa,
+            request.forecastHour,
+          );
+        } catch (error) {
+          if (
+            error instanceof Error
+            && error.message.startsWith("GFS index is missing requested fields:")
+          ) {
+            const availableLevels = availablePressureLevels(
+              records,
+              variable.gfsCode,
+              request.forecastHour,
+            );
+            const availableSet = new Set(availableLevels);
+            const missingLevels = pressureLevelsHpa.filter((level) => !availableSet.has(level));
+            throw new Error(
+              `GEFSv12 reforecast archive inventory for ${request.member}, run ${request.run.toISOString()}, f${request.forecastHour} is missing ${missingLevels.map((level) => `${variable.id}@${level}mb`).join(", ")}; available ${variable.gfsCode} levels in this file: ${availableLevels.length > 0 ? availableLevels.join(", ") : "none"}. This is run-local archive availability, not a global catalog capability`,
+              { cause: error },
+            );
+          }
+          throw error;
+        }
         for (const range of ranges) chunks.push(await this.fetchRange(gribUrl, range));
       }
     }
@@ -232,6 +253,30 @@ export class GefsReforecastS3SubsetCache implements GefsReforecastSelectionSourc
     return bytes;
   }
 
+}
+
+function availablePressureLevels(
+  records: ReturnType<typeof parseGribIndex>,
+  variableCode: string,
+  forecastHour: number,
+): number[] {
+  return [...new Set(
+    records
+      .filter((record) =>
+        record.variable === variableCode
+        && record.pressureHpa !== undefined
+        && recordForecastEndHour(record.raw) === forecastHour
+      )
+      .map((record) => record.pressureHpa as number),
+  )].sort((a, b) => b - a);
+}
+
+function recordForecastEndHour(raw: string): number | undefined {
+  const descriptor = raw.split(":")[5] ?? "";
+  const range = descriptor.match(/(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour\b/i);
+  if (range?.[2] !== undefined) return Number(range[2]);
+  const single = descriptor.match(/(?:^|\b)(\d+(?:\.\d+)?) hour fcst\b/i);
+  return single?.[1] === undefined ? undefined : Number(single[1]);
 }
 
 function selectionKey(request: NormalizedReforecastSelectionDataRequest): string {
