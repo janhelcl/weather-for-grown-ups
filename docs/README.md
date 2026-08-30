@@ -12,7 +12,7 @@ The root [README](../README.md) explains **why Weather for Grown Ups exists**. T
 | discover fields and capabilities | [CATALOG_SEARCH.md](CATALOG_SEARCH.md) |
 | contribute or debug tests | [TESTING.md](TESTING.md) |
 | understand physical/numerical validation | [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md) |
-| see release-level compatibility changes | [RELEASES.md](RELEASES.md) |
+| see release-level compatibility changes | [RELEASES.md](RELEASES.md) |\n| see what WFG is building next | [ROADMAP.md](ROADMAP.md) |
 
 ## Dataset and source semantics
 
@@ -57,7 +57,7 @@ The files below document ensemble-specific composition details. They should not 
 - [TESTING.md](TESTING.md) — deterministic unit/integration coverage and test organization.
 - [LIVE_SMOKE.md](LIVE_SMOKE.md) — bounded live-source checks across NOAA and ECMWF.
 - [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md) — physical invariants and numerical expectations.
-- [RELEASES.md](RELEASES.md) — release history and public compatibility notes.
+- [RELEASES.md](RELEASES.md) — release history and public compatibility notes.\n- [ROADMAP.md](ROADMAP.md) — planned AI, ensemble, hybrid and comparison-architecture work.
 
 ## Documentation rules
 
