@@ -287,6 +287,75 @@ describe("IfsIfsEnsComparisonService", () => {
     expect(result.comparison.outsideMemberRange).toBe(false);
   });
 
+  it("rejects a deterministic result missing the requested pressure level", async () => {
+    const deterministic = ifsResult("temperature", 5);
+    const service = new IfsIfsEnsComparisonService({
+      ifsGetter: {
+        getProfile: async () => ({
+          ...deterministic,
+          levels: [{ pressureHpa: 700, temperatureC: 5 }],
+        }),
+      },
+      ifsEnsGetter: {
+        getBundle: async () =>
+          ifsEnsResult("temperature", "temperatureC", "degC", [4, 5, 6]),
+      },
+      alignedRunProvider: {
+        resolveLatestAlignedRun: async () => new Date(run),
+      },
+    });
+
+    await expect(service.compare({
+      ...requestedPoint,
+      run: "latest",
+      validTime,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["p01", "p02", "p03"],
+      quantiles: [0.5],
+    })).rejects.toThrow("missing 850 hPa");
+  });
+
+  it("rejects a perturbation missing the comparison scalar", async () => {
+    const ensemble = ifsEnsResult(
+      "temperature",
+      "temperatureC",
+      "degC",
+      [4, 5, 6],
+    );
+    const brokenMembers = ensemble.members.map((member, index) =>
+      index === 0
+        ? {
+            ...member,
+            pressureValues: [{
+              variable: "temperature" as const,
+              pressureLevelHpa: 850,
+              values: {},
+            }],
+          }
+        : member,
+    );
+    const service = new IfsIfsEnsComparisonService({
+      ifsGetter: { getProfile: async () => ifsResult("temperature", 5) },
+      ifsEnsGetter: {
+        getBundle: async () => ({ ...ensemble, members: brokenMembers }),
+      },
+      alignedRunProvider: {
+        resolveLatestAlignedRun: async () => new Date(run),
+      },
+    });
+
+    await expect(service.compare({
+      ...requestedPoint,
+      run: "latest",
+      validTime,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["p01", "p02", "p03"],
+      quantiles: [0.5],
+    })).rejects.toThrow("is missing comparison output temperatureC");
+  });
+
   it("rejects drift between deterministic and ensemble metadata", async () => {
     const ensemble = ifsEnsResult(
       "temperature",
