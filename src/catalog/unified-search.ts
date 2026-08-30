@@ -1,5 +1,9 @@
 import { getGefsCatalog } from "./gefs-catalog.js";
 import {
+  AIGFS_FIELD_IDS,
+  AIGFS_PRESSURE_VARIABLE_IDS,
+} from "./aigfs.js";
+import {
   GEFS_REFORECAST_FIELD_IDS,
   GEFS_REFORECAST_PRESSURE_VARIABLE_IDS,
 } from "./gefs-reforecast.js";
@@ -59,6 +63,7 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
 
   const entries = [
     ...(datasets.has("gfs") ? gfsEntries() : []),
+    ...(datasets.has("aigfs") ? aigfsEntries() : []),
     ...(datasets.has("gefs")
       ? (query.forecastKind === "reforecast" ? gefsReforecastEntries() : gefsEntries())
       : []),
@@ -119,6 +124,41 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
     truncated: matches.length > query.limit,
     matches: limited,
   });
+}
+
+
+function aigfsEntries(): CatalogEntry[] {
+  const fields = AIGFS_FIELD_IDS.map((id) => NON_ISOBARIC_FIELD_CATALOG[id]);
+  return [
+    ...AIGFS_PRESSURE_VARIABLE_IDS.map((id) => {
+      const definition = VARIABLE_CATALOG[id];
+      return {
+        dataset: "aigfs" as const,
+        section: "variables" as const,
+        id,
+        classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
+        kind: definition.kind,
+        description: definition.description,
+        verticalSemantics: definition.levelType,
+        outputs: definition.outputs.map((output) => ({ ...output })),
+      };
+    }),
+    ...fields.map((definition) => ({
+      dataset: "aigfs" as const,
+      section: "fields" as const,
+      id: definition.id,
+      classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
+      kind: definition.kind,
+      description: definition.description,
+      verticalSemantics: definition.level.gribLevel,
+      temporalSemantics: definition.temporalSemantics,
+      outputs: definition.outputs.map((output) => ({ ...output })),
+    })),
+    ...Object.values(LAYER_DIAGNOSTIC_CATALOG).map((definition) =>
+      diagnosticEntry("aigfs", "layer_diagnostics", definition)),
+    ...Object.values(PROFILE_DIAGNOSTIC_CATALOG).map((definition) =>
+      diagnosticEntry("aigfs", "profile_diagnostics", definition)),
+  ];
 }
 
 function gfsEntries(): CatalogEntry[] {
@@ -365,6 +405,7 @@ function diagnosticEntry(
 
 function preferredRepresentative(entries: CatalogEntry[]): CatalogEntry {
   return entries.find((entry) => entry.dataset === "gfs")
+    ?? entries.find((entry) => entry.dataset === "aigfs")
     ?? entries.find((entry) => entry.dataset === "gefs")
     ?? entries.find((entry) => entry.dataset === "ifs")
     ?? entries.find((entry) => entry.dataset === "ifs-ens")
@@ -378,6 +419,8 @@ function supportSemantics(
   switch (dataset) {
     case "gfs":
       return "deterministic operational forecast";
+    case "aigfs":
+      return "NOAA AIGFS 0.25° deterministic AI forecast; native 6-hour output cadence through 384 hours";
     case "gefs":
       return forecastKind === "reforecast"
         ? "GEFSv12 retrospective ensemble forecast; 2000-2019 point and multi-point field, pressure, or mixed selections plus native layer/profile diagnostics; ranges preserve native cadence and per-step grid provenance"
