@@ -46,7 +46,7 @@ The implementation is split by responsibility rather than by whichever dataset w
 - `derived/` owns model-independent physical transformations.
 - `cli/` and MCP are presentation/transport adapters over the same schemas and application services.
 
-The dependency direction is intentionally inward: public surfaces depend on unified application services; unified query and diagnostic dispatch depend on dataset adapters; adapters depend on dataset-native core services; core services depend on source/cache/decoder abstractions. Provider policy does not depend on meteorology, and meteorological kernels do not depend on provider transport.
+The dependency direction is intentionally inward: public surfaces depend on the single `core/unified-atmosphere-api.ts` composition entry; unified services depend on operation-specific adapter registries; adapters depend on dataset-native core services; core services depend on source/cache/decoder abstractions. Provider policy does not depend on meteorology, and meteorological kernels do not depend on provider transport.
 
 A practical rule for new datasets is: **add capabilities to the catalog and the relevant operation adapters; do not add a new public namespace or dataset branch to a unified dispatcher.** A practical rule for new upstream backends is: **add or change a source/access implementation; do not change the public query language.**
 
