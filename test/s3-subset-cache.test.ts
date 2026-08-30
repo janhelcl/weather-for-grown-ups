@@ -96,6 +96,20 @@ describe("GfsS3SubsetCache", () => {
     expect(fetchFn.mock.calls.filter(([, init]) => new Headers(init?.headers).has("range"))).toHaveLength(2);
   });
 
+  it("writes safely when separate cache instances download the same subset concurrently", async () => {
+    const fetchFn = makeFetch();
+    const firstCache = new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch);
+    const secondCache = new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch);
+
+    const [first, second] = await Promise.all([
+      firstCache.fetch(request()),
+      secondCache.fetch(request()),
+    ]);
+
+    expect(first.path).toBe(second.path);
+    expect(Buffer.from(await readFile(first.path)).toString()).toBe("GRIB0000GRIB1111");
+  });
+
   it("bounds concurrent range requests", async () => {
     let active = 0;
     let maxActive = 0;

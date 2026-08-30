@@ -71,6 +71,7 @@ interface ArchivedPointResult {
 export interface ArchivedGfsForecastQueryServiceOptions {
   cacheDir?: string;
   cooldownMs?: number;
+  fetchFn?: typeof fetch;
   source?: ArchivedGfsForecastDataSource & ArchivedGfsForecastAreaDataSource;
   rdaSource?: ArchivedGfsForecastDataSource & ArchivedGfsForecastAreaDataSource;
   profile?: Pick<ArchivedGfsForecastProfileService, "getArchivedForecastProfile">;
@@ -92,10 +93,12 @@ export class ArchivedGfsForecastQueryService {
     this.nceiSource = options.source ?? new NceiGfsForecastHistorySource({
       cacheDir: join(cacheDir, "ncei-forecast-history"),
       limiter,
+      ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),
     });
     this.rdaSource = options.rdaSource ?? new RdaGfsForecastHistorySource({
       cacheDir: join(cacheDir, "rda-forecast-history"),
       limiter,
+      ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),
     });
     this.now = options.now ?? (() => new Date());
     this.profile = options.profile ?? new ArchivedGfsForecastProfileService({

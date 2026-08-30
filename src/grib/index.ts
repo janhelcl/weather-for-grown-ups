@@ -112,6 +112,36 @@ export function selectNonIsobaricByteRanges(
   return rangesForStarts(records, selectedStarts);
 }
 
+export function selectNonIsobaricByteRangesAtForecastHour(
+  records: GribIndexRecord[],
+  fields: Iterable<NonIsobaricGribSelector>,
+  forecastHour: number,
+): ByteRange[] {
+  const selectedStarts = new Set<number>();
+  const missing: string[] = [];
+
+  for (const field of fields) {
+    const match = records.find((record) =>
+      record.variable === field.gfsCode
+      && record.level === field.level.gribLevel
+      && matchesTemporalSemantics(record, field.temporalSemantics)
+      && forecastEndHour(record) === forecastHour,
+    );
+    if (!match) {
+      missing.push(
+        `${field.id} (${field.gfsCode}@${field.level.gribLevel}, ${field.temporalSemantics}, f${forecastHour})`,
+      );
+      continue;
+    }
+    selectedStarts.add(match.startByte);
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`GFS index is missing requested fields: ${missing.join(", ")}`);
+  }
+  return rangesForStarts(records, selectedStarts);
+}
+
 export function mergeByteRanges(...groups: ByteRange[][]): ByteRange[] {
   const byStart = new Map<number, ByteRange>();
   for (const range of groups.flat()) byStart.set(range.start, range);
@@ -130,6 +160,14 @@ function matchesTemporalSemantics(
 
 function forecastDescriptor(record: GribIndexRecord): string {
   return record.raw.split(":")[5] ?? "";
+}
+
+function forecastEndHour(record: GribIndexRecord): number | undefined {
+  const descriptor = forecastDescriptor(record);
+  const range = descriptor.match(/(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour\b/i);
+  if (range?.[2] !== undefined) return Number(range[2]);
+  const single = descriptor.match(/(?:^|\b)(\d+(?:\.\d+)?) hour fcst\b/i);
+  return single?.[1] === undefined ? undefined : Number(single[1]);
 }
 
 function rangesForStarts(records: GribIndexRecord[], selectedStarts: Set<number>): ByteRange[] {

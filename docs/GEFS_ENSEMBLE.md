@@ -18,6 +18,23 @@ GEFS shares model-independent meteorological kernels with GFS where scientifical
 - optional compatibility/debug decoder: native `wgrib2`;
 - immutable local selected-slice caching.
 
+### Retrospective GEFSv12 reforecasts
+
+Operational GEFS and GEFSv12 reforecasts share member-first physical/statistical kernels, but they are different forecast populations. WFG therefore keeps the public dataset as `gefs` and requires an explicit `forecast.kind: "reforecast"` to cross that boundary.
+
+The first reforecast slice deliberately exposes only combinations whose source semantics are already verified:
+
+- NOAA AWS Open Data `GEFSv12/reforecast`, public years 2000–2019;
+- explicit daily 00Z initialization;
+- point + one valid time;
+- default five-member daily ensemble `c00,p01..p04`;
+- optional `p05..p10` where the weekly extended run publishes them;
+- supported single-level fields: surface pressure, 2 m temperature, 10 m U/V/wind, total precipitation, precipitable water, total-atmosphere cloud cover and mean-sea-level pressure;
+- native 3-hour / 0.25° field output through +240 h, then 6-hour / 0.5° through +384 h;
+- immutable variable-file `.idx` inventories + exact forecast-hour byte ranges.
+
+A reforecast query is **not** an archived operational GEFS query. Pressure-profile support, time ranges, multi-point/transect/area operations, diagnostics, calibration metrics and the weekly +35-day horizon are follow-up layers. Until implemented, those combinations fail explicitly.
+
 ## Current GEFS capabilities
 
 The current implementation includes:
@@ -98,6 +115,22 @@ wfg catalog --dataset gefs --search cloud --json
 ```
 
 MCP: `search_catalog` with `datasets: ["gefs"]`.
+
+### Retrospective field distribution
+
+```bash
+wfg query \
+  --dataset gefs \
+  --forecast-kind reforecast \
+  --run 2017-03-14T00:00:00Z \
+  --lat 50.08 --lon 14.43 \
+  --at 2017-03-14T12:00:00Z \
+  --fields temperature_2m,wind_10m \
+  --quantiles 0.1,0.5,0.9 \
+  --json
+```
+
+MCP uses the same `query_atmosphere` request with `forecast.kind = "reforecast"`. Result provenance identifies `gefs_v12_reforecast` and `archiveType = "reforecast"`.
 
 ### Scalar ensemble distribution
 

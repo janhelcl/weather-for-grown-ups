@@ -9,12 +9,12 @@ WFG's public API is organized around a small operation vocabulary and five atmos
 | Public ID | Internal dataset | Role | Result semantics |
 | --- | --- | --- | --- |
 | `gfs` | `gfs_0p25` / `gfs_0p50` operational; grid-matched 0.25° GDEX or 0.5° NCEI archive for old explicit runs | forecast | deterministic |
-| `gefs` | `gefs_0p50` model contract; 0.5° pressure/mixed source plus 0.25° selected-field source through f240 | forecast | member-first ensemble |
+| `gefs` | operational `gefs_0p50`; explicit `forecast.kind=reforecast` resolves to `gefs_v12_reforecast` for supported retrospective queries | forecast | member-first ensemble |
 | `ifs` | `ifs_0p25` ECMWF Open Data operational forecast | forecast | deterministic |
 | `ifs-ens` | `ifs_ens_0p25` ECMWF Open Data ENS direct output | forecast | 50-member perturbed distribution |
 | `gfs-analysis` | `gfs_grid4_analysis_0p5` | historical analysis | deterministic analyzed state |
 
-Deterministic IFS supports point and multi-point access, native-cadence ranges, transects, raw scalar bbox area summaries, deterministic diagnostics, and run-to-run comparison while preserving ECMWF-native cadence and field semantics. IFS ENS supports point and multi-point member-first bundles, great-circle transects, member-first scalar area statistics, native-cadence point/multi-point state ranges and diagnostic time ranges, layer/profile/parcel diagnostics, and run-to-run distribution shifts with the same canonical pressure vocabulary, 50 perturbations and requested quantiles. Raw member payloads are opt-in for single-time/state queries; diagnostic ranges and run comparisons stay compact. The Cycle 50r1 unperturbed control is exposed as deterministic `ifs`. Unsupported combinations fail explicitly rather than falling through to another dataset. The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a separate public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently.
+Deterministic IFS supports point and multi-point access, native-cadence ranges, transects, raw scalar bbox area summaries, deterministic diagnostics, and run-to-run comparison while preserving ECMWF-native cadence and field semantics. IFS ENS supports point and multi-point member-first bundles, great-circle transects, member-first scalar area statistics, native-cadence point/multi-point state ranges and diagnostic time ranges, layer/profile/parcel diagnostics, and run-to-run distribution shifts with the same canonical pressure vocabulary, 50 perturbations and requested quantiles. Raw member payloads are opt-in for single-time/state queries; diagnostic ranges and run comparisons stay compact. The Cycle 50r1 unperturbed control is exposed as deterministic `ifs`. Unsupported combinations fail explicitly rather than falling through to another dataset. The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a separate public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently. GEFS reforecasts follow the same public-vocabulary principle but preserve a different physical meaning: `dataset: "gefs"` plus `forecast.kind: "reforecast"` selects a retrospective GEFSv12 forecast population, not an archive of whatever operational GEFS happened to run on that date.
 
 ## The four orthogonal query dimensions
 
@@ -176,6 +176,8 @@ Where the dataset supports it, the two may be mixed in one request.
 
 For `gefs`, source resolution follows selection semantics rather than adding another public dataset. Field-only requests use the 0.25° selected-field product through `f240`. Any pressure-level selection, including a mixed pressure/field bundle, uses the 0.5° pressure product. A field-only time range that extends beyond `f240` uses 0.5° for the entire range so sampling resolution cannot change between steps.
 
+For GEFSv12 reforecasts, use an explicit historical run and `forecast.kind: "reforecast"`. The initial surface is intentionally narrower: point + instant + supported fields only. Daily retrospective runs use five members (`c00,p01..p04`) by default; explicitly selected `p05..p10` are accepted for runs where the weekly extended ensemble exists. The public AWS retrospective spans 2000–2019. WFG preserves its native first-10-day 3-hour/0.25° single-level field cadence and the 6-hour/0.5° transition beyond day 10. Unsupported pressure/profile, range, spatial and diagnostic combinations fail at validation time.
+
 ## MCP tools
 
 The compact public vocabulary is:
@@ -289,6 +291,35 @@ And against GEFS:
 }
 ```
 
+
+A retrospective GEFSv12 field question keeps the same public dataset and changes forecast population explicitly:
+
+```json
+{
+  "dataset": "gefs",
+  "geometry": {
+    "type": "point",
+    "latitude": 50.08,
+    "longitude": 14.43
+  },
+  "forecast": {
+    "kind": "reforecast",
+    "run": "2017-03-14T00:00:00Z"
+  },
+  "time": {
+    "at": "2017-03-14T12:00:00Z"
+  },
+  "selection": {
+    "fields": ["temperature_2m", "wind_10m"]
+  },
+  "ensemble": {
+    "quantiles": [0.1, 0.5, 0.9]
+  }
+}
+```
+
+That result keeps `dataset: "gefs"` but exposes `internalDatasetId: "gefs_v12_reforecast"` and retrospective NOAA AWS provenance. It must not be interpreted as “the operational GEFS forecast issued on 2017-03-14”.
+
 The request shape stays stable. The result does not pretend the datasets are statistically identical.
 
 ## Result envelope
@@ -310,7 +341,7 @@ Unified state/diagnostic operations return a common envelope:
 `result` remains dataset-native.
 
 - GFS carries deterministic values and forecast metadata; `forecast.grid` selects 0.25° or 0.5° operational data and the matching historical forecast archive while retaining the public `gfs` ID.
-- GEFS carries member-derived distributions and optional members. The stable `gefs_0p50` internal model identity denotes the pressure/profile contract; `result.source.product` and `result.source.horizontalGridDegrees` expose whether an eligible field-only query used `pgrb2s` 0.25° or the `pgrb2a` 0.5° source.
+- GEFS carries member-derived distributions and optional members. Operational queries use the `gefs_0p50` internal model contract while provenance exposes the actual 0.25°/0.5° product. Explicit retrospective queries use `internalDatasetId: "gefs_v12_reforecast"`, `source.archiveType: "reforecast"`, and the native retrospective grid/cadence semantics.
 - IFS carries deterministic 0.25° values with explicit ECMWF run, lead, sampled grid point, product and source provenance.
 - IFS ENS carries distributions across the requested `p01`–`p50` perturbed members, requested quantiles, and optional raw members where the operation permits them; deterministic IFS remains the separate unperturbed-control dataset.
 - Historical GFS analysis carries deterministic analyzed values and NCEI provenance.
@@ -422,6 +453,20 @@ wfg query \
   --at 2026-08-28T12:00:00Z \
   --vars temperature,relative_humidity,wind \
   --levels 850,700,500 \
+  --quantiles 0.1,0.5,0.9 \
+  --json
+```
+
+GEFSv12 retrospective forecast:
+
+```bash
+wfg query \
+  --dataset gefs \
+  --forecast-kind reforecast \
+  --run 2017-03-14T00:00:00Z \
+  --lat 50.08 --lon 14.43 \
+  --at 2017-03-14T12:00:00Z \
+  --fields temperature_2m,wind_10m \
   --quantiles 0.1,0.5,0.9 \
   --json
 ```

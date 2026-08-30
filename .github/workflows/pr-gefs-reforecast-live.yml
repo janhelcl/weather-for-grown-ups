@@ -1,0 +1,28 @@
+name: PR GEFSv12 reforecast live
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**/gefs-reforecast*.ts"
+      - "src/grib/index.ts"
+      - "src/schema/unified-api.ts"
+      - "src/core/unified-atmosphere-api.ts"
+      - "scripts/live-smoke-gefs-reforecast.ts"
+      - ".github/workflows/pr-gefs-reforecast-live.yml"
+      - "package.json"
+
+concurrency:
+  group: pr-gefs-reforecast-live-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned live-test environment
+        run: docker build --target live-test -t weather-for-grown-ups:live-test .
+      - name: Query NOAA GEFSv12 reforecast through unified API
+        run: docker run --rm weather-for-grown-ups:live-test npm run test:live:gefs-reforecast

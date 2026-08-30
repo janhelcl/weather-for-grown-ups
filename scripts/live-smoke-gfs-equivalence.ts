@@ -3,6 +3,8 @@ import {
   UnifiedAtmosphereDiagnosticService,
   UnifiedAtmosphereQueryService,
 } from "../src/core/unified-atmosphere-api.js";
+import { ArchivedGfsForecastQueryService } from "../src/core/archived-gfs-query.js";
+import { ArchivedGfsForecastDiagnosticService } from "../src/core/archived-gfs-diagnostics.js";
 
 type Grid = "0p25" | "0p50";
 type Source = "nomads" | "s3" | "archive";
@@ -46,8 +48,28 @@ const NATIVE_HUMIDITY_PROFILE_VARIABLES = [
   "equivalent_potential_temperature",
 ] as const;
 
-const queryService = new UnifiedAtmosphereQueryService();
-const diagnosticService = new UnifiedAtmosphereDiagnosticService();
+const ARCHIVE_PARITY_FETCH_TIMEOUT_MS = 20_000;
+const archiveParityFetch: typeof fetch = (input, init) =>
+  globalThis.fetch(input, {
+    ...(init ?? {}),
+    signal: AbortSignal.timeout(ARCHIVE_PARITY_FETCH_TIMEOUT_MS),
+  });
+const archivedState = new ArchivedGfsForecastQueryService({
+  fetchFn: archiveParityFetch,
+});
+const queryService = new UnifiedAtmosphereQueryService({
+  archivedGfs: archivedState,
+});
+const diagnosticService = new UnifiedAtmosphereDiagnosticService({
+  archivedGfs: new ArchivedGfsForecastDiagnosticService({ state: archivedState }),
+});
+
+class ArchiveParityUpstreamUnavailable extends Error {
+  constructor(readonly upstreamError: unknown) {
+    super(errorChainMessage(upstreamError));
+    this.name = "ArchiveParityUpstreamUnavailable";
+  }
+}
 
 const summaries = await Promise.all(
   (["0p25", "0p50"] as const).map(async (grid) => {
@@ -60,7 +82,21 @@ const summaries = await Promise.all(
         archiveFailures: plan.archiveFailures,
       };
     }
-    return verifyGrid(grid, plan);
+    try {
+      return await verifyGrid(grid, plan);
+    } catch (error) {
+      if (!(error instanceof ArchiveParityUpstreamUnavailable)) throw error;
+      const message = errorChainMessage(error.upstreamError);
+      console.log(
+        `[${grid}] archive parity NOT TESTED: upstream archive service became unavailable during parity checks (${message})`,
+      );
+      return {
+        grid,
+        comparisonMode: plan.mode,
+        archiveStatus: "not_tested_upstream_unavailable" as const,
+        archiveFailures: [message],
+      };
+    }
   }),
 );
 console.log(JSON.stringify({
@@ -269,7 +305,13 @@ async function paired<T, U>(
   archived: Promise<U>,
 ): Promise<[T, U]> {
   console.log(`[${grid}] ${label} started`);
-  const result = await Promise.all([operational, archived] as const);
+  const guardedArchive = archived.catch((error) => {
+    if (isTransientArchiveFailure(grid, error)) {
+      throw new ArchiveParityUpstreamUnavailable(error);
+    }
+    throw error;
+  });
+  const result = await Promise.all([operational, guardedArchive] as const);
   console.log(`[${grid}] ${label} fetched`);
   return result;
 }
@@ -280,26 +322,20 @@ async function comparisonPlan(grid: Grid): Promise<ComparisonPlan> {
     const candidate = candidateRun(daysAgo);
     const run = candidate.toISOString();
     const validTime = new Date(candidate.getTime() + 6 * HOUR_MS).toISOString();
+
     try {
-      // Probe the archive first so expected archive lag/unavailability can be
-      // distinguished from an operational transport failure.
+      // Probe the archive separately so a transient archive transport failure
+      // can never mask an operational S3 failure.
       await minimalPoint(grid, "archive", run, validTime);
-      await minimalPoint(grid, "s3", run, validTime);
-      console.log(`[${grid}] archive overlap run ${run} (s3 vs archive)`);
-      return {
-        leftSource: "s3",
-        rightSource: "archive",
-        mode: "historical_archive",
-        archiveStatus: "available",
-        run: candidate,
-      };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorChainMessage(error);
       const availability = classifyArchiveAvailabilityError(grid, message);
-      if (availability === "other") throw error;
+      if (availability === "other" && !isTransientNetworkFailure(error)) {
+        throw error;
+      }
 
       failures.push(`${run}: ${message}`);
-      if (availability === "upstream_unavailable") {
+      if (availability === "upstream_unavailable" || isTransientNetworkFailure(error)) {
         console.log(
           `[${grid}] archive parity NOT TESTED: upstream archive service is temporarily unavailable (${message})`,
         );
@@ -311,7 +347,20 @@ async function comparisonPlan(grid: Grid): Promise<ComparisonPlan> {
       }
 
       console.log(`[${grid}] archive overlap unavailable for ${run}: ${message}`);
+      continue;
     }
+
+    // Operational S3 is not part of the archive availability classification:
+    // if it fails, the parity gate must fail.
+    await minimalPoint(grid, "s3", run, validTime);
+    console.log(`[${grid}] archive overlap run ${run} (s3 vs archive)`);
+    return {
+      leftSource: "s3",
+      rightSource: "archive",
+      mode: "historical_archive",
+      archiveStatus: "available",
+      run: candidate,
+    };
   }
 
   console.log(
@@ -335,6 +384,34 @@ function candidateRun(daysAgo: number): Date {
     0,
     0,
   ));
+}
+
+function errorChainMessage(error: unknown): string {
+  const messages: string[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current !== undefined && current !== null && !seen.has(current)) {
+    seen.add(current);
+    if (current instanceof Error) {
+      if (current.message) messages.push(current.message);
+      current = (current as Error & { cause?: unknown }).cause;
+      continue;
+    }
+    messages.push(String(current));
+    break;
+  }
+  return messages.join(" <- ");
+}
+
+function isTransientNetworkFailure(error: unknown): boolean {
+  return /fetch failed|headers timeout|UND_ERR_HEADERS_TIMEOUT|TimeoutError|aborted due to timeout|operation was aborted|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up/i
+    .test(errorChainMessage(error));
+}
+
+function isTransientArchiveFailure(grid: Grid, error: unknown): boolean {
+  const message = errorChainMessage(error);
+  return classifyArchiveAvailabilityError(grid, message) === "upstream_unavailable"
+    || isTransientNetworkFailure(error);
 }
 
 function classifyArchiveAvailabilityError(

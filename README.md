@@ -120,6 +120,8 @@ WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-firs
 
 GEFS also supports control `c00` plus perturbed members `p01`–`p30`, native three-hour output through `f384`, mixed pressure/non-isobaric field bundles, and opt-in member payloads for auditability. Field-only requests automatically use NOAA's `pgrb2s` 0.25° selected-field product through `f240`; pressure-level and mixed requests use `pgrb2a` 0.5°, and field ranges extending beyond `f240` stay on 0.5° for the whole range. Result provenance reports the actual product and horizontal grid.
 
+GEFS now also has an explicit **GEFSv12 reforecast** branch. It remains public `dataset: "gefs"`, but callers set `forecast.kind: "reforecast"` and an explicit historical 00Z run. Reforecasts are retrospective forecasts produced with a consistent GEFSv12 system; they are **not archived operational GEFS runs**. The first vertical slice exposes member-first point/instant distributions for supported single-level fields from the NOAA AWS retrospective corpus (2000–2019), using the standard five-member daily set `c00,p01..p04` by default and preserving the retrospective 0.25°/3 h through day 10 → 0.5°/6 h after day 10 transition. Pressure profiles, ranges, spatial geometries, diagnostics and the weekly +35-day extension remain explicit follow-ups rather than being guessed.
+
 ECMWF **IFS 0.25°** is exposed as `ifs`; **IFS ENS 0.25°** is `ifs-ens`. Both use official Open Data indexed byte-range access with bounded mirror retry/failover. Under Cycle 50r1 the products deliberately have different horizons: deterministic `oper/fc` runs to `f240` at 00/12Z and `f90` at 06/18Z, while perturbed `enfo/ef` runs to `f360` and `f144` respectively. `ifs-ens` represents the 50 perturbed members `p01`–`p50`; the unperturbed control is now identical to deterministic `ifs`, so WFG does not invent a 51st ENS member. See [IFS access](docs/IFS.md).
 
 Historical **GFS Grid 4 0.5° analysis** is exposed as `gfs-analysis`, through the same `query` / `diagnose` CLI operations and `query_atmosphere` / `diagnose_atmosphere` MCP tools. It covers profiles, time series, diagnostics, parcels, multi-point queries, multi-point time series, transects and native bbox area statistics while preserving analysis-time semantics and NCEI provenance.
@@ -158,7 +160,7 @@ Normal atmospheric access is expressed as:
 dataset × geometry × time × selection
 ```
 
-with short dataset IDs `gfs`, `gefs`, `ifs`, `ifs-ens`, and `gfs-analysis`. The same query structure therefore works for a deterministic forecast, an ensemble forecast, an archived GFS forecast, or an archived analysis while each result preserves its native deterministic/ensemble and forecast/analysis semantics. An archived forecast remains `gfs`; the explicit old `forecast.run` selects the historical state.
+with short dataset IDs `gfs`, `gefs`, `ifs`, `ifs-ens`, and `gfs-analysis`. The same query structure therefore works for a deterministic forecast, an operational ensemble forecast, a GEFS retrospective reforecast, an archived GFS forecast, or an archived analysis while each result preserves its native deterministic/ensemble and forecast/analysis semantics. An archived forecast remains `gfs`; the explicit old `forecast.run` selects the historical state.
 
 The MCP vocabulary is intentionally small:
 
