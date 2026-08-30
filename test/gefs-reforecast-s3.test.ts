@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildGefsReforecastFieldIndexUrl,
   buildGefsReforecastFieldUrl,
+  buildGefsReforecastPressureIndexUrl,
+  buildGefsReforecastPressureUrl,
   gefsReforecastForecastHour,
   gefsReforecastHorizontalGridDegrees,
   gefsReforecastLeadBlock,
+  gefsReforecastPressureFileGroup,
+  gefsReforecastProfileGrid,
   parseGefsReforecastRun,
 } from "../src/sources/gefs-reforecast-s3.js";
 
@@ -33,6 +37,40 @@ describe("GEFSv12 reforecast source semantics", () => {
       .toThrow("every 6 hours");
     expect(() => gefsReforecastForecastHour(run, new Date("2017-03-30T03:00:00Z")))
       .toThrow("through +384");
+  });
+
+  it("models the first-10-day pressure-file split instead of hiding it", () => {
+    expect(gefsReforecastPressureFileGroup(12, 850)).toBe("base");
+    expect(gefsReforecastPressureFileGroup(12, 500)).toBe("above_700mb");
+    expect(gefsReforecastPressureFileGroup(300, 500)).toBe("base");
+
+    expect(buildGefsReforecastPressureUrl(
+      run, "c00", 12, "temperature", "base",
+    )).toBe(
+      "https://noaa-gefs-retrospective.s3.amazonaws.com/GEFSv12/reforecast/2017/2017031400/c00/Days%3A1-10/tmp_pres_2017031400_c00.grib2",
+    );
+    expect(buildGefsReforecastPressureIndexUrl(
+      run, "p04", 12, "temperature", "above_700mb",
+    )).toBe(
+      "https://noaa-gefs-retrospective.s3.amazonaws.com/GEFSv12/reforecast/2017/2017031400/p04/Days%3A1-10/tmp_pres_abv700mb_2017031400_p04.grib2.idx",
+    );
+
+    expect(gefsReforecastProfileGrid(12, [850, 700])).toEqual({
+      horizontalGridDegrees: 0.25,
+      profileGridPolicy: "native_0p25",
+    });
+    expect(gefsReforecastProfileGrid(12, [500])).toEqual({
+      horizontalGridDegrees: 0.5,
+      profileGridPolicy: "native_0p50",
+    });
+    expect(gefsReforecastProfileGrid(12, [850, 500])).toEqual({
+      horizontalGridDegrees: 0.5,
+      profileGridPolicy: "coherent_0p50",
+    });
+    expect(gefsReforecastProfileGrid(300, [850, 500])).toEqual({
+      horizontalGridDegrees: 0.5,
+      profileGridPolicy: "native_0p50",
+    });
   });
 
   it("requires explicit daily 00Z runs from the public 2000-2019 retrospective", () => {
