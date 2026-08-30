@@ -24,8 +24,10 @@ import { ifsPressureLevelSchema, ifsPressureVariableSchema } from "./ifs.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 import {
   atmosphericEnsembleOptionsSchema,
+  atmosphericRunSelectorSchema,
   atmosphericSelectionSchema,
   publicAtmosphericDatasetSchema,
+  publicDatasetCapabilities,
 } from "./unified-api.js";
 
 export const compareAtmosphericRunsSchema = z.object({
@@ -33,13 +35,14 @@ export const compareAtmosphericRunsSchema = z.object({
   geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
   time: z.object({ at: isoDateTimeSchema }),
   selection: atmosphericSelectionSchema,
-  anchorRun: z.string().min(1).default("latest"),
+  anchorRun: atmosphericRunSelectorSchema,
   gfsGrid: gfsGridSchema.optional(),
   cycles: z.number().int().min(2).max(6).default(3),
   ensemble: atmosphericEnsembleOptionsSchema.optional(),
   thresholdGte: z.number().optional(),
   cycleStrideHours: z.union([z.literal(6), z.literal(12)]).optional(),
 }).superRefine((request, context) => {
+  validateRunSelectorForDatasets(request.anchorRun, [request.dataset], ["anchorRun"], context);
   if (request.dataset !== "gfs" && request.gfsGrid !== undefined) {
     context.addIssue({ code: "custom", path: ["gfsGrid"], message: "gfsGrid is only valid for GFS run comparison" });
   }
@@ -94,10 +97,12 @@ const compareGfsGefsDatasetsSchema = z.object({
   time: z.object({ at: isoDateTimeSchema }),
   variable: z.string().min(1),
   pressureLevelHpa: z.number().positive(),
-  run: z.string().min(1).default("latest"),
+  run: atmosphericRunSelectorSchema,
   gfsGrid: gfsGridSchema.optional(),
   members: z.array(z.string().min(1)).min(2).max(31).optional(),
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
+}).superRefine((request, context) => {
+  validateRunSelectorForDatasets(request.run, request.datasets, ["run"], context);
 });
 
 const compareGfsIfsDatasetsSchema = z.object({
@@ -106,10 +111,12 @@ const compareGfsIfsDatasetsSchema = z.object({
   time: z.object({ at: isoDateTimeSchema }),
   variable: ifsPressureVariableSchema,
   pressureLevelHpa: ifsPressureLevelSchema,
-  run: z.string().min(1).default("latest"),
+  run: atmosphericRunSelectorSchema,
   gfsGrid: gfsGridSchema.optional(),
   members: z.never().optional(),
   quantiles: z.never().optional(),
+}).superRefine((request, context) => {
+  validateRunSelectorForDatasets(request.run, request.datasets, ["run"], context);
 });
 
 export const compareGefsIfsEnsDatasetsSchema = z.object({
@@ -118,7 +125,7 @@ export const compareGefsIfsEnsDatasetsSchema = z.object({
   time: z.object({ at: isoDateTimeSchema }),
   variable: gefsIfsEnsComparisonVariableSchema,
   pressureLevelHpa: ifsPressureLevelSchema,
-  run: z.string().min(1).default("latest"),
+  run: atmosphericRunSelectorSchema,
   gefsMembers: z.array(gefsMemberSchema).min(2).max(GEFS_MEMBERS.length).optional(),
   ifsEnsMembers: z.array(ifsEnsMemberSchema).min(2).max(IFS_ENS_MEMBERS.length).optional(),
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
@@ -126,6 +133,7 @@ export const compareGefsIfsEnsDatasetsSchema = z.object({
   gfsGrid: z.never().optional(),
   members: z.never().optional(),
 }).superRefine((request, context) => {
+  validateRunSelectorForDatasets(request.run, request.datasets, ["run"], context);
   if (!isSupportedGefsProfileSelection(request.variable, request.pressureLevelHpa)) {
     context.addIssue({
       code: "custom",
@@ -150,7 +158,7 @@ export const compareIfsIfsEnsDatasetsSchema = z.object({
   time: z.object({ at: isoDateTimeSchema }),
   variable: ifsIfsEnsComparisonVariableSchema,
   pressureLevelHpa: ifsPressureLevelSchema,
-  run: z.string().min(1).default("latest"),
+  run: atmosphericRunSelectorSchema,
   ifsEnsMembers: z.array(ifsEnsMemberSchema).min(2).max(IFS_ENS_MEMBERS.length).optional(),
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
   gfsGrid: z.never().optional(),
@@ -158,6 +166,7 @@ export const compareIfsIfsEnsDatasetsSchema = z.object({
   gefsMembers: z.never().optional(),
   thresholdGte: z.never().optional(),
 }).superRefine((request, context) => {
+  validateRunSelectorForDatasets(request.run, request.datasets, ["run"], context);
   if (request.ifsEnsMembers && new Set(request.ifsEnsMembers).size !== request.ifsEnsMembers.length) {
     context.addIssue({
       code: "custom",
@@ -296,6 +305,24 @@ const verifyAtmosphericForecastSkillSchema = z.object({
     });
   }
 });
+
+function validateRunSelectorForDatasets(
+  run: string,
+  datasets: readonly ("gfs" | "gefs" | "ifs" | "ifs-ens")[],
+  path: (string | number)[],
+  context: z.RefinementCtx,
+): void {
+  const selector = run === "latest" || run === "latest_complete" ? run : "explicit";
+  const unsupported = datasets.filter(
+    (dataset) => !publicDatasetCapabilities(dataset).runSelectors.includes(selector),
+  );
+  if (unsupported.length === 0) return;
+  context.addIssue({
+    code: "custom",
+    path,
+    message: `run=${run} is not supported by dataset(s): ${unsupported.join(", ")}; use a selector supported by every compared dataset`,
+  });
+}
 
 export const verifyAtmosphericForecastSchema = z.union([
   verifyAtmosphericForecastCaseSchema,
