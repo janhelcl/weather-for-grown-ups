@@ -241,7 +241,7 @@ describe("GEFSv12 retrospective diagnostic schemas", () => {
       ...point,
       run,
       validTime,
-      pressureLevelsHpa: [850, 50],
+      pressureLevelsHpa: [850, 75],
       diagnostics: ["freezing_level_crossings"],
       members: ["c00", "p01"],
       quantiles,
@@ -352,7 +352,7 @@ function layerDiagnosticResult(
     forecastHour,
     requestedPoint: point,
     gridPoint: forecastHour > 240 ? { latitude: 50, longitude: 14 } : gridPoint,
-    pressureLayer: { lowerPressureHpa: 850, upperPressureHpa: 700 },
+    pressureLayer: { lowerPressureHpa: 850, upperPressureHpa: 800 },
     selection: {
       diagnostics: ["temperature_lapse_rate"],
       members: ["c00", "p01"],
@@ -473,7 +473,7 @@ describe("GEFSv12 retrospective diagnostic ranges", () => {
       diagnostic: {
         kind: "layer",
         lowerPressureHpa: 850,
-        upperPressureHpa: 700,
+        upperPressureHpa: 800,
         diagnostics: ["temperature_lapse_rate"],
       },
       members: ["c00", "p01"],
@@ -564,7 +564,7 @@ describe("GEFSv12 retrospective diagnostic ranges", () => {
       diagnostic: {
         kind: "layer",
         lowerPressureHpa: 850,
-        upperPressureHpa: 700,
+        upperPressureHpa: 800,
         diagnostics: ["temperature_lapse_rate"],
       },
       members: ["c00", "p01"],
@@ -604,7 +604,7 @@ describe("GEFSv12 retrospective diagnostic ranges", () => {
       diagnostic: {
         kind: "layer",
         lowerPressureHpa: 850,
-        upperPressureHpa: 700,
+        upperPressureHpa: 800,
         diagnostics: ["temperature_lapse_rate"],
       },
       members: ["c00", "p01"],
