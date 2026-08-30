@@ -42,7 +42,7 @@ describe("CLI public surface", () => {
   it("uses dataset rather than model vocabulary", () => {
     const program = createCliProgram();
 
-    for (const name of ["catalog", "query", "diagnose", "compare-runs"]) {
+    for (const name of ["catalog", "query", "diagnose", "compare-runs", "compare-datasets"]) {
       const command = program.commands.find((candidate) => candidate.name() === name);
       expect(command?.options.some((option) => option.long === "--dataset")).toBe(true);
       expect(command?.options.some((option) => option.long === "--model")).toBe(false);
