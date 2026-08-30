@@ -3,6 +3,10 @@ import {
   createAtmosphericQueryAdapterRegistry,
   type AtmosphericQueryRegistryOptions,
 } from "../src/core/query-adapters/registry.js";
+import {
+  createAtmosphericDiagnosticAdapterRegistry,
+  type AtmosphericDiagnosticRegistryOptions,
+} from "../src/core/diagnostic-adapters/registry.js";
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
 import {
   UnifiedAtmosphereDiagnosticService,
@@ -21,6 +25,12 @@ import {
 function createQueryService(options: AtmosphericQueryRegistryOptions = {}) {
   return new UnifiedAtmosphereQueryService({
     adapters: createAtmosphericQueryAdapterRegistry(options),
+  });
+}
+
+function createDiagnosticService(options: AtmosphericDiagnosticRegistryOptions = {}) {
+  return new UnifiedAtmosphereDiagnosticService({
+    adapters: createAtmosphericDiagnosticAdapterRegistry(options),
   });
 }
 
@@ -1107,7 +1117,7 @@ describe("unified archived forecast diagnostic routing", () => {
         route: "archive-diagnostic",
       })),
     };
-    const service = new UnifiedAtmosphereDiagnosticService({
+    const service = createDiagnosticService({
       layer: operational as any,
       archivedGfs: archivedGfs as any,
       now: () => new Date("2026-08-27T12:00:00Z"),
@@ -1161,7 +1171,7 @@ describe("unified diagnostic routing coverage", () => {
       getParcelDiagnostics: vi.fn(async () => ({ route: "ifs-ens-parcel" })),
     };
     const timeSeries = { getDiagnosticTimeSeries: vi.fn(async () => ({ route: "series" })) };
-    const service = new UnifiedAtmosphereDiagnosticService({
+    const service = createDiagnosticService({
       layer: layer as any,
       profile: profile as any,
       parcel: parcel as any,
@@ -1295,7 +1305,7 @@ describe("unified diagnostic routing coverage", () => {
   it("routes diagnostic ranges while preserving dataset time semantics", async () => {
     const timeSeries = { getDiagnosticTimeSeries: vi.fn(async (input) => ({ route: input.model })) };
     const ifsEnsTimeSeries = { getDiagnosticTimeSeries: vi.fn(async () => ({ route: "ifs-ens-series" })) };
-    const service = new UnifiedAtmosphereDiagnosticService({
+    const service = createDiagnosticService({
       timeSeries: timeSeries as any,
       ifsEnsTimeSeries: ifsEnsTimeSeries as any,
     });
