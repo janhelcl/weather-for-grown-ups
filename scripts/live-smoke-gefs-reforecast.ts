@@ -252,7 +252,7 @@ const profileDiagnosticResult = await diagnosticService.diagnose({
   time: { at: "2017-03-14T12:00:00Z" },
   diagnostic: {
     kind: "profile",
-    pressureLevelsHpa: [1000, 925, 850, 700, 500],
+    pressureLevelsHpa: [1000, 925, 850, 500],
     diagnostics: ["freezing_level_crossings", "temperature_inversion_layers"],
   },
   forecast: {
@@ -290,7 +290,7 @@ const layerDiagnosticRangeResult = await diagnosticService.diagnose({
   diagnostic: {
     kind: "layer",
     lowerPressureHpa: 850,
-    upperPressureHpa: 700,
+    upperPressureHpa: 800,
     diagnostics: ["temperature_lapse_rate"],
   },
   forecast: {
