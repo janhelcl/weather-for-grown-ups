@@ -1,5 +1,23 @@
 # Releases
 
+## v0.2.2 — 2026-08-30
+
+v0.2.2 fixes runtime version reporting without changing the public query language.
+
+- `wfg --version`, MCP server metadata and `/healthz` now derive their version from `package.json`;
+- packaged-binary tests lock that behavior so release metadata cannot drift from the published package version.
+
+## v0.2.1 — 2026-08-29
+
+v0.2.1 hardens operational data access while keeping the v0.2 unified API unchanged.
+
+- ordinary GFS point/profile and time-series access prefers NOAA AWS Open Data byte ranges;
+- GFS time-series progress is emitted on stderr without contaminating JSON stdout;
+- provider etiquette is source-specific rather than inheriting NOMADS pacing globally;
+- NOAA AWS, ECMWF, NCEI, NCAR/GDEX and IGRA use independent bounded-concurrency policies;
+- transient HTTP failures use bounded exponential backoff with jitter and `Retry-After` support;
+- access locks heartbeat during long requests and concurrent cache writes use safer atomic temporary files.
+
 ## v0.2.0 — 2026-08-28
 
 v0.2.0 turns WFG from a GFS/GEFS-focused toolkit into a unified multi-model atmospheric query engine.
