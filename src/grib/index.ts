@@ -86,6 +86,41 @@ export function selectPressureByteRanges(
   return rangesForStarts(records, selectedStarts);
 }
 
+export function selectPressureByteRangesAtForecastHour(
+  records: GribIndexRecord[],
+  variableCodes: Iterable<string>,
+  pressureLevelsHpa: Iterable<number>,
+  forecastHour: number,
+): ByteRange[] {
+  const codes = [...new Set(variableCodes)];
+  const levels = [...new Set(pressureLevelsHpa)];
+  const atHour = records.filter((record) => forecastEndHour(record) === forecastHour);
+  const availablePairs = new Set(
+    atHour
+      .filter((record) => record.pressureHpa !== undefined)
+      .map((record) => `${record.variable}@${record.pressureHpa}`),
+  );
+  const missing = codes.flatMap((code) =>
+    levels
+      .filter((level) => !availablePairs.has(`${code}@${level}`))
+      .map((level) => `${code}@${level}mb@f${forecastHour}`),
+  );
+  if (missing.length > 0) {
+    throw new Error(`GFS index is missing requested fields: ${missing.join(", ")}`);
+  }
+  const codeSet = new Set(codes);
+  const levelSet = new Set(levels);
+  const selectedStarts = new Set(
+    atHour
+      .filter((record) =>
+        codeSet.has(record.variable)
+        && record.pressureHpa !== undefined
+        && levelSet.has(record.pressureHpa))
+      .map((record) => record.startByte),
+  );
+  return rangesForStarts(records, selectedStarts);
+}
+
 export function selectNonIsobaricByteRanges(
   records: GribIndexRecord[],
   fields: Iterable<NonIsobaricGribSelector>,

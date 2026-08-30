@@ -43,4 +43,45 @@ describe("unified GEFS reforecast routing", () => {
     }));
     expect(operational.getBundle).not.toHaveBeenCalled();
   });
+
+  it("routes reforecast pressure selections through the same unified query shape", async () => {
+    const fields = { getPoint: vi.fn() };
+    const profile = {
+      getProfile: vi.fn(async () => ({
+        model: "gefs_v12_reforecast",
+        route: "profile",
+      })),
+    };
+    const service = new UnifiedAtmosphereQueryService({
+      gefsReforecast: fields as any,
+      gefsReforecastProfile: profile as any,
+    });
+
+    const result = await service.query({
+      dataset: "gefs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2017-03-14T12:00:00Z" },
+      selection: {
+        variables: ["temperature", "specific_humidity"],
+        pressureLevelsHpa: [850, 500],
+      },
+      forecast: {
+        kind: "reforecast",
+        run: "2017-03-14T00:00:00Z",
+      },
+      ensemble: {
+        members: ["c00", "p01"],
+        quantiles: [0.5],
+      },
+    });
+
+    expect(result.internalDatasetId).toBe("gefs_v12_reforecast");
+    expect(result.result).toMatchObject({ route: "profile" });
+    expect(profile.getProfile).toHaveBeenCalledWith(expect.objectContaining({
+      variables: ["temperature", "specific_humidity"],
+      pressureLevelsHpa: [850, 500],
+      members: ["c00", "p01"],
+    }));
+    expect(fields.getPoint).not.toHaveBeenCalled();
+  });
 });

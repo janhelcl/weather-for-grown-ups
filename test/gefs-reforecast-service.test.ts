@@ -70,4 +70,44 @@ describe("GEFSv12 reforecast member-first point service", () => {
     expect(result.members).toHaveLength(5);
     expect(source.fetchSelection).toHaveBeenCalledTimes(5);
   });
+
+  it("keeps compact output by default and reports fallback decoder/cache provenance", async () => {
+    const source = {
+      fetchSelection: vi.fn(async ({ member }: any) => ({
+        path: `/tmp/${member}.grib2`,
+        cacheHit: true,
+      })),
+    };
+    const decoder = {
+      extractPoint: vi.fn(async () => [{
+        code: "TMP",
+        heightAboveGroundM: 2,
+        value: 280,
+        gridPoint: { latitude: 50, longitude: 14 },
+      }]),
+    };
+
+    const service = new GefsReforecastPointService({
+      source: source as any,
+      decoder: decoder as any,
+      concurrency: 2,
+    });
+    const result = await service.getPoint({
+      latitude: 50.08,
+      longitude: 14.43,
+      run: "2017-03-14T00:00:00Z",
+      validTime: "2017-03-14T12:00:00Z",
+      fields: ["temperature_2m"],
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+    });
+
+    expect(result.members).toBeUndefined();
+    expect(result.source).toMatchObject({
+      decoder: "wgrib2",
+      allCacheHit: true,
+    });
+    expect(source.fetchSelection).toHaveBeenCalledTimes(2);
+  });
+
 });

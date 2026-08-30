@@ -1,4 +1,8 @@
-import type { GefsReforecastFieldId, GefsReforecastMember } from "../catalog/gefs-reforecast.js";
+import type {
+  GefsReforecastFieldId,
+  GefsReforecastMember,
+  GefsReforecastPressureVariableId,
+} from "../catalog/gefs-reforecast.js";
 
 export const GEFS_REFORECAST_S3_BASE_URL = "https://noaa-gefs-retrospective.s3.amazonaws.com";
 export const GEFS_REFORECAST_START_YEAR = 2000;
@@ -6,6 +10,11 @@ export const GEFS_REFORECAST_END_YEAR = 2019;
 export const GEFS_REFORECAST_MAX_FORECAST_HOUR = 384;
 
 export type GefsReforecastLeadBlock = "Days:1-10" | "Days:10-16";
+export type GefsReforecastPressureFileGroup = "base" | "above_700mb";
+export type GefsReforecastProfileGridPolicy =
+  | "native_0p25"
+  | "native_0p50"
+  | "coherent_0p50";
 
 const REFORECAST_FILE_STEMS: Record<
   Exclude<GefsReforecastFieldId, "wind_10m">,
@@ -19,6 +28,15 @@ const REFORECAST_FILE_STEMS: Record<
   precipitable_water: "pwat_eatm",
   total_atmosphere_cloud_cover: "tcdc_eatm",
   mean_sea_level_pressure: "pres_msl",
+};
+
+const REFORECAST_PRESSURE_FILE_STEMS: Record<GefsReforecastPressureVariableId, string> = {
+  temperature: "tmp_pres",
+  u_wind: "ugrd_pres",
+  v_wind: "vgrd_pres",
+  geopotential_height: "hgt_pres",
+  vertical_velocity: "vvel_pres",
+  specific_humidity: "spfh_pres",
 };
 
 export function parseGefsReforecastRun(value: string): Date {
@@ -72,6 +90,38 @@ export function gefsReforecastHorizontalGridDegrees(forecastHour: number): 0.25 
   return forecastHour <= 240 ? 0.25 : 0.5;
 }
 
+export function gefsReforecastPressureFileGroup(
+  forecastHour: number,
+  pressureLevelHpa: number,
+): GefsReforecastPressureFileGroup {
+  gefsReforecastLeadBlock(forecastHour);
+  if (!(pressureLevelHpa > 0) || !Number.isFinite(pressureLevelHpa)) {
+    throw new Error(`Invalid GEFSv12 reforecast pressure level: ${pressureLevelHpa}`);
+  }
+  return forecastHour <= 240 && pressureLevelHpa < 700 ? "above_700mb" : "base";
+}
+
+export function gefsReforecastProfileGrid(
+  forecastHour: number,
+  pressureLevelsHpa: readonly number[],
+): { horizontalGridDegrees: 0.25 | 0.5; profileGridPolicy: GefsReforecastProfileGridPolicy } {
+  gefsReforecastLeadBlock(forecastHour);
+  if (pressureLevelsHpa.length === 0) {
+    throw new Error("GEFSv12 reforecast profile requires at least one pressure level");
+  }
+  if (forecastHour > 240) {
+    return { horizontalGridDegrees: 0.5, profileGridPolicy: "native_0p50" };
+  }
+  const hasUpperAir = pressureLevelsHpa.some((level) => level < 700);
+  const hasLowerAir = pressureLevelsHpa.some((level) => level >= 700);
+  if (hasUpperAir && hasLowerAir) {
+    return { horizontalGridDegrees: 0.5, profileGridPolicy: "coherent_0p50" };
+  }
+  return hasUpperAir
+    ? { horizontalGridDegrees: 0.5, profileGridPolicy: "native_0p50" }
+    : { horizontalGridDegrees: 0.25, profileGridPolicy: "native_0p25" };
+}
+
 export function buildGefsReforecastFieldUrl(
   run: Date,
   member: GefsReforecastMember,
@@ -92,6 +142,34 @@ export function buildGefsReforecastFieldIndexUrl(
   field: Exclude<GefsReforecastFieldId, "wind_10m">,
 ): string {
   return `${buildGefsReforecastFieldUrl(run, member, forecastHour, field)}.idx`;
+}
+
+export function buildGefsReforecastPressureUrl(
+  run: Date,
+  member: GefsReforecastMember,
+  forecastHour: number,
+  variable: GefsReforecastPressureVariableId,
+  fileGroup: GefsReforecastPressureFileGroup,
+): string {
+  if (forecastHour > 240 && fileGroup === "above_700mb") {
+    throw new Error("GEFSv12 reforecast pressure data after +240 h is stored in the base variable file");
+  }
+  const cycle = yyyymmddhh(run);
+  const year = run.getUTCFullYear();
+  const block = encodeURIComponent(gefsReforecastLeadBlock(forecastHour));
+  const suffix = fileGroup === "above_700mb" ? "_abv700mb" : "";
+  const stem = REFORECAST_PRESSURE_FILE_STEMS[variable];
+  return `${GEFS_REFORECAST_S3_BASE_URL}/GEFSv12/reforecast/${year}/${cycle}/${member}/${block}/${stem}${suffix}_${cycle}_${member}.grib2`;
+}
+
+export function buildGefsReforecastPressureIndexUrl(
+  run: Date,
+  member: GefsReforecastMember,
+  forecastHour: number,
+  variable: GefsReforecastPressureVariableId,
+  fileGroup: GefsReforecastPressureFileGroup,
+): string {
+  return `${buildGefsReforecastPressureUrl(run, member, forecastHour, variable, fileGroup)}.idx`;
 }
 
 function yyyymmddhh(date: Date): string {

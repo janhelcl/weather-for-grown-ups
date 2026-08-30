@@ -3,6 +3,8 @@ import { LAYER_DIAGNOSTIC_IDS } from "../catalog/layer-diagnostics.js";
 import {
   GEFS_REFORECAST_EXTENDED_MEMBERS,
   GEFS_REFORECAST_FIELD_IDS,
+  GEFS_REFORECAST_PRESSURE_VARIABLE_IDS,
+  isSupportedGefsReforecastPressureSelection,
 } from "../catalog/gefs-reforecast.js";
 import { PARCEL_DEFINITION_IDS } from "../catalog/parcel-diagnostics.js";
 import { PROFILE_DIAGNOSTIC_IDS } from "../catalog/profile-diagnostics.js";
@@ -393,22 +395,47 @@ function validateDatasetModifiers(
       });
     }
     if (request.selection !== undefined) {
-      if (request.selection.variables !== undefined || request.selection.pressureLevelsHpa !== undefined) {
+      const variables = request.selection.variables ?? [];
+      const pressureLevelsHpa = request.selection.pressureLevelsHpa ?? [];
+      const fields = request.selection.fields ?? [];
+      if (variables.length > 0 && fields.length > 0) {
         context.addIssue({
           code: "custom",
           path: ["selection"],
-          message: "Initial GEFSv12 reforecast support is field-only; pressure/profile support is the next source layer",
+          message: "GEFSv12 reforecast point queries currently support either a pressure profile or non-isobaric fields per query, not a mixed bundle",
         });
       }
-      const fields = request.selection.fields ?? [];
-      const supported = new Set<string>(GEFS_REFORECAST_FIELD_IDS);
-      const unsupported = fields.filter((field: string) => !supported.has(field));
-      if (unsupported.length > 0) {
+
+      const supportedFields = new Set<string>(GEFS_REFORECAST_FIELD_IDS);
+      const unsupportedFields = fields.filter((field: string) => !supportedFields.has(field));
+      if (unsupportedFields.length > 0) {
         context.addIssue({
           code: "custom",
           path: ["selection", "fields"],
-          message: `GEFSv12 reforecast fields not yet supported: ${unsupported.join(", ")}`,
+          message: `GEFSv12 reforecast fields not yet supported: ${unsupportedFields.join(", ")}`,
         });
+      }
+
+      const supportedVariables = new Set<string>(GEFS_REFORECAST_PRESSURE_VARIABLE_IDS);
+      const unsupportedVariables = variables.filter((variable: string) => !supportedVariables.has(variable));
+      if (unsupportedVariables.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["selection", "variables"],
+          message: `GEFSv12 reforecast pressure variables not supported: ${unsupportedVariables.join(", ")}`,
+        });
+      }
+      for (const variable of variables) {
+        if (!supportedVariables.has(variable)) continue;
+        for (const pressureLevelHpa of pressureLevelsHpa) {
+          if (!isSupportedGefsReforecastPressureSelection(variable as any, pressureLevelHpa)) {
+            context.addIssue({
+              code: "custom",
+              path: ["selection", "pressureLevelsHpa"],
+              message: `GEFSv12 reforecast cannot satisfy ${variable} at ${pressureLevelHpa} hPa`,
+            });
+          }
+        }
       }
     }
     if (request.ensemble?.members !== undefined) {
