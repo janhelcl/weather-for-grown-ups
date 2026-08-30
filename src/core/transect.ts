@@ -1,7 +1,7 @@
 import { BatchPointsService } from "./batch-points.js";
 import type { BatchPointsResult } from "./types.js";
 import type { OperationalGfsModelId } from "../schema/gfs-grid.js";
-import type { BatchPointsQueryInput, PointCoordinate, VariableId } from "../schema/query.js";
+import type { BatchPointsQueryInput, NonIsobaricFieldId, PointCoordinate, VariableId } from "../schema/query.js";
 import { transectQuerySchema, type TransectQueryInput } from "../schema/transect.js";
 
 const EARTH_RADIUS_KM = 6371.0088;
@@ -18,6 +18,7 @@ export interface TransectSampleResult {
   requestedPoint: PointCoordinate;
   gridPoint: PointCoordinate;
   levels: BatchPointsResult["points"][number]["levels"];
+  fields?: BatchPointsResult["points"][number]["fields"];
 }
 
 export interface TransectResult {
@@ -30,6 +31,7 @@ export interface TransectResult {
   totalDistanceKm: number;
   variables: VariableId[];
   pressureLevelsHpa: number[];
+  fields?: NonIsobaricFieldId[];
   samples: TransectSampleResult[];
   source: BatchPointsResult["source"];
 }
@@ -55,8 +57,9 @@ export class TransectService {
       run: query.run,
       ...(query.grid === undefined ? {} : { grid: query.grid }),
       validTime: query.validTime,
-      variables: query.variables,
-      pressureLevelsHpa: query.pressureLevelsHpa,
+      ...(query.variables === undefined ? {} : { variables: query.variables }),
+      ...(query.pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa: query.pressureLevelsHpa }),
+      ...(query.fields === undefined ? {} : { fields: query.fields }),
     });
 
     if (batch.points.length !== points.length) {
@@ -71,8 +74,9 @@ export class TransectService {
       startPoint: { ...query.start },
       endPoint: { ...query.end },
       totalDistanceKm,
-      variables: [...query.variables],
-      pressureLevelsHpa: [...query.pressureLevelsHpa],
+      variables: [...(query.variables ?? [])],
+      pressureLevelsHpa: [...(query.pressureLevelsHpa ?? [])],
+      ...(query.fields === undefined ? {} : { fields: [...query.fields] }),
       samples: batch.points.map((point, index) => {
         const fraction = index / (points.length - 1);
         return {
@@ -82,6 +86,7 @@ export class TransectService {
           requestedPoint: point.requestedPoint,
           gridPoint: point.gridPoint,
           levels: point.levels,
+          ...(point.fields === undefined ? {} : { fields: point.fields }),
         };
       }),
       source: { ...batch.source },

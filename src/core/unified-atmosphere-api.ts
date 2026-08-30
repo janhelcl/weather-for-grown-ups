@@ -693,17 +693,13 @@ export class UnifiedAtmosphereQueryService {
     const run = request.forecast?.run ?? "latest";
 
     if (request.dataset === "gfs") {
-      if ((request.selection.fields?.length ?? 0) > 0) {
-        throw new Error("Operational GFS transects currently support pressure-level variables only; remove fields or use point/points geometry");
-      }
       return this.gfsTransect.getTransect(transectQuerySchema.parse({
         start: request.geometry.start,
         end: request.geometry.end,
         run,
         grid: request.forecast?.grid ?? "0p25",
         validTime: request.time.at,
-        variables: request.selection.variables,
-        pressureLevelsHpa: request.selection.pressureLevelsHpa,
+        ...gfsSelection(request),
         ...(request.geometry.samples === undefined ? {} : { samples: request.geometry.samples }),
       }));
     }

@@ -31,11 +31,37 @@ describe("transectQuerySchema", () => {
     expect(transectQuerySchema.safeParse({ ...base, end: base.start }).success).toBe(false);
   });
 
-  it("bounds sample count and requires explicit pressure selection", () => {
+  it("bounds sample count and requires a coherent atmospheric selection", () => {
     expect(transectQuerySchema.safeParse({ ...base, samples: 1 }).success).toBe(false);
     expect(transectQuerySchema.safeParse({ ...base, samples: 51 }).success).toBe(false);
     expect(transectQuerySchema.safeParse({ ...base, variables: [] }).success).toBe(false);
     expect(transectQuerySchema.safeParse({ ...base, pressureLevelsHpa: [] }).success).toBe(false);
+    expect(transectQuerySchema.safeParse({
+      ...base,
+      pressureLevelsHpa: undefined,
+    }).success).toBe(false);
+    expect(transectQuerySchema.safeParse({
+      ...base,
+      variables: undefined,
+    }).success).toBe(false);
+    expect(transectQuerySchema.safeParse({
+      ...base,
+      variables: undefined,
+      pressureLevelsHpa: undefined,
+    }).success).toBe(false);
+  });
+
+  it("accepts field-only and mixed pressure/field transects", () => {
+    expect(transectQuerySchema.safeParse({
+      ...base,
+      variables: undefined,
+      pressureLevelsHpa: undefined,
+      fields: ["temperature_2m", "wind_10m"],
+    }).success).toBe(true);
+    expect(transectQuerySchema.safeParse({
+      ...base,
+      fields: ["temperature_2m"],
+    }).success).toBe(true);
   });
 
   it("rejects unpublished pressure surfaces and invalid coordinates", () => {

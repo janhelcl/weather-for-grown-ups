@@ -500,7 +500,6 @@ A common query vocabulary does not mean every dataset/source implements every co
 
 Examples:
 
-- current operational GFS transects expose pressure-level selection but not the full mixed-field selection available to GEFS/history transects;
 - historical NCEI operations have tighter point/sample/time bounds because archive access is file/NCSS oriented and NOAA-paced;
 - archived GFS forecasts preserve grid-native cadence and inventory: 0.25° GDEX uses 3-hour steps through +240 h then 12-hour steps through +384 h, while 0.5° Grid 4 uses 3-hour steps through +192 h;
 - historical analysis does not expose forecast accumulation products as if they were instantaneous analysis state;

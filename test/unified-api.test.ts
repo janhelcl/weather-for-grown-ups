@@ -348,19 +348,6 @@ describe("unified atmospheric routing", () => {
     })).result).toEqual({ route: "history-series" });
   });
 
-  it("fails explicitly when a shared operation has a narrower dataset capability", async () => {
-    const service = new UnifiedAtmosphereQueryService();
-    await expect(service.query({
-      dataset: "gfs",
-      geometry: {
-        type: "transect",
-        start: { latitude: 49, longitude: 13 },
-        end: { latitude: 50, longitude: 14 },
-      },
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection: { fields: ["temperature_2m"] },
-    })).rejects.toThrow("GFS transects currently support pressure-level variables only");
-  });
 });
 
 describe("unified catalog", () => {
@@ -938,8 +925,18 @@ describe("unified geometry routing coverage", () => {
       dataset: "gfs",
       geometry,
       time: { at: "2026-08-28T12:00:00Z" },
-      selection,
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+        fields: ["temperature_2m"],
+      },
     })).result).toEqual({ route: "gfs-transect" });
+    expect(gfsTransect.getTransect).toHaveBeenCalledWith(expect.objectContaining({
+      variables: ["temperature"],
+      pressureLevelsHpa: [850],
+      fields: ["temperature_2m"],
+      samples: 5,
+    }));
 
     expect((await service.query({
       dataset: "gefs",
