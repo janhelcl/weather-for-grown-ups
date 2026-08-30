@@ -28,10 +28,18 @@ describe("unified GEFS reforecast branch", () => {
       },
     })).toThrow("currently covers point geometry");
 
+    expect(queryAtmosphereSchema.parse({
+      ...base,
+      time: { from: "2017-03-14T03:00:00Z", to: "2017-03-14T12:00:00Z" },
+    })).toMatchObject({
+      time: { from: "2017-03-14T03:00:00Z", to: "2017-03-14T12:00:00Z" },
+    });
+
     expect(() => queryAtmosphereSchema.parse({
       ...base,
       time: { from: "2017-03-14T03:00:00Z", to: "2017-03-14T12:00:00Z" },
-    })).toThrow("one valid time per query");
+      ensemble: { members: ["c00", "p01"], includeMembers: true },
+    })).toThrow("time ranges return compact member-first summaries");
   });
 
   it("accepts verified pressure profiles and rejects unsupported pressure semantics", () => {
