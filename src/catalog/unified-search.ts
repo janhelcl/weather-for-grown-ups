@@ -1,4 +1,8 @@
 import { getGefsCatalog } from "./gefs-catalog.js";
+import {
+  GEFS_REFORECAST_FIELD_IDS,
+  GEFS_REFORECAST_PRESSURE_VARIABLE_IDS,
+} from "./gefs-reforecast.js";
 import { getGfsPressureCatalog } from "./catalog.js";
 import { getIfsCatalog } from "./ifs.js";
 import { LAYER_DIAGNOSTIC_CATALOG } from "./layer-diagnostics.js";
@@ -52,7 +56,9 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
 
   const entries = [
     ...(datasets.has("gfs") ? gfsEntries() : []),
-    ...(datasets.has("gefs") ? gefsEntries() : []),
+    ...(datasets.has("gefs")
+      ? (query.forecastKind === "reforecast" ? gefsReforecastEntries() : gefsEntries())
+      : []),
     ...(datasets.has("ifs") ? ifsEntries("ifs") : []),
     ...(datasets.has("ifs-ens") ? ifsEntries("ifs-ens") : []),
     ...(datasets.has("gfs-analysis") ? historyEntries() : []),
@@ -91,7 +97,7 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
           .sort((a, b) => query.datasets.indexOf(a.dataset) - query.datasets.indexOf(b.dataset))
           .map((entry) => ({
             dataset: entry.dataset,
-            semantics: supportSemantics(entry.dataset),
+            semantics: supportSemantics(entry.dataset, query.forecastKind),
           })),
         score,
       };
@@ -185,6 +191,39 @@ function gefsEntries(): CatalogEntry[] {
       verticalSemantics: "parcel_profile",
       outputs: definition.outputs.map((output) => ({ ...output })),
     })),
+  ];
+}
+
+function gefsReforecastEntries(): CatalogEntry[] {
+  const catalog = getGefsCatalog();
+  const fields = new Set<string>(GEFS_REFORECAST_FIELD_IDS);
+  return [
+    ...GEFS_REFORECAST_PRESSURE_VARIABLE_IDS.map((id) => {
+      const definition = VARIABLE_CATALOG[id];
+      return {
+        dataset: "gefs" as const,
+        section: "variables" as const,
+        id,
+        classification: "raw" as const,
+        kind: "raw",
+        description: definition.description,
+        verticalSemantics: definition.levelType,
+        outputs: definition.outputs.map((output) => ({ ...output })),
+      };
+    }),
+    ...catalog.fields
+      .filter((definition) => fields.has(definition.id))
+      .map((definition) => ({
+        dataset: "gefs" as const,
+        section: "fields" as const,
+        id: definition.id,
+        classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
+        kind: definition.kind,
+        description: definition.description,
+        verticalSemantics: definition.level.gribLevel,
+        temporalSemantics: definition.temporalSemantics,
+        outputs: definition.outputs.map((output) => ({ ...output })),
+      })),
   ];
 }
 
@@ -323,12 +362,17 @@ function preferredRepresentative(entries: CatalogEntry[]): CatalogEntry {
     ?? entries[0]!;
 }
 
-function supportSemantics(dataset: PublicAtmosphericDataset): string {
+function supportSemantics(
+  dataset: PublicAtmosphericDataset,
+  forecastKind: "operational" | "reforecast" | undefined,
+): string {
   switch (dataset) {
     case "gfs":
       return "deterministic operational forecast";
     case "gefs":
-      return "member-first ensemble forecast distribution";
+      return forecastKind === "reforecast"
+        ? "GEFSv12 retrospective ensemble forecast; 2000-2019 point/instant native field and pressure subset with explicit retrospective cadence/grid semantics"
+        : "member-first ensemble forecast distribution";
     case "ifs":
       return "deterministic ECMWF IFS 0.25° operational forecast";
     case "ifs-ens":

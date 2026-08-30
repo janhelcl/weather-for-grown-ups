@@ -21,6 +21,7 @@ export function registerCatalogCommand(program: Command): void {
     .option("--sections <list>", "Comma-separated catalog sections")
     .option("--classification <raw|derived>", "Raw or derived entries")
     .option("--temporal <instantaneous|accumulation|average>", "Temporal semantics")
+    .option("--forecast-kind <operational|reforecast>", "GEFS forecast population capability filter")
     .option("--limit <number>", "Maximum matches", Number, 30)
     .option("--json", "Output JSON")
     .action((options) => {
@@ -31,6 +32,7 @@ export function registerCatalogCommand(program: Command): void {
         ...(options.sections === undefined ? {} : { sections: parseSections(options.sections) }),
         ...(options.classification === undefined ? {} : { classification: options.classification }),
         ...(options.temporal === undefined ? {} : { temporalSemantics: options.temporal }),
+        ...(options.forecastKind === undefined ? {} : { forecastKind: options.forecastKind }),
         limit: options.limit,
       });
 
