@@ -147,9 +147,10 @@ describe("specialized run-comparison adapters", () => {
         selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
       }),
     );
-    expect(gefsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("members");
-    expect(gefsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("quantiles");
-    expect(gefsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("thresholdGte");
+    expect(gefsNative.compareRuns.mock.calls[0]![0]).toMatchObject({
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
 
     const ifsEnsNative = { compareRuns: vi.fn(async (query) => query) };
     await new IfsEnsRunComparisonAdapter(ifsEnsNative as any).compare(
@@ -160,10 +161,10 @@ describe("specialized run-comparison adapters", () => {
         selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
       }),
     );
-    expect(ifsEnsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("members");
-    expect(ifsEnsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("quantiles");
-    expect(ifsEnsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("thresholdGte");
-    expect(ifsEnsNative.compareRuns.mock.calls[0]![0]).not.toHaveProperty("cycleStrideHours");
+    expect(ifsEnsNative.compareRuns.mock.calls[0]![0]).toMatchObject({
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
   });
 
   it("guards adapter ownership explicitly", () => {

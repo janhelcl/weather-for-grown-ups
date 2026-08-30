@@ -1,4 +1,7 @@
+import { historicalForecastSkillQuerySchema } from "../../schema/history-skill.js";
 import { historicalForecastVerificationQuerySchema } from "../../schema/history-verification.js";
+import { igraForecastSkillQuerySchema } from "../../schema/igra-skill.js";
+import { igraForecastVerificationQuerySchema } from "../../schema/igra-verification.js";
 import type { VerifyAtmosphericForecastRequest } from "../../schema/unified-specialized.js";
 import { HistoricalForecastSkillService } from "../history-skill.js";
 import { HistoricalForecastVerificationService } from "../history-verification.js";
@@ -25,7 +28,7 @@ export class GfsAnalysisVerificationAdapter implements AtmosphericVerificationAd
         hoursUtc: Array<0 | 6 | 12 | 18>;
         maxValidTimes: number;
       };
-      return this.skill.summarize({
+      return this.skill.summarize(historicalForecastSkillQuerySchema.parse({
         latitude: request.geometry.latitude,
         longitude: request.geometry.longitude,
         startTime: time.from,
@@ -33,9 +36,9 @@ export class GfsAnalysisVerificationAdapter implements AtmosphericVerificationAd
         cycleHoursUtc: time.hoursUtc,
         maxValidTimes: time.maxValidTimes,
         leadHours: request.leadHours,
-        variables: request.variables as any,
+        variables: request.variables,
         pressureLevelsHpa: request.pressureLevelsHpa,
-      });
+      }));
     }
 
     const time = request.time as { at: string };
@@ -69,7 +72,7 @@ export class IgraVerificationAdapter implements AtmosphericVerificationAdapter {
         hoursUtc: Array<0 | 6 | 12 | 18>;
         maxValidTimes: number;
       };
-      return this.skill.summarize({
+      return this.skill.summarize(igraForecastSkillQuerySchema.parse({
         latitude: request.geometry.latitude,
         longitude: request.geometry.longitude,
         startTime: time.from,
@@ -77,29 +80,29 @@ export class IgraVerificationAdapter implements AtmosphericVerificationAdapter {
         cycleHoursUtc: time.hoursUtc,
         maxValidTimes: time.maxValidTimes,
         leadHours: request.leadHours,
-        variables: request.variables as any,
+        variables: request.variables,
         pressureLevelsHpa: request.pressureLevelsHpa,
         ...(request.gfsGrid === undefined ? {} : { gfsGrid: request.gfsGrid }),
         ...(request.stationId === undefined ? {} : { stationId: request.stationId }),
         ...(request.maxStationDistanceKm === undefined
           ? {}
           : { maxStationDistanceKm: request.maxStationDistanceKm }),
-      });
+      }));
     }
 
     const time = request.time as { at: string };
-    return this.instant.verify({
+    return this.instant.verify(igraForecastVerificationQuerySchema.parse({
       latitude: request.geometry.latitude,
       longitude: request.geometry.longitude,
       validTime: time.at,
       leadHours: request.leadHours,
-      variables: request.variables as any,
+      variables: request.variables,
       pressureLevelsHpa: request.pressureLevelsHpa,
       ...(request.gfsGrid === undefined ? {} : { gfsGrid: request.gfsGrid }),
       ...(request.stationId === undefined ? {} : { stationId: request.stationId }),
       ...(request.maxStationDistanceKm === undefined
         ? {}
         : { maxStationDistanceKm: request.maxStationDistanceKm }),
-    });
+    }));
   }
 }

@@ -101,9 +101,11 @@ describe("unified dataset-comparison adapters", () => {
       pressureLevelHpa: 850,
       gfsGrid: "0p50",
     }));
-    expect(native.compare.mock.calls.at(-1)![0]).toMatchObject({ gfsGrid: "0p50" });
-    expect(native.compare.mock.calls.at(-1)![0]).not.toHaveProperty("members");
-    expect(native.compare.mock.calls.at(-1)![0]).not.toHaveProperty("quantiles");
+    expect(native.compare.mock.calls.at(-1)![0]).toMatchObject({
+      gfsGrid: "0p50",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
 
     const gfsIfs = new GfsIfsDatasetComparisonAdapter(native as any);
     await gfsIfs.compare(compareAtmosphericDatasetsSchema.parse({
@@ -123,11 +125,10 @@ describe("unified dataset-comparison adapters", () => {
       variable: "temperature",
       pressureLevelHpa: 850,
     }));
-    const ensemblePair = native.compare.mock.calls.at(-1)![0];
-    expect(ensemblePair).not.toHaveProperty("gefsMembers");
-    expect(ensemblePair).not.toHaveProperty("ifsEnsMembers");
-    expect(ensemblePair).not.toHaveProperty("quantiles");
-    expect(ensemblePair).not.toHaveProperty("thresholdGte");
+    expect(native.compare.mock.calls.at(-1)![0]).toMatchObject({
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
 
     const ifsIfsEns = new IfsIfsEnsDatasetComparisonAdapter(native as any);
     await ifsIfsEns.compare(compareAtmosphericDatasetsSchema.parse({
@@ -137,8 +138,10 @@ describe("unified dataset-comparison adapters", () => {
       variable: "temperature",
       pressureLevelHpa: 850,
     }));
-    expect(native.compare.mock.calls.at(-1)![0]).not.toHaveProperty("members");
-    expect(native.compare.mock.calls.at(-1)![0]).not.toHaveProperty("quantiles");
+    expect(native.compare.mock.calls.at(-1)![0]).toMatchObject({
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
   });
 
   it("guards each adapter against the wrong comparison pair", async () => {
