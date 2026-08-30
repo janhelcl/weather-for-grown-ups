@@ -1,9 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { registerUnifiedAtmosphereTools } from "./mcp-unified-tool.js";
+import { WFG_VERSION } from "./version.js";
 
 export function createMcpServer(): McpServer {
   const server = new McpServer(
-    { name: "weather-for-grown-ups", version: "0.1.0" },
+    { name: "weather-for-grown-ups", version: WFG_VERSION },
     {
       instructions: [
         "WFG exposes one atmospheric query language across operational GFS, GEFS, and historical GFS analysis.",

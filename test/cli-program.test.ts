@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createCliProgram } from "../src/cli/program.js";
+import { WFG_VERSION } from "../src/version.js";
 
 const EXPECTED_COMMANDS = [
   "catalog",
@@ -13,6 +14,10 @@ const EXPECTED_COMMANDS = [
 ];
 
 describe("CLI public surface", () => {
+  it("reports the package version", () => {
+    expect(createCliProgram().version()).toBe(WFG_VERSION);
+  });
+
   it("registers only the canonical operation vocabulary", () => {
     const names = createCliProgram().commands.map((command) => command.name());
 
