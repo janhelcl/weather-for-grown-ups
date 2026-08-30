@@ -21,6 +21,7 @@ import {
 } from "../sources/http-retry.js";
 import {
   isGefsReforecastFieldId,
+  isGefsReforecastPressureVariableId,
   isSupportedGefsReforecastPressureSelection,
   type GefsReforecastFieldId,
   type GefsReforecastMember,
@@ -123,6 +124,11 @@ export class GefsReforecastS3SubsetCache implements GefsReforecastSelectionSourc
     }
 
     for (const variable of request.pressureVariables) {
+      if (!isGefsReforecastPressureVariableId(variable.id)) {
+        throw new Error(
+          `GEFSv12 reforecast does not expose pressure variable ${variable.id} in the current WFG source contract`,
+        );
+      }
       const variableId = variable.id as GefsReforecastPressureVariableId;
       const levelsByFileGroup = new Map<GefsReforecastPressureFileGroup, number[]>();
       for (const pressureLevelHpa of request.pressureLevelsHpa) {
