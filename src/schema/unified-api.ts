@@ -11,9 +11,11 @@ import { PROFILE_DIAGNOSTIC_IDS } from "../catalog/profile-diagnostics.js";
 import {
   ATMOSPHERIC_DATASET_CATALOG,
   ATMOSPHERIC_DATASET_IDS,
+  datasetSupportsRunSelector,
   type AtmosphericDatasetId,
   type AtmosphericDatasetKind,
   type AtmosphericDatasetRole,
+  type AtmosphericRunSelectorId,
 } from "../catalog/models.js";
 import { areaThresholdSchema } from "./area-summary.js";
 import { gfsGridSchema } from "./gfs-grid.js";
@@ -176,13 +178,19 @@ export const atmosphericSelectionSchema = z.object({
   }
 });
 
+export const atmosphericRunSelectorSchema = z.union([
+  z.literal("latest"),
+  z.literal("latest_complete"),
+  isoDateTimeSchema,
+]).default("latest").describe(
+  "Forecast initialization: latest, latest_complete where supported, or an explicit timezone-aware ISO cycle",
+);
+
 export const atmosphericForecastOptionsSchema = z.object({
   kind: z.enum(["operational", "reforecast"]).optional().describe(
     "Forecast population. Omit (or use 'operational') for normal forecasts; 'reforecast' selects the GEFSv12 retrospective ensemble rather than an archive of operational cycles.",
   ),
-  run: z.string().min(1).default("latest").describe(
-    "Forecast initialization: latest, latest_complete where supported, or an explicit ISO cycle",
-  ),
+  run: atmosphericRunSelectorSchema,
   grid: gfsGridSchema.optional().describe("GFS-only horizontal grid override: 0p25 (default when omitted) or 0p50"),
 });
 
@@ -290,6 +298,43 @@ export const unifiedAtmosphereResultSchema = z.object({
 
 export function publicDatasetMetadata(dataset: PublicAtmosphericDataset) {
   return PUBLIC_DATASET_METADATA[dataset];
+}
+
+export type PublicForecastKind = "operational" | "reforecast";
+
+export interface PublicAtmosphericDatasetCapabilities {
+  dataset: PublicAtmosphericDataset;
+  role: AtmosphericDatasetRole;
+  kind: AtmosphericDatasetKind;
+  forecastKinds: readonly PublicForecastKind[];
+  runSelectors: readonly AtmosphericRunSelectorId[];
+  operations: readonly string[];
+}
+
+export function publicDatasetCapabilities(
+  dataset: PublicAtmosphericDataset,
+  forecastKind?: PublicForecastKind,
+): PublicAtmosphericDatasetCapabilities {
+  const metadata = publicDatasetMetadata(dataset);
+  const definition = ATMOSPHERIC_DATASET_CATALOG[metadata.internalDatasetId];
+  const forecastKinds: readonly PublicForecastKind[] = metadata.role === "analysis"
+    ? []
+    : dataset === "gefs"
+      ? ["operational", "reforecast"]
+      : ["operational"];
+  const runSelectors: readonly AtmosphericRunSelectorId[] =
+    forecastKind === "reforecast" && dataset === "gefs"
+      ? ["explicit"]
+      : definition.runSelectors;
+
+  return {
+    dataset,
+    role: metadata.role,
+    kind: metadata.kind,
+    forecastKinds,
+    runSelectors,
+    operations: definition.operations,
+  };
 }
 
 function validateCommonAtmosphericRequest(
@@ -452,6 +497,21 @@ function validateDatasetModifiers(
       }
     }
   }
+  if (metadata.role === "forecast" && !isReforecast) {
+    const run = request.forecast?.run ?? "latest";
+    const selector = runSelectorCapability(run);
+    if (!datasetSupportsRunSelector(metadata.internalDatasetId, selector)) {
+      const supported = ATMOSPHERIC_DATASET_CATALOG[metadata.internalDatasetId].runSelectors
+        .map(runSelectorLabel)
+        .join(", ");
+      context.addIssue({
+        code: "custom",
+        path: ["forecast", "run"],
+        message: `dataset=${request.dataset} does not support run=${run}; supported run selectors: ${supported}`,
+      });
+    }
+  }
+
   if (metadata.role === "analysis" && request.forecast !== undefined) {
     context.addIssue({
       code: "custom",
@@ -487,6 +547,15 @@ function validateDatasetModifiers(
       message: "source override is only valid for gfs",
     });
   }
+}
+
+function runSelectorCapability(value: string): AtmosphericRunSelectorId {
+  if (value === "latest" || value === "latest_complete") return value;
+  return "explicit";
+}
+
+function runSelectorLabel(value: AtmosphericRunSelectorId): string {
+  return value === "explicit" ? "explicit ISO cycle" : value;
 }
 
 export type QueryAtmosphereInput = z.input<typeof queryAtmosphereSchema>;
