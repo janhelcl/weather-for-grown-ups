@@ -171,7 +171,7 @@ export class ProfileService {
   }
 }
 
-function applyDecodedPressureValue(level: ProfileLevel, value: DecodedValue): void {
+export function applyDecodedPressureValue(level: ProfileLevel, value: DecodedValue): void {
   switch (value.code) {
     case "TMP": level.temperatureC = value.value - 273.15; break;
     case "RH": level.relativeHumidityPct = value.value; break;
@@ -189,7 +189,7 @@ function applyDecodedPressureValue(level: ProfileLevel, value: DecodedValue): vo
   }
 }
 
-function applyDerivedPressureValues(level: ProfileLevel, requestedVariables: readonly VariableId[]): void {
+export function applyDerivedPressureValues(level: ProfileLevel, requestedVariables: readonly VariableId[]): void {
   const requested = new Set(requestedVariables);
 
   if (requested.has("wind")) {
@@ -260,7 +260,7 @@ function dependency(value: number | undefined, id: string, pressureHpa: number):
   return value;
 }
 
-function buildFieldResult(
+export function buildFieldResult(
   definition: NonIsobaricFieldDefinition,
   values: DecodedValue[],
   run: Date,
@@ -355,7 +355,7 @@ function matchesRawField(definition: RawNonIsobaricFieldDefinition, value: Decod
   }
 }
 
-function assertPressureComplete(values: DecodedValue[], codes: string[], levels: number[]): void {
+export function assertPressureComplete(values: DecodedValue[], codes: string[], levels: number[]): void {
   const seen = new Set(
     values
       .filter((value) => value.pressureHpa !== undefined)
@@ -371,7 +371,7 @@ function assertPressureComplete(values: DecodedValue[], codes: string[], levels:
   }
 }
 
-function assertFieldsComplete(values: DecodedValue[], fields: RawNonIsobaricFieldDefinition[]): void {
+export function assertFieldsComplete(values: DecodedValue[], fields: RawNonIsobaricFieldDefinition[]): void {
   const missing = fields
     .filter((field) => !values.some((value) => matchesRawField(field, value)))
     .map((field) => `${field.id} (${field.gfsCode}@${field.level.gribLevel}, ${field.temporalSemantics})`);
