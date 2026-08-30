@@ -2,16 +2,36 @@ import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
+import {
+  runWithHttpRetry,
+  type HttpRetryExecutionOptions,
+} from "../access/http-retry.js";
 
 export interface CachedFile {
   path: string;
   cacheHit: boolean;
 }
 
+type NomadsFetchAttempt =
+  | {
+      status: 200;
+      retryAfter: null;
+      cacheHit: true;
+    }
+  | {
+      status: number;
+      retryAfter: string | null;
+      statusText: string;
+      cacheHit: false;
+      response: Response;
+    };
+
 export class NomadsCache {
   constructor(
     private readonly rootDir: string,
     private readonly accessPolicy: UpstreamAccessPolicy,
+    private readonly fetchFn: typeof fetch = globalThis.fetch,
+    private readonly retryOptions: HttpRetryExecutionOptions = {},
   ) {}
 
   async fetch(url: string): Promise<CachedFile> {
@@ -21,27 +41,47 @@ export class NomadsCache {
 
     if (await exists(path)) return { path, cacheHit: true };
 
-    return this.accessPolicy.run(async () => {
-      if (await exists(path)) return { path, cacheHit: true };
+    const result = await runWithHttpRetry(
+      () => this.accessPolicy.run(async (): Promise<NomadsFetchAttempt> => {
+        if (await exists(path)) {
+          return {
+            status: 200,
+            retryAfter: null,
+            cacheHit: true,
+          };
+        }
 
-      const response = await fetch(url, {
-        headers: { "user-agent": "weather-for-grown-ups/0.1" },
-      });
-      if (!response.ok) {
-        throw new Error(`NOMADS request failed: HTTP ${response.status} ${response.statusText}`);
-      }
+        const response = await this.fetchFn(url, {
+          headers: { "user-agent": "weather-for-grown-ups/0.1" },
+        });
+        return {
+          status: response.status,
+          retryAfter: response.headers.get("retry-after"),
+          statusText: response.statusText,
+          cacheHit: false,
+          response,
+        };
+      }),
+      this.retryOptions,
+    );
 
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
-        const preview = new TextDecoder().decode(bytes.slice(0, 240));
-        throw new Error(`NOMADS returned non-GRIB content: ${preview}`);
-      }
+    if (result.cacheHit) return { path, cacheHit: true };
 
-      const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
-      await writeFile(tempPath, bytes);
-      await rename(tempPath, path);
-      return { path, cacheHit: false };
-    });
+    const response = result.response;
+    if (!response.ok) {
+      throw new Error(`NOMADS request failed: HTTP ${result.status} ${result.statusText}`);
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
+      const preview = new TextDecoder().decode(bytes.slice(0, 240));
+      throw new Error(`NOMADS returned non-GRIB content: ${preview}`);
+    }
+
+    const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+    await writeFile(tempPath, bytes);
+    await rename(tempPath, path);
+    return { path, cacheHit: false };
   }
 }
 
