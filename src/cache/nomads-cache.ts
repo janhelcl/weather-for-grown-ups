@@ -17,13 +17,14 @@ type NomadsFetchAttempt =
       status: 200;
       retryAfter: null;
       cacheHit: true;
+      stored: true;
     }
   | {
       status: number;
       retryAfter: string | null;
       statusText: string;
       cacheHit: false;
-      response: Response;
+      stored: boolean;
     };
 
 export class NomadsCache {
@@ -48,39 +49,48 @@ export class NomadsCache {
             status: 200,
             retryAfter: null,
             cacheHit: true,
+            stored: true,
           };
         }
 
         const response = await this.fetchFn(url, {
           headers: { "user-agent": "weather-for-grown-ups/0.1" },
         });
+        const retryAfter = response.headers.get("retry-after");
+        if (!response.ok) {
+          return {
+            status: response.status,
+            retryAfter,
+            statusText: response.statusText,
+            cacheHit: false,
+            stored: false,
+          };
+        }
+
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
+          const preview = new TextDecoder().decode(bytes.slice(0, 240));
+          throw new Error(`NOMADS returned non-GRIB content: ${preview}`);
+        }
+
+        const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+        await writeFile(tempPath, bytes);
+        await rename(tempPath, path);
         return {
           status: response.status,
-          retryAfter: response.headers.get("retry-after"),
+          retryAfter,
           statusText: response.statusText,
           cacheHit: false,
-          response,
+          stored: true,
         };
       }),
       this.retryOptions,
     );
 
     if (result.cacheHit) return { path, cacheHit: true };
-
-    const response = result.response;
-    if (!response.ok) {
+    if (!result.stored) {
       throw new Error(`NOMADS request failed: HTTP ${result.status} ${result.statusText}`);
     }
-
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
-      const preview = new TextDecoder().decode(bytes.slice(0, 240));
-      throw new Error(`NOMADS returned non-GRIB content: ${preview}`);
-    }
-
-    const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
-    await writeFile(tempPath, bytes);
-    await rename(tempPath, path);
     return { path, cacheHit: false };
   }
 }
