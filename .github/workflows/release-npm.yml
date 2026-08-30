@@ -42,6 +42,7 @@ jobs:
           prefix="$(mktemp -d)"
           npm install --prefix "$prefix" --no-audit --no-fund "./$tarball"
           "$prefix/node_modules/.bin/weather-for-grown-ups" --help
+          test "$("$prefix/node_modules/.bin/weather-for-grown-ups" --version)" = "$(node -p "require('./package.json').version")"
       - name: Publish to npm
         if: steps.version.outputs.published != 'true'
         run: npm publish
