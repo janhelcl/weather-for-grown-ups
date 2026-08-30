@@ -2,11 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
-import {
-  DEFAULT_HTTP_RETRY_MAX_ATTEMPTS,
-  isRetryableHttpStatus,
-  waitBeforeHttpRetry,
-} from "../access/http-retry.js";
+import { runWithHttpRetry } from "../access/http-retry.js";
 import { NCEI_GFS_HISTORY_BASE_URL } from "./ncei-gfs-history.js";
 
 export const NCEI_GFS_GRID4_FORECAST_START = new Date("2006-10-10T00:00:00Z");
@@ -87,12 +83,8 @@ export class NceiGfsForecastHistorySource implements ArchivedGfsForecastDataSour
       return { csv: await readFile(cachePath, "utf8"), dataset, cacheHit: true };
     }
 
-    for (let attempt = 1; attempt <= DEFAULT_HTTP_RETRY_MAX_ATTEMPTS; attempt += 1) {
-      if (await exists(cachePath)) {
-        return { csv: await readFile(cachePath, "utf8"), dataset, cacheHit: true };
-      }
-
-      const result = await this.options.limiter.run(async () => {
+    const result = await runWithHttpRetry(
+      () => this.options.limiter.run(async () => {
         if (await exists(cachePath)) {
           return {
             status: 200,
@@ -113,45 +105,40 @@ export class NceiGfsForecastHistorySource implements ArchivedGfsForecastDataSour
           csv: response.ok ? await response.text() : undefined,
           cacheHit: false,
         };
-      });
+      }),
+      {
+        ...(this.options.retryBaseDelayMs === undefined
+          ? {}
+          : { baseDelayMs: this.options.retryBaseDelayMs }),
+        ...(this.options.retryJitterRatio === undefined
+          ? {}
+          : { jitterRatio: this.options.retryJitterRatio }),
+      },
+    );
 
-      if (result.cacheHit && result.csv !== undefined) {
-        return { csv: result.csv, dataset, cacheHit: true };
-      }
-      if (isRetryableHttpStatus(result.status) && attempt < DEFAULT_HTTP_RETRY_MAX_ATTEMPTS) {
-        await waitBeforeHttpRetry(attempt, result.retryAfter, {
-          ...(this.options.retryBaseDelayMs === undefined
-            ? {}
-            : { baseDelayMs: this.options.retryBaseDelayMs }),
-          ...(this.options.retryJitterRatio === undefined
-            ? {}
-            : { jitterRatio: this.options.retryJitterRatio }),
-        });
-        continue;
-      }
-      if (result.status === 404) {
-        throw new Error(
-          `NCEI archived GFS forecast is not available online for run ${runTime.toISOString()} f${formatForecastHour(forecastHour)} (${dataset}). Older forecast data may require NCEI HAS retrieval.`,
-        );
-      }
-      if (result.status < 200 || result.status >= 300 || result.csv === undefined) {
-        throw new Error(
-          `NCEI archived GFS forecast request failed: HTTP ${result.status} ${result.statusText}`,
-        );
-      }
-      if (!result.csv.includes("\n")) {
-        throw new Error(
-          `NCEI archived GFS forecast returned an unexpected response: ${result.csv.slice(0, 240)}`,
-        );
-      }
-
-      const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
-      await writeFile(tempPath, result.csv, "utf8");
-      await rename(tempPath, cachePath);
-      return { csv: result.csv, dataset, cacheHit: false };
+    if (result.cacheHit && result.csv !== undefined) {
+      return { csv: result.csv, dataset, cacheHit: true };
+    }
+    if (result.status === 404) {
+      throw new Error(
+        `NCEI archived GFS forecast is not available online for run ${runTime.toISOString()} f${formatForecastHour(forecastHour)} (${dataset}). Older forecast data may require NCEI HAS retrieval.`,
+      );
+    }
+    if (result.status < 200 || result.status >= 300 || result.csv === undefined) {
+      throw new Error(
+        `NCEI archived GFS forecast request failed: HTTP ${result.status} ${result.statusText}`,
+      );
+    }
+    if (!result.csv.includes("\n")) {
+      throw new Error(
+        `NCEI archived GFS forecast returned an unexpected response: ${result.csv.slice(0, 240)}`,
+      );
     }
 
-    throw new Error("NCEI archived GFS forecast retry loop exhausted unexpectedly");
+    const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
+    await writeFile(tempPath, result.csv, "utf8");
+    await rename(tempPath, cachePath);
+    return { csv: result.csv, dataset, cacheHit: false };
   }
 }
 
