@@ -17,7 +17,10 @@ import {
   type PublicAtmosphericDataset,
   type QueryAtmosphereInput,
 } from "../schema/unified-api.js";
-import type { CompareAtmosphericDatasetsInput } from "../schema/unified-specialized.js";
+import type {
+  CompareAtmosphericDatasetsInput,
+  CompareAtmosphericRunsInput,
+} from "../schema/unified-specialized.js";
 import type { PointCoordinate } from "../schema/query.js";
 import type { AtmosphericStepProgress } from "../core/progress.js";
 import {
@@ -144,32 +147,9 @@ function registerCompareRunsCommand(program: Command): void {
     .option("--cycle-stride-hours <6|12>", "IFS ENS only: initialization-cycle stride", Number)
     .option("--json", "Output JSON")
     .action(async (options) => {
-      const selection = parseSelection({
-        vars: options.vars,
-        levels: options.levels,
-        fields: options.fields,
-      });
-      const result = await new UnifiedRunComparisonService().compare({
-        dataset: parseForecastDataset(options.dataset),
-        geometry: { type: "point", latitude: options.lat, longitude: options.lon },
-        time: { at: options.at },
-        selection,
-        anchorRun: options.anchorRun,
-        ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
-        cycles: options.cycles,
-        ...(options.members === undefined && options.quantiles === undefined
-          ? {}
-          : {
-              ensemble: {
-                ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
-                ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
-              },
-            }),
-        ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
-        ...(options.cycleStrideHours === undefined
-          ? {}
-          : { cycleStrideHours: options.cycleStrideHours }),
-      });
+      const result = await new UnifiedRunComparisonService().compare(
+        buildUnifiedRunComparison(options),
+      );
       printResult(result, Boolean(options.json));
     });
 }
@@ -391,6 +371,42 @@ export function buildUnifiedQuery(options: Record<string, any>): QueryAtmosphere
   };
 }
 
+export function buildUnifiedRunComparison(
+  options: Record<string, any>,
+): CompareAtmosphericRunsInput {
+  const dataset = parseForecastDataset(options.dataset);
+  const selection = parseSelection({
+    vars: options.vars,
+    levels: options.levels,
+    fields: options.fields,
+  });
+  return {
+    dataset,
+    geometry: { type: "point", latitude: options.lat, longitude: options.lon },
+    time: { at: options.at },
+    selection,
+    anchorRun: options.anchorRun ?? "latest",
+    ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
+    cycles: options.cycles ?? 3,
+    ...(options.members === undefined && options.quantiles === undefined
+      ? {}
+      : {
+          ensemble: {
+            ...(options.members === undefined
+              ? {}
+              : { members: parseEnsembleMembers(dataset, options.members) }),
+            ...(options.quantiles === undefined
+              ? {}
+              : { quantiles: parseNumbers(options.quantiles) }),
+          },
+        }),
+    ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
+    ...(options.cycleStrideHours === undefined
+      ? {}
+      : { cycleStrideHours: options.cycleStrideHours }),
+  };
+}
+
 export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAtmosphereInput {
   const dataset = parseDataset(options.dataset);
   const time = parseTime(options);
@@ -551,11 +567,7 @@ function ensembleInput(dataset: PublicAtmosphericDataset, options: Record<string
 
   const members = options.members === undefined
     ? undefined
-    : dataset === "gefs"
-      ? parseGefsMembers(options.members)
-      : dataset === "ifs-ens"
-        ? parseIfsEnsMembers(options.members)
-        : parseStrings(options.members);
+    : parseEnsembleMembers(dataset, options.members);
 
   return {
     ensemble: {
@@ -565,6 +577,15 @@ function ensembleInput(dataset: PublicAtmosphericDataset, options: Record<string
       ...(options.maxMemberSamples === undefined ? {} : { maxMemberSamples: options.maxMemberSamples }),
     },
   };
+}
+
+function parseEnsembleMembers(
+  dataset: PublicAtmosphericDataset,
+  value: unknown,
+): string[] {
+  if (dataset === "gefs") return parseGefsMembers(value);
+  if (dataset === "ifs-ens") return parseIfsEnsMembers(value);
+  return parseStrings(value);
 }
 
 function aggregateInput(options: Record<string, any>) {
