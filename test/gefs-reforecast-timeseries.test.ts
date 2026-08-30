@@ -162,4 +162,97 @@ describe("GEFSv12 reforecast time ranges", () => {
       includeMembers: false,
     });
   });
+
+  it("constructs default collaborators without performing eager source work", () => {
+    expect(() => new GefsReforecastTimeSeriesService()).not.toThrow();
+  });
+
+  it("rejects decoder drift across one retrospective range", async () => {
+    let call = 0;
+    const service = new GefsReforecastTimeSeriesService({
+      pointGetter: {
+        getPoint: vi.fn(async (query: any) => {
+          call += 1;
+          const validTime = new Date(query.validTime);
+          const forecastHour = (validTime.getTime() - run.getTime()) / 3_600_000;
+          return {
+            model: "gefs_v12_reforecast",
+            run: run.toISOString(),
+            validTime: validTime.toISOString(),
+            forecastHour,
+            gridPoint: { latitude: 50, longitude: 14.5 },
+            fieldSummaries: [{
+              field: "temperature_2m",
+              level: { gribLevel: "2 m above ground", description: "2 m above ground" },
+              temporal: { type: "instantaneous" },
+              outputs: [{
+                aggregation: "numeric_distribution",
+                field: "temperatureC",
+                unit: "degC",
+                distribution: distribution(10),
+              }],
+            }],
+            source: {
+              decoder: call === 1 ? "wgrib2" as const : "gribberish" as const,
+              leadBlock: "Days:1-10" as const,
+              horizontalGridDegrees: 0.25 as const,
+              allCacheHit: true,
+            },
+          };
+        }),
+      } as any,
+      profileGetter: { getProfile: vi.fn() } as any,
+      stepConcurrency: 1,
+    });
+
+    await expect(service.getTimeSeries({
+      latitude: 50,
+      longitude: 14,
+      run: run.toISOString(),
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T06:00:00Z",
+      selection: { kind: "fields", fields: ["temperature_2m"] },
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+    })).rejects.toThrow("changed decoder within one range");
+  });
+
+  it("rejects a collaborator result that drifts to another run", async () => {
+    const service = new GefsReforecastTimeSeriesService({
+      pointGetter: {
+        getPoint: vi.fn(async (query: any) => {
+          const validTime = new Date(query.validTime);
+          const forecastHour = (validTime.getTime() - run.getTime()) / 3_600_000;
+          return {
+            model: "gefs_v12_reforecast",
+            run: new Date(run.getTime() - 24 * 3_600_000).toISOString(),
+            validTime: validTime.toISOString(),
+            forecastHour,
+            gridPoint: { latitude: 50, longitude: 14.5 },
+            fieldSummaries: [],
+            source: {
+              decoder: "wgrib2" as const,
+              leadBlock: "Days:1-10" as const,
+              horizontalGridDegrees: 0.25 as const,
+              allCacheHit: true,
+            },
+          };
+        }),
+      } as any,
+      profileGetter: { getProfile: vi.fn() } as any,
+      stepConcurrency: 1,
+    });
+
+    await expect(service.getTimeSeries({
+      latitude: 50,
+      longitude: 14,
+      run: run.toISOString(),
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T03:00:00Z",
+      selection: { kind: "fields", fields: ["temperature_2m"] },
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+    })).rejects.toThrow("drifted between model runs");
+  });
+
 });
