@@ -113,6 +113,39 @@ describe("GEFSv12 reforecast pressure profiles", () => {
     });
   });
 
+  it("distinguishes run-local missing archive levels from global capabilities", async () => {
+    const service = new GefsReforecastProfileService({
+      source: {
+        fetchSelection: async ({ member }: any) => ({
+          path: member,
+          cacheHit: true,
+        }),
+      } as any,
+      decoder: {
+        engine: "gribberish" as const,
+        extractPoint: async () => [{
+          code: "SPFH",
+          pressureHpa: 850,
+          value: 0.004,
+          gridPoint: { latitude: 50, longitude: 14.5 },
+        }],
+      },
+    });
+
+    await expect(service.getProfile({
+      latitude: 50.08,
+      longitude: 14.43,
+      run,
+      validTime,
+      variables: ["specific_humidity"],
+      pressureLevelsHpa: [700],
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+    })).rejects.toThrow(
+      /specific_humidity@700mb.*available SPFH levels.*850.*run-local archive availability/i,
+    );
+  });
+
   it("rejects pressure levels where native specific humidity is absent", async () => {
     await expect(new GefsReforecastProfileService({
       source: { fetchSelection: vi.fn() } as any,
