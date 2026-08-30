@@ -32,6 +32,24 @@ The engine is organized around **operation × dataset** internally, while the pu
 
 Nonlinear diagnostics are evaluated independently on every GEFS or IFS ENS member before aggregation. WFG does not calculate CAPE, lapse rate, inversion structure or another nonlinear quantity from an ensemble-mean profile and pretend it represents the members.
 
+## Layer boundaries
+
+The implementation is split by responsibility rather than by whichever dataset was added first:
+
+- `schema/` defines the public query vocabulary and result contracts.
+- `core/query-adapters/` translates that common vocabulary into dataset-native application services. The unified query service validates once, dispatches by dataset, and wraps the result; it does not contain model-specific routing branches.
+- `core/` owns meteorological/application composition: profiles, time series, spatial composition, diagnostics, comparisons and archive routing.
+- `sources/` owns provider/product semantics: URLs, object naming, upstream inventories, archive endpoints and ECMWF mirror selection.
+- `access/` owns transport policy: provider concurrency/pacing and retry/backoff. Cache code and meteorology code do not invent their own provider etiquette.
+- `cache/` owns local immutable artifact reuse for expensive upstream products. Cache hits must bypass upstream access policy; cache misses still pass through the source/provider policy.
+- `grib/` owns decoding and byte/index interpretation.
+- `derived/` owns model-independent physical transformations.
+- `cli/` and MCP are presentation/transport adapters over the same schemas and application services.
+
+The dependency direction is intentionally inward: public surfaces depend on unified application services; unified query dispatch depends on dataset adapters; adapters depend on dataset-native core services; core services depend on source/cache/decoder abstractions. Provider policy does not depend on meteorology, and meteorological kernels do not depend on provider transport.
+
+A practical rule for new datasets is: **add capabilities to the catalog and one dataset adapter; do not add a new public query namespace.** A practical rule for new upstream backends is: **add or change a source/access implementation; do not change the public query language.**
+
 ## Atmospheric dataset capability boundary
 
 `src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `gefs`, `ifs`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth.
