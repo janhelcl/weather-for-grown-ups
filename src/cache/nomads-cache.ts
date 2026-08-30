@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { FileRateLimiter } from "./file-rate-limiter.js";
+import type { UpstreamAccessPolicy } from "../access/access-policy.js";
 
 export interface CachedFile {
   path: string;
@@ -11,7 +11,7 @@ export interface CachedFile {
 export class NomadsCache {
   constructor(
     private readonly rootDir: string,
-    private readonly limiter: FileRateLimiter,
+    private readonly accessPolicy: UpstreamAccessPolicy,
   ) {}
 
   async fetch(url: string): Promise<CachedFile> {
@@ -21,7 +21,7 @@ export class NomadsCache {
 
     if (await exists(path)) return { path, cacheHit: true };
 
-    return this.limiter.run(async () => {
+    return this.accessPolicy.run(async () => {
       if (await exists(path)) return { path, cacheHit: true };
 
       const response = await fetch(url, {
