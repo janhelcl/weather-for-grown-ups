@@ -117,6 +117,7 @@ WFG exposes deterministic **GFS 0.25° and 0.5°** (`0p25` default), member-firs
 | Aligned GFS-vs-GEFS comparison | ✅ | ✅ | — | — |
 | Aligned GFS-vs-IFS comparison | ✅ deterministic deltas | — | ✅ deterministic deltas | — |
 | Aligned GEFS-vs-IFS ENS comparison | — | ✅ distribution shifts | — | ✅ distribution shifts |
+| Aligned IFS-vs-IFS ENS comparison | — | — | ✅ control-relative rank | ✅ perturbed distribution |
 
 GEFS also supports control `c00` plus perturbed members `p01`–`p30`, native three-hour output through `f384`, mixed pressure/non-isobaric field bundles, and opt-in member payloads for auditability. Field-only requests automatically use NOAA's `pgrb2s` 0.25° selected-field product through `f240`; pressure-level and mixed requests use `pgrb2a` 0.5°, and field ranges extending beyond `f240` stay on 0.5° for the whole range. Result provenance reports the actual product and horizontal grid.
 

@@ -19,6 +19,7 @@ import {
 import { gefsMemberSchema } from "./gefs-ensemble.js";
 import { gefsIfsEnsComparisonVariableSchema } from "./gefs-ifs-ens-comparison.js";
 import { ifsEnsMemberSchema } from "./ifs-ens.js";
+import { ifsIfsEnsComparisonVariableSchema } from "./ifs-ifs-ens-comparison.js";
 import { ifsPressureLevelSchema, ifsPressureVariableSchema } from "./ifs.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 import {
@@ -133,10 +134,41 @@ export const compareGefsIfsEnsDatasetsSchema = z.object({
   }
 });
 
+export const compareIfsIfsEnsDatasetsSchema = z.object({
+  datasets: z.tuple([z.literal("ifs"), z.literal("ifs-ens")]),
+  geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
+  time: z.object({ at: isoDateTimeSchema }),
+  variable: ifsIfsEnsComparisonVariableSchema,
+  pressureLevelHpa: ifsPressureLevelSchema,
+  run: z.string().min(1).default("latest"),
+  ifsEnsMembers: z.array(ifsEnsMemberSchema).min(2).max(IFS_ENS_MEMBERS.length).optional(),
+  quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
+  gfsGrid: z.never().optional(),
+  members: z.never().optional(),
+  gefsMembers: z.never().optional(),
+  thresholdGte: z.never().optional(),
+}).superRefine((request, context) => {
+  if (request.ifsEnsMembers && new Set(request.ifsEnsMembers).size !== request.ifsEnsMembers.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["ifsEnsMembers"],
+      message: "IFS ENS member selection must not contain duplicates",
+    });
+  }
+  if (request.quantiles && new Set(request.quantiles).size !== request.quantiles.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["quantiles"],
+      message: "Quantile selection must not contain duplicates",
+    });
+  }
+});
+
 export const compareAtmosphericDatasetsSchema = z.union([
   compareGfsGefsDatasetsSchema,
   compareGfsIfsDatasetsSchema,
   compareGefsIfsEnsDatasetsSchema,
+  compareIfsIfsEnsDatasetsSchema,
 ]);
 
 const verifyAtmosphericForecastCaseSchema = z.object({

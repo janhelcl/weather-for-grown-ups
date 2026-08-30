@@ -88,6 +88,75 @@ describe("unified dataset comparison", () => {
     expect(gfsIfs.compare).not.toHaveBeenCalled();
   });
 
+  it("routes deterministic IFS against its own perturbed ENS distribution", async () => {
+    const gfsGefs = { compare: vi.fn() };
+    const gfsIfs = { compare: vi.fn() };
+    const gefsIfsEns = { compare: vi.fn() };
+    const ifsIfsEns = {
+      compare: vi.fn(async (query) => ({ route: "ifs-ifs-ens", query })),
+    };
+    const service = new UnifiedDatasetComparisonService(
+      gfsGefs as any,
+      gfsIfs as any,
+      gefsIfsEns as any,
+      ifsIfsEns as any,
+    );
+
+    const result = await service.compare({
+      datasets: ["ifs", "ifs-ens"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "absolute_vorticity",
+      pressureLevelHpa: 850,
+      run: "latest",
+      ifsEnsMembers: ["p01", "p50"],
+      quantiles: [0.1, 0.5, 0.9],
+    });
+
+    expect(result.datasets).toEqual(["ifs", "ifs-ens"]);
+    expect((result.result as any).route).toBe("ifs-ifs-ens");
+    expect(ifsIfsEns.compare).toHaveBeenCalledWith(expect.objectContaining({
+      validTime: "2026-08-28T12:00:00Z",
+      variable: "absolute_vorticity",
+      pressureLevelHpa: 850,
+      members: ["p01", "p50"],
+      quantiles: [0.1, 0.5, 0.9],
+    }));
+    expect(gfsGefs.compare).not.toHaveBeenCalled();
+    expect(gfsIfs.compare).not.toHaveBeenCalled();
+    expect(gefsIfsEns.compare).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid controls on IFS/IFS ENS comparison", () => {
+    const base = {
+      datasets: ["ifs", "ifs-ens"] as const,
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature" as const,
+      pressureLevelHpa: 850,
+    };
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      ifsEnsMembers: ["p01", "p01"],
+    })).toThrow("IFS ENS member selection must not contain duplicates");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      quantiles: [0.5, 0.5],
+    })).toThrow("Quantile selection must not contain duplicates");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      gfsGrid: "0p25",
+    })).toThrow();
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      variable: "wind",
+    })).toThrow();
+  });
+
   it("rejects duplicate member and quantile selections on GEFS/IFS ENS", () => {
     const base = {
       datasets: ["gefs", "ifs-ens"] as const,
