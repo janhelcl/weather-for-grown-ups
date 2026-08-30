@@ -8,6 +8,10 @@ import {
   AIGFS_PRESSURE_LEVELS_HPA,
   expandAigfsRequestedFields,
   expandAigfsRequestedVariables,
+  isAigfsAreaField,
+  isAigfsField,
+  isAigfsPressureLevel,
+  isAigfsPressureVariable,
 } from "../src/catalog/aigfs.js";
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
 import {
@@ -20,8 +24,11 @@ import {
   AIGFS_NATIVE_FORECAST_HOURS,
   aigfsForecastHour,
   aigfsNativeForecastHoursInRange,
+  aigfsValidTime,
   buildAigfsNomadsIndexUrl,
   buildAigfsNomadsUrl,
+  floorToAigfsCycle,
+  parseAigfsRun,
 } from "../src/sources/aigfs.js";
 import { diagnoseAtmosphereSchema, queryAtmosphereSchema } from "../src/schema/unified-api.js";
 import type { DecodedValue } from "../src/core/types.js";
@@ -660,5 +667,142 @@ describe("AIGFS run resolution", () => {
       endTime: new Date("2026-09-20T00:00:00Z"),
       products: { pressure: true, surface: false },
     })).rejects.toThrow("extends beyond the 384-hour AIGFS horizon");
+  });
+});
+
+
+describe("AIGFS guard branches", () => {
+  it("rejects malformed runs and non-native forecast hours", () => {
+    expect(() => parseAigfsRun("not-a-date")).toThrow("Invalid AIGFS run");
+    expect(() => parseAigfsRun("2026-08-30T03:00:00Z")).toThrow("00Z, 06Z, 12Z, or 18Z");
+    expect(() => aigfsValidTime(new Date("2026-08-30T00:00:00Z"), -6)).toThrow("0 to 384");
+    expect(() => aigfsValidTime(new Date("2026-08-30T00:00:00Z"), 3)).toThrow("every 6");
+    expect(() => aigfsValidTime(new Date("2026-08-30T00:00:00Z"), 390)).toThrow("0 to 384");
+  });
+
+  it("handles range boundaries and cycle flooring explicitly", () => {
+    const run = new Date("2026-08-30T00:00:00Z");
+    expect(() => aigfsNativeForecastHoursInRange(
+      run,
+      new Date("2026-08-30T12:00:00Z"),
+      new Date("2026-08-30T06:00:00Z"),
+    )).toThrow("endTime must be at or after startTime");
+    expect(() => aigfsNativeForecastHoursInRange(
+      run,
+      new Date("2026-09-20T00:00:00Z"),
+      new Date("2026-09-20T06:00:00Z"),
+    )).toThrow("No native AIGFS forecast outputs");
+    expect(floorToAigfsCycle(new Date("2026-08-30T17:42:12Z")).toISOString())
+      .toBe("2026-08-30T12:00:00.000Z");
+  });
+
+  it("keeps inventory membership and expansion failures truthful", () => {
+    expect(isAigfsPressureLevel(850)).toBe(true);
+    expect(isAigfsPressureLevel(750)).toBe(false);
+    expect(isAigfsPressureVariable("wind")).toBe(true);
+    expect(isAigfsPressureVariable("relative_humidity")).toBe(false);
+    expect(isAigfsField("wind_10m")).toBe(true);
+    expect(isAigfsField("dew_point_2m")).toBe(false);
+    expect(isAigfsAreaField("temperature_2m")).toBe(true);
+    expect(isAigfsAreaField("wind_10m")).toBe(false);
+    expect(() => expandAigfsRequestedVariables(["relative_humidity"]))
+      .toThrow("AIGFS pressure variables not supported");
+    expect(() => expandAigfsRequestedFields(["dew_point_2m"]))
+      .toThrow("AIGFS fields not supported");
+  });
+
+  it("rejects empty cache selections and productless availability probes without transport", async () => {
+    const fetchFn = vi.fn(async () => new Response("", { status: 500 }));
+    const cache = new AigfsNomadsSubsetCache(rootDir, fetchFn as typeof fetch, passthroughPolicy);
+    await expect(cache.fetch({
+      run: new Date("2026-08-30T00:00:00Z"),
+      forecastHour: 6,
+      variables: [],
+      pressureLevelsHpa: [],
+      fields: [],
+    })).rejects.toThrow("must contain at least one");
+    expect(await cache.isForecastAvailable(
+      new Date("2026-08-30T00:00:00Z"),
+      6,
+      { pressure: false, surface: false },
+    )).toBe(false);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("treats a missing index as unavailable and propagates non-404 availability errors", async () => {
+    const missingFetch = vi.fn(async () => new Response("", { status: 404, statusText: "Not Found" }));
+    const missing = new AigfsNomadsSubsetCache(rootDir, missingFetch as typeof fetch, passthroughPolicy);
+    expect(await missing.isForecastAvailable(
+      new Date("2026-08-30T00:00:00Z"),
+      6,
+      { pressure: true, surface: false },
+    )).toBe(false);
+
+    const failingRoot = join(rootDir, "failing");
+    const failingFetch = vi.fn(async () => new Response("", { status: 503, statusText: "Unavailable" }));
+    const failing = new AigfsNomadsSubsetCache(failingRoot, failingFetch as typeof fetch, passthroughPolicy);
+    await expect(failing.isForecastAvailable(
+      new Date("2026-08-30T00:00:00Z"),
+      6,
+      { pressure: false, surface: true },
+    )).rejects.toThrow("availability request failed");
+  });
+
+  it("fails latest resolution clearly when no eligible cycle is published", async () => {
+    const probe = { isForecastAvailable: vi.fn(async () => false) };
+    const resolver = new AigfsRunResolver(
+      probe,
+      () => new Date("2026-08-30T12:00:00Z").getTime(),
+      60_000,
+      2,
+    );
+    await expect(resolver.resolveLatestRun({
+      type: "valid_time",
+      validTime: new Date("2026-08-30T12:00:00Z"),
+      products: { pressure: true, surface: false },
+    })).rejects.toThrow("Could not find an AIGFS run");
+
+    await expect(resolver.resolveLatestCompleteRun({
+      pressure: true,
+      surface: false,
+    })).rejects.toThrow("Could not find a complete AIGFS run");
+  });
+
+  it("keeps direct service misuse outside the public schema explicit", async () => {
+    const fake = new AigfsForecastService({
+      cache: { fetch: vi.fn() } as any,
+      decoder: { extractPoint: vi.fn() },
+      runProvider: {
+        resolveLatestRun: vi.fn(),
+        resolveLatestCompleteRun: vi.fn(),
+      },
+    });
+    await expect(fake.query({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    } as any)).rejects.toThrow("only accepts dataset=aigfs");
+    await expect(fake.diagnose({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-30T06:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 700,
+        diagnostics: ["temperature_lapse_rate"],
+      },
+    } as any)).rejects.toThrow("only accepts dataset=aigfs");
+    await expect(fake.diagnose({
+      dataset: "aigfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-30T06:00:00Z" },
+      diagnostic: {
+        kind: "parcel",
+        pressureLevelsHpa: [1000, 925, 850],
+        parcel: "surface_2m",
+      },
+    } as any)).rejects.toThrow("does not expose parcel diagnostics");
   });
 });
