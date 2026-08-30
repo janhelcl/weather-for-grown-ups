@@ -1,6 +1,22 @@
 import type { GefsPgrb2aFieldId } from "./gefs-fields.js";
 import type { GefsMember } from "./gefs.js";
+import type { AtmosphericOperationId, AtmosphericRunSelectorId } from "./models.js";
 import type { VariableId } from "../schema/query.js";
+
+export const GEFS_REFORECAST_RUN_SELECTOR_IDS = [
+  "explicit",
+] as const satisfies readonly AtmosphericRunSelectorId[];
+
+export const GEFS_REFORECAST_OPERATION_IDS = [
+  "profile",
+  "timeseries",
+  "layer_diagnostics",
+  "profile_diagnostics",
+  "diagnostic_timeseries",
+  "points",
+  "points_timeseries",
+  "ensemble_distribution",
+] as const satisfies readonly AtmosphericOperationId[];
 
 export const GEFS_REFORECAST_STANDARD_MEMBERS = [
   "c00", "p01", "p02", "p03", "p04",
