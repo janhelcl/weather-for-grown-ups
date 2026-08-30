@@ -88,10 +88,10 @@ WFG currently targets Node.js 20 or newer.
 
 Docker remains useful for pinned/reproducible deployments. The image contains Node.js 24 and native `wgrib2 3.8.0` from conda-forge.
 
-The release workflow publishes both an exact semver image and a moving minor-version alias. The examples below use the current `0.2` alias:
+The release workflow publishes both an exact semver image and a moving minor-version alias. The examples below use the current `0.3` alias:
 
 ```bash
-docker run --rm ghcr.io/janhelcl/weather-for-grown-ups:0.2 catalog --search cloud --json
+docker run --rm ghcr.io/janhelcl/weather-for-grown-ups:0.3 catalog --search cloud --json
 ```
 
 The image entrypoint runs the `wfg` CLI by default, so all normal CLI arguments follow the image name.
@@ -99,7 +99,7 @@ The image entrypoint runs the `wfg` CLI by default, so all normal CLI arguments 
 For the stdio MCP surface:
 
 ```bash
-docker run -i --rm ghcr.io/janhelcl/weather-for-grown-ups:0.2 mcp
+docker run -i --rm ghcr.io/janhelcl/weather-for-grown-ups:0.3 mcp
 ```
 
 Example stdio MCP client configuration:
@@ -111,7 +111,7 @@ Example stdio MCP client configuration:
     "run",
     "-i",
     "--rm",
-    "ghcr.io/janhelcl/weather-for-grown-ups:0.2",
+    "ghcr.io/janhelcl/weather-for-grown-ups:0.3",
     "mcp"
   ]
 }
@@ -123,7 +123,7 @@ For Streamable HTTP:
 docker run --rm -p 3000:3000 \
   -e WFG_MCP_HOST=0.0.0.0 \
   -e WFG_MCP_ALLOWED_HOSTS=localhost,127.0.0.1 \
-  ghcr.io/janhelcl/weather-for-grown-ups:0.2 mcp-http
+  ghcr.io/janhelcl/weather-for-grown-ups:0.3 mcp-http
 ```
 
 ## Publishing

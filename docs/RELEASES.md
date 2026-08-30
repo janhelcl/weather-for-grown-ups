@@ -1,5 +1,51 @@
 # Releases
 
+## v0.3.0 — 2026-08-30
+
+v0.3.0 expands WFG's unified weather engine with a new retrospective ensemble forecast population and sharper model-comparison semantics, while keeping the core public query language stable.
+
+### GEFSv12 retrospective forecasts
+
+GEFSv12 reforecasts are now first-class behind the existing public `gefs` dataset using explicit `forecast.kind: "reforecast"` semantics.
+
+The retrospective surface now includes:
+
+- point and multi-point field queries;
+- native pressure profiles;
+- bounded point and multi-point time ranges across the native 3h → 6h cadence transition;
+- mixed pressure + non-isobaric field selections with truthful separate-grid provenance where the archive meshes differ;
+- member-first layer diagnostics for lapse rate, wind shear and potential-temperature gradient;
+- member-first freezing-level and inversion diagnostics;
+- truthful capability discovery that exposes only the retrospective subset actually supported.
+
+Reforecasts remain explicitly distinct from archived operational GEFS runs.
+
+### Model comparison
+
+`compare_datasets` now also supports deterministic IFS versus IFS ENS. Since ECMWF Cycle 50r1 uses deterministic IFS as the unperturbed control, WFG places that control inside the aligned 50-perturbation distribution and reports rank, standardized offset and range position rather than fabricating a 51st ensemble member.
+
+GFS transects also accept the same mixed pressure/non-isobaric field selection vocabulary used by the rest of the unified GFS query surface.
+
+### Architecture hardening
+
+The internal architecture was tightened around the project invariant:
+
+> **One query language over weather datasets; native semantics stay explicit.**
+
+- unified query/diagnostic/specialized operations dispatch through operation-specific adapter registries;
+- CLI and MCP surface equivalence is tested explicitly;
+- source access, retry/concurrency policy, caching, decoding and meteorological composition are separated more clearly;
+- provider-specific access policies remain isolated rather than leaking NOMADS pacing into unrelated sources;
+- documentation now treats the root README as the product front door and keeps model/source detail in the reference docs.
+
+### Reliability
+
+- IGRA retries transient network transport failures as well as retryable HTTP statuses;
+- live and parity gates cover GFS, GEFSv12 reforecasts, ECMWF IFS/IFS ENS and IGRA verification;
+- docs-only PRs avoid unnecessary expensive live parity gates where appropriate.
+
+No public operation names or dataset IDs were removed in this release.
+
 ## v0.2.2 — 2026-08-30
 
 v0.2.2 fixes runtime version reporting without changing the public query language.
