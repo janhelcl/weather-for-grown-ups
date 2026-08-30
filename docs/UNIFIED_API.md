@@ -1,6 +1,6 @@
 # Unified atmospheric API
 
-WFG's public API is organized around a small operation vocabulary and five atmospheric datasets.
+WFG's public API is organized around a small operation vocabulary and six atmospheric datasets.
 
 > **One query language for atmospheric state; datasets preserve their semantics.**
 
@@ -8,11 +8,14 @@ WFG's public API is organized around a small operation vocabulary and five atmos
 
 | Public ID | Internal dataset | Role | Result semantics |
 | --- | --- | --- | --- |
-| `gfs` | `gfs_0p25` / `gfs_0p50` operational; grid-matched 0.25° GDEX or 0.5° NCEI archive for old explicit runs | forecast | deterministic |
+| `gfs` | `gfs_0p25` / `gfs_0p50` operational; grid-matched 0.25° GDEX or 0.5° NCEI archive for old explicit runs | forecast | deterministic physics model |
+| `aigfs` | `aigfs_0p25` NOAA operational AIGFS | forecast | deterministic AI model |
 | `gefs` | operational `gefs_0p50`; explicit `forecast.kind=reforecast` resolves to `gefs_v12_reforecast` for supported retrospective queries | forecast | member-first ensemble |
 | `ifs` | `ifs_0p25` ECMWF Open Data operational forecast | forecast | deterministic |
 | `ifs-ens` | `ifs_ens_0p25` ECMWF Open Data ENS direct output | forecast | 50-member perturbed distribution |
 | `gfs-analysis` | `gfs_grid4_analysis_0p5` | historical analysis | deterministic analyzed state |
+
+`aigfs` keeps the same public state vocabulary while preserving its narrower native product: 0.25°, 00/06/12/18Z initializations, 6-hour output through f384, six native pressure variables and a small surface-field set. It supports point/range, multi-point/range, transect, scalar area, layer and structural profile diagnostics. Parcel diagnostics are explicitly absent because the operational surface product lacks the complete parcel initialization state used by WFG. See [AIGFS.md](AIGFS.md).
 
 Deterministic IFS supports point and multi-point access, native-cadence ranges, transects, raw scalar bbox area summaries, deterministic diagnostics, and run-to-run comparison while preserving ECMWF-native cadence and field semantics. IFS ENS supports point and multi-point member-first bundles, great-circle transects, member-first scalar area statistics, native-cadence point/multi-point state ranges and diagnostic time ranges, layer/profile/parcel diagnostics, and run-to-run distribution shifts with the same canonical pressure vocabulary, 50 perturbations and requested quantiles. Raw member payloads are opt-in for single-time/state queries; diagnostic ranges and run comparisons stay compact. The Cycle 50r1 unperturbed control is exposed as deterministic `ifs`. Unsupported combinations fail explicitly rather than falling through to another dataset. The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a separate public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently. GEFS reforecasts follow the same public-vocabulary principle but preserve a different physical meaning: `dataset: "gefs"` plus `forecast.kind: "reforecast"` selects a retrospective GEFSv12 forecast population, not an archive of whatever operational GEFS happened to run on that date.
 
@@ -31,6 +34,12 @@ dataset × geometry × time × selection
 ```
 
 Changing only the dataset asks the same atmospheric question of another source:
+
+```json
+{ "dataset": "aigfs" }
+```
+
+or:
 
 ```json
 { "dataset": "gefs" }
@@ -145,13 +154,14 @@ Run selection is capability-driven rather than syntactically pretending every fo
 | Dataset / population | Run selectors |
 | --- | --- |
 | GFS operational | `latest`, `latest_complete`, explicit ISO cycle |
+| AIGFS operational | `latest`, `latest_complete`, explicit ISO cycle |
 | GEFS operational | `latest`, explicit ISO cycle |
 | IFS operational | `latest`, explicit ISO cycle |
 | IFS ENS operational | `latest`, explicit ISO cycle |
 | GEFSv12 reforecast | explicit historical 00Z cycle only |
 | GFS analysis | no forecast run axis |
 
-`latest` means the newest published cycle that can satisfy the requested valid time/selection. GFS additionally exposes `latest_complete` for callers that specifically require a run published through its full horizon. Unsupported selectors fail at the dataset capability boundary; WFG does not manufacture equivalent semantics for sources that do not provide them. The same rule applies to query, diagnostic, run-comparison, and cross-dataset comparison surfaces.
+`latest` means the newest published cycle that can satisfy the requested valid time/selection. GFS and AIGFS expose `latest_complete` for callers that specifically require a run published through its full horizon. Unsupported selectors fail at the dataset capability boundary; WFG does not manufacture equivalent semantics for sources that do not provide them. The same rule applies to query, diagnostic, run-comparison, and cross-dataset comparison surfaces.
 
 The caller always asks for an atmospheric state valid at a time. Dataset-native time semantics stay in the result:
 
@@ -187,6 +197,8 @@ Non-isobaric fields:
 
 Where the dataset supports it, the two may be mixed in one request.
 
+For `aigfs`, native range sampling is every 6 forecast hours. Pressure-level requests are restricted to the published 50/100/150/200/250/300/400/500/600/700/850/925/1000 hPa surfaces. Pressure variables are temperature, U/V wind, geopotential height, specific humidity and vertical velocity plus derivations whose dependencies exist. Supported surface selections are 2 m temperature, 10 m U/V wind (plus derived `wind_10m`), mean-sea-level pressure and total precipitation. Unsupported state such as pressure-level relative humidity is rejected rather than substituted. Operational access uses cached NOMADS `.idx` inventories and partial HTTP ranges under the shared NOMADS access policy.
+
 For `gefs`, source resolution follows selection semantics rather than adding another public dataset. Field-only requests use the 0.25° selected-field product through `f240`. Any pressure-level selection, including a mixed pressure/field bundle, uses the 0.5° pressure product. A field-only time range that extends beyond `f240` uses 0.5° for the entire range so sampling resolution cannot change between steps.
 
 For GEFSv12 reforecasts, use an explicit historical run and `forecast.kind: "reforecast"`. The surface remains intentionally narrower than operational GEFS: point and multi-point queries support the verified single-level fields, native pressure profiles, or both together at one valid time or across a bounded `from`/`to` range. Daily retrospective runs use five members (`c00,p01..p04`) by default; explicitly selected `p05..p10` are accepted for runs where the weekly extended ensemble exists. The public AWS retrospective spans 2000–2019. Pressure variables currently include temperature, U/V wind, geopotential height, vertical velocity and specific humidity. Native range cadence is 3-hourly from f003 through f240 and 6-hourly from f246 through f384; there is no synthetic f243. Through f240, levels at/below 700 hPa use the retrospective 0.25° base files while upper levels use 0.5° files, and mixed profiles are sampled on one common 0.5° point. Because a range can cross the day-10 boundary, each step reports its own sampled grid point and horizontal-grid provenance; profile steps also preserve `profileGridPolicy`. For mixed pressure/field selections, WFG preserves separate pressure and field grid points and grid provenance because the retrospective files can genuinely resolve the same requested coordinate on different native meshes. Range payloads stay compact and raw member arrays remain single-time only. `diagnose_atmosphere` supports the retrospective subset's three layer diagnostics (`temperature_lapse_rate`, `wind_shear`, `potential_temperature_gradient`) and two structural profile diagnostics (`freezing_level_crossings`, `temperature_inversion_layers`) for instant or bounded range queries. Diagnostics are derived independently for each member before ensemble aggregation, and range steps retain their own sampled grid point, horizontal-grid resolution and `profileGridPolicy`. Parcel diagnostics remain explicit unsupported because the available retrospective subset lacks the surface/moisture inputs required by the parcel kernel. Transect/area geometry, derived pressure thermodynamics and unimplemented archive extensions fail explicitly rather than falling through to operational GEFS.
@@ -205,7 +217,7 @@ The compact public vocabulary is:
 | `verify_forecast` | Compare an archived GFS forecast with later GFS analysis or an IGRA radiosonde |
 | `find_analogs` | Search materialized historical atmospheric analogs |
 
-`search_catalog` returns a top-level `datasetCapabilities` section alongside field/diagnostic matches. It exposes each selected dataset's role, deterministic/ensemble kind, forecast populations, supported run selectors, and operations; the CLI `wfg catalog` prints the same capability summary before its match table. This is the canonical discovery surface for source differences rather than requiring callers to learn dataset-specific exceptions.
+`search_catalog` returns a top-level `datasetCapabilities` section alongside field/diagnostic matches. It exposes each selected dataset's role, deterministic/ensemble kind, model class, provider, native grid/cadence metadata, forecast populations, supported run selectors, and operations; the CLI `wfg catalog` prints the same capability summary before its match table. This is the canonical discovery surface for source differences rather than requiring callers to learn dataset-specific exceptions.
 
 `search_catalog` defaults to operational capabilities. To plan a GEFSv12 retrospective query, pass `datasets: ["gefs"]` and `forecastKind: "reforecast"`. The result contains only capabilities currently exposed by the reforecast path: the verified retrospective single-level fields, six native pressure variables, three layer diagnostics and two structural profile diagnostics. Derived pressure thermodynamics and parcel diagnostics remain absent because the retrospective source subset does not expose the dependencies needed to support them truthfully. The CLI equivalent is `wfg catalog --dataset gefs --forecast-kind reforecast`.
 
