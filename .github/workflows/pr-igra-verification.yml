@@ -3,6 +3,8 @@ name: PR IGRA verification
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
 
 concurrency:
   group: pr-igra-verification-${{ github.event.pull_request.number }}

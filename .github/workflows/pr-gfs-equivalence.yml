@@ -3,6 +3,8 @@ name: PR GFS parity
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
 
 concurrency:
   group: pr-gfs-parity-${{ github.event.pull_request.number }}
