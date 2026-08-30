@@ -14,16 +14,11 @@ describe("unified GEFS reforecast branch", () => {
     expect(queryAtmosphereSchema.parse(base)).toMatchObject(base);
   });
 
-  it("rejects implicit latest, pressure selections and unfinished geometries", () => {
+  it("rejects implicit latest and unfinished geometries", () => {
     expect(() => queryAtmosphereSchema.parse({
       ...base,
       forecast: { kind: "reforecast", run: "latest" },
     })).toThrow("explicit historical 00Z initialization");
-
-    expect(() => queryAtmosphereSchema.parse({
-      ...base,
-      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-    })).toThrow("field-only");
 
     expect(() => queryAtmosphereSchema.parse({
       ...base,
@@ -37,6 +32,38 @@ describe("unified GEFS reforecast branch", () => {
       ...base,
       time: { from: "2017-03-14T03:00:00Z", to: "2017-03-14T12:00:00Z" },
     })).toThrow("one valid time per query");
+  });
+
+  it("accepts verified pressure profiles and rejects unsupported pressure semantics", () => {
+    expect(queryAtmosphereSchema.parse({
+      ...base,
+      selection: {
+        variables: ["temperature", "specific_humidity"],
+        pressureLevelsHpa: [850, 500],
+      },
+    })).toMatchObject({
+      selection: {
+        variables: ["temperature", "specific_humidity"],
+        pressureLevelsHpa: [850, 500],
+      },
+    });
+
+    expect(() => queryAtmosphereSchema.parse({
+      ...base,
+      selection: {
+        variables: ["specific_humidity"],
+        pressureLevelsHpa: [50],
+      },
+    })).toThrow("specific_humidity at 50 hPa");
+
+    expect(() => queryAtmosphereSchema.parse({
+      ...base,
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+        fields: ["temperature_2m"],
+      },
+    })).toThrow("either a pressure profile or non-isobaric fields");
   });
 
   it("rejects fields and members whose retrospective semantics are not implemented", () => {
