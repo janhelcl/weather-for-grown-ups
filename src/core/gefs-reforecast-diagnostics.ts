@@ -410,12 +410,6 @@ function memberValuesToLevels(
         case "geopotential_height":
           level.geopotentialHeightGpm = value.value;
           break;
-        case "vertical_velocity":
-          level.verticalVelocityPaS = value.value;
-          break;
-        case "specific_humidity":
-          level.specificHumidityKgKg = value.value;
-          break;
       }
     }
     return level;
