@@ -2,13 +2,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { inflateRawSync } from "node:zlib";
-import type { UpstreamAccessPolicy } from "../cache/file-access-policy.js";
+import type { UpstreamAccessPolicy } from "../access/access-policy.js";
 import {
   DEFAULT_HTTP_RETRY_MAX_ATTEMPTS,
   isRetryableHttpStatus,
   isRetryableHttpTransportError,
   waitBeforeHttpRetry,
-} from "./http-retry.js";
+} from "../access/http-retry.js";
 import { deriveSaturationVaporPressureHpa } from "../derived/thermodynamics.js";
 import type { ProfileLevel } from "../core/types.js";
 
