@@ -999,13 +999,15 @@ function wrapResult(
   result: unknown,
 ): UnifiedAtmosphereResult {
   const metadata = publicDatasetMetadata(request.dataset);
-  const internalDatasetId = isArchivedGfsForecastResult(result)
-    ? (result as { model: "gfs_0p25_forecast_archive" | "gfs_grid4_forecast_0p5_archive" }).model
-    : isOperationalGfsResult(result)
-      ? (result as { model: "gfs_0p25" | "gfs_0p50" }).model
-      : isGefsReforecastResult(result)
-        ? "gefs_v12_reforecast"
-        : metadata.internalDatasetId;
+  const internalDatasetId = request.forecast?.kind === "reforecast"
+    ? "gefs_v12_reforecast"
+    : isArchivedGfsForecastResult(result)
+      ? (result as { model: "gfs_0p25_forecast_archive" | "gfs_grid4_forecast_0p5_archive" }).model
+      : isOperationalGfsResult(result)
+        ? (result as { model: "gfs_0p25" | "gfs_0p50" }).model
+        : isGefsReforecastResult(result)
+          ? "gefs_v12_reforecast"
+          : metadata.internalDatasetId;
   return unifiedAtmosphereResultSchema.parse({
     dataset: request.dataset,
     internalDatasetId,
