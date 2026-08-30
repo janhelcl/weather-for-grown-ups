@@ -14,6 +14,7 @@ import {
   createAtmosphericQueryAdapterRegistry,
 } from "../src/core/query-adapters/registry.js";
 import { AigfsForecastService } from "../src/core/aigfs.js";
+import { AigfsRunResolver, resolveAigfsRun } from "../src/core/aigfs-run.js";
 import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-query.js";
 import {
   AIGFS_NATIVE_FORECAST_HOURS,
@@ -568,3 +569,96 @@ function fakeStats(mean: number, min: number, max: number) {
     max,
   };
 }
+
+
+describe("AIGFS run resolution", () => {
+  it("walks back cycles until the requested native valid time is published and caches the answer", async () => {
+    const availableRun = new Date("2026-08-30T06:00:00Z");
+    const probe = {
+      isForecastAvailable: vi.fn(async (run: Date, forecastHour: number) =>
+        run.getTime() === availableRun.getTime() && forecastHour === 6),
+    };
+    const resolver = new AigfsRunResolver(
+      probe,
+      () => new Date("2026-08-30T13:00:00Z").getTime(),
+      60_000,
+      4,
+    );
+    const requirement = {
+      type: "valid_time" as const,
+      validTime: new Date("2026-08-30T12:00:00Z"),
+      products: { pressure: true, surface: false },
+    };
+
+    expect(await resolver.resolveLatestRun(requirement)).toEqual(availableRun);
+    const calls = probe.isForecastAvailable.mock.calls.length;
+    expect(await resolver.resolveLatestRun(requirement)).toEqual(availableRun);
+    expect(probe.isForecastAvailable).toHaveBeenCalledTimes(calls);
+  });
+
+  it("checks the full horizon for latest_complete and both ends of a range", async () => {
+    const run = new Date("2026-08-30T00:00:00Z");
+    const probe = {
+      isForecastAvailable: vi.fn(async (candidate: Date, forecastHour: number) =>
+        candidate.getTime() === run.getTime() && [6, 18, 384].includes(forecastHour)),
+    };
+    const resolver = new AigfsRunResolver(
+      probe,
+      () => new Date("2026-08-30T05:00:00Z").getTime(),
+      60_000,
+      2,
+    );
+
+    expect(await resolver.resolveLatestCompleteRun({ pressure: true, surface: true })).toEqual(run);
+    expect(probe.isForecastAvailable).toHaveBeenCalledWith(
+      run,
+      384,
+      { pressure: true, surface: true },
+    );
+
+    expect(await resolver.resolveLatestRun({
+      type: "time_range",
+      startTime: new Date("2026-08-30T06:00:00Z"),
+      endTime: new Date("2026-08-30T18:00:00Z"),
+      products: { pressure: true, surface: false },
+    })).toEqual(run);
+    expect(probe.isForecastAvailable).toHaveBeenCalledWith(
+      run,
+      6,
+      { pressure: true, surface: false },
+    );
+    expect(probe.isForecastAvailable).toHaveBeenCalledWith(
+      run,
+      18,
+      { pressure: true, surface: false },
+    );
+  });
+
+  it("parses explicit cycles without probing and rejects impossible latest ranges", async () => {
+    const probe = { isForecastAvailable: vi.fn(async () => false) };
+    const resolver = new AigfsRunResolver(
+      probe,
+      () => new Date("2026-08-30T12:00:00Z").getTime(),
+      60_000,
+      2,
+    );
+    const explicit = resolveAigfsRun(
+      "2026-08-30T06:00:00Z",
+      {
+        type: "valid_time",
+        validTime: new Date("2026-08-30T12:00:00Z"),
+        products: { pressure: true, surface: false },
+      },
+      resolver,
+    );
+    expect(explicit).toEqual(new Date("2026-08-30T06:00:00Z"));
+    expect(probe.isForecastAvailable).not.toHaveBeenCalled();
+
+    await expect(resolver.resolveLatestRun({
+      type: "time_range",
+      startTime: new Date("2026-08-30T12:00:00Z"),
+      endTime: new Date("2026-09-20T00:00:00Z"),
+      products: { pressure: true, surface: false },
+    })).rejects.toThrow("extends beyond the 384-hour AIGFS horizon");
+  });
+});
