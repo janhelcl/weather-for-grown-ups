@@ -467,14 +467,15 @@ export class AigfsForecastService {
     const profile = await this.profileAt(run, validTime, request.geometry, selection);
 
     if (request.diagnostic.kind === "layer") {
+      const diagnostic = request.diagnostic;
       const diagnostics = deriveLayerDiagnosticsFromLevels(
         profile.levels,
-        request.diagnostic.lowerPressureHpa,
-        request.diagnostic.upperPressureHpa,
-        request.diagnostic.diagnostics,
+        diagnostic.lowerPressureHpa,
+        diagnostic.upperPressureHpa,
+        diagnostic.diagnostics,
       );
-      const lower = profile.levels.find((level) => level.pressureHpa === request.diagnostic.lowerPressureHpa)!;
-      const upper = profile.levels.find((level) => level.pressureHpa === request.diagnostic.upperPressureHpa)!;
+      const lower = profile.levels.find((level) => level.pressureHpa === diagnostic.lowerPressureHpa)!;
+      const upper = profile.levels.find((level) => level.pressureHpa === diagnostic.upperPressureHpa)!;
       const lowerHeight = lower.geopotentialHeightGpm!;
       const upperHeight = upper.geopotentialHeightGpm!;
       return {
@@ -485,8 +486,8 @@ export class AigfsForecastService {
         requestedPoint: profile.requestedPoint,
         gridPoint: profile.gridPoint,
         layer: {
-          lowerPressureHpa: request.diagnostic.lowerPressureHpa,
-          upperPressureHpa: request.diagnostic.upperPressureHpa,
+          lowerPressureHpa: diagnostic.lowerPressureHpa,
+          upperPressureHpa: diagnostic.upperPressureHpa,
           lowerGeopotentialHeightGpm: lowerHeight,
           upperGeopotentialHeightGpm: upperHeight,
           depthGpm: upperHeight - lowerHeight,
@@ -627,20 +628,33 @@ export class AigfsForecastService {
     selection: ExpandedSelection,
   ): Promise<AigfsProfileResult> {
     const decoded = await this.decoder.extractPoint(cached.path, point.longitude, point.latitude);
-    const levels = selection.pressureLevelsHpa.map((pressureHpa) => ({ pressureHpa }));
+    const firstValue = decoded[0];
+    if (firstValue === undefined) throw new Error("AIGFS decoder returned no grid point");
+
+    assertPressureComplete(
+      decoded,
+      selection.variables.map((variable) => variable.gfsCode),
+      selection.pressureLevelsHpa,
+    );
+    assertFieldsComplete(decoded, selection.fields);
+
+    const levelMap = new Map<number, ProfileLevel>();
+    for (const pressureHpa of selection.pressureLevelsHpa) {
+      levelMap.set(pressureHpa, { pressureHpa });
+    }
     for (const value of decoded) {
       if (value.pressureHpa === undefined) continue;
-      const level = levels.find((candidate) => candidate.pressureHpa === value.pressureHpa);
+      const level = levelMap.get(value.pressureHpa);
       if (level !== undefined) applyDecodedPressureValue(level, value);
     }
-    applyDerivedPressureValues(levels, selection.variableIds);
-    assertPressureComplete(levels, selection.variables);
-    const fields = selection.fields.map((definition) =>
-      buildFieldResult(definition, decoded, run));
-    assertFieldsComplete(fields, selection.fields);
+    for (const level of levelMap.values()) {
+      applyDerivedPressureValues(level, selection.variableIds);
+    }
+    const levels = [...levelMap.values()].sort((a, b) => b.pressureHpa - a.pressureHpa);
+    const fields = selection.fieldIds.map((id) =>
+      buildFieldResult(NON_ISOBARIC_FIELD_CATALOG[id], decoded, run));
 
-    const gridPoint = decoded[0]?.gridPoint;
-    if (gridPoint === undefined) throw new Error("AIGFS decoder returned no grid point");
+    const gridPoint = firstValue.gridPoint;
     return {
       model: MODEL,
       run: run.toISOString(),
