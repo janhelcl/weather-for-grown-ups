@@ -1,6 +1,7 @@
 import * as z from "zod/v4";
 import {
   GEFS_REFORECAST_EXTENDED_MEMBERS,
+  GEFS_REFORECAST_PRESSURE_LEVELS_HPA,
   GEFS_REFORECAST_PRESSURE_VARIABLE_IDS,
   GEFS_REFORECAST_STANDARD_MEMBERS,
   isSupportedGefsReforecastPressureSelection,
@@ -75,6 +76,16 @@ function validateRequiredVariables(
   path: Array<string | number>,
   context: z.RefinementCtx,
 ): void {
+  const supportedLevels = new Set<number>(GEFS_REFORECAST_PRESSURE_LEVELS_HPA);
+  for (const pressureLevelHpa of pressureLevelsHpa) {
+    if (!supportedLevels.has(pressureLevelHpa)) {
+      context.addIssue({
+        code: "custom",
+        path: ["pressureLevelsHpa"],
+        message: `GEFSv12 reforecast does not publish pressure level ${pressureLevelHpa} hPa`,
+      });
+    }
+  }
   const supported = new Set<string>(GEFS_REFORECAST_PRESSURE_VARIABLE_IDS);
   for (const variable of variables) {
     if (!supported.has(variable)) {
