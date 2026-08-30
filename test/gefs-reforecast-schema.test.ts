@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { gefsReforecastTimeSeriesQuerySchema } from "../src/schema/gefs-reforecast.js";
+import {
+  gefsReforecastPointsTimeSeriesQuerySchema,
+  gefsReforecastTimeSeriesQuerySchema,
+} from "../src/schema/gefs-reforecast.js";
 import { queryAtmosphereSchema } from "../src/schema/unified-api.js";
 
 const base = {
@@ -41,14 +44,17 @@ describe("unified GEFS reforecast branch", () => {
       },
     })).toThrow("point and multi-point geometry");
 
-    expect(() => queryAtmosphereSchema.parse({
+    expect(queryAtmosphereSchema.parse({
       ...base,
       geometry: {
         type: "points",
         points: [{ latitude: 50.08, longitude: 14.43 }, { latitude: 49.2, longitude: 16.61 }],
       },
       time: { from: "2017-03-14T03:00:00Z", to: "2017-03-14T12:00:00Z" },
-    })).toThrow("multi-point queries currently support one valid time");
+    })).toMatchObject({
+      geometry: { type: "points" },
+      time: { from: "2017-03-14T03:00:00Z", to: "2017-03-14T12:00:00Z" },
+    });
 
     expect(queryAtmosphereSchema.parse({
       ...base,
@@ -159,6 +165,70 @@ describe("unified GEFS reforecast branch", () => {
         pressureLevelsHpa: [850, 850],
       },
     })).toThrow();
+  });
+
+
+  it("validates direct reforecast multi-point range matrix and selection guards", () => {
+    const range = {
+      points: [
+        { latitude: 50.08, longitude: 14.43 },
+        { latitude: 49.2, longitude: 16.61 },
+      ],
+      run: "2017-03-14T00:00:00Z",
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T06:00:00Z",
+      selection: { kind: "fields" as const, fields: ["temperature_2m" as const] },
+      members: ["c00" as const, "p01" as const],
+      quantiles: [0.5],
+      maxPointSteps: 4,
+    };
+    expect(gefsReforecastPointsTimeSeriesQuerySchema.parse(range)).toMatchObject({
+      maxPointSteps: 4,
+    });
+    expect(() => gefsReforecastPointsTimeSeriesQuerySchema.parse({
+      ...range,
+      startTime: "2017-03-14T06:00:00Z",
+      endTime: "2017-03-14T03:00:00Z",
+    })).toThrow("endTime must be at or after startTime");
+    expect(() => gefsReforecastPointsTimeSeriesQuerySchema.parse({
+      ...range,
+      members: ["c00", "c00"],
+    })).toThrow("members must not contain duplicates");
+    expect(() => gefsReforecastPointsTimeSeriesQuerySchema.parse({
+      ...range,
+      quantiles: [0.5, 0.5],
+    })).toThrow("Quantiles must not contain duplicates");
+    expect(() => gefsReforecastPointsTimeSeriesQuerySchema.parse({
+      ...range,
+      selection: {
+        kind: "fields",
+        fields: ["temperature_2m", "temperature_2m"],
+      },
+    })).toThrow("fields must not contain duplicates");
+    expect(() => gefsReforecastPointsTimeSeriesQuerySchema.parse({
+      ...range,
+      selection: {
+        kind: "profile",
+        variables: ["temperature", "temperature"],
+        pressureLevelsHpa: [850, 850],
+      },
+    })).toThrow();
+    expect(() => gefsReforecastPointsTimeSeriesQuerySchema.parse({
+      ...range,
+      selection: {
+        kind: "profile",
+        variables: ["specific_humidity"],
+        pressureLevelsHpa: [50],
+      },
+    })).toThrow("specific_humidity at 50 hPa");
+    expect(() => gefsReforecastPointsTimeSeriesQuerySchema.parse({
+      ...range,
+      selection: {
+        kind: "profile",
+        variables: ["temperature"],
+        pressureLevelsHpa: [850, 850],
+      },
+    })).toThrow("pressure levels must not contain duplicates");
   });
 
 });

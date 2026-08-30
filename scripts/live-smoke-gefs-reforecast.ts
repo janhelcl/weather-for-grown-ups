@@ -152,6 +152,64 @@ for (const point of points.points) {
   assert(Number.isFinite(point.fieldSummaries[0].outputs[0].distribution.mean));
 }
 
+
+const pointsRangeResult = await service.query({
+  dataset: "gefs",
+  geometry: {
+    type: "points",
+    points: [
+      { latitude: 50.13, longitude: 14.37 },
+      { latitude: 49.2, longitude: 16.61 },
+    ],
+  },
+  time: {
+    from: "2017-03-23T21:00:00Z",
+    to: "2017-03-24T06:00:00Z",
+    maxSteps: 3,
+  },
+  selection: { fields: ["temperature_2m"] },
+  forecast: {
+    kind: "reforecast",
+    run: "2017-03-14T00:00:00Z",
+  },
+  ensemble: {
+    members: ["c00", "p01"],
+    quantiles: [0.5],
+  },
+  limits: { maxPointSteps: 6 },
+});
+const pointsRange = pointsRangeResult.result as any;
+assert.equal(pointsRangeResult.internalDatasetId, "gefs_v12_reforecast");
+assert.equal(pointsRangeResult.geometryType, "points");
+assert.equal(pointsRangeResult.timeType, "range");
+assert.deepEqual(
+  pointsRange.series.map((step: any) => step.forecastHour),
+  [237, 240, 246],
+);
+assert.deepEqual(
+  pointsRange.series.map((step: any) => step.source.horizontalGridDegrees),
+  [0.25, 0.25, 0.5],
+);
+assert.deepEqual(
+  pointsRange.series[0].points.map((point: any) => point.requestedPoint),
+  [
+    { latitude: 50.13, longitude: 14.37 },
+    { latitude: 49.2, longitude: 16.61 },
+  ],
+);
+assert.notDeepEqual(
+  pointsRange.series[0].points.map((point: any) => point.gridPoint),
+  pointsRange.series[2].points.map((point: any) => point.gridPoint),
+);
+for (const step of pointsRange.series) {
+  assert.equal(step.kind, "fields");
+  assert.equal(step.points.length, 2);
+  for (const point of step.points) {
+    assert.equal(point.fieldSummaries[0].field, "temperature_2m");
+    assert(Number.isFinite(point.fieldSummaries[0].outputs[0].distribution.mean));
+  }
+}
+
 console.log(JSON.stringify({
   dataset: result.dataset,
   internalDatasetId: result.internalDatasetId,
@@ -175,5 +233,10 @@ console.log(JSON.stringify({
     selection: points.selection,
     points: points.points,
     source: points.source,
+  },
+  pointsRange: {
+    selection: pointsRange.selection,
+    series: pointsRange.series,
+    source: pointsRange.source,
   },
 }, null, 2));

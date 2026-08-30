@@ -291,4 +291,71 @@ describe("unified GEFS reforecast routing", () => {
     }));
   });
 
+
+  it("routes reforecast multi-point ranges without operational GEFS fallback", async () => {
+    const operational = { getPointsTimeSeries: vi.fn() };
+    const reforecastRange = {
+      getPointsTimeSeries: vi.fn(async () => ({
+        model: "gefs_v12_reforecast",
+        route: "reforecast-points-range",
+      })),
+    };
+    const service = new UnifiedAtmosphereQueryService({
+      gefsPointsTimeSeries: operational as any,
+      gefsReforecastPointsTimeSeries: reforecastRange as any,
+    });
+
+    const result = await service.query({
+      dataset: "gefs",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50.13, longitude: 14.37 },
+          { latitude: 49.2, longitude: 16.61 },
+        ],
+      },
+      time: {
+        from: "2017-03-23T21:00:00Z",
+        to: "2017-03-24T06:00:00Z",
+        maxSteps: 3,
+      },
+      selection: { fields: ["temperature_2m"] },
+      forecast: {
+        kind: "reforecast",
+        run: "2017-03-14T00:00:00Z",
+      },
+      ensemble: {
+        members: ["c00", "p01"],
+        quantiles: [0.5],
+      },
+      limits: { maxPointSteps: 6 },
+    });
+
+    expect(result.internalDatasetId).toBe("gefs_v12_reforecast");
+    expect(result.geometryType).toBe("points");
+    expect(result.timeType).toBe("range");
+    expect(result.result).toEqual({
+      model: "gefs_v12_reforecast",
+      route: "reforecast-points-range",
+    });
+    expect(reforecastRange.getPointsTimeSeries).toHaveBeenCalledWith(expect.objectContaining({
+      points: [
+        { latitude: 50.13, longitude: 14.37 },
+        { latitude: 49.2, longitude: 16.61 },
+      ],
+      run: "2017-03-14T00:00:00Z",
+      startTime: "2017-03-23T21:00:00Z",
+      endTime: "2017-03-24T06:00:00Z",
+      maxSteps: 3,
+      maxPointSteps: 6,
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+      selection: {
+        kind: "fields",
+        fields: ["temperature_2m"],
+      },
+    }));
+    expect(operational.getPointsTimeSeries).not.toHaveBeenCalled();
+  });
+
 });

@@ -355,6 +355,163 @@ export type GefsReforecastPointsResult =
 export const GEFS_REFORECAST_TIME_SERIES_DEFAULT_MAX_STEPS = 40;
 export const GEFS_REFORECAST_TIME_SERIES_MAX_STEPS = 104;
 
+export const GEFS_REFORECAST_POINTS_TIME_SERIES_DEFAULT_MAX_POINT_STEPS = 800;
+export const GEFS_REFORECAST_POINTS_TIME_SERIES_MAX_POINT_STEPS = 5_000;
+
+export const gefsReforecastPointsTimeSeriesQuerySchema = z.object({
+  points: z.array(pointCoordinateSchema).min(1).max(GEFS_REFORECAST_MAX_POINTS),
+  run: isoDateTimeSchema.describe(
+    "Explicit GEFSv12 reforecast initialization; public AWS reforecasts are daily 00Z runs from 2000 through 2019",
+  ),
+  startTime: isoDateTimeSchema,
+  endTime: isoDateTimeSchema,
+  selection: gefsReforecastPointsSelectionSchema,
+  members: z.array(gefsReforecastMemberSchema)
+    .min(2)
+    .max(GEFS_REFORECAST_EXTENDED_MEMBERS.length)
+    .default([...GEFS_REFORECAST_STANDARD_MEMBERS]),
+  quantiles: z.array(z.number().min(0).max(1))
+    .min(1)
+    .max(9)
+    .default([0.1, 0.5, 0.9]),
+  maxSteps: z.number().int().min(1).max(GEFS_REFORECAST_TIME_SERIES_MAX_STEPS)
+    .default(GEFS_REFORECAST_TIME_SERIES_DEFAULT_MAX_STEPS),
+  maxPointSteps: z.number().int().min(1)
+    .max(GEFS_REFORECAST_POINTS_TIME_SERIES_MAX_POINT_STEPS)
+    .default(GEFS_REFORECAST_POINTS_TIME_SERIES_DEFAULT_MAX_POINT_STEPS),
+}).superRefine((query, context) => {
+  if (new Date(query.endTime).getTime() < new Date(query.startTime).getTime()) {
+    context.addIssue({
+      code: "custom",
+      path: ["endTime"],
+      message: "endTime must be at or after startTime",
+    });
+  }
+  if (new Set(query.members).size !== query.members.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["members"],
+      message: "GEFSv12 reforecast members must not contain duplicates",
+    });
+  }
+  if (new Set(query.quantiles).size !== query.quantiles.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["quantiles"],
+      message: "Quantiles must not contain duplicates",
+    });
+  }
+  if (query.selection.kind === "fields") {
+    if (new Set(query.selection.fields).size !== query.selection.fields.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "fields"],
+        message: "GEFSv12 reforecast fields must not contain duplicates",
+      });
+    }
+    return;
+  }
+  if (new Set(query.selection.variables).size !== query.selection.variables.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["selection", "variables"],
+      message: "GEFSv12 reforecast profile variables must not contain duplicates",
+    });
+  }
+  if (
+    new Set(query.selection.pressureLevelsHpa).size
+    !== query.selection.pressureLevelsHpa.length
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["selection", "pressureLevelsHpa"],
+      message: "GEFSv12 reforecast pressure levels must not contain duplicates",
+    });
+  }
+  for (const variable of query.selection.variables) {
+    for (const pressureLevelHpa of query.selection.pressureLevelsHpa) {
+      if (!isSupportedGefsReforecastPressureSelection(variable, pressureLevelHpa)) {
+        context.addIssue({
+          code: "custom",
+          path: ["selection", "pressureLevelsHpa"],
+          message: `GEFSv12 reforecast cannot satisfy ${variable} at ${pressureLevelHpa} hPa`,
+        });
+      }
+    }
+  }
+});
+
+const reforecastPointsTimeSeriesBaseStepSchema = z.object({
+  validTime: isoDateTimeSchema,
+  forecastHour: z.number().int().min(3).max(384),
+});
+
+const reforecastFieldPointsTimeSeriesStepSchema =
+  reforecastPointsTimeSeriesBaseStepSchema.extend({
+    kind: z.literal("fields"),
+    points: z.array(reforecastFieldPointSchema).min(1).max(GEFS_REFORECAST_MAX_POINTS),
+    source: z.object({
+      leadBlock: z.enum(["Days:1-10", "Days:10-16"]),
+      horizontalGridDegrees: z.union([z.literal(0.25), z.literal(0.5)]),
+      allCacheHit: z.boolean(),
+    }),
+  });
+
+const reforecastProfilePointsTimeSeriesStepSchema =
+  reforecastPointsTimeSeriesBaseStepSchema.extend({
+    kind: z.literal("profile"),
+    points: z.array(reforecastProfilePointSchema).min(1).max(GEFS_REFORECAST_MAX_POINTS),
+    source: z.object({
+      leadBlock: z.enum(["Days:1-10", "Days:10-16"]),
+      horizontalGridDegrees: z.union([z.literal(0.25), z.literal(0.5)]),
+      profileGridPolicy: z.enum(["native_0p25", "native_0p50", "coherent_0p50"]),
+      allCacheHit: z.boolean(),
+    }),
+  });
+
+const reforecastPointsTimeSeriesSelectionResultSchema =
+  z.discriminatedUnion("kind", [
+    reforecastFieldPointsResultSchema.shape.selection,
+    reforecastProfilePointsResultSchema.shape.selection,
+  ]);
+
+export const gefsReforecastPointsTimeSeriesResultSchema = z.object({
+  model: z.literal("gefs_v12_reforecast"),
+  run: isoDateTimeSchema,
+  startTime: isoDateTimeSchema,
+  endTime: isoDateTimeSchema,
+  selection: reforecastPointsTimeSeriesSelectionResultSchema,
+  series: z.array(z.discriminatedUnion("kind", [
+    reforecastFieldPointsTimeSeriesStepSchema,
+    reforecastProfilePointsTimeSeriesStepSchema,
+  ])).min(1).max(GEFS_REFORECAST_TIME_SERIES_MAX_STEPS),
+  source: z.object({
+    provider: z.literal("NOAA AWS Open Data"),
+    access: z.literal("s3_range"),
+    decoder: z.enum(["gribberish", "wgrib2"]),
+    archiveType: z.literal("reforecast"),
+    dataset: z.literal("GEFSv12/reforecast"),
+    nativeCadence: z.tuple([
+      z.object({
+        fromForecastHour: z.literal(3),
+        throughForecastHour: z.literal(240),
+        stepHours: z.literal(3),
+      }),
+      z.object({
+        fromForecastHour: z.literal(246),
+        throughForecastHour: z.literal(384),
+        stepHours: z.literal(6),
+      }),
+    ]),
+    allCacheHit: z.boolean(),
+  }),
+});
+
+export type GefsReforecastPointsTimeSeriesQueryInput =
+  z.input<typeof gefsReforecastPointsTimeSeriesQuerySchema>;
+export type GefsReforecastPointsTimeSeriesResult =
+  z.infer<typeof gefsReforecastPointsTimeSeriesResultSchema>;
+
 const gefsReforecastTimeSeriesSelectionSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("fields"),
