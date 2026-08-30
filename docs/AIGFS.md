@@ -51,7 +51,7 @@ The operational surface product currently supports these canonical WFG fields:
 - `v_wind_10m`;
 - `wind_10m` as the shared derived vector magnitude/direction;
 - `mean_sea_level_pressure`;
-- `total_precipitation`.
+- `total_precipitation` for positive forecast leads; AIGFS f000 does not publish APCP.
 
 WFG does **not** synthesize missing native state. In particular, AIGFS does not expose pressure-level relative humidity in the operational product, so `relative_humidity` and dew-point derivation are not advertised.
 
