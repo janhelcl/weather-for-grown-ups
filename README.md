@@ -2,7 +2,7 @@
 
 **Weather is the hello-world of agent tools. This is the version for when “temperature tomorrow” stops being enough.**
 
-Weather for Grown Ups (WFG) gives agents direct, structured access to numerical weather prediction: NOAA **GFS**, **GEFS** and historical GFS data, plus ECMWF **IFS** and **IFS ENS**.
+Weather for Grown Ups (WFG) gives agents direct, structured access to numerical weather prediction: NOAA **GFS**, **AIGFS**, **GEFS** and historical GFS data, plus ECMWF **IFS** and **IFS ENS**.
 
 The central idea is deliberately simple:
 
@@ -102,6 +102,7 @@ Old GFS initializations stay `dataset: "gfs"` and route to the matching archive.
 | Public dataset | Meaning | Key semantics |
 | --- | --- | --- |
 | `gfs` | NOAA deterministic GFS | 0.25° default / 0.5° optional; operational data and archived forecasts share one public identity |
+| `aigfs` | NOAA deterministic AIGFS | AI model; 0.25°; native 6-hour output through f384; deliberately narrower field inventory than GFS |
 | `gefs` | NOAA GEFS | member-first operational ensemble; explicit `forecast.kind: "reforecast"` selects the GEFSv12 retrospective population |
 | `ifs` | ECMWF deterministic IFS | 0.25° Open Data forecast with native ECMWF run/cadence semantics |
 | `ifs-ens` | ECMWF IFS ENS | 50 perturbations `p01`–`p50`; deterministic IFS is the Cycle-50r1 unperturbed control |
@@ -161,7 +162,7 @@ The deeper reasoning is documented in [Architecture](docs/ARCHITECTURE.md).
 
 WFG selects only the upstream messages needed for a request, caches immutable slices and decodes locally.
 
-Operational point/profile access favors indexed byte-range reads from NOAA AWS Open Data and ECMWF Open Data. Bounded GFS areas use NOMADS geographic subsetting where that is materially better. Historical products route to NCEI or NCAR/GDEX as appropriate.
+Operational GFS point/profile access favors indexed byte-range reads from NOAA AWS Open Data; ECMWF sources use Open Data access. AIGFS uses NOMADS raw products with cached `.idx` inventories and partial HTTP byte ranges. Bounded GFS areas use NOMADS geographic subsetting where that is materially better. Historical products route to NCEI or NCAR/GDEX as appropriate.
 
 Provider etiquette is also source-specific: NOMADS retains its courtesy pacing, while AWS, ECMWF, NCEI, GDEX and IGRA use independent bounded-concurrency policies with transient retry/backoff. A slow provider does not impose its policy on unrelated sources.
 
@@ -176,6 +177,7 @@ Start here:
 - [Installation and deployment](docs/INSTALL.md)
 - [Unified atmospheric API](docs/UNIFIED_API.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [NOAA AIGFS semantics](docs/AIGFS.md)
 - [GEFS and GEFSv12 reforecast semantics](docs/GEFS_ENSEMBLE.md)
 - [ECMWF IFS / IFS ENS semantics](docs/IFS.md)
 - [Historical GFS, archives and verification](docs/HISTORY.md)
