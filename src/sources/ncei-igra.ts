@@ -3,14 +3,8 @@ import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promis
 import { join } from "node:path";
 import { inflateRawSync } from "node:zlib";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
-import {
-  DEFAULT_HTTP_RETRY_MAX_ATTEMPTS,
-  isRetryableHttpStatus,
-  isRetryableHttpTransportError,
-  waitBeforeHttpRetry,
-} from "../access/http-retry.js";
+import { runWithHttpRetry } from "../access/http-retry.js";
 import { deriveSaturationVaporPressureHpa } from "../derived/thermodynamics.js";
-import type { ProfileLevel } from "../core/types.js";
 
 export const NCEI_IGRA_STATION_LIST_URL =
   "https://www.ncei.noaa.gov/pub/data/igra/igra2-station-list.txt";
@@ -31,12 +25,22 @@ export interface IgraStation {
   observations: number;
 }
 
+export interface IgraSoundingLevel {
+  pressureHpa: number;
+  temperatureC?: number;
+  relativeHumidityPct?: number;
+  geopotentialHeightGpm?: number;
+  windDirectionDeg?: number;
+  windSpeedMs?: number;
+  dewPointC?: number;
+}
+
 export interface IgraSounding {
   stationId: string;
   nominalTime: string;
   soundingLatitude: number;
   soundingLongitude: number;
-  levels: ProfileLevel[];
+  levels: IgraSoundingLevel[];
   sourceFile: string;
   cacheHit: boolean;
 }
@@ -106,127 +110,90 @@ export class NceiIgraSource {
         : { bytes: new Uint8Array(await readFile(cachePath)), cacheHit: true };
     }
 
-    for (let attempt = 1; attempt <= DEFAULT_HTTP_RETRY_MAX_ATTEMPTS; attempt += 1) {
-      if (await isFresh(cachePath, ttlMs)) {
-        return kind === "text"
-          ? { text: await readFile(cachePath, "utf8"), cacheHit: true }
-          : { bytes: new Uint8Array(await readFile(cachePath)), cacheHit: true };
-      }
-
-      let result: {
-        status: number;
-        statusText: string;
-        retryAfter: string | null;
-        text?: string;
-        bytes?: Uint8Array;
-        cacheHit: boolean;
-      };
-      try {
-        result = await this.options.limiter.run(async () => {
-          if (await isFresh(cachePath, ttlMs)) {
-            return kind === "text"
-              ? {
-                  status: 200,
-                  statusText: "cache-hit",
-                  retryAfter: null,
-                  text: await readFile(cachePath, "utf8"),
-                  cacheHit: true,
-                }
-              : {
-                  status: 200,
-                  statusText: "cache-hit",
-                  retryAfter: null,
-                  bytes: new Uint8Array(await readFile(cachePath)),
-                  cacheHit: true,
-                };
-          }
-
-          const response = await this.fetchFn(url, {
-            headers: { "user-agent": "weather-for-grown-ups/0.2" },
-          });
-          if (!response.ok) {
-            return {
-              status: response.status,
-              statusText: response.statusText,
-              retryAfter: response.headers.get("retry-after"),
-              cacheHit: false,
-            };
-          }
-
+    const result = await runWithHttpRetry(
+      () => this.options.limiter.run(async () => {
+        if (await isFresh(cachePath, ttlMs)) {
           return kind === "text"
             ? {
-                status: response.status,
-                statusText: response.statusText,
-                retryAfter: response.headers.get("retry-after"),
-                text: await response.text(),
-                cacheHit: false,
+                status: 200,
+                retryAfter: null,
+                statusText: "cache-hit",
+                text: await readFile(cachePath, "utf8"),
+                cacheHit: true,
               }
             : {
-                status: response.status,
-                statusText: response.statusText,
-                retryAfter: response.headers.get("retry-after"),
-                bytes: new Uint8Array(await response.arrayBuffer()),
-                cacheHit: false,
+                status: 200,
+                retryAfter: null,
+                statusText: "cache-hit",
+                bytes: new Uint8Array(await readFile(cachePath)),
+                cacheHit: true,
               };
-        });
-      } catch (error) {
-        if (
-          isRetryableHttpTransportError(error)
-          && attempt < DEFAULT_HTTP_RETRY_MAX_ATTEMPTS
-        ) {
-          await waitBeforeHttpRetry(attempt, null, {
-            ...(this.options.retryBaseDelayMs === undefined
-              ? {}
-              : { baseDelayMs: this.options.retryBaseDelayMs }),
-            ...(this.options.retryJitterRatio === undefined
-              ? {}
-              : { jitterRatio: this.options.retryJitterRatio }),
-          });
-          continue;
         }
-        throw error;
-      }
 
-      if (result.cacheHit) {
-        if (kind === "text") {
-          if (result.text === undefined) throw new Error("NOAA IGRA cached text response was empty");
-          return { text: result.text, cacheHit: true };
-        }
-        if (result.bytes === undefined) throw new Error("NOAA IGRA cached binary response was empty");
-        return { bytes: result.bytes, cacheHit: true };
-      }
-      if (isRetryableHttpStatus(result.status) && attempt < DEFAULT_HTTP_RETRY_MAX_ATTEMPTS) {
-        await waitBeforeHttpRetry(attempt, result.retryAfter, {
-          ...(this.options.retryBaseDelayMs === undefined
-            ? {}
-            : { baseDelayMs: this.options.retryBaseDelayMs }),
-          ...(this.options.retryJitterRatio === undefined
-            ? {}
-            : { jitterRatio: this.options.retryJitterRatio }),
+        const response = await this.fetchFn(url, {
+          headers: { "user-agent": "weather-for-grown-ups/0.2" },
         });
-        continue;
-      }
-      if (result.status < 200 || result.status >= 300) {
-        throw new Error(
-          `NOAA IGRA request failed: HTTP ${result.status} ${result.statusText} (${url})`,
-        );
-      }
+        if (!response.ok) {
+          return {
+            status: response.status,
+            retryAfter: response.headers.get("retry-after"),
+            statusText: response.statusText,
+            cacheHit: false,
+          };
+        }
 
-      const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
+        return kind === "text"
+          ? {
+              status: response.status,
+              retryAfter: response.headers.get("retry-after"),
+              statusText: response.statusText,
+              text: await response.text(),
+              cacheHit: false,
+            }
+          : {
+              status: response.status,
+              retryAfter: response.headers.get("retry-after"),
+              statusText: response.statusText,
+              bytes: new Uint8Array(await response.arrayBuffer()),
+              cacheHit: false,
+            };
+      }),
+      {
+        ...(this.options.retryBaseDelayMs === undefined
+          ? {}
+          : { baseDelayMs: this.options.retryBaseDelayMs }),
+        ...(this.options.retryJitterRatio === undefined
+          ? {}
+          : { jitterRatio: this.options.retryJitterRatio }),
+      },
+    );
+
+    if (result.cacheHit) {
       if (kind === "text") {
-        if (result.text === undefined) throw new Error("NOAA IGRA text response was empty");
-        await writeFile(tempPath, result.text, "utf8");
-        await rename(tempPath, cachePath);
-        return { text: result.text, cacheHit: false };
+        if (result.text === undefined) throw new Error("NOAA IGRA cached text response was empty");
+        return { text: result.text, cacheHit: true };
       }
-
-      if (result.bytes === undefined) throw new Error("NOAA IGRA binary response was empty");
-      await writeFile(tempPath, result.bytes);
-      await rename(tempPath, cachePath);
-      return { bytes: result.bytes, cacheHit: false };
+      if (result.bytes === undefined) throw new Error("NOAA IGRA cached binary response was empty");
+      return { bytes: result.bytes, cacheHit: true };
+    }
+    if (result.status < 200 || result.status >= 300) {
+      throw new Error(
+        `NOAA IGRA request failed: HTTP ${result.status} ${result.statusText} (${url})`,
+      );
     }
 
-    throw new Error("NOAA IGRA retry loop exhausted unexpectedly");
+    const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
+    if (kind === "text") {
+      if (result.text === undefined) throw new Error("NOAA IGRA text response was empty");
+      await writeFile(tempPath, result.text, "utf8");
+      await rename(tempPath, cachePath);
+      return { text: result.text, cacheHit: false };
+    }
+
+    if (result.bytes === undefined) throw new Error("NOAA IGRA binary response was empty");
+    await writeFile(tempPath, result.bytes);
+    await rename(tempPath, cachePath);
+    return { bytes: result.bytes, cacheHit: false };
   }
 }
 
@@ -311,7 +278,7 @@ export function parseIgraSounding(
     throw new Error(`IGRA station ${stationId} has no sounding at ${target}`);
   }
 
-  const levelMap = new Map<number, ProfileLevel>();
+  const levelMap = new Map<number, IgraSoundingLevel>();
   for (const line of lines.slice(headerIndex + 1, headerIndex + 1 + numberLevels)) {
     if (!line || line.startsWith("#")) break;
     const pressurePa = integerField(line.slice(9, 15));
