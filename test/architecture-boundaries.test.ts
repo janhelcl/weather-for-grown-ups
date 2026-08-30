@@ -38,6 +38,8 @@ describe("architecture boundaries", () => {
 
     for (const surface of [cli, mcp]) {
       expect(surface).toContain("UnifiedAtmosphereQueryService");
+      expect(surface).toContain("unified-atmosphere-api.js");
+      expect(surface).not.toContain("unified-specialized-api.js");
       expect(surface).not.toMatch(
         /core\/(?:gfs|gefs|ifs|history|archived-gfs)-(?!unified)[^"']+\.js/,
       );
@@ -109,6 +111,7 @@ describe("architecture boundaries", () => {
     const api = await readFile("src/core/unified-atmosphere-api.ts", "utf8");
     expect(api).toContain("./unified-atmosphere-query.js");
     expect(api).toContain("./unified-atmosphere-diagnostics.js");
+    expect(api).toContain("./unified-specialized-api.js");
     expect(api).not.toContain("query-adapters/");
     expect(api).not.toMatch(/Gefs|Ifs|Historical|ArchivedGfs/);
   });

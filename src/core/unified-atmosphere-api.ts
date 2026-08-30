@@ -6,3 +6,13 @@ export {
   UnifiedAtmosphereDiagnosticService,
   type UnifiedAtmosphereDiagnosticServiceOptions,
 } from "./unified-atmosphere-diagnostics.js";
+export {
+  UnifiedAnalogService,
+  UnifiedDatasetComparisonService,
+  UnifiedForecastVerificationService,
+  UnifiedRunComparisonService,
+  type UnifiedAnalogServiceOptions,
+  type UnifiedDatasetComparisonServiceOptions,
+  type UnifiedForecastVerificationServiceOptions,
+  type UnifiedRunComparisonServiceOptions,
+} from "./unified-specialized-api.js";

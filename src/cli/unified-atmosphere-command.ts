@@ -1,14 +1,12 @@
 import type { Command } from "commander";
 import {
+  UnifiedAnalogService,
   UnifiedAtmosphereDiagnosticService,
   UnifiedAtmosphereQueryService,
-} from "../core/unified-atmosphere-api.js";
-import {
-  UnifiedAnalogService,
   UnifiedDatasetComparisonService,
   UnifiedForecastVerificationService,
   UnifiedRunComparisonService,
-} from "../core/unified-specialized-api.js";
+} from "../core/unified-atmosphere-api.js";
 import {
   PUBLIC_ATMOSPHERIC_DATASET_IDS,
   publicAtmosphericDatasetSchema,
