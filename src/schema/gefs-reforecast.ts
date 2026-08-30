@@ -184,6 +184,174 @@ export type GefsReforecastProfileResult =
   z.infer<typeof gefsReforecastProfileResultSchema>;
 
 
+
+export const GEFS_REFORECAST_MAX_POINTS = 20;
+export const GEFS_REFORECAST_POINTS_DEFAULT_MAX_MEMBER_SAMPLES = 5_000;
+export const GEFS_REFORECAST_POINTS_MAX_MEMBER_SAMPLES = 20_000;
+
+const gefsReforecastPointsSelectionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("fields"),
+    fields: z.array(gefsReforecastFieldSchema)
+      .min(1)
+      .max(GEFS_REFORECAST_FIELD_IDS.length),
+  }),
+  z.object({
+    kind: z.literal("profile"),
+    variables: z.array(gefsReforecastProfileVariableSchema)
+      .min(1)
+      .max(GEFS_REFORECAST_PRESSURE_VARIABLE_IDS.length),
+    pressureLevelsHpa: z.array(z.number().positive()).min(1).max(25),
+  }),
+]);
+
+export const gefsReforecastPointsQuerySchema = z.object({
+  points: z.array(pointCoordinateSchema).min(1).max(GEFS_REFORECAST_MAX_POINTS),
+  run: isoDateTimeSchema.describe(
+    "Explicit GEFSv12 reforecast initialization; public AWS reforecasts are daily 00Z runs from 2000 through 2019",
+  ),
+  validTime: isoDateTimeSchema,
+  selection: gefsReforecastPointsSelectionSchema,
+  members: z.array(gefsReforecastMemberSchema)
+    .min(2)
+    .max(GEFS_REFORECAST_EXTENDED_MEMBERS.length)
+    .default([...GEFS_REFORECAST_STANDARD_MEMBERS]),
+  quantiles: z.array(z.number().min(0).max(1))
+    .min(1)
+    .max(9)
+    .default([0.1, 0.5, 0.9]),
+  includeMembers: z.boolean().default(false),
+  maxMemberSamples: z.number().int().min(1).max(GEFS_REFORECAST_POINTS_MAX_MEMBER_SAMPLES)
+    .default(GEFS_REFORECAST_POINTS_DEFAULT_MAX_MEMBER_SAMPLES),
+}).superRefine((query, context) => {
+  if (new Set(query.members).size !== query.members.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["members"],
+      message: "GEFSv12 reforecast members must not contain duplicates",
+    });
+  }
+  if (new Set(query.quantiles).size !== query.quantiles.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["quantiles"],
+      message: "Quantiles must not contain duplicates",
+    });
+  }
+  if (query.selection.kind === "fields") {
+    if (new Set(query.selection.fields).size !== query.selection.fields.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "fields"],
+        message: "GEFSv12 reforecast fields must not contain duplicates",
+      });
+    }
+    return;
+  }
+  if (new Set(query.selection.variables).size !== query.selection.variables.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["selection", "variables"],
+      message: "GEFSv12 reforecast profile variables must not contain duplicates",
+    });
+  }
+  if (
+    new Set(query.selection.pressureLevelsHpa).size
+    !== query.selection.pressureLevelsHpa.length
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["selection", "pressureLevelsHpa"],
+      message: "GEFSv12 reforecast pressure levels must not contain duplicates",
+    });
+  }
+  for (const variable of query.selection.variables) {
+    for (const pressureLevelHpa of query.selection.pressureLevelsHpa) {
+      if (!isSupportedGefsReforecastPressureSelection(variable, pressureLevelHpa)) {
+        context.addIssue({
+          code: "custom",
+          path: ["selection", "pressureLevelsHpa"],
+          message: `GEFSv12 reforecast cannot satisfy ${variable} at ${pressureLevelHpa} hPa`,
+        });
+      }
+    }
+  }
+});
+
+const reforecastFieldPointSchema = z.object({
+  kind: z.literal("fields"),
+  requestedPoint: pointCoordinateSchema,
+  gridPoint: pointCoordinateSchema,
+  fieldSummaries: z.array(gefsFieldSummarySchema).min(1),
+  members: gefsReforecastPointResultSchema.shape.members,
+});
+
+const reforecastProfilePointSchema = z.object({
+  kind: z.literal("profile"),
+  requestedPoint: pointCoordinateSchema,
+  gridPoint: pointCoordinateSchema,
+  summaries: z.array(reforecastProfileSummarySchema).min(1),
+  members: gefsReforecastProfileResultSchema.shape.members,
+});
+
+const reforecastPointsCommonSourceSchema = z.object({
+  provider: z.literal("NOAA AWS Open Data"),
+  access: z.literal("s3_range"),
+  decoder: z.enum(["gribberish", "wgrib2"]),
+  archiveType: z.literal("reforecast"),
+  dataset: z.literal("GEFSv12/reforecast"),
+  leadBlock: z.enum(["Days:1-10", "Days:10-16"]),
+  horizontalGridDegrees: z.union([z.literal(0.25), z.literal(0.5)]),
+  allCacheHit: z.boolean(),
+});
+
+const reforecastFieldPointsResultSchema = z.object({
+  model: z.literal("gefs_v12_reforecast"),
+  kind: z.literal("fields"),
+  run: isoDateTimeSchema,
+  validTime: isoDateTimeSchema,
+  forecastHour: z.number().int().min(3).max(384),
+  selection: z.object({
+    kind: z.literal("fields"),
+    fields: z.array(gefsReforecastFieldSchema).min(1),
+    members: z.array(gefsReforecastMemberSchema).min(2),
+    quantiles: z.array(z.number().min(0).max(1)).min(1),
+  }),
+  includeMembers: z.boolean(),
+  points: z.array(reforecastFieldPointSchema).min(1).max(GEFS_REFORECAST_MAX_POINTS),
+  source: reforecastPointsCommonSourceSchema,
+});
+
+const reforecastProfilePointsResultSchema = z.object({
+  model: z.literal("gefs_v12_reforecast"),
+  kind: z.literal("profile"),
+  run: isoDateTimeSchema,
+  validTime: isoDateTimeSchema,
+  forecastHour: z.number().int().min(3).max(384),
+  selection: z.object({
+    kind: z.literal("profile"),
+    variables: z.array(gefsReforecastProfileVariableSchema).min(1),
+    pressureLevelsHpa: z.array(z.number().positive()).min(1),
+    members: z.array(gefsReforecastMemberSchema).min(2),
+    quantiles: z.array(z.number().min(0).max(1)).min(1),
+  }),
+  includeMembers: z.boolean(),
+  points: z.array(reforecastProfilePointSchema).min(1).max(GEFS_REFORECAST_MAX_POINTS),
+  source: reforecastPointsCommonSourceSchema.extend({
+    profileGridPolicy: z.enum(["native_0p25", "native_0p50", "coherent_0p50"]),
+  }),
+});
+
+export const gefsReforecastPointsResultSchema = z.discriminatedUnion("kind", [
+  reforecastFieldPointsResultSchema,
+  reforecastProfilePointsResultSchema,
+]);
+
+export type GefsReforecastPointsQueryInput =
+  z.input<typeof gefsReforecastPointsQuerySchema>;
+export type GefsReforecastPointsResult =
+  z.infer<typeof gefsReforecastPointsResultSchema>;
+
 export const GEFS_REFORECAST_TIME_SERIES_DEFAULT_MAX_STEPS = 40;
 export const GEFS_REFORECAST_TIME_SERIES_MAX_STEPS = 104;
 

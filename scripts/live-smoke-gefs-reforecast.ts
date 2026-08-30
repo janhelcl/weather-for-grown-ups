@@ -112,6 +112,46 @@ for (const step of range.series) {
   assert(Number.isFinite(step.fieldSummaries[0].outputs[0].distribution.mean));
 }
 
+
+const pointsResult = await service.query({
+  dataset: "gefs",
+  geometry: {
+    type: "points",
+    points: [
+      { latitude: 50.08, longitude: 14.43 },
+      { latitude: 49.2, longitude: 16.61 },
+    ],
+  },
+  time: { at: "2017-03-14T12:00:00Z" },
+  selection: { fields: ["temperature_2m"] },
+  forecast: {
+    kind: "reforecast",
+    run: "2017-03-14T00:00:00Z",
+  },
+  ensemble: {
+    members: ["c00", "p01"],
+    quantiles: [0.5],
+  },
+});
+const points = pointsResult.result as any;
+assert.equal(pointsResult.internalDatasetId, "gefs_v12_reforecast");
+assert.equal(pointsResult.geometryType, "points");
+assert.equal(pointsResult.timeType, "instant");
+assert.equal(points.kind, "fields");
+assert.equal(points.points.length, 2);
+assert.deepEqual(
+  points.points.map((point: any) => point.requestedPoint),
+  [
+    { latitude: 50.08, longitude: 14.43 },
+    { latitude: 49.2, longitude: 16.61 },
+  ],
+);
+assert.equal(points.source.horizontalGridDegrees, 0.25);
+for (const point of points.points) {
+  assert.equal(point.fieldSummaries[0].field, "temperature_2m");
+  assert(Number.isFinite(point.fieldSummaries[0].outputs[0].distribution.mean));
+}
+
 console.log(JSON.stringify({
   dataset: result.dataset,
   internalDatasetId: result.internalDatasetId,
@@ -130,5 +170,10 @@ console.log(JSON.stringify({
     selection: range.selection,
     series: range.series,
     source: range.source,
+  },
+  points: {
+    selection: points.selection,
+    points: points.points,
+    source: points.source,
   },
 }, null, 2));
