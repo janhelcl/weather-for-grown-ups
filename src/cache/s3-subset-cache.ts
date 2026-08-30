@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -78,7 +78,7 @@ export class GfsS3SubsetCache {
       offset += chunk.byteLength;
     }
 
-    const tempPath = `${path}.${process.pid}.tmp`;
+    const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
     try {
       await writeFile(tempPath, combined);
       await rename(tempPath, path);
