@@ -397,6 +397,53 @@ describe("unified catalog branch coverage", () => {
       match.support.every((support) => support.dataset === "gefs"))).toBe(true);
   });
 
+  it("restricts GEFS reforecast discovery to the retrospective capability subset", () => {
+    const variables = searchAtmosphereCatalog({
+      datasets: ["gefs"],
+      forecastKind: "reforecast",
+      sections: ["variables"],
+      limit: 30,
+    });
+    expect(variables.matches.map((match) => match.id).sort()).toEqual([
+      "geopotential_height",
+      "specific_humidity",
+      "temperature",
+      "u_wind",
+      "v_wind",
+      "vertical_velocity",
+    ]);
+    expect(variables.matches.some((match) => match.id === "relative_humidity")).toBe(false);
+    expect(variables.matches[0]?.support[0]?.semantics).toContain("GEFSv12 retrospective ensemble forecast");
+
+    const fields = searchAtmosphereCatalog({
+      datasets: ["gefs"],
+      forecastKind: "reforecast",
+      sections: ["fields"],
+      search: "wind",
+      limit: 30,
+    });
+    expect(fields.matches.some((match) => match.id === "wind_10m")).toBe(true);
+
+    const diagnostics = searchAtmosphereCatalog({
+      datasets: ["gefs"],
+      forecastKind: "reforecast",
+      sections: ["layer_diagnostics", "profile_diagnostics", "parcel_definitions"],
+      limit: 30,
+    });
+    expect(diagnostics.totalMatches).toBe(0);
+  });
+
+  it("rejects ambiguous forecast-kind catalog filtering outside GEFS-only discovery", () => {
+    expect(() => searchAtmosphereCatalog({
+      datasets: ["gfs"],
+      forecastKind: "reforecast",
+    })).toThrow("forecastKind catalog filtering currently requires datasets=[gefs]");
+    expect(() => searchAtmosphereCatalog({
+      datasets: ["gefs", "ifs-ens"],
+      forecastKind: "operational",
+    })).toThrow("forecastKind catalog filtering currently requires datasets=[gefs]");
+  });
+
   it("discovers IFS canonical state and diagnostic support", () => {
     const pressure = searchAtmosphereCatalog({
       datasets: ["ifs"],
