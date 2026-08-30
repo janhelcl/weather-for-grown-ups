@@ -384,17 +384,6 @@ function validateDatasetModifiers(
       });
     }
     if (
-      request.geometry?.type === "points"
-      && request.time !== undefined
-      && "from" in request.time
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["time"],
-        message: "GEFSv12 reforecast multi-point queries currently support one valid time; use point geometry for retrospective time ranges",
-      });
-    }
-    if (
       request.time !== undefined
       && "from" in request.time
       && request.ensemble?.includeMembers === true
