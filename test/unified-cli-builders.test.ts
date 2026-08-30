@@ -101,6 +101,44 @@ describe("unified CLI request builders", () => {
     });
   });
 
+  it("builds GEFSv12 reforecast multi-point ranges with matrix guardrails", () => {
+    const request = buildUnifiedQuery({
+      dataset: "gefs",
+      point: [
+        { latitude: 50.13, longitude: 14.37 },
+        { latitude: 49.20, longitude: 16.61 },
+      ],
+      from: "2017-03-23T21:00:00Z",
+      to: "2017-03-24T06:00:00Z",
+      maxSteps: 3,
+      fields: "temperature_2m",
+      run: "2017-03-14T00:00:00Z",
+      forecastKind: "reforecast",
+      members: "c00,p01",
+      quantiles: "0.5",
+      maxPointSteps: 6,
+    });
+
+    expect(queryAtmosphereSchema.parse(request)).toMatchObject({
+      dataset: "gefs",
+      geometry: { type: "points" },
+      time: {
+        from: "2017-03-23T21:00:00Z",
+        to: "2017-03-24T06:00:00Z",
+        maxSteps: 3,
+      },
+      forecast: {
+        kind: "reforecast",
+        run: "2017-03-14T00:00:00Z",
+      },
+      ensemble: {
+        members: ["c00", "p01"],
+        quantiles: [0.5],
+      },
+      limits: { maxPointSteps: 6 },
+    });
+  });
+
   it("builds an ECMWF IFS point query without a GFS grid or source override", () => {
     const request = buildUnifiedQuery({
       dataset: "ifs",
