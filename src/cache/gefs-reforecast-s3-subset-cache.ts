@@ -14,11 +14,7 @@ import {
   selectPressureByteRangesAtForecastHour,
   type ByteRange,
 } from "../grib/index.js";
-import {
-  DEFAULT_HTTP_RETRY_MAX_ATTEMPTS,
-  isRetryableHttpStatus,
-  waitBeforeHttpRetry,
-} from "../access/http-retry.js";
+import { fetchWithRetry } from "../access/http-fetch.js";
 import {
   isGefsReforecastFieldId,
   isGefsReforecastPressureVariableId,
@@ -198,68 +194,44 @@ export class GefsReforecastS3SubsetCache implements GefsReforecastSelectionSourc
     try {
       return await readFile(path, "utf8");
     } catch {
-      // Immutable reforecast inventories are cached permanently.
+      // Forecast inventories are immutable after publication and can be reused indefinitely.
     }
 
-    for (let attempt = 1; attempt <= DEFAULT_HTTP_RETRY_MAX_ATTEMPTS; attempt += 1) {
-      const result = await this.accessPolicy.run(async () => {
-        const response = await this.fetchFn(url, {
-          headers: { "user-agent": "weather-for-grown-ups/0.2" },
-        });
-        return {
-          status: response.status,
-          statusText: response.statusText,
-          retryAfter: response.headers.get("retry-after"),
-          text: response.ok ? await response.text() : undefined,
-        };
-      });
-      if (isRetryableHttpStatus(result.status) && attempt < DEFAULT_HTTP_RETRY_MAX_ATTEMPTS) {
-        await waitBeforeHttpRetry(attempt, result.retryAfter);
-        continue;
-      }
-      if (result.status < 200 || result.status >= 300 || result.text === undefined) {
-        throw new Error(`NOAA GEFSv12 reforecast AWS index request failed: HTTP ${result.status} ${result.statusText}`);
-      }
-      await writeFile(path, result.text, "utf8");
-      return result.text;
+    const response = await fetchWithRetry(
+      url,
+      { headers: { "user-agent": "weather-for-grown-ups/0.2" } },
+      { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
+    );
+    if (!response.ok) {
+      throw new Error(`NOAA GEFSv12 reforecast AWS index request failed: HTTP ${response.status} ${response.statusText}`);
     }
-    throw new Error("NOAA GEFSv12 reforecast AWS index retry loop exhausted unexpectedly");
+    const text = await response.text();
+    await writeFile(path, text, "utf8");
+    return text;
   }
 
   private async fetchRange(url: string, range: ByteRange): Promise<Uint8Array> {
     const rangeValue = `bytes=${range.start}-${range.end ?? ""}`;
-    for (let attempt = 1; attempt <= DEFAULT_HTTP_RETRY_MAX_ATTEMPTS; attempt += 1) {
-      const result = await this.accessPolicy.run(async () => {
-        const response = await this.fetchFn(url, {
-          headers: {
-            range: rangeValue,
-            "user-agent": "weather-for-grown-ups/0.2",
-          },
-        });
-        return {
-          status: response.status,
-          statusText: response.statusText,
-          retryAfter: response.headers.get("retry-after"),
-          bytes: response.status === 206 ? new Uint8Array(await response.arrayBuffer()) : undefined,
-        };
-      });
-      if (isRetryableHttpStatus(result.status) && attempt < DEFAULT_HTTP_RETRY_MAX_ATTEMPTS) {
-        await waitBeforeHttpRetry(attempt, result.retryAfter);
-        continue;
-      }
-      if (result.status !== 206 || result.bytes === undefined) {
-        throw new Error(`NOAA GEFSv12 reforecast AWS range request failed: HTTP ${result.status} ${result.statusText}`);
-      }
-      if (
-        result.bytes.length < 4
-        || new TextDecoder().decode(result.bytes.slice(0, 4)) !== "GRIB"
-      ) {
-        throw new Error(`NOAA GEFSv12 reforecast AWS range did not start with a GRIB message (${rangeValue})`);
-      }
-      return result.bytes;
+    const response = await fetchWithRetry(
+      url,
+      {
+        headers: {
+          range: rangeValue,
+          "user-agent": "weather-for-grown-ups/0.2",
+        },
+      },
+      { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
+    );
+    if (response.status !== 206) {
+      throw new Error(`NOAA GEFSv12 reforecast AWS range request failed: HTTP ${response.status} ${response.statusText}`);
     }
-    throw new Error("NOAA GEFSv12 reforecast AWS range retry loop exhausted unexpectedly");
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
+      throw new Error(`NOAA GEFSv12 reforecast AWS range did not start with a GRIB message (${rangeValue})`);
+    }
+    return bytes;
   }
+
 }
 
 function selectionKey(request: NormalizedReforecastSelectionDataRequest): string {
