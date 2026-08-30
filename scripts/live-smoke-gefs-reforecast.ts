@@ -70,6 +70,7 @@ assert(Number.isFinite(profile.summaries[0].mean));
 assert.equal(profile.source.archiveType, "reforecast");
 assert.equal(profile.source.horizontalGridDegrees, 0.5);
 assert.equal(profile.source.profileGridPolicy, "coherent_0p50");
+assert.deepEqual(profile.gridPoint, { latitude: 50, longitude: 14.5 });
 
 console.log(JSON.stringify({
   dataset: result.dataset,
