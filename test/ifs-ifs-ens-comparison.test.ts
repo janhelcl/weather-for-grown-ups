@@ -170,6 +170,95 @@ describe("IfsIfsEnsComparisonService", () => {
     expect(result.comparison.rangePosition).toBe("within_member_range");
   });
 
+  it("identifies deterministic IFS below the perturbed member range", async () => {
+    const service = new IfsIfsEnsComparisonService({
+      ifsGetter: { getProfile: async () => ifsResult("temperature", 3) },
+      ifsEnsGetter: {
+        getBundle: async () =>
+          ifsEnsResult("temperature", "temperatureC", "degC", [4, 5, 6]),
+      },
+      alignedRunProvider: {
+        resolveLatestAlignedRun: async () => new Date(run),
+      },
+    });
+
+    const result = await service.compare({
+      ...requestedPoint,
+      run: "latest",
+      validTime,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["p01", "p02", "p03"],
+      quantiles: [0.5],
+    });
+
+    expect(result.comparison.rangePosition).toBe("below_member_min");
+    expect(result.comparison.outsideMemberRange).toBe(true);
+    expect(result.comparison.membersBelowDeterministic).toBe(0);
+  });
+
+  it("fails explicitly when internal ensemble member payloads are absent", async () => {
+    const ensemble = ifsEnsResult(
+      "temperature",
+      "temperatureC",
+      "degC",
+      [4, 5, 6],
+    );
+    const { members: _members, ...withoutMembers } = ensemble;
+    const service = new IfsIfsEnsComparisonService({
+      ifsGetter: { getProfile: async () => ifsResult("temperature", 5) },
+      ifsEnsGetter: { getBundle: async () => withoutMembers as any },
+      alignedRunProvider: {
+        resolveLatestAlignedRun: async () => new Date(run),
+      },
+    });
+
+    await expect(service.compare({
+      ...requestedPoint,
+      run: "latest",
+      validTime,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["p01", "p02", "p03"],
+      quantiles: [0.5],
+    })).rejects.toThrow("requires internal member payloads");
+  });
+
+  it("rejects unit drift between deterministic and ensemble outputs", async () => {
+    const ensemble = ifsEnsResult(
+      "temperature",
+      "temperatureC",
+      "degC",
+      [4, 5, 6],
+    );
+    const output = ensemble.pressureSummaries[0]!.outputs[0]!;
+    const service = new IfsIfsEnsComparisonService({
+      ifsGetter: { getProfile: async () => ifsResult("temperature", 5) },
+      ifsEnsGetter: {
+        getBundle: async () => ({
+          ...ensemble,
+          pressureSummaries: [{
+            ...ensemble.pressureSummaries[0]!,
+            outputs: [{ ...output, unit: "K" }],
+          }],
+        } as any),
+      },
+      alignedRunProvider: {
+        resolveLatestAlignedRun: async () => new Date(run),
+      },
+    });
+
+    await expect(service.compare({
+      ...requestedPoint,
+      run: "latest",
+      validTime,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["p01", "p02", "p03"],
+      quantiles: [0.5],
+    })).rejects.toThrow("output unit mismatch");
+  });
+
   it("reports null standardized difference for zero perturbed spread", async () => {
     const service = new IfsIfsEnsComparisonService({
       ifsGetter: { getProfile: async () => ifsResult("temperature", 5) },
