@@ -1,12 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { UpstreamAccessPolicy } from "../cache/file-access-policy.js";
+import type { UpstreamAccessPolicy } from "../access/access-policy.js";
 import {
   DEFAULT_HTTP_RETRY_MAX_ATTEMPTS,
   isRetryableHttpStatus,
   waitBeforeHttpRetry,
-} from "./http-retry.js";
+} from "../access/http-retry.js";
 
 export const NCEI_GFS_HISTORY_BASE_URL = "https://www.ncei.noaa.gov/thredds/ncss/grid";
 export const NCEI_GFS_GRID4_ANALYSIS_START = new Date("2007-01-01T00:00:00Z");
