@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { UnifiedAtmosphereDiagnosticService } from "../src/core/unified-atmosphere-api.js";
+import { IFS_ENS_MEMBERS } from "../src/catalog/ifs-ens.js";
 import { createAtmosphericDiagnosticAdapterRegistry } from "../src/core/diagnostic-adapters/registry.js";
+import { UnifiedAtmosphereDiagnosticService } from "../src/core/unified-atmosphere-api.js";
+import { IFS_ENS_DIAGNOSTIC_TIME_SERIES_DEFAULT_MAX_STEPS } from "../src/schema/ifs-ens-diagnostic-timeseries.js";
 
 const point = { type: "point" as const, latitude: 50.08, longitude: 14.43 };
 const layerDiagnostic = {
@@ -76,8 +78,8 @@ describe("diagnostic adapter default ensemble controls", () => {
       diagnostic: layerDiagnostic,
     });
     const ifsEnsRange = ifsEnsTimeSeries.getDiagnosticTimeSeries.mock.calls[0]![0];
-    expect(ifsEnsRange).not.toHaveProperty("members");
-    expect(ifsEnsRange).not.toHaveProperty("quantiles");
-    expect(ifsEnsRange).not.toHaveProperty("maxSteps");
+    expect(ifsEnsRange.members).toEqual([...IFS_ENS_MEMBERS]);
+    expect(ifsEnsRange.quantiles).toEqual([0.1, 0.5, 0.9]);
+    expect(ifsEnsRange.maxSteps).toBe(IFS_ENS_DIAGNOSTIC_TIME_SERIES_DEFAULT_MAX_STEPS);
   });
 });
