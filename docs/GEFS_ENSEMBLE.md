@@ -22,7 +22,7 @@ GEFS shares model-independent meteorological kernels with GFS where scientifical
 
 Operational GEFS and GEFSv12 reforecasts share member-first physical/statistical kernels, but they are different forecast populations. WFG therefore keeps the public dataset as `gefs` and requires an explicit `forecast.kind: "reforecast"` to cross that boundary.
 
-The first reforecast slice deliberately exposes only combinations whose source semantics are already verified:
+The reforecast branch deliberately exposes only combinations whose source semantics are already verified:
 
 - NOAA AWS Open Data `GEFSv12/reforecast`, public years 2000–2019;
 - explicit daily 00Z initialization;
@@ -30,10 +30,12 @@ The first reforecast slice deliberately exposes only combinations whose source s
 - default five-member daily ensemble `c00,p01..p04`;
 - optional `p05..p10` where the weekly extended run publishes them;
 - supported single-level fields: surface pressure, 2 m temperature, 10 m U/V/wind, total precipitation, precipitable water, total-atmosphere cloud cover and mean-sea-level pressure;
-- native 3-hour / 0.25° field output through +240 h, then 6-hour / 0.5° through +384 h;
+- native pressure variables: temperature, U/V wind, geopotential height, vertical velocity and specific humidity;
 - immutable variable-file `.idx` inventories + exact forecast-hour byte ranges.
 
-A reforecast query is **not** an archived operational GEFS query. Pressure-profile support, time ranges, multi-point/transect/area operations, diagnostics, calibration metrics and the weekly +35-day horizon are follow-up layers. Until implemented, those combinations fail explicitly.
+The retrospective pressure archive is not one uniform horizontal grid. Through +240 h, pressure levels at/below 700 hPa are published in the 0.25° base files while levels above 700 hPa are in 0.5° `_abv700mb` files. WFG therefore keeps lower-only profiles on 0.25°, upper-only profiles on 0.5°, and samples mixed profiles on a shared 0.5° point so the returned vertical column has one truthful `gridPoint`. After +240 h, the standard retrospective horizon is 0.5° / 6-hour output.
+
+A reforecast query is **not** an archived operational GEFS query. Time ranges, multi-point/transect/area operations, diagnostics, derived pressure thermodynamics, calibration metrics and the weekly +35-day horizon are follow-up layers. Until implemented, those combinations fail explicitly.
 
 ## Current GEFS capabilities
 
@@ -131,6 +133,24 @@ wfg query \
 ```
 
 MCP uses the same `query_atmosphere` request with `forecast.kind = "reforecast"`. Result provenance identifies `gefs_v12_reforecast` and `archiveType = "reforecast"`.
+
+### Retrospective pressure profile
+
+```bash
+wfg query \
+  --dataset gefs \
+  --forecast-kind reforecast \
+  --run 2017-03-14T00:00:00Z \
+  --lat 50.08 --lon 14.43 \
+  --at 2017-03-14T12:00:00Z \
+  --vars temperature,specific_humidity \
+  --levels 850,700,500 \
+  --members c00,p01,p02,p03,p04 \
+  --quantiles 0.1,0.5,0.9 \
+  --json
+```
+
+The request shape is identical to an operational GEFS profile except for the explicit reforecast population. Result provenance adds `profileGridPolicy` so a caller can distinguish native 0.25°/0.5° profiles from a coherent 0.5° column assembled across the retrospective archive's pressure-file split.
 
 ### Scalar ensemble distribution
 
