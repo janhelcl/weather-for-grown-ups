@@ -468,16 +468,12 @@ export class AigfsForecastService {
 
     if (request.diagnostic.kind === "layer") {
       const diagnostic = request.diagnostic;
-      const diagnostics = deriveLayerDiagnosticsFromLevels(
+      const derived = deriveLayerDiagnosticsFromLevels(
         profile.levels,
         diagnostic.lowerPressureHpa,
         diagnostic.upperPressureHpa,
         diagnostic.diagnostics,
       );
-      const lower = profile.levels.find((level) => level.pressureHpa === diagnostic.lowerPressureHpa)!;
-      const upper = profile.levels.find((level) => level.pressureHpa === diagnostic.upperPressureHpa)!;
-      const lowerHeight = lower.geopotentialHeightGpm!;
-      const upperHeight = upper.geopotentialHeightGpm!;
       return {
         model: MODEL,
         run: profile.run,
@@ -485,15 +481,9 @@ export class AigfsForecastService {
         forecastHour: profile.forecastHour,
         requestedPoint: profile.requestedPoint,
         gridPoint: profile.gridPoint,
-        layer: {
-          lowerPressureHpa: diagnostic.lowerPressureHpa,
-          upperPressureHpa: diagnostic.upperPressureHpa,
-          lowerGeopotentialHeightGpm: lowerHeight,
-          upperGeopotentialHeightGpm: upperHeight,
-          depthGpm: upperHeight - lowerHeight,
-        },
-        levels: profile.levels,
-        diagnostics,
+        layer: derived.layer,
+        levels: derived.levels,
+        diagnostics: derived.diagnostics,
         source: profile.source,
       };
     }
