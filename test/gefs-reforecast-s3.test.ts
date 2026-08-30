@@ -9,6 +9,7 @@ import {
   gefsReforecastLeadBlock,
   gefsReforecastPressureFileGroup,
   gefsReforecastProfileGrid,
+  nativeGefsReforecastValidTimesInRange,
   parseGefsReforecastRun,
 } from "../src/sources/gefs-reforecast-s3.js";
 
@@ -37,6 +38,31 @@ describe("GEFSv12 reforecast source semantics", () => {
       .toThrow("every 6 hours");
     expect(() => gefsReforecastForecastHour(run, new Date("2017-03-30T03:00:00Z")))
       .toThrow("through +384");
+  });
+
+  it("enumerates one native range across the f240 cadence transition", () => {
+    const times = nativeGefsReforecastValidTimesInRange(
+      run,
+      new Date("2017-03-23T21:00:00Z"),
+      new Date("2017-03-24T12:00:00Z"),
+      4,
+    );
+    expect(times.map((time) => gefsReforecastForecastHour(run, time)))
+      .toEqual([237, 240, 246, 252]);
+
+    expect(() => nativeGefsReforecastValidTimesInRange(
+      run,
+      new Date("2017-03-23T21:00:00Z"),
+      new Date("2017-03-24T12:00:00Z"),
+      3,
+    )).toThrow("exceeding maxSteps=3");
+
+    expect(() => nativeGefsReforecastValidTimesInRange(
+      run,
+      new Date("2017-03-24T06:00:00Z"),
+      new Date("2017-03-24T00:00:00Z"),
+      10,
+    )).toThrow("endTime must be at or after startTime");
   });
 
   it("models the first-10-day pressure-file split instead of hiding it", () => {
