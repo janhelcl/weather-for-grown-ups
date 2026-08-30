@@ -5,18 +5,24 @@ import {
 } from "../schema/unified-api.js";
 import {
   createAtmosphericQueryAdapterRegistry,
-  type AtmosphericQueryRegistryOptions,
 } from "./query-adapters/registry.js";
+import type { AtmosphericProgressReporter } from "./progress.js";
 import type { AtmosphericQueryAdapterRegistry } from "./query-adapters/types.js";
 import { wrapUnifiedAtmosphereResult } from "./unified-atmosphere-result.js";
 
-export interface UnifiedAtmosphereQueryServiceOptions extends AtmosphericQueryRegistryOptions {}
+export interface UnifiedAtmosphereQueryServiceOptions {
+  progress?: AtmosphericProgressReporter;
+  adapters?: Partial<AtmosphericQueryAdapterRegistry>;
+}
 
 export class UnifiedAtmosphereQueryService {
   private readonly adapters: AtmosphericQueryAdapterRegistry;
 
   constructor(options: UnifiedAtmosphereQueryServiceOptions = {}) {
-    this.adapters = createAtmosphericQueryAdapterRegistry(options);
+    this.adapters = createAtmosphericQueryAdapterRegistry({
+      ...(options.progress === undefined ? {} : { progress: options.progress }),
+      ...(options.adapters === undefined ? {} : { adapters: options.adapters }),
+    });
   }
 
   async query(input: QueryAtmosphereInput): Promise<UnifiedAtmosphereResult> {
