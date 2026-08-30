@@ -65,19 +65,23 @@ export class GefsIfsEnsDatasetComparisonAdapter implements AtmosphericDatasetCom
     if (request.datasets[0] !== "gefs" || request.datasets[1] !== "ifs-ens") {
       throw new Error("GEFS/IFS ENS comparison adapter requires datasets=gefs,ifs-ens");
     }
+    const query = request as Extract<
+      CompareAtmosphericDatasetsRequest,
+      { datasets: ["gefs", "ifs-ens"] }
+    >;
     return this.service.compare(gefsIfsEnsComparisonQuerySchema.parse({
-      latitude: request.geometry.latitude,
-      longitude: request.geometry.longitude,
-      run: request.run,
-      validTime: request.time.at,
-      variable: request.variable,
-      pressureLevelHpa: request.pressureLevelHpa,
-      ...(request.gefsMembers === undefined ? {} : { gefsMembers: request.gefsMembers }),
-      ...(request.ifsEnsMembers === undefined
+      latitude: query.geometry.latitude,
+      longitude: query.geometry.longitude,
+      run: query.run,
+      validTime: query.time.at,
+      variable: query.variable,
+      pressureLevelHpa: query.pressureLevelHpa,
+      ...(query.gefsMembers === undefined ? {} : { gefsMembers: query.gefsMembers }),
+      ...(query.ifsEnsMembers === undefined
         ? {}
-        : { ifsEnsMembers: request.ifsEnsMembers }),
-      ...(request.quantiles === undefined ? {} : { quantiles: request.quantiles }),
-      ...(request.thresholdGte === undefined ? {} : { thresholdGte: request.thresholdGte }),
+        : { ifsEnsMembers: query.ifsEnsMembers }),
+      ...(query.quantiles === undefined ? {} : { quantiles: query.quantiles }),
+      ...(query.thresholdGte === undefined ? {} : { thresholdGte: query.thresholdGte }),
     }));
   }
 }
@@ -92,15 +96,19 @@ export class IfsIfsEnsDatasetComparisonAdapter implements AtmosphericDatasetComp
     if (request.datasets[0] !== "ifs" || request.datasets[1] !== "ifs-ens") {
       throw new Error("IFS/IFS ENS comparison adapter requires datasets=ifs,ifs-ens");
     }
+    const query = request as Extract<
+      CompareAtmosphericDatasetsRequest,
+      { datasets: ["ifs", "ifs-ens"] }
+    >;
     return this.service.compare(ifsIfsEnsComparisonQuerySchema.parse({
-      latitude: request.geometry.latitude,
-      longitude: request.geometry.longitude,
-      run: request.run,
-      validTime: request.time.at,
-      variable: request.variable,
-      pressureLevelHpa: request.pressureLevelHpa,
-      ...(request.ifsEnsMembers === undefined ? {} : { members: request.ifsEnsMembers }),
-      ...(request.quantiles === undefined ? {} : { quantiles: request.quantiles }),
+      latitude: query.geometry.latitude,
+      longitude: query.geometry.longitude,
+      run: query.run,
+      validTime: query.time.at,
+      variable: query.variable,
+      pressureLevelHpa: query.pressureLevelHpa,
+      ...(query.ifsEnsMembers === undefined ? {} : { members: query.ifsEnsMembers }),
+      ...(query.quantiles === undefined ? {} : { quantiles: query.quantiles }),
     }));
   }
 }
