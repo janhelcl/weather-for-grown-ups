@@ -410,4 +410,123 @@ describe("GEFSv12 reforecast multi-point ranges", () => {
     })).rejects.toThrow("changed selection between forecast steps");
   });
 
+  it("rejects profile batches for a field range", async () => {
+    const getPoints = vi.fn(async (query: any) => profileBatch(query.validTime));
+    const service = new GefsReforecastPointsTimeSeriesService({
+      pointsGetter: { getPoints } as any,
+    });
+
+    await expect(service.getPointsTimeSeries({
+      points: requestedPoints,
+      run: run.toISOString(),
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T03:00:00Z",
+      selection: { kind: "fields", fields: ["temperature_2m"] },
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+      maxPointSteps: 2,
+    })).rejects.toThrow("field range returned a profile batch");
+  });
+
+  it("rejects field batches for a profile range", async () => {
+    const getPoints = vi.fn(async (query: any) => fieldBatch(query.validTime));
+    const service = new GefsReforecastPointsTimeSeriesService({
+      pointsGetter: { getPoints } as any,
+    });
+
+    await expect(service.getPointsTimeSeries({
+      points: requestedPoints,
+      run: run.toISOString(),
+      startTime: "2017-03-14T03:00:00Z",
+      endTime: "2017-03-14T03:00:00Z",
+      selection: {
+        kind: "profile",
+        variables: ["temperature"],
+        pressureLevelsHpa: [850, 500],
+      },
+      members: ["c00", "p01"],
+      quantiles: [0.5],
+      maxPointSteps: 2,
+    })).rejects.toThrow("profile range returned a field batch");
+  });
+
+  it("rejects field member and quantile selection drift", async () => {
+    for (const mutateSelection of [
+      (selection: ReturnType<typeof fieldBatch>["selection"]) => ({
+        ...selection,
+        members: ["c00"] as const,
+      }),
+      (selection: ReturnType<typeof fieldBatch>["selection"]) => ({
+        ...selection,
+        quantiles: [0.25] as const,
+      }),
+    ]) {
+      const getPoints = vi.fn(async (query: any) => {
+        const batch = fieldBatch(query.validTime);
+        return {
+          ...batch,
+          selection: mutateSelection(batch.selection),
+        };
+      });
+      const service = new GefsReforecastPointsTimeSeriesService({
+        pointsGetter: { getPoints } as any,
+      });
+
+      await expect(service.getPointsTimeSeries({
+        points: requestedPoints,
+        run: run.toISOString(),
+        startTime: "2017-03-14T03:00:00Z",
+        endTime: "2017-03-14T03:00:00Z",
+        selection: { kind: "fields", fields: ["temperature_2m"] },
+        members: ["c00", "p01"],
+        quantiles: [0.5],
+        maxPointSteps: 2,
+      })).rejects.toThrow("changed selection between forecast steps");
+    }
+  });
+
+  it("rejects profile pressure-level, member and quantile selection drift", async () => {
+    for (const mutateSelection of [
+      (selection: ReturnType<typeof profileBatch>["selection"]) => ({
+        ...selection,
+        pressureLevelsHpa: [850, 700] as const,
+      }),
+      (selection: ReturnType<typeof profileBatch>["selection"]) => ({
+        ...selection,
+        members: ["c00"] as const,
+      }),
+      (selection: ReturnType<typeof profileBatch>["selection"]) => ({
+        ...selection,
+        quantiles: [0.25] as const,
+      }),
+    ]) {
+      const getPoints = vi.fn(async (query: any) => {
+        const batch = profileBatch(query.validTime);
+        return {
+          ...batch,
+          selection: mutateSelection(batch.selection),
+        };
+      });
+      const service = new GefsReforecastPointsTimeSeriesService({
+        pointsGetter: { getPoints } as any,
+      });
+
+      await expect(service.getPointsTimeSeries({
+        points: requestedPoints,
+        run: run.toISOString(),
+        startTime: "2017-03-14T03:00:00Z",
+        endTime: "2017-03-14T03:00:00Z",
+        selection: {
+          kind: "profile",
+          variables: ["temperature"],
+          pressureLevelsHpa: [850, 500],
+        },
+        members: ["c00", "p01"],
+        quantiles: [0.5],
+        maxPointSteps: 2,
+      })).rejects.toThrow("changed selection between forecast steps");
+    }
+  });
+
+
 });
