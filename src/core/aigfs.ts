@@ -218,7 +218,7 @@ export class AigfsForecastService {
       run: run.toISOString(),
       requestedStartTime: startTime.toISOString(),
       requestedEndTime: endTime.toISOString(),
-      requestedPoint: { ...request.geometry },
+      requestedPoint: { latitude: request.geometry.latitude, longitude: request.geometry.longitude },
       gridPoint: first.gridPoint,
       source: sourceWithoutCache(first.source),
       series: profiles.map((profile) => ({
@@ -448,6 +448,9 @@ export class AigfsForecastService {
     if (!("at" in request.time)) {
       throw new Error("Internal AIGFS routing error: expected instant diagnostic");
     }
+    if (request.diagnostic.kind === "parcel") {
+      throw new Error("AIGFS parcel diagnostics are not supported");
+    }
     const validTime = new Date(request.time.at);
     const pressureLevelsHpa = request.diagnostic.kind === "layer"
       ? [request.diagnostic.lowerPressureHpa, request.diagnostic.upperPressureHpa]
@@ -544,7 +547,7 @@ export class AigfsForecastService {
       run: run.toISOString(),
       requestedStartTime: startTime.toISOString(),
       requestedEndTime: endTime.toISOString(),
-      requestedPoint: { ...request.geometry },
+      requestedPoint: { latitude: request.geometry.latitude, longitude: request.geometry.longitude },
       gridPoint: first.gridPoint,
       source: sourceWithoutCache(first.source),
       diagnostic: request.diagnostic,
