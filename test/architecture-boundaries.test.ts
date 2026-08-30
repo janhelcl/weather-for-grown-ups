@@ -23,6 +23,14 @@ describe("architecture boundaries", () => {
     }
   });
 
+  it("keeps dataset-native service wiring out of the public query service", async () => {
+    const service = await readFile("src/core/unified-atmosphere-query.ts", "utf8");
+    expect(service).toContain("adapters?: Partial<AtmosphericQueryAdapterRegistry>");
+    expect(service).not.toMatch(
+      /gfsProfile|gefsBundle|gefsReforecast|ifsProfile|ifsEnsBundle|historyProfile/,
+    );
+  });
+
   it("keeps the public unified API module as a composition barrel", async () => {
     const api = await readFile("src/core/unified-atmosphere-api.ts", "utf8");
     expect(api).toContain("./unified-atmosphere-query.js");
