@@ -42,6 +42,36 @@ assert.equal(reforecast.source.dataset, "GEFSv12/reforecast");
 assert.equal(reforecast.source.leadBlock, "Days:1-10");
 assert.equal(reforecast.source.horizontalGridDegrees, 0.25);
 
+const profileResult = await service.query({
+  dataset: "gefs",
+  geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+  time: { at: "2017-03-14T12:00:00Z" },
+  selection: {
+    variables: ["temperature"],
+    pressureLevelsHpa: [850, 500],
+  },
+  forecast: {
+    kind: "reforecast",
+    run: "2017-03-14T00:00:00Z",
+  },
+  ensemble: {
+    members: ["c00", "p01"],
+    quantiles: [0.5],
+  },
+});
+const profile = profileResult.result as any;
+assert.equal(profileResult.internalDatasetId, "gefs_v12_reforecast");
+assert.equal(profile.model, "gefs_v12_reforecast");
+assert.deepEqual(profile.selection.pressureLevelsHpa, [850, 500]);
+assert.equal(profile.summaries.length, 2);
+assert.equal(profile.summaries[0].variable, "temperature");
+assert.equal(profile.summaries[0].memberCount, 2);
+assert(Number.isFinite(profile.summaries[0].mean));
+assert.equal(profile.source.archiveType, "reforecast");
+assert.equal(profile.source.horizontalGridDegrees, 0.5);
+assert.equal(profile.source.profileGridPolicy, "coherent_0p50");
+assert.deepEqual(profile.gridPoint, { latitude: 50, longitude: 14.5 });
+
 console.log(JSON.stringify({
   dataset: result.dataset,
   internalDatasetId: result.internalDatasetId,
@@ -51,4 +81,9 @@ console.log(JSON.stringify({
   members: reforecast.selection.members,
   temperature2m: reforecast.fieldSummaries[0],
   source: reforecast.source,
+  profile: {
+    selection: profile.selection,
+    summaries: profile.summaries,
+    source: profile.source,
+  },
 }, null, 2));
