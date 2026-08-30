@@ -91,7 +91,7 @@ describe("unified dataset-comparison adapters", () => {
   });
 
   it("guards each adapter against the wrong comparison pair", async () => {
-    const native = { compare: vi.fn() };
+    const native = { compare: vi.fn(async () => undefined) };
     const gfsGefs = new GfsGefsDatasetComparisonAdapter(native as any);
     const gfsIfs = new GfsIfsDatasetComparisonAdapter(native as any);
     const gefsIfsEns = new GefsIfsEnsDatasetComparisonAdapter(native as any);
@@ -103,9 +103,9 @@ describe("unified dataset-comparison adapters", () => {
       variable: "temperature",
       pressureLevelHpa: 850,
     });
-    await expect(gfsGefs.compare(request)).rejects.toThrow("datasets=gfs,gefs");
-    await expect(gefsIfsEns.compare(request)).rejects.toThrow("datasets=gefs,ifs-ens");
-    await expect(ifsIfsEns.compare(request)).rejects.toThrow("datasets=ifs,ifs-ens");
+    expect(() => gfsGefs.compare(request)).toThrow("datasets=gfs,gefs");
+    expect(() => gefsIfsEns.compare(request)).toThrow("datasets=gefs,ifs-ens");
+    expect(() => ifsIfsEns.compare(request)).toThrow("datasets=ifs,ifs-ens");
     await expect(gfsIfs.compare(request)).resolves.toBeUndefined();
   });
 });
@@ -180,4 +180,4 @@ describe("unified dataset-comparison schema", () => {
       pressureLevelHpa: 850,
     })).toThrow();
   });
-}
+});

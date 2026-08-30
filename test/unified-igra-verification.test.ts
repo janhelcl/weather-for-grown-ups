@@ -160,8 +160,8 @@ describe("verification adapters", () => {
       variables: ["temperature"],
       pressureLevelsHpa: [850],
     });
-    await expect(analysis.verify(igraRequest)).rejects.toThrow("referenceDataset=gfs-analysis");
-    await expect(new IgraVerificationAdapter().verify(analysisRequest)).rejects.toThrow(
+    expect(() => analysis.verify(igraRequest)).toThrow("referenceDataset=gfs-analysis");
+    expect(() => new IgraVerificationAdapter().verify(analysisRequest)).toThrow(
       "referenceDataset=igra",
     );
   });
