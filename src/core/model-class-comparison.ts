@@ -19,6 +19,7 @@ import {
   assertAligned,
   circularDifference,
   compareThreshold,
+  comparisonResultObject,
   constituentSource,
   memberProfileValue,
   objectResult,
@@ -246,7 +247,7 @@ export class ModelClassComparisonService {
     const hybridValues = rawMembers.map((member) =>
       memberProfileValue(member, input.pressureLevelHpa, output.field, "hgefs"));
     const constituentValues = rawMembers
-      .filter((member) => object(member).population === input.constituent)
+      .filter((member) => comparisonResultObject(member).population === input.constituent)
       .map((member) =>
         memberProfileValue(member, input.pressureLevelHpa, output.field, input.constituent));
     if (constituentValues.length < 2) {
