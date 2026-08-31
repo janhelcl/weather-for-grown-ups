@@ -660,3 +660,69 @@ describe("HGEFS additional compact branches", () => {
     expect(result.members).toBeUndefined();
   });
 });
+
+
+describe("HGEFS AI-only diagnostics", () => {
+  it("summarizes an AIGEFS-only profile diagnostic on one constituent grid", async () => {
+    const aigefsDiagnose = vi.fn(async (request: any) => ({
+      model: "aigefs_0p25",
+      run,
+      validTime,
+      forecastHour: 6,
+      gridPoint: aigefsGrid,
+      sampledPressureLevelsHpa: [850, 700],
+      members: request.ensemble.members.map((member: string, index: number) => ({
+        member,
+        cacheHit: true,
+        levels: [
+          { pressureHpa: 850, temperatureC: 1 },
+          { pressureHpa: 700, temperatureC: -4 },
+        ],
+        diagnostics: [{
+          id: "freezing_level_crossings",
+          crossings: index === 0
+            ? [{ geopotentialHeightGpm: 1600, pressureHpa: 820 }]
+            : [],
+        }],
+      })),
+      source: { cacheHit: true },
+    }));
+    const gefsDiagnose = vi.fn();
+
+    const service = new HgefsForecastService({
+      aigefs: { query: vi.fn(), diagnose: aigefsDiagnose } as any,
+      gefsQuery: { query: vi.fn() },
+      gefsDiagnostics: { diagnose: gefsDiagnose },
+    });
+
+    const result = await service.diagnose(diagnoseAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: point,
+      time: { at: validTime },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [850, 700],
+        diagnostics: ["freezing_level_crossings"],
+      },
+      forecast: { run },
+      ensemble: {
+        members: ["aigefs:c00", "aigefs:p01"],
+        quantiles: [0.5],
+      },
+    })) as any;
+
+    expect(gefsDiagnose).not.toHaveBeenCalled();
+    expect(result.constituentGridPoints).toEqual([{
+      population: "aigefs",
+      modelClass: "ai",
+      gridPoint: aigefsGrid,
+    }]);
+    expect(result.summaries[0].membersWithAnyCrossing).toMatchObject({
+      count: 1,
+      memberCount: 2,
+      fraction: 0.5,
+    });
+    expect(result.members).toBeUndefined();
+    expect(result.source.allCacheHit).toBe(true);
+  });
+});
