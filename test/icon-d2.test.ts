@@ -263,12 +263,42 @@ describe("ICON-D2 deterministic service operations", () => {
       min: 278,
       max: 282,
     })),
+    summarizeSelectedMessage: vi.fn(async (_path: string, _box: unknown, selector: any) => ({
+      totalGridPoints: 9,
+      undefinedGridPoints: 0,
+      definedGridPoints: 9,
+      mean: selector.code === "TMP" ? 280 : 101_325,
+      min: selector.code === "TMP" ? 278 : 101_000,
+      max: selector.code === "TMP" ? 282 : 101_700,
+      temporal: selector.temporalSemantics === "accumulation"
+        ? { type: "accumulation" as const, startForecastHour: 0, endForecastHour: 6 }
+        : { type: "instantaneous" as const },
+    })),
+  };
+  const areaGridDecoder = {
+    engine: "gribberish" as const,
+    extractBox: vi.fn(async () => [
+      { longitude: 13, latitude: 49, value: 278 },
+      { longitude: 13.1, latitude: 49.1, value: 280 },
+      { longitude: 13.2, latitude: 49.2, value: 282 },
+    ]),
+    extractSelectedMessage: vi.fn(async (_path: string, _box: unknown, selector: any) => ({
+      points: [
+        { longitude: 13, latitude: 49, value: selector.code === "TMP" ? 278 : 101_000 },
+        { longitude: 13.1, latitude: 49.1, value: selector.code === "TMP" ? 280 : 101_325 },
+        { longitude: 13.2, latitude: 49.2, value: selector.code === "TMP" ? 282 : 101_700 },
+      ],
+      temporal: selector.temporalSemantics === "accumulation"
+        ? { type: "accumulation" as const, startForecastHour: 0, endForecastHour: 6 }
+        : { type: "instantaneous" as const },
+    })),
   };
   const service = () => new IconD2ForecastService({
     cache,
     decoder,
     runProvider,
     areaDecoder: areaDecoder as any,
+    areaGridDecoder: areaGridDecoder as any,
   });
 
   beforeEach(() => vi.clearAllMocks());
@@ -363,6 +393,96 @@ describe("ICON-D2 deterministic service operations", () => {
     expect(area.statistics.mean).toBeCloseTo(6.85, 8);
     expect(area.variable).toMatchObject({ id: "temperature", pressureHpa: 850, unit: "degC" });
     expect(area.source.productGrid.resolutionDegrees).toBe(0.02);
+  });
+
+  it("covers bounded-area field statistics and accumulation semantics", async () => {
+    const mslp = await service().query(queryAtmosphereSchema.parse({
+      dataset: "icon-d2",
+      geometry: {
+        type: "area",
+        westLongitude: 13,
+        eastLongitude: 13.2,
+        southLatitude: 49,
+        northLatitude: 49.2,
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+      selection: { fields: ["mean_sea_level_pressure"] },
+      forecast: { run: run.toISOString() },
+    })) as any;
+    expect(mslp.field).toMatchObject({
+      id: "mean_sea_level_pressure",
+      level: { type: "named_level", id: "mean_sea_level" },
+      temporal: { type: "instantaneous" },
+    });
+    expect(mslp.statistics.mean).toBe(101_325);
+
+    const precipitation = await service().query(queryAtmosphereSchema.parse({
+      dataset: "icon-d2",
+      geometry: {
+        type: "area",
+        westLongitude: 13,
+        eastLongitude: 13.2,
+        southLatitude: 49,
+        northLatitude: 49.2,
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+      selection: { fields: ["total_precipitation"] },
+      forecast: { run: run.toISOString() },
+    })) as any;
+    expect(precipitation.field.level).toEqual({ type: "surface" });
+    expect(precipitation.field.temporal).toMatchObject({
+      type: "accumulation",
+      startForecastHour: 0,
+      endForecastHour: 6,
+      startTime: "2026-08-31T00:00:00.000Z",
+      endTime: "2026-08-31T06:00:00.000Z",
+    });
+  });
+
+  it("covers bounded-area pressure and field distributions", async () => {
+    const pressure = await service().query(queryAtmosphereSchema.parse({
+      dataset: "icon-d2",
+      geometry: {
+        type: "area",
+        westLongitude: 13,
+        eastLongitude: 13.2,
+        southLatitude: 49,
+        northLatitude: 49.2,
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      aggregate: {
+        percentiles: [50],
+        thresholds: [{ operator: "gte", value: 6 }],
+        includeExtremaLocations: true,
+      },
+      forecast: { run: run.toISOString() },
+    })) as any;
+    expect(pressure.statistics.mean).toBeCloseTo(6.85, 8);
+    expect(pressure.distribution.percentiles[0].value).toBeCloseTo(6.85, 8);
+    expect(pressure.distribution.extrema.min.gridPoint).toEqual({ latitude: 49, longitude: 13 });
+
+    const field = await service().query(queryAtmosphereSchema.parse({
+      dataset: "icon-d2",
+      geometry: {
+        type: "area",
+        westLongitude: 13,
+        eastLongitude: 13.2,
+        southLatitude: 49,
+        northLatitude: 49.2,
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+      selection: { fields: ["temperature_2m"] },
+      aggregate: {
+        percentiles: [50],
+        thresholds: [{ operator: "gte", value: 6 }],
+        includeExtremaLocations: true,
+      },
+      forecast: { run: run.toISOString() },
+    })) as any;
+    expect(field.field.id).toBe("temperature_2m");
+    expect(field.statistics.mean).toBeCloseTo(6.85, 8);
+    expect(field.distribution.percentiles[0].value).toBeCloseTo(6.85, 8);
   });
 
   it("derives layer diagnostics through the shared diagnostic machinery", async () => {
