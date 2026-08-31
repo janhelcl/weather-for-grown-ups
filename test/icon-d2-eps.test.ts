@@ -1,8 +1,12 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { IconD2EpsOpenDataCache } from "../src/cache/icon-d2-eps-open-data-cache.js";
+import {
+  IconD2EpsMemberFileFilter,
+  IconD2EpsOpenDataCache,
+  iconD2EpsWgrib2TagForMember,
+} from "../src/cache/icon-d2-eps-open-data-cache.js";
 import {
   ICON_D2_EPS_MEMBERS,
   iconD2EpsMemberOrdinal,
@@ -43,6 +47,14 @@ describe("ICON-D2-EPS source and catalog", () => {
       "https://opendata.dwd.de/weather/nwp/icon-d2-eps/grib/00/t_2m/"
       + "icon-d2-eps_germany_icosahedral_single-level_2026083100_006_2d_t_2m.grib2.bz2",
     );
+    expect(() => buildIconD2EpsOpenDataUrl(run, -1, {
+      type: "single",
+      parameter: "t_2m",
+    })).toThrow("forecast hour must be a whole number from 0 to 48");
+    expect(() => buildIconD2EpsOpenDataUrl(run, 6.5, {
+      type: "single",
+      parameter: "t_2m",
+    })).toThrow("forecast hour must be a whole number from 0 to 48");
   });
 
   it("registers a limited-area 20-member physics ensemble on the native mesh", () => {
@@ -138,6 +150,70 @@ describe("ICON-D2-EPS all-member selected-object cache", () => {
     const second = await cache.fetch(request);
     expect(second).toMatchObject({ path: first.path, cacheHit: true });
     expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ICON-D2-EPS native member filtering", () => {
+  let rootDir: string;
+
+  beforeEach(async () => {
+    rootDir = await mkdtemp(join(tmpdir(), "wfg-icon-d2-eps-members-"));
+  });
+
+  afterEach(async () => {
+    await rm(rootDir, { recursive: true, force: true });
+  });
+
+  it("maps the provider inventory to p01..p20 and materializes one member-only GRIB", async () => {
+    const inventory = Array.from({ length: 20 }, (_, index) =>
+      `${index + 1}:0:d=2026083100:TMP:850 mb:6 hour fcst:ENS=+${index + 1}`
+    ).join("\n");
+    const runner = vi.fn(async (_executable: string, args: string[]) => {
+      if (args.includes("-s")) return { stdout: inventory };
+      const output = args.at(-1)!;
+      await writeFile(output, new TextEncoder().encode("GRIB-MEMBER"));
+      return { stdout: "selected" };
+    });
+    const sourcePath = join(rootDir, "all-members.grib2");
+    await writeFile(sourcePath, new TextEncoder().encode("GRIB-ALL"));
+    const filter = new IconD2EpsMemberFileFilter(
+      join(rootDir, "filtered"),
+      "wgrib2-test",
+      runner,
+    );
+
+    expect(iconD2EpsWgrib2TagForMember(inventory, "p01")).toBe("ENS=+1");
+    expect(iconD2EpsWgrib2TagForMember(inventory, "p20")).toBe("ENS=+20");
+
+    const first = await filter.filter(sourcePath, "p02");
+    expect(first.cacheHit).toBe(false);
+    expect(new TextDecoder().decode(await readFile(first.path))).toBe("GRIB-MEMBER");
+    expect(runner).toHaveBeenCalledTimes(2);
+    expect(runner.mock.calls[1]![1].join(" ")).toContain("ENS=\\+2");
+
+    const second = await filter.filter(sourcePath, "p02");
+    expect(second).toMatchObject({ path: first.path, cacheHit: true });
+    expect(runner).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects incomplete member inventories instead of guessing", () => {
+    const inventory = Array.from({ length: 19 }, (_, index) =>
+      `${index + 1}:0:d=2026083100:TMP:850 mb:6 hour fcst:ENS=+${index + 1}`
+    ).join("\n");
+    expect(() => iconD2EpsWgrib2TagForMember(inventory, "p01"))
+      .toThrow("exposed 19 distinct forecast-member tags; expected 20");
+  });
+
+  it("surfaces the native wgrib2 dependency clearly", async () => {
+    const sourcePath = join(rootDir, "all-members.grib2");
+    await writeFile(sourcePath, new TextEncoder().encode("GRIB-ALL"));
+    const filter = new IconD2EpsMemberFileFilter(
+      join(rootDir, "filtered"),
+      "missing-wgrib2",
+      async () => { throw new Error("spawn missing-wgrib2 ENOENT"); },
+    );
+    await expect(filter.filter(sourcePath, "p01"))
+      .rejects.toThrow("ICON-D2-EPS requires native wgrib2");
   });
 });
 
