@@ -13,23 +13,6 @@ export type AtmosphericRunComparisonAdapterRegistry = Record<
   AtmosphericRunComparisonAdapter
 >;
 
-export interface AtmosphericDatasetComparisonAdapter {
-  compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown>;
-}
-
-type DatasetComparisonKey<Request> =
-  Request extends { datasets: [infer Left extends string, infer Right extends string] }
-    ? `${Left}:${Right}`
-    : never;
-
-export type AtmosphericDatasetComparisonKey =
-  DatasetComparisonKey<CompareAtmosphericDatasetsRequest>;
-
-export type AtmosphericDatasetComparisonAdapterRegistry = Record<
-  AtmosphericDatasetComparisonKey,
-  AtmosphericDatasetComparisonAdapter
->;
-
 export interface AtmosphericVerificationAdapter {
   verify(request: VerifyAtmosphericForecastRequest): Promise<unknown>;
 }

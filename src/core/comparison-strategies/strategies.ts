@@ -23,7 +23,7 @@ export class GfsGefsComparisonStrategy implements AtmosphericDatasetComparisonSt
 
   compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown> {
     if (request.datasets[0] !== "gfs" || request.datasets[1] !== "gefs") {
-      throw new Error("GFS/GEFS comparison adapter requires datasets=gfs,gefs");
+      throw new Error("GFS/GEFS comparison strategy requires datasets=gfs,gefs");
     }
     return this.service.compare(gfsGefsComparisonQuerySchema.parse({
       latitude: request.geometry.latitude,
@@ -53,7 +53,7 @@ export class GfsIfsComparisonStrategy implements AtmosphericDatasetComparisonStr
 
   compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown> {
     if (request.datasets[0] !== "gfs" || request.datasets[1] !== "ifs") {
-      throw new Error("GFS/IFS comparison adapter requires datasets=gfs,ifs");
+      throw new Error("GFS/IFS comparison strategy requires datasets=gfs,ifs");
     }
     return this.service.compare(gfsIfsComparisonQuerySchema.parse({
       latitude: request.geometry.latitude,
@@ -81,7 +81,7 @@ export class GefsIfsEnsComparisonStrategy implements AtmosphericDatasetCompariso
 
   compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown> {
     if (request.datasets[0] !== "gefs" || request.datasets[1] !== "ifs-ens") {
-      throw new Error("GEFS/IFS ENS comparison adapter requires datasets=gefs,ifs-ens");
+      throw new Error("GEFS/IFS ENS comparison strategy requires datasets=gefs,ifs-ens");
     }
     const query = request as Extract<
       CompareAtmosphericDatasetsRequest,
@@ -118,7 +118,7 @@ export class IfsIfsEnsComparisonStrategy implements AtmosphericDatasetComparison
 
   compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown> {
     if (request.datasets[0] !== "ifs" || request.datasets[1] !== "ifs-ens") {
-      throw new Error("IFS/IFS ENS comparison adapter requires datasets=ifs,ifs-ens");
+      throw new Error("IFS/IFS ENS comparison strategy requires datasets=ifs,ifs-ens");
     }
     const query = request as Extract<
       CompareAtmosphericDatasetsRequest,
