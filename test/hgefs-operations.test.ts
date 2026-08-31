@@ -516,7 +516,6 @@ describe("HGEFS diagnostic ranges", () => {
       ensemble: {
         members: ["gefs:c00", "aigefs:c00"],
         quantiles: [0.5],
-        includeMembers: true,
       },
     })) as any;
 
