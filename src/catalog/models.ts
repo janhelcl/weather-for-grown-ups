@@ -131,6 +131,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points_timeseries",
       "transect",
       "area_summary",
+      "aligned_model_comparison",
     ],
   },
   aigefs_0p25: {
@@ -156,6 +157,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "transect",
       "area_summary",
       "ensemble_distribution",
+      "aligned_model_comparison",
     ],
   },
   hgefs_0p25: {
@@ -185,6 +187,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "transect",
       "area_summary",
       "ensemble_distribution",
+      "aligned_model_comparison",
     ],
   },
   aifs_0p25: {
@@ -208,6 +211,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points_timeseries",
       "transect",
       "area_summary",
+      "aligned_model_comparison",
     ],
   },
   aifs_ens_0p25: {
@@ -233,6 +237,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "transect",
       "area_summary",
       "ensemble_distribution",
+      "aligned_model_comparison",
     ],
   },
   gefs_0p50: {
