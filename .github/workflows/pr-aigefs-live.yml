@@ -1,0 +1,27 @@
+name: PR NOAA AIGEFS live
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**/aigefs*.ts"
+      - "src/catalog/models.ts"
+      - "src/schema/unified-api.ts"
+      - "scripts/live-smoke-aigefs.ts"
+      - ".github/workflows/pr-aigefs-live.yml"
+      - "package.json"
+
+concurrency:
+  group: pr-aigefs-live-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned live-test environment
+        run: docker build --target live-test -t weather-for-grown-ups:live-test .
+      - name: Query live NOAA AIGEFS
+        run: docker run --rm weather-for-grown-ups:live-test npm run test:live:aigefs
