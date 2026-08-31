@@ -488,17 +488,17 @@ export class HgefsForecastService {
     );
 
     const source = hybridSource([
-      ...(aigefs === undefined ? [] : [{
-        population: "aigefs" as const,
-        modelClass: "ai" as const,
-        selectedMemberCount: split.aigefs.length,
-        result: aigefs,
-      }]),
       ...(gefs === undefined ? [] : [{
         population: "gefs" as const,
         modelClass: "physics" as const,
         selectedMemberCount: split.gefs.length,
         result: gefs,
+      }]),
+      ...(aigefs === undefined ? [] : [{
+        population: "aigefs" as const,
+        modelClass: "ai" as const,
+        selectedMemberCount: split.aigefs.length,
+        result: aigefs,
       }]),
     ]);
 
