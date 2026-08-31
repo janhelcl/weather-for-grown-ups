@@ -35,6 +35,17 @@ describe("atmospheric dataset capability catalog", () => {
       nativeForecastIntervalHours: 6,
       members: 31,
     });
+    expect(ATMOSPHERIC_DATASET_CATALOG.hgefs_0p25).toMatchObject({
+      family: "hgefs",
+      provider: "noaa",
+      modelClass: "hybrid",
+      kind: "ensemble",
+      role: "forecast",
+      horizontalGridDegrees: 0.25,
+      maxForecastHour: 240,
+      nativeForecastIntervalHours: 6,
+      members: 62,
+    });
     expect(ATMOSPHERIC_DATASET_CATALOG.aifs_0p25).toMatchObject({
       family: "aifs",
       provider: "ecmwf",
@@ -97,6 +108,12 @@ describe("atmospheric dataset capability catalog", () => {
     expect(datasetSupportsOperation("aigefs_0p25", "ensemble_distribution")).toBe(true);
     expect(datasetSupportsOperation("aigefs_0p25", "parcel_diagnostics")).toBe(false);
     expect(datasetSupportsOperation("aigefs_0p25", "run_comparison")).toBe(false);
+    expect(datasetSupportsOperation("hgefs_0p25", "profile")).toBe(true);
+    expect(datasetSupportsOperation("hgefs_0p25", "timeseries")).toBe(true);
+    expect(datasetSupportsOperation("hgefs_0p25", "layer_diagnostics")).toBe(true);
+    expect(datasetSupportsOperation("hgefs_0p25", "profile_diagnostics")).toBe(true);
+    expect(datasetSupportsOperation("hgefs_0p25", "diagnostic_timeseries")).toBe(false);
+    expect(datasetSupportsOperation("hgefs_0p25", "area_summary")).toBe(false);
     expect(datasetSupportsOperation("aifs_0p25", "profile")).toBe(true);
     expect(datasetSupportsOperation("aifs_0p25", "layer_diagnostics")).toBe(true);
     expect(datasetSupportsOperation("aifs_0p25", "parcel_diagnostics")).toBe(false);
@@ -137,6 +154,7 @@ describe("atmospheric dataset capability catalog", () => {
       "gfs_0p50",
       "aigfs_0p25",
       "aigefs_0p25",
+      "hgefs_0p25",
       "aifs_0p25",
       "aifs_ens_0p25",
       "gefs_0p50",
@@ -150,6 +168,8 @@ describe("atmospheric dataset capability catalog", () => {
     expect(modelSupportsOperation("aigfs_0p25", "parcel_diagnostics")).toBe(false);
     expect(modelSupportsOperation("aigefs_0p25", "ensemble_distribution")).toBe(true);
     expect(modelSupportsOperation("aigefs_0p25", "parcel_diagnostics")).toBe(false);
+    expect(modelSupportsOperation("hgefs_0p25", "ensemble_distribution")).toBe(true);
+    expect(modelSupportsOperation("hgefs_0p25", "area_summary")).toBe(false);
     expect(modelSupportsOperation("aifs_0p25", "profile")).toBe(true);
     expect(modelSupportsOperation("aifs_0p25", "parcel_diagnostics")).toBe(false);
     expect(modelSupportsOperation("aifs_ens_0p25", "ensemble_distribution")).toBe(true);
