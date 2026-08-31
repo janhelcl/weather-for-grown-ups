@@ -1,6 +1,6 @@
 # Unified atmospheric API
 
-WFG's public API is organized around a small operation vocabulary and six atmospheric datasets.
+WFG's public API is organized around a small operation vocabulary and seven atmospheric datasets.
 
 > **One query language for atmospheric state; datasets preserve their semantics.**
 
@@ -10,12 +10,15 @@ WFG's public API is organized around a small operation vocabulary and six atmosp
 | --- | --- | --- | --- |
 | `gfs` | `gfs_0p25` / `gfs_0p50` operational; grid-matched 0.25° GDEX or 0.5° NCEI archive for old explicit runs | forecast | deterministic physics model |
 | `aigfs` | `aigfs_0p25` NOAA operational AIGFS | forecast | deterministic AI model |
+| `aigefs` | `aigefs_0p25` NOAA operational AIGEFS | forecast | 31-member AI ensemble |
 | `gefs` | operational `gefs_0p50`; explicit `forecast.kind=reforecast` resolves to `gefs_v12_reforecast` for supported retrospective queries | forecast | member-first ensemble |
 | `ifs` | `ifs_0p25` ECMWF Open Data operational forecast | forecast | deterministic |
 | `ifs-ens` | `ifs_ens_0p25` ECMWF Open Data ENS direct output | forecast | 50-member perturbed distribution |
 | `gfs-analysis` | `gfs_grid4_analysis_0p5` | historical analysis | deterministic analyzed state |
 
 `aigfs` keeps the same public state vocabulary while preserving its narrower native product: 0.25°, 00/06/12/18Z initializations, 6-hour output through f384, six native pressure variables and a small surface-field set. It supports point/range, multi-point/range, transect, scalar area, layer and structural profile diagnostics. Parcel diagnostics are explicitly absent because the operational surface product lacks the complete parcel initialization state used by WFG. See [AIGFS.md](AIGFS.md).
+
+`aigefs` preserves the same AI-state inventory while changing the result semantics to a 31-member ensemble on the native 0.25° / 6-hour / f384 product. WFG evaluates deterministic normalization and nonlinear layer/profile diagnostics independently inside each selected member before aggregation. Parcel diagnostics and comparison operations are not advertised yet. See [AIGEFS.md](AIGEFS.md).
 
 Deterministic IFS supports point and multi-point access, native-cadence ranges, transects, raw scalar bbox area summaries, deterministic diagnostics, and run-to-run comparison while preserving ECMWF-native cadence and field semantics. IFS ENS supports point and multi-point member-first bundles, great-circle transects, member-first scalar area statistics, native-cadence point/multi-point state ranges and diagnostic time ranges, layer/profile/parcel diagnostics, and run-to-run distribution shifts with the same canonical pressure vocabulary, 50 perturbations and requested quantiles. Raw member payloads are opt-in for single-time/state queries; diagnostic ranges and run comparisons stay compact. The Cycle 50r1 unperturbed control is exposed as deterministic `ifs`. Unsupported combinations fail explicitly rather than falling through to another dataset. The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a separate public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently. GEFS reforecasts follow the same public-vocabulary principle but preserve a different physical meaning: `dataset: "gefs"` plus `forecast.kind: "reforecast"` selects a retrospective GEFSv12 forecast population, not an archive of whatever operational GEFS happened to run on that date.
 
@@ -37,6 +40,12 @@ Changing only the dataset asks the same atmospheric question of another source:
 
 ```json
 { "dataset": "aigfs" }
+```
+
+or:
+
+```json
+{ "dataset": "aigefs" }
 ```
 
 or:
