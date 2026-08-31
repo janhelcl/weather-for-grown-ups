@@ -20,7 +20,18 @@ export type AtmosphericDatasetComparisonKey =
 export type AtmosphericComparisonSemantics =
   | "deterministic_delta"
   | "deterministic_ensemble_positioning"
-  | "ensemble_distribution_shift";
+  | "ensemble_distribution_shift"
+  | "hybrid_constituent_distribution_shift";
+
+export type AtmosphericComparisonOutputShape =
+  | "pair_native_result"
+  | "normalized_pair_result"
+  | "hybrid_constituent_result";
+
+export type AtmosphericComparisonProvenanceShape =
+  | "native_source_per_dataset"
+  | "native_source_per_side"
+  | "hybrid_constituent_sources";
 
 export interface AtmosphericComparisonDatasetDescriptor {
   dataset: PublicAtmosphericDataset;
@@ -38,8 +49,8 @@ export interface AtmosphericDatasetComparisonStrategyMetadata {
   validTimeAlignment: "exact";
   variableCompatibility: "pair_specific_pressure_scalar_intersection";
   comparisonSemantics: AtmosphericComparisonSemantics;
-  outputShape: "pair_native_result";
-  provenanceShape: "native_source_per_dataset";
+  outputShape: AtmosphericComparisonOutputShape;
+  provenanceShape: AtmosphericComparisonProvenanceShape;
 }
 
 export interface AtmosphericDatasetComparisonStrategy {
@@ -62,6 +73,10 @@ export function comparisonStrategyMetadata(
   key: AtmosphericDatasetComparisonKey,
   datasets: readonly [PublicAtmosphericDataset, PublicAtmosphericDataset],
   comparisonSemantics: AtmosphericComparisonSemantics,
+  shapes: {
+    outputShape?: AtmosphericComparisonOutputShape;
+    provenanceShape?: AtmosphericComparisonProvenanceShape;
+  } = {},
 ): AtmosphericDatasetComparisonStrategyMetadata {
   const declaredKey = `${datasets[0]}:${datasets[1]}`;
   if (declaredKey !== key) {
@@ -76,8 +91,8 @@ export function comparisonStrategyMetadata(
     validTimeAlignment: "exact",
     variableCompatibility: "pair_specific_pressure_scalar_intersection",
     comparisonSemantics,
-    outputShape: "pair_native_result",
-    provenanceShape: "native_source_per_dataset",
+    outputShape: shapes.outputShape ?? "pair_native_result",
+    provenanceShape: shapes.provenanceShape ?? "native_source_per_dataset",
   };
 }
 
