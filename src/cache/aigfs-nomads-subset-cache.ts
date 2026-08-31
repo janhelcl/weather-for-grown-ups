@@ -47,7 +47,11 @@ export interface AigfsAvailabilityProbe {
   ): Promise<boolean>;
 }
 
-export class AigfsNomadsSubsetCache implements AigfsAvailabilityProbe {
+export interface AigfsSubsetCache extends AigfsAvailabilityProbe {
+  fetch(request: AigfsDataRequest): Promise<AigfsSourceFile>;
+}
+
+export class AigfsNomadsSubsetCache implements AigfsSubsetCache {
   private readonly inFlight = new Map<string, Promise<AigfsSourceFile>>();
 
   constructor(
