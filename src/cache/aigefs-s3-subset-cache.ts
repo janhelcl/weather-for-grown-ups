@@ -7,11 +7,11 @@ import {
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
 import { fetchWithRetry } from "../access/http-fetch.js";
-import {
-  AigfsNomadsSubsetCache,
-  type AigfsAvailabilityRequirement,
-  type AigfsDataRequest,
-  type AigfsSourceFile,
+import type {
+  AigfsAvailabilityRequirement,
+  AigfsDataRequest,
+  AigfsSourceFile,
+  AigfsSubsetCache,
 } from "./aigfs-nomads-subset-cache.js";
 import type { AigefsMember } from "../catalog/aigefs.js";
 import {
@@ -27,7 +27,7 @@ import {
   type AigefsProduct,
 } from "../sources/aigefs.js";
 
-export class AigefsS3SubsetCache extends AigfsNomadsSubsetCache {
+export class AigefsS3SubsetCache implements AigfsSubsetCache {
   private readonly memberInFlight = new Map<string, Promise<AigfsSourceFile>>();
 
   constructor(
@@ -38,11 +38,9 @@ export class AigefsS3SubsetCache extends AigfsNomadsSubsetCache {
       join(memberRootDir, "access-state"),
       UPSTREAM_ACCESS_POLICIES.noaaAws,
     ),
-  ) {
-    super(memberRootDir, memberFetchFn, memberAccessPolicy);
-  }
+  ) {}
 
-  override async fetch(request: AigfsDataRequest): Promise<AigfsSourceFile> {
+  async fetch(request: AigfsDataRequest): Promise<AigfsSourceFile> {
     if (request.variables.length === 0 && request.fields.length === 0) {
       throw new Error(
         "AIGEFS subset request must contain at least one pressure variable or surface field",
@@ -66,7 +64,7 @@ export class AigefsS3SubsetCache extends AigfsNomadsSubsetCache {
     return operation;
   }
 
-  override async isForecastAvailable(
+  async isForecastAvailable(
     run: Date,
     forecastHour: number,
     requirement: AigfsAvailabilityRequirement,
