@@ -7,7 +7,6 @@ import {
   HGEFS_MEMBERS,
   gefsVariablesForHgefs,
   hgefsMember,
-  isHgefsMember,
   sortHgefsMembers,
   splitHgefsMembers,
   type HgefsMember,
@@ -137,7 +136,7 @@ export class HgefsForecastService {
     );
     this.aigefs = options.aigefs ?? new AigefsForecastService({ cacheDir });
     this.gefsQuery = options.gefsQuery ?? new GefsQueryAdapter({ cacheDir });
-    this.gefsDiagnostics = options.gefsDiagnostics ?? new GefsDiagnosticAdapter({ cacheDir });
+    this.gefsDiagnostics = options.gefsDiagnostics ?? new GefsDiagnosticAdapter();
     this.stepConcurrency = options.stepConcurrency ?? DEFAULT_STEP_CONCURRENCY;
   }
 
