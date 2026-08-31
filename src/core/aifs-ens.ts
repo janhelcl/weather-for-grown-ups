@@ -71,7 +71,7 @@ export class AifsEnsForecastService {
 
   async query(request: QueryAtmosphereRequest): Promise<unknown> {
     if (request.dataset !== "aifs-ens") {
-      throw new Error("AIFS ENS service only accepts dataset=aigefs");
+      throw new Error("AIFS ENS service only accepts dataset=aifs-ens");
     }
     const members = requestedMembers(request.ensemble?.members);
     const quantiles = requestedQuantiles(request.ensemble?.quantiles);
@@ -159,7 +159,7 @@ function asAifsQuery(
 ): QueryAtmosphereRequest {
   return {
     ...request,
-    dataset: "aigfs",
+    dataset: "aifs",
     forecast: {
       ...(request.forecast ?? {}),
       run: runOverride ?? request.forecast?.run ?? "latest",
@@ -175,7 +175,7 @@ function asAifsDiagnostic(
 ): DiagnoseAtmosphereRequest {
   return {
     ...request,
-    dataset: "aigfs",
+    dataset: "aifs",
     forecast: {
       ...(request.forecast ?? {}),
       run: runOverride ?? request.forecast?.run ?? "latest",
@@ -190,7 +190,7 @@ function requestedMembers(input: readonly string[] | undefined): AifsEnsMember[]
   const unsupported = raw.filter((member) => !MEMBER_SET.has(member));
   if (unsupported.length > 0) {
     throw new Error(
-      `AIFS ENS members are c00,p01..p30; unsupported: ${unsupported.join(", ")}`,
+      `AIFS ENS members are c00,p01..p50; unsupported: ${unsupported.join(", ")}`,
     );
   }
   if (raw.length < 2) throw new Error("AIFS ENS requires at least two selected members");
