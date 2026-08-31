@@ -49,6 +49,32 @@ describe("AI and hybrid comparison registry contract", () => {
     expect(hybrid.hgefsMembers).toHaveLength(62);
   });
 
+  it("accepts latest_complete only where every dataset supports it", () => {
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["gfs", "aigfs"],
+      run: "latest_complete",
+    })).not.toThrow();
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["ifs", "aifs"],
+      run: "latest_complete",
+    })).toThrow();
+  });
+
+  it("rejects pair-irrelevant comparison controls instead of silently discarding them", () => {
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["gfs", "aigfs"],
+      quantiles: [0.5],
+    })).toThrow();
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["gefs", "aigefs"],
+      ifsEnsMembers: ["p01", "p02"],
+    })).toThrow();
+  });
+
   it("remains restrictive rather than accepting arbitrary queryable pairs", () => {
     expect(() => compareAtmosphericDatasetsSchema.parse({
       ...base,
