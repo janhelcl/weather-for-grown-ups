@@ -6,6 +6,7 @@ import {
   AIGFS_RAW_PRESSURE_VARIABLE_IDS,
 } from "../catalog/aigfs.js";
 import { AIGEFS_MEMBERS } from "../catalog/aigefs.js";
+import { AIFS_ENS_MEMBERS } from "../catalog/aifs-ens.js";
 import {
   AIFS_AREA_FIELD_IDS,
   AIFS_FIELD_IDS,
@@ -40,7 +41,7 @@ import { areaThresholdSchema } from "./area-summary.js";
 import { gfsGridSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 
-export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "aigfs", "aigefs", "gefs", "ifs", "aifs", "ifs-ens", "gfs-analysis"] as const;
+export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "aigfs", "aigefs", "gefs", "ifs", "aifs", "aifs-ens", "ifs-ens", "gfs-analysis"] as const;
 export const publicAtmosphericDatasetSchema = z.enum(PUBLIC_ATMOSPHERIC_DATASET_IDS);
 export type PublicAtmosphericDataset = z.infer<typeof publicAtmosphericDatasetSchema>;
 
@@ -68,6 +69,7 @@ export const PUBLIC_DATASET_METADATA = {
   gefs: datasetMetadata("gefs_0p50"),
   ifs: datasetMetadata("ifs_0p25"),
   aifs: datasetMetadata("aifs_0p25"),
+  "aifs-ens": datasetMetadata("aifs_ens_0p25"),
   "ifs-ens": datasetMetadata("ifs_ens_0p25"),
   "gfs-analysis": datasetMetadata("gfs_grid4_analysis_0p5"),
 } as const;
@@ -86,7 +88,7 @@ const transectGeometrySchema = z.object({
   type: z.literal("transect"),
   start: pointCoordinateSchema,
   end: pointCoordinateSchema,
-  samples: z.number().int().min(2).max(50).optional(),
+  samples: z.number().int().min(2).max(51).optional(),
 }).superRefine((geometry, context) => {
   if (
     geometry.start.latitude === geometry.end.latitude
@@ -221,7 +223,7 @@ export const atmosphericForecastOptionsSchema = z.object({
 });
 
 export const atmosphericEnsembleOptionsSchema = z.object({
-  members: z.array(z.string().min(1)).min(2).max(50).optional(),
+  members: z.array(z.string().min(1)).min(2).max(51).optional(),
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
   includeMembers: z.boolean().optional(),
   maxMemberSamples: z.number().int().min(1).max(20_000).optional(),
@@ -541,8 +543,16 @@ function validateDatasetModifiers(
     validateAigfsModifiers(request, context);
   }
 
-  if (request.dataset === "aifs") {
+  if (request.dataset === "aifs" || request.dataset === "aifs-ens") {
     validateAifsModifiers(request, context);
+  }
+
+  if (request.dataset === "aifs-ens" && request.ensemble?.members !== undefined) {
+    const supportedMembers = new Set<string>(AIFS_ENS_MEMBERS);
+    const unsupported = request.ensemble.members.filter((member: string) => !supportedMembers.has(member));
+    if (unsupported.length > 0) {
+      context.addIssue({ code: "custom", path: ["ensemble", "members"], message: `AIFS ENS members are c00,p01..p50; unsupported: ${unsupported.join(", ")}` });
+    }
   }
 
   if (request.dataset === "aigefs" && request.ensemble?.members !== undefined) {
@@ -599,7 +609,7 @@ function validateDatasetModifiers(
     context.addIssue({
       code: "custom",
       path: ["ensemble"],
-      message: "ensemble controls are only valid for ensemble datasets: aigefs, gefs, or ifs-ens",
+      message: "ensemble controls are only valid for ensemble datasets: aigefs, gefs, aifs-ens, or ifs-ens",
     });
   }
   if (request.dataset !== "gfs" && request.source !== undefined) {

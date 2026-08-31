@@ -1,0 +1,28 @@
+name: PR ECMWF AIFS ENS live
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**/aifs-ens*.ts"
+      - "src/**/aifs*.ts"
+      - "src/catalog/models.ts"
+      - "src/schema/unified-api.ts"
+      - "scripts/live-smoke-aifs-ens.ts"
+      - ".github/workflows/pr-aifs-ens-live.yml"
+      - "package.json"
+
+concurrency:
+  group: pr-aifs-ens-live-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned live-test environment
+        run: docker build --target live-test -t weather-for-grown-ups:live-test .
+      - name: Query live ECMWF AIFS ENS Open Data
+        run: docker run --rm weather-for-grown-ups:live-test npm run test:live:aifs-ens
