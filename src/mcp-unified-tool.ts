@@ -61,7 +61,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("diagnose_atmosphere", {
     title: "Derive atmospheric diagnostics",
-    description: "Run shared layer, profile or parcel physics through the same dataset and point/time vocabulary. Deterministic datasets evaluate the shared kernels once; ensemble datasets evaluate nonlinear diagnostics member by member before aggregation. Dataset-native cadence and capability limits remain explicit; AIGFS, AIGEFS and AIFS expose layer/profile diagnostics but not parcel diagnostics because their operational surface inventory lacks the required parcel initialization state; AIGEFS evaluates those diagnostics member by member before aggregation.",
+    description: "Run shared layer, profile or parcel physics through the same dataset and point/time vocabulary. Deterministic datasets evaluate the shared kernels once; ensemble datasets evaluate nonlinear diagnostics member by member before aggregation. Dataset-native cadence and capability limits remain explicit; AIGFS and AIGEFS do not expose parcel diagnostics because their operational surface inventory lacks the required parcel initialization state, while AIFS currently exposes layer/profile diagnostics but keeps parcel diagnostics as an explicit capability boundary; AIGEFS evaluates supported diagnostics member by member before aggregation.",
     inputSchema: diagnoseAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {
