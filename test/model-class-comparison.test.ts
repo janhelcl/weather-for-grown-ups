@@ -210,12 +210,9 @@ describe("model-class comparison mechanics", () => {
         const values = members.map((_, index) => 5 + index / 10);
         return wrapped(
           input.dataset,
-          aiEnsembleResult(
-            input.dataset === "ifs-ens" ? "ifs_ens_0p25" : "aifs_ens_0p25",
-            values,
-            members,
-            "ECMWF Open Data",
-          ),
+          input.dataset === "ifs-ens"
+            ? ifsEnsResult(values, members)
+            : aiEnsembleResult("aifs_ens_0p25", values, members, "ECMWF Open Data"),
         );
       }),
     };
@@ -230,6 +227,7 @@ describe("model-class comparison mechanics", () => {
       variable: "temperature",
       pressureLevelHpa: 850,
       quantiles: [0.1, 0.5, 0.9],
+      thresholdGte: 7,
     });
 
     const ifsMembers = calls.find((call) => call.dataset === "ifs-ens")!.ensemble!.members!;
@@ -253,12 +251,9 @@ describe("model-class comparison mechanics", () => {
         const values = input.dataset === "gefs" ? [8, 10, 12] : [10, 12, 14];
         return wrapped(
           input.dataset,
-          aiEnsembleResult(
-            input.dataset === "gefs" ? "gefs_0p50" : "aigefs_0p25",
-            values,
-            members,
-            "NOAA",
-          ),
+          input.dataset === "gefs"
+            ? gefsEnsembleResult(values, members)
+            : aiEnsembleResult("aigefs_0p25", values, members, "NOAA"),
         );
       }),
     };
