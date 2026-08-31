@@ -444,6 +444,58 @@ describe("unified catalog branch coverage", () => {
     expect(reforecast.datasetCapabilities[0]?.operations).not.toContain("run_comparison");
   });
 
+  it("discovers datasets by spatial scope and declared point/area coverage", () => {
+    const covered = searchAtmosphereCatalog({
+      datasets: ["gfs", "gefs", "ifs"],
+      coverage: { type: "point", latitude: 50.08, longitude: 14.43 },
+      sections: ["variables"],
+      limit: 1,
+    });
+
+    expect(covered.datasetCapabilities).toHaveLength(3);
+    expect(covered.datasetCapabilities[0]).toMatchObject({
+      dataset: "gfs",
+      spatialDomain: { scope: "global" },
+      nativeGrid: {
+        type: "regular_latlon",
+        nominalResolution: { value: 0.25, unit: "degrees" },
+      },
+      maxForecastHour: 384,
+      nativeTimeCadenceHours: [1, 3],
+    });
+    expect(covered.datasetCapabilities[1]).toMatchObject({
+      dataset: "gefs",
+      kind: "ensemble",
+      members: 31,
+      nativeTimeCadenceHours: [3],
+    });
+
+    const area = searchAtmosphereCatalog({
+      datasets: ["gfs", "ifs"],
+      coverage: {
+        type: "area",
+        westLongitude: 10,
+        eastLongitude: 16,
+        southLatitude: 48,
+        northLatitude: 52,
+      },
+      search: "temperature",
+      limit: 5,
+    });
+    expect(area.datasetCapabilities.map((capability) => capability.dataset))
+      .toEqual(["gfs", "ifs"]);
+
+    const regionalOnly = searchAtmosphereCatalog({
+      datasets: ["gfs", "ifs"],
+      spatialScope: "limited_area",
+      search: "temperature",
+      limit: 5,
+    });
+    expect(regionalOnly.datasetCapabilities).toEqual([]);
+    expect(regionalOnly.totalMatches).toBe(0);
+    expect(regionalOnly.matches).toEqual([]);
+  });
+
   it("supports GEFS-only search without a GFS representative", () => {
     const result = searchAtmosphereCatalog({
       datasets: ["gefs"],
