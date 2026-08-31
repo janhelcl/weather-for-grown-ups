@@ -222,7 +222,7 @@ describe("ICON-D2 unified capabilities", () => {
 
     await expect(service.query({
       dataset: "icon-d2",
-      geometry: { type: "point", latitude: 51.51, longitude: -0.12 },
+      geometry: { type: "point", latitude: 40.42, longitude: -3.70 },
       time: { at: "2026-08-31T06:00:00Z" },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
       forecast: { run: "2026-08-31T00:00:00Z" },
