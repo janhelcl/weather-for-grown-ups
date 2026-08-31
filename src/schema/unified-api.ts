@@ -1,5 +1,6 @@
 import * as z from "zod/v4";
 import {
+  AIGEFS_MEMBERS,
   AIGFS_AREA_FIELD_IDS,
   AIGFS_PRESSURE_LEVELS_HPA,
   AIGFS_PRESSURE_VARIABLE_IDS,
@@ -31,7 +32,7 @@ import { areaThresholdSchema } from "./area-summary.js";
 import { gfsGridSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 
-export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "aigfs", "gefs", "ifs", "ifs-ens", "gfs-analysis"] as const;
+export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "aigfs", "aigefs", "gefs", "ifs", "ifs-ens", "gfs-analysis"] as const;
 export const publicAtmosphericDatasetSchema = z.enum(PUBLIC_ATMOSPHERIC_DATASET_IDS);
 export type PublicAtmosphericDataset = z.infer<typeof publicAtmosphericDatasetSchema>;
 
@@ -55,6 +56,7 @@ function datasetMetadata<Id extends AtmosphericDatasetId>(internalDatasetId: Id)
 export const PUBLIC_DATASET_METADATA = {
   gfs: datasetMetadata("gfs_0p25"),
   aigfs: datasetMetadata("aigfs_0p25"),
+  aigefs: datasetMetadata("aigefs_0p25"),
   gefs: datasetMetadata("gefs_0p50"),
   ifs: datasetMetadata("ifs_0p25"),
   "ifs-ens": datasetMetadata("ifs_ens_0p25"),
@@ -526,8 +528,30 @@ function validateDatasetModifiers(
     }
   }
 
-  if (request.dataset === "aigfs") {
-    validateAigfsModifiers(request, context);
+  if (request.dataset === "aigfs" || request.dataset === "aigefs") {
+    validateAigfsModifiers(request, context, request.dataset === "aigefs" ? "AIGEFS" : "AIGFS");
+  }
+  if (request.dataset === "aigefs") {
+    if (request.ensemble?.members !== undefined) {
+      const supportedMembers = new Set<string>(AIGEFS_MEMBERS);
+      const unsupported = request.ensemble.members.filter(
+        (member: string) => !supportedMembers.has(member),
+      );
+      if (unsupported.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["ensemble", "members"],
+          message: `AIGEFS members are 000 through 030; unsupported: ${unsupported.join(", ")}`,
+        });
+      }
+    }
+    if ("from" in request.time && request.ensemble?.includeMembers === true) {
+      context.addIssue({
+        code: "custom",
+        path: ["ensemble", "includeMembers"],
+        message: "AIGEFS ranges return compact member-first summaries; use a single valid time to include raw member payloads",
+      });
+    }
   }
 
   if (metadata.role === "forecast" && !isReforecast) {
@@ -570,7 +594,7 @@ function validateDatasetModifiers(
     context.addIssue({
       code: "custom",
       path: ["ensemble"],
-      message: "ensemble controls are only valid for ensemble datasets: gefs or ifs-ens",
+      message: "ensemble controls are only valid for ensemble datasets: aigefs, gefs or ifs-ens",
     });
   }
   if (request.dataset !== "gfs" && request.source !== undefined) {
@@ -586,6 +610,7 @@ function validateDatasetModifiers(
 function validateAigfsModifiers(
   request: any,
   context: z.RefinementCtx,
+  label: "AIGFS" | "AIGEFS" = "AIGFS",
 ): void {
   const variableSet = new Set<string>(AIGFS_PRESSURE_VARIABLE_IDS);
   const rawVariableSet = new Set<string>(AIGFS_RAW_PRESSURE_VARIABLE_IDS);
@@ -602,7 +627,7 @@ function validateAigfsModifiers(
       context.addIssue({
         code: "custom",
         path: ["selection", "variables"],
-        message: `AIGFS pressure variables not supported: ${unsupportedVariables.join(", ")}`,
+        message: `${label} pressure variables not supported: ${unsupportedVariables.join(", ")}`,
       });
     }
 
@@ -611,7 +636,7 @@ function validateAigfsModifiers(
       context.addIssue({
         code: "custom",
         path: ["selection", "pressureLevelsHpa"],
-        message: `AIGFS pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
+        message: `${label} pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
       });
     }
 
@@ -628,7 +653,7 @@ function validateAigfsModifiers(
       context.addIssue({
         code: "custom",
         path: ["selection", "fields"],
-        message: `AIGFS fields not supported: ${unsupportedFields.join(", ")}`,
+        message: `${label} fields not supported: ${unsupportedFields.join(", ")}`,
       });
     }
 
@@ -638,7 +663,7 @@ function validateAigfsModifiers(
         context.addIssue({
           code: "custom",
           path: ["selection", "variables"],
-          message: `AIGFS area summaries require a native scalar pressure variable; derived variables not supported for area geometry: ${derivedAreaVariables.join(", ")}`,
+          message: `${label} area summaries require a native scalar pressure variable; derived variables not supported for area geometry: ${derivedAreaVariables.join(", ")}`,
         });
       }
       const unsupportedAreaFields = fields.filter((field: string) => !areaFieldSet.has(field));
@@ -646,7 +671,7 @@ function validateAigfsModifiers(
         context.addIssue({
           code: "custom",
           path: ["selection", "fields"],
-          message: `AIGFS area summaries require a native scalar field; unsupported: ${unsupportedAreaFields.join(", ")}`,
+          message: `${label} area summaries require a native scalar field; unsupported: ${unsupportedAreaFields.join(", ")}`,
         });
       }
     }
@@ -657,7 +682,7 @@ function validateAigfsModifiers(
       context.addIssue({
         code: "custom",
         path: ["diagnostic"],
-        message: "AIGFS parcel diagnostics are not exposed because the operational surface product lacks surface pressure, surface geopotential height, and 2 m specific humidity",
+        message: `${label} parcel diagnostics are not exposed because the operational surface product lacks surface pressure, surface geopotential height, and 2 m specific humidity`,
       });
       return;
     }
@@ -669,7 +694,7 @@ function validateAigfsModifiers(
       context.addIssue({
         code: "custom",
         path: ["diagnostic"],
-        message: `AIGFS diagnostic pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
+        message: `${label} diagnostic pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
       });
     }
   }
