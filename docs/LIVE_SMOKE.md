@@ -1,6 +1,6 @@
-# Live NOAA integration tests
+# Live upstream integration tests
 
-WFG keeps real-NOAA checks separate from normal deterministic CI. Upstream publication timing, network availability and NOAA request pacing make live data valuable as a compatibility signal but a poor merge gate.
+WFG keeps real-upstream checks separate from normal deterministic CI. Upstream publication timing, network availability and NOAA request pacing make live data valuable as a compatibility signal but a poor merge gate.
 
 ## Schedule
 
