@@ -341,6 +341,7 @@ describe("model-class comparison mechanics", () => {
       pressureLevelHpa: 850,
       members: ["gefs:c00", "gefs:p01", "aigefs:c00", "aigefs:p01"],
       quantiles: [0.1, 0.5, 0.9],
+      thresholdGte: 13,
     });
 
     expect(result.hgefs.summary.mean).toBe(13);
@@ -350,5 +351,155 @@ describe("model-class comparison mechanics", () => {
       "overlapping_hybrid_and_constituent_raw_distributions_not_independent_not_calibrated_uncertainty",
     );
     expect(result.constituent.source).toEqual({ provider: "NOAA AWS Open Data" });
+    expect(result.comparison.threshold).toMatchObject({
+      leftLabel: "hybrid",
+      rightLabel: "gefs",
+      leftCount: 2,
+      leftFraction: 0.5,
+      rightCount: 0,
+      rightFraction: 0,
+      rightMinusLeftFraction: -0.5,
+    });
+  });
+
+  it("uses linear wind-speed deltas and shortest signed circular direction deltas", async () => {
+    const service = new ModelClassComparisonService({
+      query: vi.fn(async (input: QueryAtmosphereInput) => wrapped(input.dataset, {
+        model: input.dataset === "gfs" ? "gfs_0p25" : "aigfs_0p25",
+        run,
+        validTime,
+        forecastHour: 6,
+        gridPoint: { latitude: 50, longitude: 14 },
+        levels: [{
+          pressureHpa: 850,
+          windSpeedMs: input.dataset === "gfs" ? 8 : 10,
+          windDirectionDeg: input.dataset === "gfs" ? 350 : 10,
+        }],
+        source: { provider: "NOAA" },
+      })),
+    });
+
+    const result: any = await service.compareDeterministic({
+      datasets: ["gfs", "aigfs"],
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "wind",
+      pressureLevelHpa: 850,
+    });
+
+    expect(result.comparison.outputs).toEqual([
+      expect.objectContaining({
+        field: "windSpeedMs",
+        rightMinusLeft: 2,
+        deltaKind: "linear",
+      }),
+      expect.objectContaining({
+        field: "windDirectionDeg",
+        rightMinusLeft: 20,
+        deltaKind: "circular_degrees",
+      }),
+    ]);
+  });
+
+  it("rejects inconsistent initialization and valid-time semantics defensively", async () => {
+    const wrongRun = new ModelClassComparisonService({
+      query: vi.fn(async (input: QueryAtmosphereInput) => wrapped(
+        input.dataset,
+        deterministicResult(
+          input.dataset === "gfs" ? "gfs_0p25" : "aigfs_0p25",
+          input.dataset === "gfs" ? run : "2026-08-31T06:00:00.000Z",
+          10,
+          "NOAA",
+        ),
+      )),
+    });
+    await expect(wrongRun.compareDeterministic({
+      datasets: ["gfs", "aigfs"],
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    })).rejects.toThrow("inconsistent initialization cycles");
+
+    const wrongForecastHour = new ModelClassComparisonService({
+      query: vi.fn(async (input: QueryAtmosphereInput) => {
+        const result = deterministicResult(
+          input.dataset === "gfs" ? "gfs_0p25" : "aigfs_0p25",
+          run,
+          10,
+          "NOAA",
+        );
+        if (input.dataset === "aigfs") result.forecastHour = 12;
+        return wrapped(input.dataset, result);
+      }),
+    });
+    await expect(wrongForecastHour.compareDeterministic({
+      datasets: ["gfs", "aigfs"],
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    })).rejects.toThrow("inconsistent valid-time semantics");
+  });
+
+  it("handles zero-spread reference ensembles and rejects non-scalar ensemble variables", async () => {
+    const service = new ModelClassComparisonService({
+      query: vi.fn(async (input: QueryAtmosphereInput) => {
+        const members = input.ensemble?.members ?? ["c00", "p01"];
+        const values = input.dataset === "gefs" ? [10, 10] : [9, 11];
+        return wrapped(
+          input.dataset,
+          input.dataset === "gefs"
+            ? gefsEnsembleResult(values, members)
+            : aiEnsembleResult("aigefs_0p25", values, members, "NOAA"),
+        );
+      }),
+    });
+
+    const result: any = await service.compareEnsembles({
+      datasets: ["gefs", "aigefs"],
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      leftMembers: ["c00", "p01"],
+      rightMembers: ["c00", "p01"],
+      quantiles: [0.5],
+    });
+    expect(result.comparison.populationStdDevRatioRightToLeft).toBeNull();
+
+    await expect(service.compareEnsembles({
+      datasets: ["gefs", "aigefs"],
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "wind",
+      pressureLevelHpa: 850,
+      leftMembers: ["c00", "p01"],
+      rightMembers: ["c00", "p01"],
+      quantiles: [0.5],
+    })).rejects.toThrow("requires one scalar output");
+
+    await expect(service.compareEnsembles({
+      datasets: ["gefs", "aigefs"],
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "not_a_variable",
+      pressureLevelHpa: 850,
+      leftMembers: ["c00", "p01"],
+      rightMembers: ["c00", "p01"],
+      quantiles: [0.5],
+    })).rejects.toThrow("Unknown comparison variable");
   });
 });
