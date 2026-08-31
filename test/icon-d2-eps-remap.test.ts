@@ -230,8 +230,11 @@ describe("ICON-D2-EPS CDO remap cache", () => {
     ]);
 
     let release!: () => void;
+    let markStarted!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
     const runner = vi.fn(async (_executable: string, args: string[]) => {
+      markStarted();
       await gate;
       await writeFile(args.at(-1)!, "GRIB-REMAPPED");
       return { stdout: "processed" };
@@ -244,6 +247,7 @@ describe("ICON-D2-EPS CDO remap cache", () => {
     );
 
     const firstPending = remapper.remap(sourcePath);
+    await started;
     const secondPending = remapper.remap(sourcePath);
     release();
     const [first, second] = await Promise.all([firstPending, secondPending]);
