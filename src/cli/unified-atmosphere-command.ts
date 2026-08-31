@@ -185,6 +185,16 @@ function registerCompareDatasetsCommand(program: Command): void {
     .option("--gte <number>", "Compare raw ensemble member fractions at or above this threshold", Number)
     .option("--json", "Output JSON")
     .action(async (options) => {
+      const request = buildUnifiedDatasetComparison(options);
+      const result = await new UnifiedDatasetComparisonService().compare(request);
+      printResult(result, Boolean(options.json));
+    });
+}
+
+
+export function buildUnifiedDatasetComparison(
+  options: Record<string, any>,
+): CompareAtmosphericDatasetsInput {
       const against = String(options.against).trim().toLowerCase();
       const rightDatasets = new Set([
         "aigfs", "aifs", "aigefs", "gefs", "ifs", "ifs-ens", "aifs-ens",
@@ -345,10 +355,7 @@ function registerCompareDatasetsCommand(program: Command): void {
         default:
           throw new Error(`Unsupported comparison pair: ${left}↔${against}`);
       }
-
-      const result = await new UnifiedDatasetComparisonService().compare(request);
-      printResult(result, Boolean(options.json));
-    });
+      return request;
 }
 
 function registerVerifyCommand(program: Command): void {
