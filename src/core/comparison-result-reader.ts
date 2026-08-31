@@ -254,7 +254,10 @@ export function requiredQuantile(
   return match.value;
 }
 
-export function constituentSource(result: ComparisonResultObject, population: HgefsPopulation): unknown {
+export function constituentSource(
+  result: ComparisonResultObject,
+  population: HgefsPopulation,
+): unknown {
   const source = object(result.source);
   const constituents = Array.isArray(source.constituents) ? source.constituents.map(object) : [];
   return constituents.find((candidate) => candidate.population === population)?.source;
