@@ -21,6 +21,7 @@ The current aggregate script runs:
 test:live:bundled
 test:live:s3
 test:live:aigfs
+test:live:aigefs
 test:live:history
 test:live:gefs
 test:live:gefs-runs
@@ -44,6 +45,10 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 ### AIGFS
 
 `npm run test:live:aigfs` makes one bounded mixed pressure/surface query through the public `dataset: "aigfs"` path. It verifies the operational NOMADS directory/index format, partial HTTP Range transport, bundled GRIB2 decoding, canonical pressure/surface normalization, derived wind, 6-hour lead semantics and unified result identity. The test deliberately uses a valid time well behind the publication edge so it checks source compatibility rather than racing the newest cycle.
+
+### AIGEFS
+
+`npm run test:live:aigefs` makes one deliberately small two-member pressure query through public `dataset: "aigefs"`. It verifies the operational `mem000` / `mem001` NOMADS layout, indexed partial byte ranges, real GRIB decoding, 0.25° ensemble identity, numeric member distributions and circular wind-direction aggregation. The member set stays tiny because this is a source-compatibility smoke, not a forecast product, and NOMADS cache misses retain the shared courtesy pacing.
 
 ### Historical GFS analysis and forecast skill
 
@@ -115,14 +120,14 @@ Live tests should assert contracts and invariants rather than pinning today's we
 
 - current NOAA paths and inventory formats;
 - historical NCEI archive paths and NCSS response formats;
-- selected GRIB byte-range access, including AIGFS `.idx` + raw NOMADS HTTP Range reads;
+- selected GRIB byte-range access, including AIGFS/AIGEFS `.idx` + raw NOMADS HTTP Range reads;
 - decoder compatibility with real GFS/GEFS messages;
 - requested grid/sample consistency;
 - finite normalized physical values;
 - fixed-cycle semantics across time;
 - upstream slice reuse across coordinates;
 - explicit temporal semantics for accumulation/average fields;
-- member-first GEFS computation and raw-member interpretation labels.
+- member-first AIGEFS/GEFS computation and raw-member interpretation labels.
 
 ## Failure triage
 
