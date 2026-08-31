@@ -367,7 +367,7 @@ export function assertPressureComplete(values: DecodedValue[], codes: string[], 
       .map((level) => `${code}@${level}mb`),
   );
   if (missing.length > 0) {
-    throw new Error(`Decoded GFS data is missing requested fields: ${missing.join(", ")}`);
+    throw new Error(`Decoded GRIB data is missing requested fields: ${missing.join(", ")}`);
   }
 }
 
@@ -376,6 +376,6 @@ export function assertFieldsComplete(values: DecodedValue[], fields: RawNonIsoba
     .filter((field) => !values.some((value) => matchesRawField(field, value)))
     .map((field) => `${field.id} (${field.gfsCode}@${field.level.gribLevel}, ${field.temporalSemantics})`);
   if (missing.length > 0) {
-    throw new Error(`Decoded GFS data is missing requested fields: ${missing.join(", ")}`);
+    throw new Error(`Decoded GRIB data is missing requested fields: ${missing.join(", ")}`);
   }
 }

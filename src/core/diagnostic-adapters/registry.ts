@@ -3,6 +3,7 @@ import { AigfsDiagnosticAdapter, type AigfsDiagnosticAdapterOptions } from "./ai
 import { AifsDiagnosticAdapter, type AifsDiagnosticAdapterOptions } from "./aifs.js";
 import { AifsEnsDiagnosticAdapter, type AifsEnsDiagnosticAdapterOptions } from "./aifs-ens.js";
 import { AigefsDiagnosticAdapter, type AigefsDiagnosticAdapterOptions } from "./aigefs.js";
+import { AromeDiagnosticAdapter } from "./arome.js";
 import { GefsDiagnosticAdapter, type GefsDiagnosticAdapterOptions } from "./gefs.js";
 import { HgefsDiagnosticAdapter, type HgefsDiagnosticAdapterOptions } from "./hgefs.js";
 import {
@@ -55,6 +56,7 @@ export function createAtmosphericDiagnosticAdapterRegistry(
     aifs: new AifsDiagnosticAdapter(options),
     "aifs-ens": new AifsEnsDiagnosticAdapter(options),
     aigefs: new AigefsDiagnosticAdapter(options),
+    arome: new AromeDiagnosticAdapter(),
     gfs: new GfsDiagnosticAdapter(options),
     gefs: new GefsDiagnosticAdapter(options),
     hgefs: new HgefsDiagnosticAdapter(options),
