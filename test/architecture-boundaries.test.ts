@@ -22,7 +22,19 @@ describe("architecture boundaries", () => {
       ["gefs", "gfs", "ifs", "ifs-ens"],
     );
     expect(Object.keys(createAtmosphericDatasetComparisonStrategyRegistry()).sort()).toEqual(
-      ["gefs:ifs-ens", "gfs:gefs", "gfs:ifs", "ifs:ifs-ens"],
+      [
+        "aigfs:aifs",
+        "gefs:aigefs",
+        "gefs:ifs-ens",
+        "gfs:aigfs",
+        "gfs:gefs",
+        "gfs:ifs",
+        "hgefs:aigefs",
+        "hgefs:gefs",
+        "ifs:aifs",
+        "ifs:ifs-ens",
+        "ifs-ens:aifs-ens",
+      ].sort(),
     );
     expect(Object.keys(createAtmosphericVerificationAdapterRegistry()).sort()).toEqual(
       ["gfs-analysis", "igra"],

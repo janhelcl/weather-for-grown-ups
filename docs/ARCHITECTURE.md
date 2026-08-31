@@ -268,7 +268,7 @@ The MCP vocabulary is similarly small:
 - `verify_forecast`;
 - `find_analogs`.
 
-The first three are the normal atmospheric query language. Comparison, verification and analog search remain separate because they are genuine composition operations rather than another geometry/time shape.
+The first three are the normal atmospheric query language. Comparison, verification and analog search remain separate because they are genuine composition operations rather than another geometry/time shape. Dataset comparison is itself registry-driven and restrictive: a shared atmospheric vocabulary does not imply that every pair has a scientifically meaningful comparison strategy. Physics, AI and hybrid pairs declare alignment, comparison semantics, output shape and provenance explicitly; there is no universal subtraction fallback.
 
 The unified adapters validate the common request and then delegate through dataset-specific schemas/services internally, so unsupported combinations fail explicitly rather than being coerced into fake symmetry. Those dataset-native services are implementation details and are not registered as separate public MCP tools.
 
