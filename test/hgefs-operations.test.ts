@@ -6,6 +6,7 @@ import {
 } from "../src/schema/unified-api.js";
 
 const run = "2026-08-31T00:00:00.000Z";
+const validTime = "2026-08-31T06:00:00.000Z";
 const point = { type: "point" as const, latitude: 50.08, longitude: 14.43 };
 const gefsGrid = { latitude: 50, longitude: 14 };
 const aigefsGrid = { latitude: 50, longitude: 14.5 };
