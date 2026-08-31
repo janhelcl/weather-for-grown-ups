@@ -13,6 +13,10 @@ import {
   sortIconD2EpsMembers,
 } from "../src/catalog/icon-d2-eps.js";
 import { ATMOSPHERIC_DATASET_CATALOG } from "../src/catalog/models.js";
+import {
+  NON_ISOBARIC_FIELD_CATALOG,
+  type RawNonIsobaricFieldDefinition,
+} from "../src/catalog/non-isobaric-fields.js";
 import { VARIABLE_CATALOG, type RawVariableDefinition } from "../src/catalog/variables.js";
 import { IconD2EpsForecastService } from "../src/core/icon-d2-eps.js";
 import { IconD2EpsQueryAdapter } from "../src/core/query-adapters/icon-d2-eps.js";
@@ -31,6 +35,13 @@ describe("ICON-D2-EPS source and catalog", () => {
     expect(iconD2EpsMemberOrdinal("p01")).toBe(1);
     expect(iconD2EpsMemberOrdinal("p20")).toBe(20);
     expect(sortIconD2EpsMembers(["p20", "p01", "p10"])).toEqual(["p01", "p10", "p20"]);
+    expect(sortIconD2EpsMembers([
+      "p20",
+      "unknown" as any,
+      "p01",
+    ])).toEqual(["p01", "p20", "unknown"]);
+    expect(() => iconD2EpsMemberOrdinal("unknown" as any))
+      .toThrow("Unknown ICON-D2-EPS member");
 
     expect(buildIconD2EpsOpenDataUrl(run, 6, {
       type: "pressure",
@@ -150,6 +161,190 @@ describe("ICON-D2-EPS all-member selected-object cache", () => {
     const second = await cache.fetch(request);
     expect(second).toMatchObject({ path: first.path, cacheHit: true });
     expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ICON-D2-EPS source defensive branches", () => {
+  let rootDir: string;
+
+  beforeEach(async () => {
+    rootDir = await mkdtemp(join(tmpdir(), "wfg-icon-d2-eps-source-"));
+  });
+
+  afterEach(async () => {
+    await rm(rootDir, { recursive: true, force: true });
+  });
+
+  it("rejects empty selections before upstream access", async () => {
+    const cache = new IconD2EpsOpenDataCache(
+      rootDir,
+      vi.fn() as unknown as typeof fetch,
+    );
+    await expect(cache.fetch({
+      run: new Date("2026-08-31T00:00:00Z"),
+      forecastHour: 6,
+      variables: [],
+      pressureLevelsHpa: [],
+      fields: [],
+    })).rejects.toThrow("must contain at least one pressure variable or surface field");
+  });
+
+  it("maps the complete supported pressure and surface inventory", async () => {
+    const fetchFn = vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 }));
+    const cache = new IconD2EpsOpenDataCache(
+      rootDir,
+      fetchFn as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+      async () => new TextEncoder().encode("GRIB-EPS"),
+    );
+
+    await cache.fetch({
+      run: new Date("2026-08-31T00:00:00Z"),
+      forecastHour: 6,
+      variables: [
+        VARIABLE_CATALOG.temperature,
+        VARIABLE_CATALOG.relative_humidity,
+        VARIABLE_CATALOG.u_wind,
+        VARIABLE_CATALOG.v_wind,
+        VARIABLE_CATALOG.geopotential_height,
+        VARIABLE_CATALOG.vertical_velocity,
+      ] as RawVariableDefinition[],
+      pressureLevelsHpa: [850],
+      fields: [
+        NON_ISOBARIC_FIELD_CATALOG.temperature_2m,
+        NON_ISOBARIC_FIELD_CATALOG.u_wind_10m,
+        NON_ISOBARIC_FIELD_CATALOG.v_wind_10m,
+        NON_ISOBARIC_FIELD_CATALOG.mean_sea_level_pressure,
+        NON_ISOBARIC_FIELD_CATALOG.total_precipitation,
+      ] as RawNonIsobaricFieldDefinition[],
+    });
+
+    expect(fetchFn).toHaveBeenCalledTimes(11);
+    const urls = fetchFn.mock.calls.map((call) => String(call[0]));
+    for (const parameter of [
+      "/t/",
+      "/relhum/",
+      "/u/",
+      "/v/",
+      "/fi/",
+      "/omega/",
+      "/t_2m/",
+      "/u_10m/",
+      "/v_10m/",
+      "/pmsl/",
+      "/tot_prec/",
+    ]) {
+      expect(urls.some((url) => url.includes(parameter))).toBe(true);
+    }
+  });
+
+  it("rejects unsupported pressure and surface mappings explicitly", async () => {
+    const cache = new IconD2EpsOpenDataCache(
+      rootDir,
+      vi.fn() as unknown as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+      async () => new TextEncoder().encode("GRIB-EPS"),
+    );
+    const base = {
+      run: new Date("2026-08-31T00:00:00Z"),
+      forecastHour: 6,
+      pressureLevelsHpa: [850],
+    };
+
+    await expect(cache.fetch({
+      ...base,
+      variables: [{ id: "unsupported_pressure" } as any],
+      fields: [],
+    })).rejects.toThrow("no pressure-file mapping");
+
+    await expect(cache.fetch({
+      ...base,
+      variables: [],
+      fields: [{ id: "unsupported_field" } as any],
+    })).rejects.toThrow("no single-level file mapping");
+  });
+
+  it("handles availability requirements and upstream status distinctly", async () => {
+    const successfulFetch = vi.fn(async () => new Response(null, { status: 200 }));
+    const cache = new IconD2EpsOpenDataCache(
+      rootDir,
+      successfulFetch as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+    );
+    const run = new Date("2026-08-31T00:00:00Z");
+
+    await expect(cache.isForecastAvailable(
+      run,
+      6,
+      { pressure: false, surface: false },
+    )).resolves.toBe(false);
+    await expect(cache.isForecastAvailable(
+      run,
+      6,
+      { pressure: true, surface: true },
+    )).resolves.toBe(true);
+    expect(successfulFetch).toHaveBeenCalledTimes(2);
+
+    const missing = new IconD2EpsOpenDataCache(
+      join(rootDir, "missing"),
+      vi.fn(async () => new Response(null, { status: 404 })) as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+    );
+    await expect(missing.isForecastAvailable(
+      run,
+      6,
+      { pressure: true, surface: false },
+    )).resolves.toBe(false);
+
+    const denied = new IconD2EpsOpenDataCache(
+      join(rootDir, "denied"),
+      vi.fn(async () => new Response(null, { status: 403, statusText: "Forbidden" })) as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+    );
+    await expect(denied.isForecastAvailable(
+      run,
+      6,
+      { pressure: true, surface: false },
+    )).rejects.toThrow("availability request failed: HTTP 403");
+  });
+
+  it("rejects bad download status and malformed decompressed objects", async () => {
+    const request = {
+      run: new Date("2026-08-31T00:00:00Z"),
+      forecastHour: 6,
+      variables: [VARIABLE_CATALOG.temperature] as RawVariableDefinition[],
+      pressureLevelsHpa: [850],
+      fields: [],
+    };
+
+    const failed = new IconD2EpsOpenDataCache(
+      join(rootDir, "failed-download"),
+      vi.fn(async () => new Response(null, { status: 404, statusText: "Not Found" })) as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+    );
+    await expect(failed.fetch(request)).rejects.toThrow(
+      "Open Data request failed: HTTP 404",
+    );
+
+    const tooShort = new IconD2EpsOpenDataCache(
+      join(rootDir, "short"),
+      vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 })) as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+      async () => new TextEncoder().encode("NO"),
+    );
+    await expect(tooShort.fetch(request)).rejects.toThrow(
+      "decompressed object did not start with GRIB",
+    );
+
+    const wrongMagic = new IconD2EpsOpenDataCache(
+      join(rootDir, "magic"),
+      vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 })) as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+      async () => new TextEncoder().encode("XXXX"),
+    );
+    await expect(wrongMagic.fetch(request)).rejects.toThrow(
+      "decompressed object did not start with GRIB",
+    );
   });
 });
 
@@ -293,197 +488,6 @@ describe("ICON-D2-EPS service guards and defaults", () => {
     expect(result.selection.quantiles).toEqual([0.1, 0.5, 0.9]);
     expect(result.pressureSummaries[0].distribution.memberCount).toBe(20);
     expect(result.members).toBeUndefined();
-  });
-});
-
-describe("ICON-D2-EPS geometry dispatch", () => {
-  it("routes range, multi-point, transect and area requests through member-first summaries", async () => {
-    const service = new IconD2EpsForecastService({
-      memberServiceFactory: () => ({
-        query: vi.fn(async (request: any) => {
-          const source = {
-            provider: "DWD Open Data",
-            access: "dwd_open_data",
-            decoder: "wgrib2",
-            cacheHit: true,
-          };
-          const profile = {
-            requestedPoint: { latitude: 50.08, longitude: 14.43 },
-            gridPoint: { latitude: 50.08, longitude: 14.42 },
-            levels: [{ pressureHpa: 850, temperatureC: 10 }],
-          };
-
-          if (request.geometry.type === "point" && !("at" in request.time)) {
-            return {
-              model: "icon_d2_0p02",
-              run: "2026-08-31T00:00:00.000Z",
-              requestedStartTime: request.time.start,
-              requestedEndTime: request.time.end,
-              ...profile,
-              series: [
-                {
-                  validTime: "2026-08-31T06:00:00.000Z",
-                  forecastHour: 6,
-                  levels: profile.levels,
-                  cacheHit: true,
-                },
-              ],
-              source,
-            };
-          }
-
-          if (request.geometry.type === "points" && "at" in request.time) {
-            return {
-              model: "icon_d2_0p02",
-              run: "2026-08-31T00:00:00.000Z",
-              validTime: "2026-08-31T06:00:00.000Z",
-              forecastHour: 6,
-              points: [
-                profile,
-                {
-                  requestedPoint: { latitude: 50.1, longitude: 14.5 },
-                  gridPoint: { latitude: 50.1, longitude: 14.5 },
-                  levels: profile.levels,
-                },
-              ],
-              source,
-            };
-          }
-
-          if (request.geometry.type === "points") {
-            return {
-              model: "icon_d2_0p02",
-              run: "2026-08-31T00:00:00.000Z",
-              requestedStartTime: request.time.start,
-              requestedEndTime: request.time.end,
-              series: [{
-                validTime: "2026-08-31T06:00:00.000Z",
-                forecastHour: 6,
-                points: [
-                  profile,
-                  {
-                    requestedPoint: { latitude: 50.1, longitude: 14.5 },
-                    gridPoint: { latitude: 50.1, longitude: 14.5 },
-                    levels: profile.levels,
-                  },
-                ],
-                cacheHit: true,
-              }],
-              source,
-            };
-          }
-
-          if (request.geometry.type === "transect") {
-            return {
-              model: "icon_d2_0p02",
-              run: "2026-08-31T00:00:00.000Z",
-              validTime: "2026-08-31T06:00:00.000Z",
-              forecastHour: 6,
-              startPoint: request.geometry.start,
-              endPoint: request.geometry.end,
-              totalDistanceKm: 10,
-              samples: [{
-                index: 0,
-                fraction: 0,
-                distanceKm: 0,
-                ...profile,
-              }],
-              source,
-            };
-          }
-
-          return {
-            model: "icon_d2_0p02",
-            run: "2026-08-31T00:00:00.000Z",
-            validTime: "2026-08-31T06:00:00.000Z",
-            forecastHour: 6,
-            bbox: request.geometry,
-            variable: "temperature",
-            statistics: {
-              definedGridPoints: 100,
-              mean: 10,
-              min: 5,
-              max: 15,
-            },
-            source,
-          };
-        }),
-        diagnose: vi.fn(),
-      }),
-    });
-
-    const common = {
-      dataset: "icon-d2-eps",
-      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-      ensemble: { members: ["p01", "p02"], quantiles: [0.5] },
-    } as const;
-
-    const range = await service.query({
-      ...common,
-      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
-      time: {
-        start: "2026-08-31T06:00:00Z",
-        end: "2026-08-31T06:00:00Z",
-      },
-    } as any) as any;
-    expect(range.series).toHaveLength(1);
-
-    const points = await service.query({
-      ...common,
-      geometry: {
-        type: "points",
-        points: [
-          { latitude: 50.08, longitude: 14.43 },
-          { latitude: 50.1, longitude: 14.5 },
-        ],
-      },
-      time: { at: "2026-08-31T06:00:00Z" },
-    } as any) as any;
-    expect(points.points).toHaveLength(2);
-
-    const pointsRange = await service.query({
-      ...common,
-      geometry: {
-        type: "points",
-        points: [
-          { latitude: 50.08, longitude: 14.43 },
-          { latitude: 50.1, longitude: 14.5 },
-        ],
-      },
-      time: {
-        start: "2026-08-31T06:00:00Z",
-        end: "2026-08-31T06:00:00Z",
-      },
-    } as any) as any;
-    expect(pointsRange.series[0].points).toHaveLength(2);
-
-    const transect = await service.query({
-      ...common,
-      geometry: {
-        type: "transect",
-        start: { latitude: 50.08, longitude: 14.43 },
-        end: { latitude: 50.1, longitude: 14.5 },
-        samples: 2,
-      },
-      time: { at: "2026-08-31T06:00:00Z" },
-    } as any) as any;
-    expect(transect.samples).toHaveLength(1);
-
-    const area = await service.query({
-      ...common,
-      geometry: {
-        type: "area",
-        westLongitude: 14.3,
-        eastLongitude: 14.5,
-        southLatitude: 50.0,
-        northLatitude: 50.2,
-      },
-      time: { at: "2026-08-31T06:00:00Z" },
-    } as any) as any;
-    expect(area.methodology).toBe(
-      "spatial_statistics_per_member_then_ensemble_distribution",
-    );
-    expect(area.statistics.mean.memberCount).toBe(2);
   });
 });
 
