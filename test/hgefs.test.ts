@@ -104,6 +104,14 @@ describe("HGEFS hybrid catalog and validation", () => {
 
     expect(() => queryAtmosphereSchema.parse({
       dataset: "hgefs",
+      geometry: { type: "point", ...requestedPoint },
+      time: { at: validTime },
+      selection: { fields: ["total_precipitation"] },
+      ensemble: { members: selectedMembers },
+    })).toThrow("compatible semantics in both GEFS and AIGEFS");
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "hgefs",
       geometry: {
         type: "points",
         points: [requestedPoint, { latitude: 49.2, longitude: 16.61 }],
@@ -641,13 +649,13 @@ describe("HGEFS field and invariant coverage", () => {
       gefsBundle: gefsBundle as any,
     });
 
-    await expect(service.query(queryAtmosphereSchema.parse({
+    await expect(service.query({
       dataset: "hgefs",
       geometry: { type: "point", ...requestedPoint },
       time: { at: validTime },
       selection: { fields: ["total_precipitation"] },
-      ensemble: { members: selectedMembers },
-    }))).rejects.toThrow("temporal semantics disagree");
+      ensemble: { members: [...selectedMembers] },
+    } as any)).rejects.toThrow("temporal semantics disagree");
   });
 
   it("combines profile diagnostic structures member-first", async () => {
