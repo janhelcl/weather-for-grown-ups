@@ -434,6 +434,9 @@ export class HgefsForecastService {
     members: HgefsMember[],
     quantiles: number[],
   ): Promise<unknown> {
+    if (request.diagnostic.kind === "parcel") {
+      throw new Error("Internal HGEFS routing error: parcel diagnostics are unsupported");
+    }
     const forecastHour = hgefsForecastHour(run, validTime);
     const split = splitHgefsMembers(members);
     const runIso = run.toISOString();
@@ -1188,7 +1191,7 @@ function numericProfileKeys(level: ProfileLevel): Array<Exclude<keyof ProfileLev
   return Object.keys(level)
     .filter((key) =>
       key !== "pressureHpa"
-      && typeof (level as Record<string, unknown>)[key] === "number") as Array<
+      && typeof (level as unknown as Record<string, unknown>)[key] === "number") as Array<
         Exclude<keyof ProfileLevel, "pressureHpa">
       >;
 }
