@@ -135,8 +135,8 @@ describe("AI/hybrid comparison strategies", () => {
       datasets: ["ifs", "aifs"],
     });
 
-    await expect(new GfsAigfsComparisonStrategy(service).compare(wrong))
-      .rejects.toThrow("requires datasets=gfs,aigfs");
+    expect(() => new GfsAigfsComparisonStrategy(service).compare(wrong))
+      .toThrow("requires datasets=gfs,aigfs");
     expect(service.compareDeterministic).not.toHaveBeenCalled();
   });
 });
