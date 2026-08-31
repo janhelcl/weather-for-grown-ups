@@ -19,6 +19,7 @@ import type {
 import {
   aigefsMemberNomadsPaths,
   aigefsStatisticNomadsPaths,
+  aigfsNativeForecastHoursInRange,
 } from "../sources/aigfs.js";
 import {
   AigfsRunResolver,
@@ -102,6 +103,7 @@ export class AigefsForecastService {
     const members = selectedMembers(request);
     const quantiles = selectedQuantiles(request);
     const run = await this.resolveRun(request.forecast?.run ?? "latest", queryRequirement(request));
+    enforceQueryMemberLimits(request, run, members.length);
     const memberRequest = {
       ...request,
       dataset: "aigfs",
@@ -145,6 +147,7 @@ export class AigefsForecastService {
       request.forecast?.run ?? "latest",
       diagnosticRequirement(request),
     );
+    enforceDiagnosticMemberLimit(request, run, members.length);
     const memberRequest = {
       ...request,
       dataset: "aigfs",
@@ -171,6 +174,74 @@ export class AigefsForecastService {
 
   private resolveRun(selector: string, requirement: AigfsRunRequirement): Promise<Date> {
     return Promise.resolve(resolveAigfsRun(selector, requirement, this.runProvider));
+  }
+}
+
+
+function enforceQueryMemberLimits(
+  request: QueryAtmosphereRequest,
+  run: Date,
+  memberCount: number,
+): void {
+  if (request.geometry.type === "area") {
+    const maxMemberGridPoints = request.limits?.maxMemberGridPoints;
+    if (maxMemberGridPoints === undefined) return;
+    const longitudePoints =
+      Math.ceil((request.geometry.eastLongitude - request.geometry.westLongitude) / 0.25) + 2;
+    const latitudePoints =
+      Math.ceil((request.geometry.northLatitude - request.geometry.southLatitude) / 0.25) + 2;
+    const memberGridPoints = Math.max(0, longitudePoints)
+      * Math.max(0, latitudePoints)
+      * memberCount;
+    if (memberGridPoints > maxMemberGridPoints) {
+      throw new Error(
+        `Requested AIGEFS bbox × member selection is approximately ${memberGridPoints} member-grid points, exceeding maxMemberGridPoints=${maxMemberGridPoints}`,
+      );
+    }
+    return;
+  }
+
+  const maxMemberSamples = request.ensemble?.maxMemberSamples;
+  if (maxMemberSamples === undefined) return;
+  const spatialSamples = request.geometry.type === "point"
+    ? 1
+    : request.geometry.type === "points"
+      ? request.geometry.points.length
+      : request.geometry.samples ?? 21;
+  const timeSteps = "at" in request.time
+    ? 1
+    : aigfsNativeForecastHoursInRange(
+        run,
+        new Date(request.time.from),
+        new Date(request.time.to),
+      ).length;
+  const memberSamples = spatialSamples * timeSteps * memberCount;
+  if (memberSamples > maxMemberSamples) {
+    throw new Error(
+      `Requested AIGEFS query contains ${memberSamples} member samples, exceeding maxMemberSamples=${maxMemberSamples}`,
+    );
+  }
+}
+
+function enforceDiagnosticMemberLimit(
+  request: DiagnoseAtmosphereRequest,
+  run: Date,
+  memberCount: number,
+): void {
+  const maxMemberSamples = request.ensemble?.maxMemberSamples;
+  if (maxMemberSamples === undefined) return;
+  const timeSteps = "at" in request.time
+    ? 1
+    : aigfsNativeForecastHoursInRange(
+        run,
+        new Date(request.time.from),
+        new Date(request.time.to),
+      ).length;
+  const memberSamples = timeSteps * memberCount;
+  if (memberSamples > maxMemberSamples) {
+    throw new Error(
+      `Requested AIGEFS diagnostic contains ${memberSamples} member samples, exceeding maxMemberSamples=${maxMemberSamples}`,
+    );
   }
 }
 
