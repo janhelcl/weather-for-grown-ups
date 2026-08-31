@@ -16,8 +16,8 @@ import {
   type ByteRange,
 } from "../grib/index.js";
 import {
-  buildAigfsNomadsIndexUrl,
-  buildAigfsNomadsUrl,
+  AIGFS_NOMADS_PATHS,
+  type AigfsNomadsPathResolver,
   type AigfsProduct,
 } from "../sources/aigfs.js";
 
@@ -57,6 +57,7 @@ export class AigfsNomadsSubsetCache implements AigfsAvailabilityProbe {
       join(rootDir, "access-state"),
       UPSTREAM_ACCESS_POLICIES.nomads,
     ),
+    private readonly paths: AigfsNomadsPathResolver = AIGFS_NOMADS_PATHS,
   ) {}
 
   async fetch(request: AigfsDataRequest): Promise<AigfsSourceFile> {
@@ -97,7 +98,7 @@ export class AigfsNomadsSubsetCache implements AigfsAvailabilityProbe {
     if (request.variables.length > 0) {
       const ranges = await this.selectedRanges(request, "pres");
       chunks.push(await this.fetchCoveringRange(
-        buildAigfsNomadsUrl(request.run, request.forecastHour, "pres"),
+        this.paths.buildUrl(request.run, request.forecastHour, "pres"),
         coveringRange(ranges),
       ));
     }
@@ -105,7 +106,7 @@ export class AigfsNomadsSubsetCache implements AigfsAvailabilityProbe {
     if (request.fields.length > 0) {
       const ranges = await this.selectedRanges(request, "sfc");
       chunks.push(await this.fetchCoveringRange(
-        buildAigfsNomadsUrl(request.run, request.forecastHour, "sfc"),
+        this.paths.buildUrl(request.run, request.forecastHour, "sfc"),
         coveringRange(ranges),
       ));
     }
@@ -149,7 +150,7 @@ export class AigfsNomadsSubsetCache implements AigfsAvailabilityProbe {
     forecastHour: number,
     product: AigfsProduct,
   ): Promise<string> {
-    const url = buildAigfsNomadsIndexUrl(run, forecastHour, product);
+    const url = this.paths.buildIndexUrl(run, forecastHour, product);
     const path = this.indexPath(url);
     try {
       return await readFile(path, "utf8");
@@ -165,7 +166,7 @@ export class AigfsNomadsSubsetCache implements AigfsAvailabilityProbe {
     );
     if (!response.ok) {
       throw new Error(
-        `AIGFS NOMADS index request failed: HTTP ${response.status} ${response.statusText}`,
+        `${this.paths.label} NOMADS index request failed: HTTP ${response.status} ${response.statusText}`,
       );
     }
     const text = await response.text();
@@ -178,7 +179,7 @@ export class AigfsNomadsSubsetCache implements AigfsAvailabilityProbe {
     forecastHour: number,
     product: AigfsProduct,
   ): Promise<boolean> {
-    const url = buildAigfsNomadsIndexUrl(run, forecastHour, product);
+    const url = this.paths.buildIndexUrl(run, forecastHour, product);
     const path = this.indexPath(url);
     if (await exists(path)) return true;
 
@@ -191,7 +192,7 @@ export class AigfsNomadsSubsetCache implements AigfsAvailabilityProbe {
     if (response.status === 404) return false;
     if (!response.ok) {
       throw new Error(
-        `AIGFS NOMADS availability request failed: HTTP ${response.status} ${response.statusText}`,
+        `${this.paths.label} NOMADS availability request failed: HTTP ${response.status} ${response.statusText}`,
       );
     }
     const text = await response.text();
@@ -213,12 +214,12 @@ export class AigfsNomadsSubsetCache implements AigfsAvailabilityProbe {
     );
     if (response.status !== 206) {
       throw new Error(
-        `AIGFS NOMADS range request failed: HTTP ${response.status} ${response.statusText}`,
+        `${this.paths.label} NOMADS range request failed: HTTP ${response.status} ${response.statusText}`,
       );
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
-      throw new Error(`AIGFS NOMADS range did not start with a GRIB message (${rangeValue})`);
+      throw new Error(`${this.paths.label} NOMADS range did not start with a GRIB message (${rangeValue})`);
     }
     return bytes;
   }
