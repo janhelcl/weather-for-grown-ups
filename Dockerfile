@@ -16,7 +16,6 @@ USER root
 RUN micromamba install --yes --name base --channel conda-forge \
       nodejs=24 \
       wgrib2=3.8.0 \
-      bzip2=1.0.8 \
   && micromamba clean --all --yes
 
 ENV PATH=/opt/conda/bin:${PATH}

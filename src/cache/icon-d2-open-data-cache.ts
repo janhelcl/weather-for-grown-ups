@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
 import { access, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import Bunzip from "seek-bzip";
 import {
   FileAccessPolicy,
   UPSTREAM_ACCESS_POLICIES,
@@ -227,35 +227,8 @@ function subsetKey(request: IconD2DataRequest): string {
   })).digest("hex");
 }
 
-export function bunzip2(bytes: Uint8Array): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    const executable = process.env.BZIP2_PATH ?? "bzip2";
-    const child = spawn(executable, ["-dc"], { stdio: ["pipe", "pipe", "pipe"] });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-
-    child.stdout.on("data", (chunk: Buffer | Uint8Array) => stdout.push(Buffer.from(chunk)));
-    child.stderr.on("data", (chunk: Buffer | Uint8Array) => stderr.push(Buffer.from(chunk)));
-    child.on("error", (error) => {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        reject(new Error(
-          "ICON-D2 Open Data uses bzip2-compressed GRIB2. Install bzip2 or set BZIP2_PATH to a compatible executable.",
-        ));
-        return;
-      }
-      reject(error);
-    });
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve(new Uint8Array(Buffer.concat(stdout)));
-        return;
-      }
-      reject(new Error(
-        `bzip2 failed while decoding ICON-D2 Open Data (exit=${code}): ${Buffer.concat(stderr).toString("utf8").slice(0, 500)}`,
-      ));
-    });
-    child.stdin.end(Buffer.from(bytes));
-  });
+export async function bunzip2(bytes: Uint8Array): Promise<Uint8Array> {
+  return new Uint8Array(Bunzip.decode(bytes));
 }
 
 async function exists(path: string): Promise<boolean> {

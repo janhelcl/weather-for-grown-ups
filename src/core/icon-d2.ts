@@ -113,6 +113,11 @@ interface IconD2ProfileResult {
     provider: "DWD Open Data";
     access: "dwd_open_data";
     decoder: GribDecoderName;
+    productGrid: {
+      type: "regular_latlon";
+      resolutionDegrees: 0.02;
+      interpolation: "dwd_open_data";
+    };
     cacheHit: boolean;
   };
 }
@@ -595,6 +600,7 @@ export class IconD2ForecastService {
         provider: "DWD Open Data" as const,
         access: "dwd_open_data" as const,
         decoder: this.decoder.engine ?? "gribberish",
+        productGrid: iconD2ProductGrid(),
         cacheHit: cached.cacheHit,
       },
     };
@@ -659,6 +665,7 @@ export class IconD2ForecastService {
         provider: "DWD Open Data",
         access: "dwd_open_data",
         decoder: this.decoder.engine ?? "gribberish",
+        productGrid: iconD2ProductGrid(),
         cacheHit: cached.cacheHit,
       },
     };
@@ -736,6 +743,7 @@ function sourceWithoutCache(source: IconD2ProfileResult["source"]) {
     provider: source.provider,
     access: source.access,
     decoder: source.decoder,
+    productGrid: source.productGrid,
   };
 }
 
@@ -851,6 +859,7 @@ function areaSource(cacheHit: boolean, decoder: GribDecoderName | undefined) {
     provider: "DWD Open Data" as const,
     access: "dwd_open_data" as const,
     decoder: decoder ?? "gribberish",
+    productGrid: iconD2ProductGrid(),
     cacheHit,
   };
 }
@@ -864,4 +873,12 @@ export function isIconD2RawAreaVariable(id: string): boolean {
 
 export function isIconD2RawAreaField(id: string): boolean {
   return NON_ISOBARIC_FIELD_CATALOG[id as NonIsobaricFieldId]?.kind === "raw";
+}
+
+function iconD2ProductGrid() {
+  return {
+    type: "regular_latlon" as const,
+    resolutionDegrees: 0.02 as const,
+    interpolation: "dwd_open_data" as const,
+  };
 }

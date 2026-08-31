@@ -281,6 +281,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     modelClass: "physics",
     kind: "deterministic",
     role: "forecast",
+    horizontalGridDegrees: 0.02,
     spatialDomain: {
       scope: "limited_area",
       name: "DWD ICON-D2 conservative core domain",
@@ -292,8 +293,8 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       },
     },
     nativeGrid: {
-      type: "rotated_latlon",
-      nominalResolution: { value: 2.2, unit: "km" },
+      type: "icosahedral",
+      nominalResolution: { value: 2.1, unit: "km" },
     },
     maxForecastHour: 48,
     nativeTimeCadenceHours: [1],
