@@ -383,6 +383,7 @@ describe("unified catalog", () => {
       "gfs",
       "aigfs",
       "aigefs",
+      "hgefs",
       "gefs",
       "ifs",
       "aifs",
