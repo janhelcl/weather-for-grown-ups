@@ -565,6 +565,9 @@ function aggregateInstantDiagnostic(
   members: AigefsMember[],
   quantiles: number[],
 ) {
+  if (request.diagnostic.kind === "parcel") {
+    throw new Error("AIGEFS parcel diagnostics are unsupported");
+  }
   const first = samples[0]!.result;
   if (request.diagnostic.kind === "layer") {
     const derivedMembers = samples.map(({ member, result }) => ({
@@ -654,6 +657,7 @@ function aggregateDiagnosticRange(
   if (request.diagnostic.kind === "parcel") {
     throw new Error("AIGEFS parcel diagnostic ranges are unsupported");
   }
+  const diagnostic = request.diagnostic;
   const first = samples[0]!.result;
   return {
     model: MODEL,
@@ -662,7 +666,7 @@ function aggregateDiagnosticRange(
     requestedEndTime: first.requestedEndTime,
     requestedPoint: first.requestedPoint,
     gridPoint: first.gridPoint,
-    diagnostic: request.diagnostic,
+    diagnostic,
     selection: { members, quantiles },
     series: first.series.map((step: any, stepIndex: number) => {
       const aligned = samples.map(({ member, result }) => ({
@@ -674,9 +678,9 @@ function aggregateDiagnosticRange(
           "AIGEFS diagnostic time series",
         ),
       }));
-      if (request.diagnostic.kind === "layer") {
+      if (diagnostic.kind === "layer") {
         const summary = summarizeEnsembleLayerDiagnostics(
-          request.diagnostic.diagnostics,
+          diagnostic.diagnostics,
           aligned.map(({ member, result }) => ({
             member,
             layer: result.layer,
@@ -696,7 +700,7 @@ function aggregateDiagnosticRange(
         validTime: step.validTime,
         forecastHour: step.forecastHour,
         summaries: summarizeEnsembleProfileDiagnostics(
-          request.diagnostic.diagnostics,
+          diagnostic.diagnostics,
           aligned.map(({ member, result }) => ({ member, diagnostics: result.diagnostics })),
           quantiles,
         ),
@@ -821,7 +825,13 @@ function stateSample(
   fields: any[] | undefined,
   cacheHit: boolean,
 ): StateSample {
-  return { member, gridPoint, levels, fields, cacheHit };
+  return {
+    member,
+    gridPoint,
+    levels,
+    cacheHit,
+    ...(fields === undefined ? {} : { fields }),
+  };
 }
 
 function publicStateMembers(states: StateSample[]) {
