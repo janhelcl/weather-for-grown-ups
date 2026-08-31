@@ -6,6 +6,13 @@ import {
   IconD2OpenDataCache,
   bunzip2,
 } from "../src/cache/icon-d2-open-data-cache.js";
+import {
+  expandIconD2RequestedFields,
+  expandIconD2RequestedVariables,
+  isIconD2Field,
+  isIconD2PressureLevel,
+  isIconD2PressureVariable,
+} from "../src/catalog/icon-d2.js";
 import { VARIABLE_CATALOG, type RawVariableDefinition } from "../src/catalog/variables.js";
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
 import { IconD2ForecastService } from "../src/core/icon-d2.js";
@@ -377,6 +384,191 @@ describe("ICON-D2 deterministic service operations", () => {
       "wind_shear",
     ]);
   });
+
+
+  it("covers point fields, derived 10 m wind, and field-preserving ranges", async () => {
+    const point = await service().query(queryAtmosphereSchema.parse({
+      dataset: "icon-d2",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+        fields: ["temperature_2m", "wind_10m", "mean_sea_level_pressure"],
+      },
+      forecast: { run: run.toISOString() },
+    })) as any;
+    expect(point.fields.map((field: any) => field.id)).toEqual([
+      "temperature_2m",
+      "wind_10m",
+      "mean_sea_level_pressure",
+    ]);
+    expect(point.fields.find((field: any) => field.id === "wind_10m")?.windSpeedMs).toBe(5);
+
+    const range = await service().query(queryAtmosphereSchema.parse({
+      dataset: "icon-d2",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: {
+        from: "2026-08-31T06:00:00Z",
+        to: "2026-08-31T07:00:00Z",
+      },
+      selection: { fields: ["temperature_2m"] },
+      forecast: { run: run.toISOString() },
+    })) as any;
+    expect(range.series).toHaveLength(2);
+    expect(range.series.every((step: any) => step.fields[0].id === "temperature_2m")).toBe(true);
+  });
+
+  it("covers multi-point ranges and default transect sampling", async () => {
+    const pointsRange = await service().query(queryAtmosphereSchema.parse({
+      dataset: "icon-d2",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50.08, longitude: 14.43 },
+          { latitude: 49.2, longitude: 16.61 },
+        ],
+      },
+      time: {
+        from: "2026-08-31T06:00:00Z",
+        to: "2026-08-31T07:00:00Z",
+      },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      forecast: { run: run.toISOString() },
+    })) as any;
+    expect(pointsRange.series).toHaveLength(2);
+    expect(pointsRange.series.every((step: any) => step.points.length === 2)).toBe(true);
+
+    const fallbackDecoder = {
+      extractPoint: vi.fn(async (_path: string, longitude: number, latitude: number) =>
+        fakeDecodedValues(longitude, latitude)),
+    };
+    const fallback = new IconD2ForecastService({
+      cache: {
+        fetch: vi.fn(async () => ({ path: "/tmp/icon-d2-test.grib2", cacheHit: true })),
+        isForecastAvailable: vi.fn(async () => true),
+      },
+      decoder: fallbackDecoder,
+      runProvider,
+      areaDecoder: areaDecoder as any,
+    });
+    const transect = await fallback.query(queryAtmosphereSchema.parse({
+      dataset: "icon-d2",
+      geometry: {
+        type: "transect",
+        start: { latitude: 49.5, longitude: 13.5 },
+        end: { latitude: 50.5, longitude: 15 },
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      forecast: { run: run.toISOString() },
+    })) as any;
+    expect(transect.samples).toHaveLength(21);
+    expect(transect.source).toMatchObject({ decoder: "gribberish", cacheHit: true });
+  });
+
+  it("covers profile and ranged diagnostics", async () => {
+    const profile = await service().diagnose({
+      dataset: "icon-d2",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [1000, 925, 850, 700, 500],
+        diagnostics: ["freezing_level_crossings", "temperature_inversion_layers"],
+      },
+      forecast: { run: run.toISOString() },
+    } as any) as any;
+    expect(profile.kind).toBe("profile");
+    expect(profile.diagnostics).toHaveLength(2);
+
+    const range = await service().diagnose({
+      dataset: "icon-d2",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: {
+        from: "2026-08-31T06:00:00Z",
+        to: "2026-08-31T07:00:00Z",
+      },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 700,
+        diagnostics: ["temperature_lapse_rate"],
+      },
+      forecast: { run: run.toISOString() },
+    } as any) as any;
+    expect(range.series.map((step: any) => step.forecastHour)).toEqual([6, 7]);
+    expect(range.series.every((step: any) => step.kind === "layer")).toBe(true);
+  });
+
+  it("keeps direct service guardrails explicit below the public schema", async () => {
+    const instance = service();
+    await expect(instance.query({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    } as any)).rejects.toThrow("only accepts dataset=icon-d2");
+
+    await expect(instance.diagnose({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 700,
+        diagnostics: ["temperature_lapse_rate"],
+      },
+    } as any)).rejects.toThrow("only accepts dataset=icon-d2");
+
+    await expect(instance.diagnose({
+      dataset: "icon-d2",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      diagnostic: {
+        kind: "parcel",
+        pressureLevelsHpa: [1000, 925, 850],
+        parcel: "surface_2m",
+      },
+    } as any)).rejects.toThrow("does not expose parcel diagnostics");
+  });
+
+  it("enforces multi-point and area resource limits", async () => {
+    await expect(service().query(queryAtmosphereSchema.parse({
+      dataset: "icon-d2",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50, longitude: 14 },
+          { latitude: 51, longitude: 15 },
+        ],
+      },
+      time: {
+        from: "2026-08-31T06:00:00Z",
+        to: "2026-08-31T08:00:00Z",
+      },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      limits: { maxPointSteps: 5 },
+      forecast: { run: run.toISOString() },
+    }))).rejects.toThrow("exceeding maxPointSteps=5");
+
+    await expect(service().query(queryAtmosphereSchema.parse({
+      dataset: "icon-d2",
+      geometry: {
+        type: "area",
+        westLongitude: 13,
+        eastLongitude: 13.2,
+        southLatitude: 49,
+        northLatitude: 49.2,
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      limits: { maxGridPoints: 10 },
+      forecast: { run: run.toISOString() },
+    }))).rejects.toThrow("exceeding maxGridPoints=10");
+  });
+
 });
 
 describe("ICON-D2 run resolution", () => {
@@ -403,18 +595,201 @@ describe("ICON-D2 run resolution", () => {
       { pressure: true, surface: false },
     );
   });
+
+
+  it("checks latest-complete horizon probes and range endpoints", async () => {
+    const completeRun = new Date("2026-08-31T06:00:00Z");
+    const completeProbe = {
+      isForecastAvailable: vi.fn(async (candidate: Date, forecastHour: number) =>
+        candidate.getTime() === completeRun.getTime() && forecastHour === 48),
+    };
+    const completeResolver = new IconD2RunResolver(
+      completeProbe,
+      () => new Date("2026-08-31T09:30:00Z").getTime(),
+      60_000,
+      3,
+    );
+    expect(await completeResolver.resolveLatestCompleteRun({
+      pressure: true,
+      surface: true,
+    })).toEqual(completeRun);
+    expect(completeProbe.isForecastAvailable).toHaveBeenCalledWith(
+      completeRun,
+      48,
+      { pressure: true, surface: true },
+    );
+
+    const rangeRun = new Date("2026-08-31T06:00:00Z");
+    const rangeProbe = {
+      isForecastAvailable: vi.fn(async (candidate: Date, forecastHour: number) =>
+        candidate.getTime() === rangeRun.getTime() && [2, 4].includes(forecastHour)),
+    };
+    const rangeResolver = new IconD2RunResolver(
+      rangeProbe,
+      () => new Date("2026-08-31T09:30:00Z").getTime(),
+      60_000,
+      2,
+    );
+    expect(await rangeResolver.resolveLatestRun({
+      type: "time_range",
+      startTime: new Date("2026-08-31T08:00:00Z"),
+      endTime: new Date("2026-08-31T10:00:00Z"),
+      products: { pressure: true, surface: false },
+    })).toEqual(rangeRun);
+    expect(rangeProbe.isForecastAvailable).toHaveBeenCalledWith(
+      rangeRun,
+      2,
+      { pressure: true, surface: false },
+    );
+    expect(rangeProbe.isForecastAvailable).toHaveBeenCalledWith(
+      rangeRun,
+      4,
+      { pressure: true, surface: false },
+    );
+  });
+
+  it("fails clearly when no eligible run is published", async () => {
+    const probe = { isForecastAvailable: vi.fn(async () => false) };
+    const resolver = new IconD2RunResolver(
+      probe,
+      () => new Date("2026-08-31T12:00:00Z").getTime(),
+      60_000,
+      2,
+    );
+    await expect(resolver.resolveLatestRun({
+      type: "valid_time",
+      validTime: new Date("2026-08-31T12:00:00Z"),
+      products: { pressure: true, surface: false },
+    })).rejects.toThrow("Could not find an ICON-D2 run");
+    await expect(resolver.resolveLatestCompleteRun({
+      pressure: true,
+      surface: false,
+    })).rejects.toThrow("Could not find a complete ICON-D2 run");
+  });
+
+});
+
+
+describe("ICON-D2 guard and inventory branches", () => {
+  it("rejects malformed cycles, impossible leads, and empty ranges", () => {
+    const run = new Date("2026-08-31T00:00:00Z");
+    expect(() => parseIconD2Run("not-a-date")).toThrow("Invalid ICON-D2 run");
+    expect(() => parseIconD2Run("2026-08-31T01:00:00Z")).toThrow("3-hourly UTC cycle");
+    expect(() => iconD2ValidTime(run, -1)).toThrow("0 to 48");
+    expect(() => iconD2ValidTime(run, 49)).toThrow("0 to 48");
+    expect(() => iconD2NativeForecastHoursInRange(
+      run,
+      new Date("2026-08-31T12:00:00Z"),
+      new Date("2026-08-31T11:00:00Z"),
+    )).toThrow("endTime must be at or after startTime");
+    expect(() => iconD2NativeForecastHoursInRange(
+      run,
+      new Date("2026-09-03T00:00:00Z"),
+      new Date("2026-09-03T01:00:00Z"),
+    )).toThrow("No native ICON-D2 forecast outputs");
+  });
+
+  it("keeps the ICON-D2 inventory and expansion failures explicit", () => {
+    expect(isIconD2PressureLevel(850)).toBe(true);
+    expect(isIconD2PressureLevel(750)).toBe(false);
+    expect(isIconD2PressureVariable("wind")).toBe(true);
+    expect(isIconD2PressureVariable("specific_humidity")).toBe(false);
+    expect(isIconD2Field("wind_10m")).toBe(true);
+    expect(isIconD2Field("dew_point_2m")).toBe(false);
+    expect(() => expandIconD2RequestedVariables(["specific_humidity"]))
+      .toThrow("ICON-D2 pressure variables not supported");
+    expect(() => expandIconD2RequestedFields(["dew_point_2m"]))
+      .toThrow("ICON-D2 fields not supported");
+  });
+
+  it("covers empty/productless and HTTP availability branches in the DWD cache", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "wfg-icon-d2-guards-"));
+    try {
+      const fetchFn = vi.fn(async () => new Response(null, { status: 200 }));
+      const cache = new IconD2OpenDataCache(
+        rootDir,
+        fetchFn as typeof fetch,
+        { run: <T>(operation: () => Promise<T>) => operation() },
+        async (bytes) => bytes,
+      );
+      await expect(cache.fetch({
+        run: new Date("2026-08-31T00:00:00Z"),
+        forecastHour: 6,
+        variables: [],
+        pressureLevelsHpa: [],
+        fields: [],
+      })).rejects.toThrow("must contain at least one");
+      expect(await cache.isForecastAvailable(
+        new Date("2026-08-31T00:00:00Z"),
+        6,
+        { pressure: false, surface: false },
+      )).toBe(false);
+      expect(fetchFn).not.toHaveBeenCalled();
+
+      const missing = new IconD2OpenDataCache(
+        join(rootDir, "missing"),
+        vi.fn(async () => new Response(null, { status: 404, statusText: "Not Found" })) as typeof fetch,
+        { run: <T>(operation: () => Promise<T>) => operation() },
+        async (bytes) => bytes,
+      );
+      expect(await missing.isForecastAvailable(
+        new Date("2026-08-31T00:00:00Z"),
+        6,
+        { pressure: true, surface: false },
+      )).toBe(false);
+
+      const forbidden = new IconD2OpenDataCache(
+        join(rootDir, "forbidden"),
+        vi.fn(async () => new Response(null, { status: 403, statusText: "Forbidden" })) as typeof fetch,
+        { run: <T>(operation: () => Promise<T>) => operation() },
+        async (bytes) => bytes,
+      );
+      await expect(forbidden.isForecastAvailable(
+        new Date("2026-08-31T00:00:00Z"),
+        6,
+        { pressure: false, surface: true },
+      )).rejects.toThrow("availability request failed");
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
 });
 
 function fakeDecodedValues(longitude: number, latitude: number) {
   const gridPoint = { longitude, latitude };
-  const temperature = new Map([[1000, 290], [850, 280]]);
-  const height = new Map([[1000, 100], [850, 1500]]);
-  return [...temperature].flatMap(([pressureHpa, temperatureK]) => [
-    { code: "TMP", pressureHpa, value: temperatureK, gridPoint },
-    { code: "RH", pressureHpa, value: 60, gridPoint },
-    { code: "UGRD", pressureHpa, value: 3, gridPoint },
-    { code: "VGRD", pressureHpa, value: 4, gridPoint },
-    { code: "HGT", pressureHpa, value: height.get(pressureHpa)!, gridPoint },
-    { code: "VVEL", pressureHpa, value: -0.1, gridPoint },
+  const temperature = new Map([
+    [1000, 290],
+    [925, 285],
+    [850, 280],
+    [700, 268],
+    [500, 250],
   ]);
+  const height = new Map([
+    [1000, 100],
+    [925, 750],
+    [850, 1500],
+    [700, 3000],
+    [500, 5600],
+  ]);
+  return [
+    ...[...temperature].flatMap(([pressureHpa, temperatureK]) => [
+      { code: "TMP", pressureHpa, value: temperatureK, gridPoint },
+      { code: "RH", pressureHpa, value: 60, gridPoint },
+      { code: "UGRD", pressureHpa, value: 3, gridPoint },
+      { code: "VGRD", pressureHpa, value: 4, gridPoint },
+      { code: "HGT", pressureHpa, value: height.get(pressureHpa)!, gridPoint },
+      { code: "VVEL", pressureHpa, value: -0.1, gridPoint },
+    ]),
+    { code: "TMP", heightAboveGroundM: 2, value: 290, gridPoint },
+    { code: "UGRD", heightAboveGroundM: 10, value: 3, gridPoint },
+    { code: "VGRD", heightAboveGroundM: 10, value: 4, gridPoint },
+    { code: "PRMSL", namedVertical: "mean sea level", value: 101_325, gridPoint },
+    {
+      code: "APCP",
+      surface: true,
+      accumulation: { startForecastHour: 0, endForecastHour: 6 },
+      value: 1.5,
+      gridPoint,
+    },
+  ];
 }
