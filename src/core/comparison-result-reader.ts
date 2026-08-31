@@ -57,10 +57,10 @@ export function publicEnsembleSide(
 }
 
 export function objectResult(response: UnifiedAtmosphereResult): ComparisonResultObject {
-  return object(response.result);
+  return comparisonResultObject(response.result);
 }
 
-function object(value: unknown): ComparisonResultObject {
+export function comparisonResultObject(value: unknown): ComparisonResultObject {
   if (typeof value !== "object" || value === null) {
     throw new Error("Comparison query returned a non-object result");
   }
@@ -74,7 +74,7 @@ export function requiredProfileValue(
   dataset: string,
 ): number {
   const levels = requiredArray(result.levels, `${dataset} profile levels`);
-  const level = levels.map(object).find((candidate) => candidate.pressureHpa === pressureLevelHpa);
+  const level = levels.map(comparisonResultObject).find((candidate) => candidate.pressureHpa === pressureLevelHpa);
   if (!level) throw new Error(`${dataset} comparison is missing ${pressureLevelHpa} hPa`);
   return requiredNumber(level[field], `${dataset} ${field}@${pressureLevelHpa}hPa`);
 }
@@ -108,7 +108,7 @@ export function requiredDistribution(
 ): NumericDistribution {
   const summaries = requiredArray(result.pressureSummaries, `${dataset} pressure summaries`);
   for (const raw of summaries) {
-    const summary = object(raw);
+    const summary = comparisonResultObject(raw);
     if (summary.pressureLevelHpa !== pressureLevelHpa) continue;
     if (
       summary.variable === variable
@@ -125,7 +125,7 @@ export function requiredDistribution(
       return numericDistribution(summary.distribution, dataset);
     }
     if (summary.variable === variable && Array.isArray(summary.outputs)) {
-      const output = summary.outputs.map(object).find((candidate) =>
+      const output = summary.outputs.map(comparisonResultObject).find((candidate) =>
         candidate.field === outputField && candidate.aggregation === "numeric_distribution");
       if (output?.distribution !== undefined) {
         return numericDistribution(output.distribution, dataset);
@@ -138,7 +138,7 @@ export function requiredDistribution(
 }
 
 function numericDistribution(value: unknown, dataset: string): NumericDistribution {
-  const distribution = object(value);
+  const distribution = comparisonResultObject(value);
   return {
     memberCount: requiredNumber(distribution.memberCount, `${dataset} memberCount`),
     mean: requiredNumber(distribution.mean, `${dataset} mean`),
@@ -149,7 +149,7 @@ function numericDistribution(value: unknown, dataset: string): NumericDistributi
     min: requiredNumber(distribution.min, `${dataset} min`),
     max: requiredNumber(distribution.max, `${dataset} max`),
     quantiles: requiredArray(distribution.quantiles, `${dataset} quantiles`).map((entry) => {
-      const item = object(entry);
+      const item = comparisonResultObject(entry);
       return {
         quantile: requiredNumber(item.quantile, `${dataset} quantile`),
         value: requiredNumber(item.value, `${dataset} quantile value`),
@@ -180,21 +180,21 @@ function memberValues(
   dataset: string,
 ): number[] {
   return requiredArray(result.members, `${dataset} member payloads`).map((member) => {
-    const candidate = object(member);
+    const candidate = comparisonResultObject(member);
     if (Array.isArray(candidate.levels)) {
       return memberProfileValue(candidate, pressureLevelHpa, outputField, dataset);
     }
     const pressure = requiredArray(
       candidate.pressureValues,
       `${dataset} member pressure values`,
-    ).map(object).find((value) =>
+    ).map(comparisonResultObject).find((value) =>
       value.variable === variable && value.pressureLevelHpa === pressureLevelHpa);
     if (!pressure) {
       throw new Error(`${dataset} member is missing ${variable}@${pressureLevelHpa}hPa`);
     }
     if (typeof pressure.value === "number") return pressure.value;
     return requiredNumber(
-      object(pressure.values)[outputField],
+      comparisonResultObject(pressure.values)[outputField],
       `${dataset} member ${outputField}`,
     );
   });
@@ -206,9 +206,9 @@ export function memberProfileValue(
   outputField: string,
   dataset: string,
 ): number {
-  const member = object(rawMember);
+  const member = comparisonResultObject(rawMember);
   const level = requiredArray(member.levels, `${dataset} member levels`)
-    .map(object)
+    .map(comparisonResultObject)
     .find((candidate) => candidate.pressureHpa === pressureLevelHpa);
   if (!level) {
     throw new Error(`${dataset} member is missing ${pressureLevelHpa} hPa`);
@@ -258,8 +258,8 @@ export function constituentSource(
   result: ComparisonResultObject,
   population: HgefsPopulation,
 ): unknown {
-  const source = object(result.source);
-  const constituents = Array.isArray(source.constituents) ? source.constituents.map(object) : [];
+  const source = comparisonResultObject(result.source)
+  const constituents = Array.isArray(source.constituents) ? source.constituents.map(comparisonResultObject) : [];
   return constituents.find((candidate) => candidate.population === population)?.source;
 }
 
