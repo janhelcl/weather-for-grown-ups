@@ -17,7 +17,7 @@ npx weather-for-grown-ups catalog --search cloud --json
 npx weather-for-grown-ups query --dataset gfs --lat 50.08 --lon 14.43 --at 2026-08-24T12:00:00Z --vars temperature,wind --levels 850,700,500 --json
 ```
 
-The npm package includes its GRIB2 decoder, so `wgrib2` does **not** need to be installed on the host.
+The npm package includes its GRIB2 decoder for the normal dataset set, so native weather tooling is not required on the host. **ICON-D2-EPS is the current exception:** DWD exposes that ensemble on its provider-native triangular grid. WFG follows DWD's official conversion path with CDO plus the provider target-grid/weights bundle, then uses `wgrib2` for member extraction and regular-grid sampling. Use the Docker image for a zero-setup ICON-D2-EPS path, or install `cdo` and `wgrib2`; `CDO_PATH` and `WGRIB2_PATH` may override their executable locations.
 
 ### stdio MCP with npx
 
@@ -80,13 +80,13 @@ wfg-mcp
 wfg-mcp-http
 ```
 
-The package's default GRIB2 engine is bundled through npm. Native `wgrib2` remains an opt-in compatibility/debug path: set `WGRIB2_PATH=/path/to/wgrib2`, or set `WFG_DECODER=wgrib2` to use `wgrib2` from `PATH`.
+The package's default GRIB2 engine is bundled through npm. Native tooling remains optional for the regular datasets. `dataset: "icon-d2-eps"` currently requires both CDO and `wgrib2`: CDO applies DWD's official ICON-D2 0.02° target grid and nearest-neighbour weights, then `wgrib2` selects/samples individual ensemble members. Set `CDO_PATH=/path/to/cdo` and/or `WGRIB2_PATH=/path/to/wgrib2`, or ensure both executables are on `PATH`.
 
 WFG currently targets Node.js 20 or newer.
 
 ## Docker
 
-Docker remains useful for pinned/reproducible deployments. The image contains Node.js 24 and native `wgrib2 3.8.0` from conda-forge.
+Docker remains useful for pinned/reproducible deployments. The image contains Node.js 24, CDO and native `wgrib2 3.8.0` from conda-forge.
 
 The release workflow publishes both an exact semver image and a moving minor-version alias. The examples below use the current `0.4` alias:
 

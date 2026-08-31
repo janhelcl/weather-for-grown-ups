@@ -88,7 +88,8 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
     ...(datasets.has("aigfs") ? aigfsEntries("aigfs") : []),
     ...(datasets.has("aigefs") ? aigfsEntries("aigefs") : []),
     ...(datasets.has("hgefs") ? aigfsEntries("hgefs") : []),
-    ...(datasets.has("icon-d2") ? iconD2Entries() : []),
+    ...(datasets.has("icon-d2") ? iconD2Entries("icon-d2") : []),
+    ...(datasets.has("icon-d2-eps") ? iconD2Entries("icon-d2-eps") : []),
     ...(datasets.has("gefs")
       ? (query.forecastKind === "reforecast" ? gefsReforecastEntries() : gefsEntries())
       : []),
@@ -189,8 +190,9 @@ function aigfsEntries(dataset: "aigfs" | "aigefs" | "hgefs"): CatalogEntry[] {
 }
 
 
-function iconD2Entries(): CatalogEntry[] {
-  const dataset = "icon-d2" as const;
+function iconD2Entries(
+  dataset: "icon-d2" | "icon-d2-eps",
+): CatalogEntry[] {
   const fields = ICON_D2_FIELD_IDS.map((id) => NON_ISOBARIC_FIELD_CATALOG[id]);
   return [
     ...ICON_D2_PRESSURE_VARIABLE_IDS.map((id) => {
@@ -503,6 +505,7 @@ function preferredRepresentative(entries: CatalogEntry[]): CatalogEntry {
     ?? entries.find((entry) => entry.dataset === "aigefs")
     ?? entries.find((entry) => entry.dataset === "hgefs")
     ?? entries.find((entry) => entry.dataset === "icon-d2")
+    ?? entries.find((entry) => entry.dataset === "icon-d2-eps")
     ?? entries.find((entry) => entry.dataset === "gefs")
     ?? entries.find((entry) => entry.dataset === "ifs")
     ?? entries.find((entry) => entry.dataset === "aifs")
@@ -526,6 +529,8 @@ function supportSemantics(
       return "NOAA HGEFS 62-member hybrid ensemble composed from 31 GEFS physics members and 31 AIGEFS AI members; 6-hourly through 240 hours with constituent identity and native-grid provenance preserved";
     case "icon-d2":
       return "DWD ICON-D2 limited-area deterministic convection-permitting forecast; 3-hourly cycles, hourly output through 48 hours, with provider-native domain/grid semantics preserved";
+    case "icon-d2-eps":
+      return "DWD ICON-D2-EPS 20-member limited-area convection-permitting ensemble; 3-hourly cycles, hourly output through 48 hours with member-first aggregation on the native icosahedral grid";
     case "gefs":
       return forecastKind === "reforecast"
         ? "GEFSv12 retrospective ensemble forecast; 2000-2019 point and multi-point field, pressure, or mixed selections plus native layer/profile diagnostics; ranges preserve native cadence and per-step grid provenance"

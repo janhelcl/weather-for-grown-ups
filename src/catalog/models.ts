@@ -5,6 +5,7 @@ export const ATMOSPHERIC_DATASET_IDS = [
   "aigefs_0p25",
   "hgefs_0p25",
   "icon_d2_0p02",
+  "icon_d2_eps_2p1km",
   "aifs_0p25",
   "aifs_ens_0p25",
   "gefs_0p50",
@@ -96,7 +97,7 @@ export type AtmosphericOperationId = (typeof ATMOSPHERIC_OPERATION_IDS)[number];
 
 export interface AtmosphericDatasetDefinition {
   id: AtmosphericDatasetId;
-  family: "gfs" | "gefs" | "ifs" | "aigfs" | "aigefs" | "hgefs" | "aifs" | "icon-d2";
+  family: "gfs" | "gefs" | "ifs" | "aigfs" | "aigefs" | "hgefs" | "aifs" | "icon-d2" | "icon-d2-eps";
   provider: AtmosphericProvider;
   modelClass: AtmosphericModelClass;
   kind: AtmosphericDatasetKind;
@@ -310,6 +311,45 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points_timeseries",
       "transect",
       "area_summary",
+    ],
+  },
+  icon_d2_eps_2p1km: {
+    id: "icon_d2_eps_2p1km",
+    family: "icon-d2-eps",
+    provider: "dwd",
+    modelClass: "physics",
+    kind: "ensemble",
+    role: "forecast",
+    spatialDomain: {
+      scope: "limited_area",
+      name: "DWD ICON-D2-EPS conservative core domain",
+      bounds: {
+        westLongitude: -0.25,
+        eastLongitude: 17.54,
+        southLatitude: 43.42,
+        northLatitude: 57.31,
+      },
+    },
+    nativeGrid: {
+      type: "icosahedral",
+      nominalResolution: { value: 2.1, unit: "km" },
+    },
+    maxForecastHour: 48,
+    nativeTimeCadenceHours: [1],
+    nativeForecastIntervalHours: 1,
+    members: 20,
+    runSelectors: ["latest", "latest_complete", "explicit"],
+    operations: [
+      "profile",
+      "timeseries",
+      "layer_diagnostics",
+      "profile_diagnostics",
+      "diagnostic_timeseries",
+      "points",
+      "points_timeseries",
+      "transect",
+      "area_summary",
+      "ensemble_distribution",
     ],
   },
   aifs_0p25: {
@@ -548,6 +588,7 @@ export const ATMOSPHERIC_MODEL_IDS = [
   "aigefs_0p25",
   "hgefs_0p25",
   "icon_d2_0p02",
+  "icon_d2_eps_2p1km",
   "aifs_0p25",
   "aifs_ens_0p25",
   "gefs_0p50",
@@ -564,6 +605,7 @@ export const ATMOSPHERIC_MODEL_CATALOG: Record<AtmosphericModelId, AtmosphericDa
   aigefs_0p25: ATMOSPHERIC_DATASET_CATALOG.aigefs_0p25,
   hgefs_0p25: ATMOSPHERIC_DATASET_CATALOG.hgefs_0p25,
   icon_d2_0p02: ATMOSPHERIC_DATASET_CATALOG.icon_d2_0p02,
+  icon_d2_eps_2p1km: ATMOSPHERIC_DATASET_CATALOG.icon_d2_eps_2p1km,
   aifs_0p25: ATMOSPHERIC_DATASET_CATALOG.aifs_0p25,
   aifs_ens_0p25: ATMOSPHERIC_DATASET_CATALOG.aifs_ens_0p25,
   gefs_0p50: ATMOSPHERIC_DATASET_CATALOG.gefs_0p50,

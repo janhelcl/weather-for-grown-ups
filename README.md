@@ -2,7 +2,7 @@
 
 **Weather is the hello-world of agent tools. This is the version for when “temperature tomorrow” stops being enough.**
 
-Weather for Grown Ups (WFG) gives agents direct, structured access to numerical weather prediction: NOAA **GFS**, **AIGFS**, **AIGEFS**, **HGEFS**, **GEFS** and historical GFS data, plus ECMWF **IFS**, **AIFS**, **AIFS ENS** and **IFS ENS**.
+Weather for Grown Ups (WFG) gives agents direct, structured access to numerical weather prediction: NOAA **GFS**, **AIGFS**, **AIGEFS**, **HGEFS**, **GEFS** and historical GFS data, DWD **ICON-D2** and **ICON-D2-EPS**, plus ECMWF **IFS**, **AIFS**, **AIFS ENS** and **IFS ENS**.
 
 The central idea is deliberately simple:
 
@@ -14,7 +14,7 @@ No weather API key. No model-specific public namespaces. No need to teach the ag
 
 ## 30-second start
 
-Node.js 20+ is enough. The npm package includes its GRIB2 decoder.
+Node.js 20+ is enough for the normal npm path. The package includes its GRIB2 decoder; `icon-d2-eps` is the one current exception and needs native CDO plus `wgrib2` for DWD's official triangular-grid remapping/member extraction path (the Docker image includes both).
 
 ```bash
 npx weather-for-grown-ups --help
@@ -105,6 +105,8 @@ Old GFS initializations stay `dataset: "gfs"` and route to the matching archive.
 | `aigfs` | NOAA deterministic AIGFS | AI model; 0.25°; native 6-hour output through f384; deliberately narrower field inventory than GFS |
 | `aigefs` | NOAA AIGEFS | 31-member AI ensemble; 0.25°; native 6-hour output through f384; member-first aggregation |
 | `hgefs` | NOAA HGEFS | 62-member hybrid ensemble: 31 GEFS physics + 31 AIGEFS AI members; 6-hourly through f240; constituent identity and native grids preserved |
+| `icon-d2` | DWD ICON-D2 | limited-area convection-permitting deterministic forecast; native ~2.1 km icosahedral model grid; 3-hourly cycles; hourly output through f48 |
+| `icon-d2-eps` | DWD ICON-D2-EPS | 20-member convection-permitting regional ensemble; native ~2.1 km icosahedral grid; member-first aggregation; hourly output through f48; native CDO + `wgrib2` required for official DWD remapping/member extraction |
 | `gefs` | NOAA GEFS | member-first operational ensemble; explicit `forecast.kind: "reforecast"` selects the GEFSv12 retrospective population |
 | `ifs` | ECMWF deterministic IFS | 0.25° Open Data forecast with native ECMWF run/cadence semantics |
 | `aifs` | ECMWF AIFS Single | deterministic AI forecast; 0.25°; four daily cycles; native 6-hour output through f360; AIFS-native field inventory |
@@ -154,7 +156,7 @@ Not every dataset implements every line. `catalog` / `search_catalog` is the sou
 
 WFG is opinionated about a few things that are easy to get subtly wrong:
 
-- **Ensemble physics is member-first.** Nonlinear diagnostics are computed inside each AIGEFS/HGEFS/AIFS ENS/GEFS/IFS ENS member before aggregation.
+- **Ensemble physics is member-first.** Nonlinear diagnostics are computed inside each AIGEFS/HGEFS/AIFS ENS/ICON-D2-EPS/GEFS/IFS ENS member before aggregation.
 - **Spread is not calibrated uncertainty.** Member fractions and ensemble spread are reported as raw model evidence unless a dedicated calibrated layer says otherwise.
 - **History is not relabeled as “current”.** Archived GFS forecasts retain their old initialization and lead; GFS analysis retains analysis-time semantics; GEFSv12 reforecasts are explicitly retrospective forecasts, not archived operational GEFS.
 - **Provenance stays visible.** Results keep run, valid time, sampled grid, source product and archive/backend information.
@@ -166,7 +168,7 @@ The deeper reasoning is documented in [Architecture](docs/ARCHITECTURE.md).
 
 WFG selects only the upstream messages needed for a request, caches immutable slices and decodes locally.
 
-Operational GFS point/profile access favors indexed byte-range reads from NOAA AWS Open Data; ECMWF IFS, AIFS and AIFS ENS sources use Open Data access. AIGFS uses NOMADS raw products with cached `.idx` inventories and partial HTTP byte ranges. AIGEFS reads member-specific indexed GRIB2 slices from NOAA EAGLE on AWS Open Data. HGEFS composes those AIGEFS members with GEFS member feeds rather than duplicating a third member-access stack. Bounded GFS areas use NOMADS geographic subsetting where that is materially better. Historical products route to NCEI or NCAR/GDEX as appropriate.
+DWD ICON-D2 uses selected regular-lat/lon Open Data objects, while ICON-D2-EPS preserves DWD's native all-member icosahedral GRIB packaging. Operational GFS point/profile access favors indexed byte-range reads from NOAA AWS Open Data; ECMWF IFS, AIFS and AIFS ENS sources use Open Data access. AIGFS uses NOMADS raw products with cached `.idx` inventories and partial HTTP byte ranges. AIGEFS reads member-specific indexed GRIB2 slices from NOAA EAGLE on AWS Open Data. HGEFS composes those AIGEFS members with GEFS member feeds rather than duplicating a third member-access stack. Bounded GFS areas use NOMADS geographic subsetting where that is materially better. Historical products route to NCEI or NCAR/GDEX as appropriate.
 
 Provider etiquette is also source-specific: NOMADS retains its courtesy pacing, while AWS, ECMWF, NCEI, GDEX and IGRA use independent bounded-concurrency policies with transient retry/backoff. A slow provider does not impose its policy on unrelated sources.
 
@@ -184,6 +186,7 @@ Start here:
 - [NOAA AIGFS semantics](docs/AIGFS.md)
 - [NOAA AIGEFS semantics](docs/AIGEFS.md)
 - [NOAA HGEFS hybrid semantics](docs/HGEFS.md)
+- [Regional/convection-permitting roadmap](docs/ROADMAP.md)
 - [ECMWF AIFS ENS semantics](docs/AIFS_ENS.md)
 - [GEFS and GEFSv12 reforecast semantics](docs/GEFS_ENSEMBLE.md)
 - [ECMWF IFS / IFS ENS semantics](docs/IFS.md)

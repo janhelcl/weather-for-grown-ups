@@ -9,6 +9,7 @@ on:
       - "src/schema/unified-api.ts"
       - "src/grib/**"
       - "scripts/live-smoke-icon-d2.ts"
+      - "scripts/live-smoke-icon-d2-eps.ts"
       - ".github/workflows/pr-icon-d2-live.yml"
       - "package.json"
       - "package-lock.json"
@@ -27,3 +28,5 @@ jobs:
         run: docker build --target live-test -t weather-for-grown-ups:live-test .
       - name: Query live DWD ICON-D2
         run: docker run --rm weather-for-grown-ups:live-test npm run test:live:icon-d2
+      - name: Query live DWD ICON-D2-EPS
+        run: docker run --rm weather-for-grown-ups:live-test npm run test:live:icon-d2-eps

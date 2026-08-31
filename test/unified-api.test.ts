@@ -386,6 +386,7 @@ describe("unified catalog", () => {
       "aigefs",
       "hgefs",
       "icon-d2",
+      "icon-d2-eps",
       "gefs",
       "ifs",
       "aifs",
