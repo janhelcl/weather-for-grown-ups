@@ -1,5 +1,6 @@
 import type { PublicAtmosphericDataset } from "../../schema/unified-api.js";
 import { AigfsDiagnosticAdapter, type AigfsDiagnosticAdapterOptions } from "./aigfs.js";
+import { AigefsDiagnosticAdapter, type AigefsDiagnosticAdapterOptions } from "./aigefs.js";
 import { GefsDiagnosticAdapter, type GefsDiagnosticAdapterOptions } from "./gefs.js";
 import {
   GfsAnalysisDiagnosticAdapter,
@@ -18,6 +19,7 @@ import type {
 
 export type DefaultAtmosphericDiagnosticAdapterOptions =
   AigfsDiagnosticAdapterOptions
+  & AigefsDiagnosticAdapterOptions
   & GfsDiagnosticAdapterOptions
   & GefsDiagnosticAdapterOptions
   & IfsDiagnosticAdapterOptions
@@ -34,6 +36,7 @@ export function createAtmosphericDiagnosticAdapterRegistry(
 ): AtmosphericDiagnosticAdapterRegistry {
   const defaults: AtmosphericDiagnosticAdapterRegistry = {
     aigfs: new AigfsDiagnosticAdapter(options),
+    aigefs: new AigefsDiagnosticAdapter(options),
     gfs: new GfsDiagnosticAdapter(options),
     gefs: new GefsDiagnosticAdapter(options),
     ifs: new IfsDiagnosticAdapter(options),
