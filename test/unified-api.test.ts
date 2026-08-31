@@ -7,6 +7,7 @@ import {
   createAtmosphericDiagnosticAdapterRegistry,
   type AtmosphericDiagnosticRegistryOptions,
 } from "../src/core/diagnostic-adapters/registry.js";
+import { createAtmosphericDatasetComparisonStrategyRegistry } from "../src/core/comparison-strategies/registry.js";
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
 import {
   UnifiedAtmosphereDiagnosticService,
@@ -636,14 +637,27 @@ describe("unified specialized operations", () => {
     expect(adapter.compare).not.toHaveBeenCalled();
   });
 
-  it("dispatches each dataset comparison pair through its pair adapter", async () => {
+  it("dispatches each dataset comparison pair through its strategy", async () => {
+    const defaults = createAtmosphericDatasetComparisonStrategyRegistry();
     const pairs = {
-      "gfs:gefs": { compare: vi.fn(async () => ({ route: "gfs:gefs" })) },
-      "gfs:ifs": { compare: vi.fn(async () => ({ route: "gfs:ifs" })) },
-      "gefs:ifs-ens": { compare: vi.fn(async () => ({ route: "gefs:ifs-ens" })) },
-      "ifs:ifs-ens": { compare: vi.fn(async () => ({ route: "ifs:ifs-ens" })) },
+      "gfs:gefs": {
+        metadata: defaults["gfs:gefs"].metadata,
+        compare: vi.fn(async () => ({ route: "gfs:gefs" })),
+      },
+      "gfs:ifs": {
+        metadata: defaults["gfs:ifs"].metadata,
+        compare: vi.fn(async () => ({ route: "gfs:ifs" })),
+      },
+      "gefs:ifs-ens": {
+        metadata: defaults["gefs:ifs-ens"].metadata,
+        compare: vi.fn(async () => ({ route: "gefs:ifs-ens" })),
+      },
+      "ifs:ifs-ens": {
+        metadata: defaults["ifs:ifs-ens"].metadata,
+        compare: vi.fn(async () => ({ route: "ifs:ifs-ens" })),
+      },
     };
-    const service = new UnifiedDatasetComparisonService({ adapters: pairs as any });
+    const service = new UnifiedDatasetComparisonService({ strategies: pairs });
 
     const gfsGefs = await service.compare({
       geometry: point,
