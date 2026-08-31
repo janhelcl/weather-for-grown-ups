@@ -145,7 +145,7 @@ describe("AROME unified capabilities", () => {
       diagnostic: {
         kind: "profile",
         pressureLevelsHpa: [850, 700],
-        diagnostics: ["wind"],
+        diagnostics: ["freezing_level_crossings"],
       },
     })).toThrow("pressure-based diagnostics");
 
