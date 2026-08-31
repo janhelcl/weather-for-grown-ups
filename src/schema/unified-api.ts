@@ -223,7 +223,7 @@ export const atmosphericForecastOptionsSchema = z.object({
 });
 
 export const atmosphericEnsembleOptionsSchema = z.object({
-  members: z.array(z.string().min(1)).min(2).max(50).optional(),
+  members: z.array(z.string().min(1)).min(2).max(51).optional(),
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
   includeMembers: z.boolean().optional(),
   maxMemberSamples: z.number().int().min(1).max(20_000).optional(),
