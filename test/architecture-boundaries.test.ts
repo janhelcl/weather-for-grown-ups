@@ -136,12 +136,13 @@ describe("architecture boundaries", () => {
 
     expect(schema).toContain("./dataset-capability-validation.js");
     expect(schema).not.toMatch(
-      /AIGFS_PRESSURE_|AIGEFS_MEMBERS|AIFS_PRESSURE_|AIFS_ENS_MEMBERS|HGEFS_MEMBERS|HGEFS_AREA_PRESSURE_/,
+      /AIGFS_PRESSURE_|AIGEFS_MEMBERS|AIFS_PRESSURE_|AIFS_ENS_MEMBERS|HGEFS_MEMBERS|HGEFS_AREA_PRESSURE_|GEFS_REFORECAST_(?:EXTENDED_MEMBERS|FIELD_IDS|PRESSURE_VARIABLE_IDS)/,
     );
-    expect(schema).not.toMatch(
-      /request\.dataset\s*===\s*["'](?:aigfs|aigefs|hgefs|aifs|aifs-ens)["']/,
-    );
+    expect(schema).not.toMatch(/request\.dataset\s*(?:===|!==)/);
+    expect(schema).not.toContain("datasetSupportsRunSelector");
     expect(datasetValidation).toContain("DATASET_CAPABILITY_VALIDATORS");
+    expect(datasetValidation).toContain("validateGfsModifiers");
+    expect(datasetValidation).toContain("validateGefsReforecastModifiers");
     expect(datasetValidation).not.toMatch(/from ["']\.\.\/(?:core|sources|access|cache|grib)\//);
   });
 

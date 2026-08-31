@@ -1,11 +1,7 @@
 import * as z from "zod/v4";
 import {
-  GEFS_REFORECAST_EXTENDED_MEMBERS,
-  GEFS_REFORECAST_FIELD_IDS,
   GEFS_REFORECAST_OPERATION_IDS,
-  GEFS_REFORECAST_PRESSURE_VARIABLE_IDS,
   GEFS_REFORECAST_RUN_SELECTOR_IDS,
-  isSupportedGefsReforecastPressureSelection,
 } from "../catalog/gefs-reforecast.js";
 import { LAYER_DIAGNOSTIC_IDS } from "../catalog/layer-diagnostics.js";
 import { PARCEL_DEFINITION_IDS } from "../catalog/parcel-diagnostics.js";
@@ -13,7 +9,6 @@ import { PROFILE_DIAGNOSTIC_IDS } from "../catalog/profile-diagnostics.js";
 import {
   ATMOSPHERIC_DATASET_CATALOG,
   ATMOSPHERIC_DATASET_IDS,
-  datasetSupportsRunSelector,
   type AtmosphericDatasetId,
   type AtmosphericDatasetKind,
   type AtmosphericDatasetRole,
@@ -376,26 +371,6 @@ function validateCommonAtmosphericRequest(
 ): void {
   validateDatasetModifiers(request, context);
 
-  if (request.dataset === "gfs" && request.source !== undefined && request.source !== "archive") {
-    if (request.geometry.type === "area" && request.source !== "nomads") {
-      context.addIssue({
-        code: "custom",
-        path: ["source"],
-        message: "Operational GFS area queries use NOMADS geographic subsetting; omit source for automatic routing or use source=nomads",
-      });
-    }
-    if (
-      (request.geometry.type === "points" || request.geometry.type === "transect")
-      && request.source !== "s3"
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["source"],
-        message: "Operational GFS multi-point and transect queries reuse AWS S3 byte-range slices; omit source for automatic routing or use source=s3",
-      });
-    }
-  }
-
   const isRange = "from" in request.time;
   if (isRange && (request.geometry.type === "transect" || request.geometry.type === "area")) {
     context.addIssue({
@@ -434,166 +409,9 @@ function validateDatasetModifiers(
   context: z.RefinementCtx,
 ): void {
   const metadata = publicDatasetMetadata(request.dataset as PublicAtmosphericDataset);
-  const isReforecast = request.forecast?.kind === "reforecast";
-
-  if (isReforecast) {
-    if (request.dataset !== "gefs") {
-      context.addIssue({
-        code: "custom",
-        path: ["forecast", "kind"],
-        message: "forecast.kind=reforecast is currently available only for dataset=gefs",
-      });
-    }
-    if (request.forecast?.run === "latest" || request.forecast?.run === "latest_complete") {
-      context.addIssue({
-        code: "custom",
-        path: ["forecast", "run"],
-        message: "GEFSv12 reforecast queries require an explicit historical 00Z initialization",
-      });
-    }
-    if (
-      request.geometry?.type !== "point"
-      && request.geometry?.type !== "points"
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["geometry"],
-        message: "GEFSv12 reforecast support currently covers point and multi-point geometry; transect and area support will be added without changing the public query vocabulary",
-      });
-    }
-    if (
-      request.time !== undefined
-      && "from" in request.time
-      && request.ensemble?.includeMembers === true
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["ensemble", "includeMembers"],
-        message: "GEFSv12 reforecast time ranges return compact member-first summaries; use one valid time to include raw member payloads",
-      });
-    }
-    if (
-      request.diagnostic !== undefined
-      && request.diagnostic.kind === "parcel"
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["diagnostic"],
-        message: "GEFSv12 reforecast parcel diagnostics are not exposed because the current retrospective subset lacks the required moisture/surface inputs",
-      });
-    }
-    if (request.selection !== undefined) {
-      const variables = request.selection.variables ?? [];
-      const pressureLevelsHpa = request.selection.pressureLevelsHpa ?? [];
-      const fields = request.selection.fields ?? [];
-      const supportedFields = new Set<string>(GEFS_REFORECAST_FIELD_IDS);
-      const unsupportedFields = fields.filter((field: string) => !supportedFields.has(field));
-      if (unsupportedFields.length > 0) {
-        context.addIssue({
-          code: "custom",
-          path: ["selection", "fields"],
-          message: `GEFSv12 reforecast fields not yet supported: ${unsupportedFields.join(", ")}`,
-        });
-      }
-
-      const supportedVariables = new Set<string>(GEFS_REFORECAST_PRESSURE_VARIABLE_IDS);
-      const unsupportedVariables = variables.filter((variable: string) => !supportedVariables.has(variable));
-      if (unsupportedVariables.length > 0) {
-        context.addIssue({
-          code: "custom",
-          path: ["selection", "variables"],
-          message: `GEFSv12 reforecast pressure variables not supported: ${unsupportedVariables.join(", ")}`,
-        });
-      }
-      for (const variable of variables) {
-        if (!supportedVariables.has(variable)) continue;
-        for (const pressureLevelHpa of pressureLevelsHpa) {
-          if (!isSupportedGefsReforecastPressureSelection(variable as any, pressureLevelHpa)) {
-            context.addIssue({
-              code: "custom",
-              path: ["selection", "pressureLevelsHpa"],
-              message: `GEFSv12 reforecast cannot satisfy ${variable} at ${pressureLevelHpa} hPa`,
-            });
-          }
-        }
-      }
-    }
-    if (request.ensemble?.members !== undefined) {
-      const supportedMembers = new Set<string>(GEFS_REFORECAST_EXTENDED_MEMBERS);
-      const unsupported = request.ensemble.members.filter((member: string) => !supportedMembers.has(member));
-      if (unsupported.length > 0) {
-        context.addIssue({
-          code: "custom",
-          path: ["ensemble", "members"],
-          message: `GEFSv12 reforecast members are c00,p01..p10; unsupported: ${unsupported.join(", ")}`,
-        });
-      }
-    }
-  }
-
-  validateDatasetCapabilityModifiers(request, context);
-
-  if (metadata.role === "forecast" && !isReforecast) {
-    const run = request.forecast?.run ?? "latest";
-    const selector = runSelectorCapability(run);
-    if (!datasetSupportsRunSelector(metadata.internalDatasetId, selector)) {
-      const supported = ATMOSPHERIC_DATASET_CATALOG[metadata.internalDatasetId].runSelectors
-        .map(runSelectorLabel)
-        .join(", ");
-      context.addIssue({
-        code: "custom",
-        path: ["forecast", "run"],
-        message: `dataset=${request.dataset} does not support run=${run}; supported run selectors: ${supported}`,
-      });
-    }
-  }
-
-  if (metadata.role === "analysis" && request.forecast !== undefined) {
-    context.addIssue({
-      code: "custom",
-      path: ["forecast"],
-      message: "Historical GFS analysis has no forecast initialization or lead axis",
-    });
-  }
-  if (metadata.role !== "analysis" && "from" in request.time && request.time.hoursUtc !== undefined) {
-    context.addIssue({
-      code: "custom",
-      path: ["time", "hoursUtc"],
-      message: "hoursUtc is only valid for gfs-analysis ranges",
-    });
-  }
-  if (request.dataset !== "gfs" && request.forecast?.grid !== undefined) {
-    context.addIssue({
-      code: "custom",
-      path: ["forecast", "grid"],
-      message: "forecast.grid is only configurable for the gfs dataset",
-    });
-  }
-  if (metadata.kind !== "ensemble" && request.ensemble !== undefined) {
-    context.addIssue({
-      code: "custom",
-      path: ["ensemble"],
-      message: "ensemble controls are only valid for ensemble datasets: aigefs, hgefs, gefs, aifs-ens, or ifs-ens",
-    });
-  }
-  if (request.dataset !== "gfs" && request.source !== undefined) {
-    context.addIssue({
-      code: "custom",
-      path: ["source"],
-      message: "source override is only valid for gfs",
-    });
-  }
+  validateDatasetCapabilityModifiers(request, context, metadata);
 }
 
-
-function runSelectorCapability(value: string): AtmosphericRunSelectorId {
-  if (value === "latest" || value === "latest_complete") return value;
-  return "explicit";
-}
-
-function runSelectorLabel(value: AtmosphericRunSelectorId): string {
-  return value === "explicit" ? "explicit ISO cycle" : value;
-}
 
 export type QueryAtmosphereInput = z.input<typeof queryAtmosphereSchema>;
 export type QueryAtmosphereRequest = z.output<typeof queryAtmosphereSchema>;
