@@ -487,6 +487,25 @@ describe("ICON-D2 deterministic service operations", () => {
     expect(field.field.id).toBe("temperature_2m");
     expect(field.statistics.mean).toBeCloseTo(6.85, 8);
     expect(field.distribution.percentiles[0].value).toBeCloseTo(6.85, 8);
+
+    const extremaOnly = await service().query(queryAtmosphereSchema.parse({
+      dataset: "icon-d2",
+      geometry: {
+        type: "area",
+        westLongitude: 13,
+        eastLongitude: 13.2,
+        southLatitude: 49,
+        northLatitude: 49.2,
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      aggregate: { includeExtremaLocations: true },
+      forecast: { run: run.toISOString() },
+    })) as any;
+    expect(extremaOnly.distribution.extrema.max.gridPoint).toEqual({
+      latitude: 49.2,
+      longitude: 13.2,
+    });
   });
 
   it("derives layer diagnostics through the shared diagnostic machinery", async () => {
@@ -658,7 +677,19 @@ describe("ICON-D2 deterministic service operations", () => {
     } as any)).rejects.toThrow("does not expose parcel diagnostics");
   });
 
-  it("enforces multi-point and area resource limits", async () => {
+  it("enforces native-step, multi-point and area resource limits", async () => {
+    await expect(service().query(queryAtmosphereSchema.parse({
+      dataset: "icon-d2",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: {
+        from: "2026-08-31T06:00:00Z",
+        to: "2026-08-31T08:00:00Z",
+        maxSteps: 2,
+      },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      forecast: { run: run.toISOString() },
+    }))).rejects.toThrow("exceeding maxSteps=2");
+
     await expect(service().query(queryAtmosphereSchema.parse({
       dataset: "icon-d2",
       geometry: {
