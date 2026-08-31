@@ -4,7 +4,10 @@ import {
   AIFS_MAX_FORECAST_HOUR,
   aifsForecastHour,
   aifsForecastHoursInRange,
+  aifsValidTime,
+  latestAifsCycleAtOrBefore,
   parseAifsRun,
+  previousAifsCycle,
 } from "../src/core/aifs-time.js";
 import {
   AifsOpenDataRunProbe,
@@ -44,6 +47,30 @@ describe("ECMWF AIFS source semantics", () => {
       new Date("2026-08-31T03:00:00Z"),
       new Date("2026-08-31T18:00:00Z"),
     )).toEqual([6, 12, 18]);
+  });
+
+  it("rejects invalid temporal requests and handles cycle arithmetic", () => {
+    expect(() => parseAifsRun("not-a-date")).toThrow("Invalid AIFS run");
+    expect(() => parseAifsRun("2026-08-31T12:30:00Z")).toThrow("00/06/12/18");
+    expect(() => aifsForecastHour(run, new Date("2026-08-30T18:00:00Z")))
+      .toThrow("at or after the run");
+    expect(() => aifsForecastHour(run, new Date("2026-09-15T06:00:00Z")))
+      .toThrow("native cadence is 6-hourly");
+    expect(() => aifsForecastHoursInRange(
+      run,
+      new Date("2026-09-01T00:00:00Z"),
+      new Date("2026-08-31T00:00:00Z"),
+    )).toThrow("end time");
+    expect(() => aifsForecastHoursInRange(
+      run,
+      new Date("2026-09-16T00:00:00Z"),
+      new Date("2026-09-16T06:00:00Z"),
+    )).toThrow("contains no native");
+    expect(() => aifsValidTime(run, 3)).toThrow("not a native");
+    expect(latestAifsCycleAtOrBefore(new Date("2026-08-31T17:59:00Z")).toISOString())
+      .toBe("2026-08-31T12:00:00.000Z");
+    expect(previousAifsCycle(new Date("2026-08-31T12:00:00Z"), 2).toISOString())
+      .toBe("2026-08-31T00:00:00.000Z");
   });
 });
 
@@ -190,6 +217,71 @@ describe("AIFS unified capability", () => {
         pressureLevelsHpa: [10],
       },
     })).toThrow("specific_humidity@10hPa");
+  });
+
+  it("uses the same AIFS selection path for time series, multi-point and transect queries", async () => {
+    const fetchSelection = vi.fn(async () => ({ path: "aifs-temperature", cacheHit: true }));
+    const decoder = {
+      engine: "gribberish" as const,
+      extractPoint: vi.fn(async (_path: string, longitude: number, latitude: number) => [
+        {
+          code: "t",
+          pressureHpa: 850,
+          value: 280,
+          gridPoint: { latitude, longitude },
+        },
+      ] satisfies DecodedValue[]),
+    };
+    const service = new AifsForecastService({
+      source: { fetchSelection },
+      decoder,
+    });
+
+    const series: any = await service.query(queryAtmosphereSchema.parse({
+      dataset: "aifs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: {
+        from: "2026-08-31T00:00:00Z",
+        to: "2026-08-31T12:00:00Z",
+      },
+      forecast: { run: "2026-08-31T00:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    }));
+    expect(series.series.map((step: any) => step.forecastHour)).toEqual([0, 6, 12]);
+    expect(series.series.every((step: any) => step.cacheHit)).toBe(true);
+
+    const points: any = await service.query(queryAtmosphereSchema.parse({
+      dataset: "aifs",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50, longitude: 14 },
+          { latitude: 49, longitude: 15 },
+        ],
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+      forecast: { run: "2026-08-31T00:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    }));
+    expect(points.points).toHaveLength(2);
+    expect(points.points[1].gridPoint).toEqual({ latitude: 49, longitude: 15 });
+
+    const transect: any = await service.query(queryAtmosphereSchema.parse({
+      dataset: "aifs",
+      geometry: {
+        type: "transect",
+        start: { latitude: 50, longitude: 14 },
+        end: { latitude: 49, longitude: 15 },
+        samples: 3,
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+      forecast: { run: "2026-08-31T00:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    }));
+    expect(transect.samples).toHaveLength(3);
+    expect(transect.samples[0].distanceKm).toBe(0);
+    expect(transect.samples[2].distanceKm).toBeCloseTo(transect.totalDistanceKm);
+    expect(fetchSelection).toHaveBeenCalledTimes(5);
   });
 
   it("normalizes AIFS pressure and surface state while preserving provenance", async () => {
