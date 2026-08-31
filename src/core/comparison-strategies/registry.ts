@@ -1,3 +1,4 @@
+import { ModelClassComparisonService } from "../model-class-comparison.js";
 import {
   AigfsAifsComparisonStrategy,
   GefsAigefsComparisonStrategy,
@@ -19,18 +20,19 @@ import type {
 export function createAtmosphericDatasetComparisonStrategyRegistry(
   strategies: Partial<AtmosphericDatasetComparisonStrategyRegistry> = {},
 ): AtmosphericDatasetComparisonStrategyRegistry {
+  const modelClassComparison = new ModelClassComparisonService();
   const registry: AtmosphericDatasetComparisonStrategyRegistry = {
     "gfs:gefs": new GfsGefsComparisonStrategy(),
     "gfs:ifs": new GfsIfsComparisonStrategy(),
     "gefs:ifs-ens": new GefsIfsEnsComparisonStrategy(),
     "ifs:ifs-ens": new IfsIfsEnsComparisonStrategy(),
-    "gfs:aigfs": new GfsAigfsComparisonStrategy(),
-    "ifs:aifs": new IfsAifsComparisonStrategy(),
-    "aigfs:aifs": new AigfsAifsComparisonStrategy(),
-    "gefs:aigefs": new GefsAigefsComparisonStrategy(),
-    "ifs-ens:aifs-ens": new IfsEnsAifsEnsComparisonStrategy(),
-    "hgefs:gefs": new HgefsGefsComparisonStrategy(),
-    "hgefs:aigefs": new HgefsAigefsComparisonStrategy(),
+    "gfs:aigfs": new GfsAigfsComparisonStrategy(modelClassComparison),
+    "ifs:aifs": new IfsAifsComparisonStrategy(modelClassComparison),
+    "aigfs:aifs": new AigfsAifsComparisonStrategy(modelClassComparison),
+    "gefs:aigefs": new GefsAigefsComparisonStrategy(modelClassComparison),
+    "ifs-ens:aifs-ens": new IfsEnsAifsEnsComparisonStrategy(modelClassComparison),
+    "hgefs:gefs": new HgefsGefsComparisonStrategy(modelClassComparison),
+    "hgefs:aigefs": new HgefsAigefsComparisonStrategy(modelClassComparison),
     ...strategies,
   };
   validateComparisonStrategyRegistry(registry);
