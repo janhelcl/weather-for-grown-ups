@@ -95,11 +95,11 @@ export class AifsEnsForecastService {
 
   async diagnose(request: DiagnoseAtmosphereRequest): Promise<unknown> {
     if (request.dataset !== "aifs-ens") {
-      throw new Error("AIFS ENS service only accepts dataset=aigefs");
+      throw new Error("AIFS ENS service only accepts dataset=aifs-ens");
     }
     if (request.diagnostic.kind === "parcel") {
       throw new Error(
-        "AIFS ENS does not expose parcel diagnostics because its member surface product lacks the required parcel initialization state",
+        "AIFS ENS parcel diagnostics are not exposed in the current capability slice",
       );
     }
     const members = requestedMembers(request.ensemble?.members);
