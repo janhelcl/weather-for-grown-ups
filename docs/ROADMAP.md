@@ -116,7 +116,7 @@ The first implementation should prefer a coherent, well-tested shared-variable s
 
 **Implemented as the first convection-permitting regional ensemble.**
 
-DWD ICON-D2-EPS now uses the same limited-area capability/domain contract and public atmospheric query language as ICON-D2 while preserving its native 20-member population. WFG reads DWD's all-members bzip2/GRIB2 parameter objects on the native ~2.1 km icosahedral grid, selects members from GRIB ensemble metadata, runs shared nonlinear diagnostics independently per member, and only then aggregates distributions.
+DWD ICON-D2-EPS now uses the same limited-area capability/domain contract and public atmospheric query language as ICON-D2 while preserving its native 20-member population. WFG reads DWD's all-members bzip2/GRIB2 parameter objects on the native ~2.1 km icosahedral grid, inventories and materializes member-only GRIBs with native `wgrib2`, runs shared nonlinear diagnostics independently per member, and only then aggregates distributions. The native decoder requirement is a source/runtime constraint, not a public query dimension.
 
 Point, time-range, multi-point, multi-point-range, transect and bounded-area ensemble summaries are routed through the existing ensemble result semantics, with layer/profile diagnostic summaries, native member IDs, run pinning and source provenance. Source packaging, decompression, DWD request policy and caching remain isolated below the unified adapter boundary. A focused live smoke exercises the real two-member Open Data decode path.
 
