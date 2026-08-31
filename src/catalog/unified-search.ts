@@ -66,6 +66,7 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
     ...(datasets.has("gfs") ? gfsEntries() : []),
     ...(datasets.has("aigfs") ? aigfsEntries("aigfs") : []),
     ...(datasets.has("aigefs") ? aigfsEntries("aigefs") : []),
+    ...(datasets.has("hgefs") ? aigfsEntries("hgefs") : []),
     ...(datasets.has("gefs")
       ? (query.forecastKind === "reforecast" ? gefsReforecastEntries() : gefsEntries())
       : []),
@@ -131,7 +132,7 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
 }
 
 
-function aigfsEntries(dataset: "aigfs" | "aigefs"): CatalogEntry[] {
+function aigfsEntries(dataset: "aigfs" | "aigefs" | "hgefs"): CatalogEntry[] {
   const fields = AIGFS_FIELD_IDS.map((id) => NON_ISOBARIC_FIELD_CATALOG[id]);
   return [
     ...AIGFS_PRESSURE_VARIABLE_IDS.map((id) => {
@@ -442,6 +443,7 @@ function preferredRepresentative(entries: CatalogEntry[]): CatalogEntry {
   return entries.find((entry) => entry.dataset === "gfs")
     ?? entries.find((entry) => entry.dataset === "aigfs")
     ?? entries.find((entry) => entry.dataset === "aigefs")
+    ?? entries.find((entry) => entry.dataset === "hgefs")
     ?? entries.find((entry) => entry.dataset === "gefs")
     ?? entries.find((entry) => entry.dataset === "ifs")
     ?? entries.find((entry) => entry.dataset === "aifs")
@@ -461,6 +463,8 @@ function supportSemantics(
       return "NOAA AIGFS 0.25° deterministic AI forecast; native 6-hour output cadence through 384 hours";
     case "aigefs":
       return "NOAA AIGEFS 0.25° 31-member AI ensemble; native 6-hour output cadence through 384 hours with member-first aggregation";
+    case "hgefs":
+      return "NOAA HGEFS 62-member hybrid ensemble composed from 31 GEFS physics members and 31 AIGEFS AI members; 6-hourly through 240 hours with constituent identity and native-grid provenance preserved";
     case "gefs":
       return forecastKind === "reforecast"
         ? "GEFSv12 retrospective ensemble forecast; 2000-2019 point and multi-point field, pressure, or mixed selections plus native layer/profile diagnostics; ranges preserve native cadence and per-step grid provenance"
