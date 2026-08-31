@@ -217,6 +217,85 @@ describe("ICON-D2-EPS native member filtering", () => {
   });
 });
 
+describe("ICON-D2-EPS service guards and defaults", () => {
+  it("rejects wrong dataset identities and unsupported parcel diagnostics before source access", async () => {
+    const service = new IconD2EpsForecastService({
+      memberServiceFactory: () => ({
+        query: vi.fn(),
+        diagnose: vi.fn(),
+      }),
+    });
+
+    await expect(service.query({ dataset: "gfs" } as any))
+      .rejects.toThrow("only accepts dataset=icon-d2-eps");
+    await expect(service.diagnose({ dataset: "gfs" } as any))
+      .rejects.toThrow("only accepts dataset=icon-d2-eps");
+    await expect(service.diagnose({
+      dataset: "icon-d2-eps",
+      diagnostic: { kind: "parcel" },
+    } as any)).rejects.toThrow("parcel diagnostics are not exposed");
+  });
+
+  it("rejects unsupported or singleton member selections", async () => {
+    const service = new IconD2EpsForecastService({
+      memberServiceFactory: () => ({
+        query: vi.fn(),
+        diagnose: vi.fn(),
+      }),
+    });
+    const base = {
+      dataset: "icon-d2-eps",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    };
+
+    await expect(service.query({
+      ...base,
+      ensemble: { members: ["p01", "bogus"] },
+    } as any)).rejects.toThrow("unsupported: bogus");
+    await expect(service.query({
+      ...base,
+      ensemble: { members: ["p01"] },
+    } as any)).rejects.toThrow("requires at least two selected members");
+  });
+
+  it("uses the full native population and default quantiles when ensemble modifiers are omitted", async () => {
+    const service = new IconD2EpsForecastService({
+      memberServiceFactory: () => ({
+        query: vi.fn(async (request: any) => ({
+          model: "icon_d2_0p02",
+          run: "2026-08-31T00:00:00.000Z",
+          validTime: "2026-08-31T06:00:00.000Z",
+          forecastHour: 6,
+          requestedPoint: request.geometry,
+          gridPoint: { latitude: 50.08, longitude: 14.42 },
+          levels: [{ pressureHpa: 850, temperatureC: 10 }],
+          source: {
+            provider: "DWD Open Data",
+            access: "dwd_open_data",
+            decoder: "wgrib2",
+            cacheHit: true,
+          },
+        })),
+        diagnose: vi.fn(),
+      }),
+    });
+
+    const result = await service.query({
+      dataset: "icon-d2-eps",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    } as any) as any;
+
+    expect(result.selection.members).toEqual(ICON_D2_EPS_MEMBERS);
+    expect(result.selection.quantiles).toEqual([0.1, 0.5, 0.9]);
+    expect(result.pressureSummaries[0].distribution.memberCount).toBe(20);
+    expect(result.members).toBeUndefined();
+  });
+});
+
 describe("ICON-D2-EPS member-first aggregation", () => {
   it("runs the deterministic regional engine per member and pins one resolved run", async () => {
     const calls: Array<{ member: string; request: any }> = [];
