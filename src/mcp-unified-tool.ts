@@ -48,7 +48,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("query_atmosphere", {
     title: "Query atmospheric state",
-    description: "Query atmospheric state through one dataset × geometry × time × selection contract across GFS, NOAA AIGFS, NOAA AIGEFS, GEFS, deterministic ECMWF IFS, ECMWF AIFS, ECMWF AIFS ENS, ECMWF IFS ENS, and historical GFS analysis. Dataset-native cadence, provenance, deterministic/member-first semantics and capability limits stay explicit; unsupported combinations fail rather than being coerced into fake symmetry.",
+    description: "Query atmospheric state through one dataset × geometry × time × selection contract across GFS, NOAA AIGFS, NOAA AIGEFS, NOAA HGEFS, GEFS, deterministic ECMWF IFS, ECMWF AIFS, ECMWF AIFS ENS, ECMWF IFS ENS, and historical GFS analysis. Dataset-native cadence, provenance, deterministic/member-first semantics and capability limits stay explicit; unsupported combinations fail rather than being coerced into fake symmetry.",
     inputSchema: queryAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {
@@ -61,7 +61,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("diagnose_atmosphere", {
     title: "Derive atmospheric diagnostics",
-    description: "Run shared layer, profile or parcel physics through the same dataset and point/time vocabulary. Deterministic datasets evaluate the shared kernels once; ensemble datasets evaluate nonlinear diagnostics member by member before aggregation. Dataset-native cadence and capability limits remain explicit; AIGFS and AIGEFS do not expose parcel diagnostics because their operational surface inventory lacks the required parcel initialization state, while AIFS and AIFS ENS currently expose layer/profile diagnostics but keep parcel diagnostics as an explicit capability boundary; AIGEFS and AIFS ENS evaluate supported diagnostics member by member before aggregation.",
+    description: "Run shared layer, profile or parcel physics through the same dataset and point/time vocabulary. Deterministic datasets evaluate the shared kernels once; ensemble datasets evaluate nonlinear diagnostics member by member before aggregation. Dataset-native cadence and capability limits remain explicit; AIGFS and AIGEFS do not expose parcel diagnostics because their operational surface inventory lacks the required parcel initialization state, while AIFS and AIFS ENS currently expose layer/profile diagnostics but keep parcel diagnostics as an explicit capability boundary; AIGEFS, HGEFS and AIFS ENS evaluate supported diagnostics member by member before aggregation; HGEFS preserves GEFS-vs-AIGEFS population provenance and currently limits hybrid diagnostics to single valid times.",
     inputSchema: diagnoseAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {
