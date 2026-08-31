@@ -63,6 +63,16 @@ describe("AIFS unified capability", () => {
         pressureLevelsHpa: [825],
       },
     })).toThrow("AIFS pressure levels not supported");
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "aifs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-31T12:00:00Z" },
+      selection: {
+        variables: ["specific_humidity"],
+        pressureLevelsHpa: [10],
+      },
+    })).toThrow("specific_humidity@10hPa");
   });
 
   it("normalizes AIFS pressure and surface state while preserving provenance", async () => {
