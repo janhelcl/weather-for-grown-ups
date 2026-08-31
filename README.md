@@ -2,7 +2,7 @@
 
 **Weather is the hello-world of agent tools. This is the version for when “temperature tomorrow” stops being enough.**
 
-Weather for Grown Ups (WFG) gives agents direct, structured access to numerical weather prediction: NOAA **GFS**, **AIGFS**, **AIGEFS**, **GEFS** and historical GFS data, plus ECMWF **IFS** and **IFS ENS**.
+Weather for Grown Ups (WFG) gives agents direct, structured access to numerical weather prediction: NOAA **GFS**, **AIGFS**, **AIGEFS**, **GEFS** and historical GFS data, plus ECMWF **IFS**, **AIFS** and **IFS ENS**.
 
 The central idea is deliberately simple:
 
@@ -106,6 +106,7 @@ Old GFS initializations stay `dataset: "gfs"` and route to the matching archive.
 | `aigefs` | NOAA AIGEFS | 31-member AI ensemble; 0.25°; native 6-hour output through f384; member-first aggregation |
 | `gefs` | NOAA GEFS | member-first operational ensemble; explicit `forecast.kind: "reforecast"` selects the GEFSv12 retrospective population |
 | `ifs` | ECMWF deterministic IFS | 0.25° Open Data forecast with native ECMWF run/cadence semantics |
+| `aifs` | ECMWF AIFS Single | deterministic AI forecast; 0.25°; four daily cycles; native 6-hour output through f360; AIFS-native field inventory |
 | `ifs-ens` | ECMWF IFS ENS | 50 perturbations `p01`–`p50`; deterministic IFS is the Cycle-50r1 unperturbed control |
 | `gfs-analysis` | historical GFS Grid 4 analysis | deterministic analyzed state with analysis-time rather than forecast-lead semantics |
 
@@ -163,7 +164,7 @@ The deeper reasoning is documented in [Architecture](docs/ARCHITECTURE.md).
 
 WFG selects only the upstream messages needed for a request, caches immutable slices and decodes locally.
 
-Operational GFS point/profile access favors indexed byte-range reads from NOAA AWS Open Data; ECMWF sources use Open Data access. AIGFS uses NOMADS raw products with cached `.idx` inventories and partial HTTP byte ranges. AIGEFS reads member-specific indexed GRIB2 slices from NOAA EAGLE on AWS Open Data. Bounded GFS areas use NOMADS geographic subsetting where that is materially better. Historical products route to NCEI or NCAR/GDEX as appropriate.
+Operational GFS point/profile access favors indexed byte-range reads from NOAA AWS Open Data; ECMWF IFS and AIFS sources use Open Data access. AIGFS uses NOMADS raw products with cached `.idx` inventories and partial HTTP byte ranges. AIGEFS reads member-specific indexed GRIB2 slices from NOAA EAGLE on AWS Open Data. Bounded GFS areas use NOMADS geographic subsetting where that is materially better. Historical products route to NCEI or NCAR/GDEX as appropriate.
 
 Provider etiquette is also source-specific: NOMADS retains its courtesy pacing, while AWS, ECMWF, NCEI, GDEX and IGRA use independent bounded-concurrency policies with transient retry/backoff. A slow provider does not impose its policy on unrelated sources.
 

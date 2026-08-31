@@ -385,6 +385,7 @@ describe("unified catalog", () => {
       "aigefs",
       "gefs",
       "ifs",
+      "aifs",
       "ifs-ens",
       "gfs-analysis",
     ]);

@@ -35,6 +35,16 @@ describe("atmospheric dataset capability catalog", () => {
       nativeForecastIntervalHours: 6,
       members: 31,
     });
+    expect(ATMOSPHERIC_DATASET_CATALOG.aifs_0p25).toMatchObject({
+      family: "aifs",
+      provider: "ecmwf",
+      modelClass: "ai",
+      kind: "deterministic",
+      role: "forecast",
+      horizontalGridDegrees: 0.25,
+      maxForecastHour: 360,
+      nativeForecastIntervalHours: 6,
+    });
     expect(ATMOSPHERIC_DATASET_CATALOG.gefs_0p50).toMatchObject({
       kind: "ensemble",
       role: "forecast",
@@ -76,6 +86,10 @@ describe("atmospheric dataset capability catalog", () => {
     expect(datasetSupportsOperation("aigefs_0p25", "ensemble_distribution")).toBe(true);
     expect(datasetSupportsOperation("aigefs_0p25", "parcel_diagnostics")).toBe(false);
     expect(datasetSupportsOperation("aigefs_0p25", "run_comparison")).toBe(false);
+    expect(datasetSupportsOperation("aifs_0p25", "profile")).toBe(true);
+    expect(datasetSupportsOperation("aifs_0p25", "layer_diagnostics")).toBe(true);
+    expect(datasetSupportsOperation("aifs_0p25", "parcel_diagnostics")).toBe(false);
+    expect(datasetSupportsOperation("aifs_0p25", "run_comparison")).toBe(false);
     expect(datasetSupportsOperation("gefs_0p50", "profile")).toBe(true);
     expect(datasetSupportsOperation("ifs_0p25", "profile")).toBe(true);
     expect(datasetSupportsOperation("ifs_0p25", "timeseries")).toBe(true);
@@ -109,6 +123,7 @@ describe("atmospheric dataset capability catalog", () => {
       "gfs_0p50",
       "aigfs_0p25",
       "aigefs_0p25",
+      "aifs_0p25",
       "gefs_0p50",
       "ifs_0p25",
       "ifs_ens_0p25",
@@ -120,6 +135,8 @@ describe("atmospheric dataset capability catalog", () => {
     expect(modelSupportsOperation("aigfs_0p25", "parcel_diagnostics")).toBe(false);
     expect(modelSupportsOperation("aigefs_0p25", "ensemble_distribution")).toBe(true);
     expect(modelSupportsOperation("aigefs_0p25", "parcel_diagnostics")).toBe(false);
+    expect(modelSupportsOperation("aifs_0p25", "profile")).toBe(true);
+    expect(modelSupportsOperation("aifs_0p25", "parcel_diagnostics")).toBe(false);
     expect(modelSupportsOperation("gefs_0p50", "ensemble_distribution")).toBe(true);
     expect(modelSupportsOperation("ifs_0p25", "profile")).toBe(true);
     expect(modelSupportsOperation("ifs_0p25", "timeseries")).toBe(true);

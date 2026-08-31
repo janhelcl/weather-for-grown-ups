@@ -9,6 +9,7 @@ import {
 } from "./gefs-reforecast.js";
 import { getGfsPressureCatalog } from "./catalog.js";
 import { getIfsCatalog } from "./ifs.js";
+import { getAifsCatalog } from "./aifs.js";
 import { LAYER_DIAGNOSTIC_CATALOG } from "./layer-diagnostics.js";
 import { NON_ISOBARIC_FIELD_CATALOG } from "./non-isobaric-fields.js";
 import { PARCEL_DIAGNOSTIC_CATALOG } from "./parcel-diagnostics.js";
@@ -69,6 +70,7 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
       ? (query.forecastKind === "reforecast" ? gefsReforecastEntries() : gefsEntries())
       : []),
     ...(datasets.has("ifs") ? ifsEntries("ifs") : []),
+    ...(datasets.has("aifs") ? aifsEntries() : []),
     ...(datasets.has("ifs-ens") ? ifsEntries("ifs-ens") : []),
     ...(datasets.has("gfs-analysis") ? historyEntries() : []),
   ].filter((entry) => {
@@ -277,6 +279,38 @@ function gefsReforecastEntries(): CatalogEntry[] {
   ];
 }
 
+function aifsEntries(): CatalogEntry[] {
+  const catalog = getAifsCatalog();
+  const dataset = "aifs" as const;
+  return [
+    ...catalog.variables.map((definition) => ({
+      dataset,
+      section: "variables" as const,
+      id: definition.id,
+      classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
+      kind: definition.kind,
+      description: definition.description,
+      verticalSemantics: definition.levelType,
+      outputs: definition.outputs.map((output) => ({ ...output })),
+    })),
+    ...catalog.fields.map((definition) => ({
+      dataset,
+      section: "fields" as const,
+      id: definition.id,
+      classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
+      kind: definition.kind,
+      description: definition.description,
+      verticalSemantics: definition.verticalSemantics,
+      temporalSemantics: definition.temporalSemantics,
+      outputs: definition.outputs.map((output) => ({ ...output })),
+    })),
+    ...Object.values(LAYER_DIAGNOSTIC_CATALOG).map((definition) =>
+      diagnosticEntry(dataset, "layer_diagnostics", definition)),
+    ...Object.values(PROFILE_DIAGNOSTIC_CATALOG).map((definition) =>
+      diagnosticEntry(dataset, "profile_diagnostics", definition)),
+  ];
+}
+
 function ifsEntries(dataset: "ifs" | "ifs-ens"): CatalogEntry[] {
   const catalog = getIfsCatalog();
   return [
@@ -410,6 +444,7 @@ function preferredRepresentative(entries: CatalogEntry[]): CatalogEntry {
     ?? entries.find((entry) => entry.dataset === "aigefs")
     ?? entries.find((entry) => entry.dataset === "gefs")
     ?? entries.find((entry) => entry.dataset === "ifs")
+    ?? entries.find((entry) => entry.dataset === "aifs")
     ?? entries.find((entry) => entry.dataset === "ifs-ens")
     ?? entries[0]!;
 }
@@ -431,6 +466,8 @@ function supportSemantics(
         : "member-first ensemble forecast distribution";
     case "ifs":
       return "deterministic ECMWF IFS 0.25° operational forecast";
+    case "aifs":
+      return "ECMWF AIFS Single 0.25° deterministic AI forecast; four daily cycles with native 6-hour output through 360 hours";
     case "ifs-ens":
       return "ECMWF IFS ENS 0.25° distribution across 50 perturbed members; deterministic IFS is the post-50r1 unperturbed control";
     case "gfs-analysis":
