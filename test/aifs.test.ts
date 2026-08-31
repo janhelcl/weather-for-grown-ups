@@ -7,9 +7,14 @@ import {
   parseAifsRun,
 } from "../src/core/aifs-time.js";
 import {
+  AifsOpenDataRunProbe,
   buildAifsOpenDataForecastIndexUrl,
   buildAifsOpenDataForecastUrl,
 } from "../src/sources/aifs-open-data.js";
+import { AifsLatestRunResolver } from "../src/core/aifs-run.js";
+import {
+  isSupportedAifsPressureSelection,
+} from "../src/catalog/aifs.js";
 import { queryAtmosphereSchema } from "../src/schema/unified-api.js";
 import type { DecodedValue } from "../src/core/types.js";
 
@@ -39,6 +44,118 @@ describe("ECMWF AIFS source semantics", () => {
       new Date("2026-08-31T03:00:00Z"),
       new Date("2026-08-31T18:00:00Z"),
     )).toEqual([6, 12, 18]);
+  });
+});
+
+describe("AIFS availability and latest-run resolution", () => {
+  const selectors = [
+    { key: "temperature@850", param: "t", levtype: "pl" as const, levelist: 850 },
+  ];
+
+  it("fails over between ECMWF Open Data mirrors and checks selected inventory", async () => {
+    const fetchFn = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("ecmwf-forecasts.s3.eu-central-1.amazonaws.com")) {
+        return new Response("", { status: 404 });
+      }
+      return new Response(
+        '{"date":"20260831","time":"0000","step":"6","levtype":"pl","levelist":"850","param":"t","_offset":0,"_length":10}',
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    await expect(new AifsOpenDataRunProbe(fetchFn).isForecastAvailable(
+      run,
+      6,
+      selectors,
+    )).resolves.toBe(true);
+    expect(fetchFn.mock.calls.some(([input]) =>
+      String(input).includes("storage.googleapis.com/ecmwf-open-data"))).toBe(true);
+  });
+
+  it("treats missing objects or selected fields as unavailable and rejects hard HTTP failures", async () => {
+    const notFound = new AifsOpenDataRunProbe(
+      vi.fn(async () => new Response("", { status: 404 })) as typeof fetch,
+    );
+    await expect(notFound.isForecastAvailable(run, 6, selectors)).resolves.toBe(false);
+
+    const wrongInventory = new AifsOpenDataRunProbe(
+      vi.fn(async () => new Response(
+        '{"date":"20260831","time":"0000","step":"6","levtype":"sfc","param":"2t","_offset":0,"_length":10}',
+        { status: 200 },
+      )) as typeof fetch,
+    );
+    await expect(wrongInventory.isForecastAvailable(run, 6, selectors)).resolves.toBe(false);
+
+    const badRequest = new AifsOpenDataRunProbe(
+      vi.fn(async () => new Response("bad", { status: 400, statusText: "Bad Request" })) as typeof fetch,
+    );
+    await expect(badRequest.isForecastAvailable(run, 6, selectors))
+      .rejects.toThrow("HTTP 400");
+  });
+
+  it("selects the newest published native cycle for points and ranges", async () => {
+    const isForecastAvailable = vi.fn(async (candidate: Date) =>
+      candidate.toISOString() === "2026-08-31T12:00:00.000Z");
+    const resolver = new AifsLatestRunResolver({
+      probe: { isForecastAvailable },
+      now: () => new Date("2026-08-31T19:00:00Z"),
+    });
+
+    await expect(resolver.resolveLatestRun(
+      new Date("2026-08-31T18:00:00Z"),
+      selectors,
+    )).resolves.toEqual(new Date("2026-08-31T12:00:00Z"));
+    expect(isForecastAvailable).toHaveBeenCalledWith(
+      new Date("2026-08-31T18:00:00Z"),
+      0,
+      selectors,
+    );
+    expect(isForecastAvailable).toHaveBeenCalledWith(
+      new Date("2026-08-31T12:00:00Z"),
+      6,
+      selectors,
+    );
+
+    isForecastAvailable.mockClear();
+    isForecastAvailable.mockResolvedValue(true);
+    await expect(resolver.resolveLatestRunForRange(
+      new Date("2026-08-31T12:00:00Z"),
+      new Date("2026-08-31T18:00:00Z"),
+      selectors,
+    )).resolves.toEqual(new Date("2026-08-31T12:00:00Z"));
+    expect(isForecastAvailable).toHaveBeenCalledWith(
+      new Date("2026-08-31T12:00:00Z"),
+      6,
+      selectors,
+    );
+  });
+
+  it("fails cleanly when no candidate cycle can satisfy the selection or range", async () => {
+    const resolver = new AifsLatestRunResolver({
+      probe: { isForecastAvailable: vi.fn(async () => false) },
+      now: () => new Date("2026-08-31T19:00:00Z"),
+      maxCandidates: 2,
+    });
+
+    await expect(resolver.resolveLatestRun(
+      new Date("2026-08-31T18:00:00Z"),
+      selectors,
+    )).rejects.toThrow("No published ECMWF AIFS cycle");
+
+    await expect(resolver.resolveLatestRunForRange(
+      new Date("2026-08-31T18:00:00Z"),
+      new Date("2026-09-20T00:00:00Z"),
+      selectors,
+    )).rejects.toThrow("No published ECMWF AIFS cycle");
+  });
+
+  it("encodes the v2 moisture ceiling separately from the common pressure-level vocabulary", () => {
+    expect(isSupportedAifsPressureSelection("temperature", 10)).toBe(true);
+    expect(isSupportedAifsPressureSelection("vertical_velocity", 10)).toBe(true);
+    expect(isSupportedAifsPressureSelection("specific_humidity", 50)).toBe(true);
+    expect(isSupportedAifsPressureSelection("specific_humidity", 10)).toBe(false);
+    expect(isSupportedAifsPressureSelection("air_density", 10)).toBe(false);
   });
 });
 
