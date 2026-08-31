@@ -135,7 +135,7 @@ export class HgefsForecastService {
       ),
     );
     this.aigefs = options.aigefs ?? new AigefsForecastService({ cacheDir });
-    this.gefsQuery = options.gefsQuery ?? new GefsQueryAdapter({ cacheDir });
+    this.gefsQuery = options.gefsQuery ?? new GefsQueryAdapter();
     this.gefsDiagnostics = options.gefsDiagnostics ?? new GefsDiagnosticAdapter();
     this.stepConcurrency = options.stepConcurrency ?? DEFAULT_STEP_CONCURRENCY;
   }
