@@ -1,5 +1,6 @@
 import * as z from "zod/v4";
 import {
+  ATMOSPHERIC_DATASET_IDS,
   ATMOSPHERIC_OPERATION_IDS,
   ATMOSPHERIC_RUN_SELECTOR_IDS,
 } from "../catalog/models.js";
@@ -79,11 +80,7 @@ export const unifiedDatasetCapabilitiesSchema = z.object({
   maxForecastHour: z.number().int().nonnegative().optional(),
   nativeForecastIntervalHours: z.number().positive().optional(),
   constituents: z.array(z.object({
-    dataset: z.enum([
-      "gfs_0p25", "gfs_0p50", "aigfs_0p25", "aigefs_0p25", "hgefs_0p25",
-      "aifs_0p25", "aifs_ens_0p25", "gefs_0p50", "ifs_0p25", "ifs_ens_0p25",
-      "gfs_grid4_analysis_0p5",
-    ]),
+    dataset: z.enum(ATMOSPHERIC_DATASET_IDS),
     modelClass: z.enum(["physics", "ai", "hybrid"]),
     members: z.number().int().positive(),
   })).optional(),
