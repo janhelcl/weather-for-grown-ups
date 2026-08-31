@@ -25,6 +25,7 @@ import {
 } from "../schema/unified-catalog.js";
 import {
   publicDatasetCapabilities,
+  publicDatasetCoversGeometry,
   type PublicAtmosphericDataset,
 } from "../schema/unified-api.js";
 
@@ -60,7 +61,23 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
   const sections = new Set<UnifiedSection>(
     query.sections ?? ["variables", "fields", "layer_diagnostics", "profile_diagnostics", "parcel_definitions"],
   );
-  const datasets = new Set(query.datasets);
+  const eligibleDatasets = query.datasets.filter((dataset) => {
+    const capability = publicDatasetCapabilities(dataset, query.forecastKind);
+    if (
+      query.spatialScope !== undefined
+      && capability.spatialDomain.scope !== query.spatialScope
+    ) {
+      return false;
+    }
+    if (
+      query.coverage !== undefined
+      && !publicDatasetCoversGeometry(dataset, query.coverage)
+    ) {
+      return false;
+    }
+    return true;
+  });
+  const datasets = new Set(eligibleDatasets);
 
   const entries = [
     ...(datasets.has("gfs") ? gfsEntries() : []),
@@ -123,7 +140,7 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
   const limited = matches.slice(0, query.limit);
   return unifiedCatalogResultSchema.parse({
     query,
-    datasetCapabilities: query.datasets.map((dataset) =>
+    datasetCapabilities: eligibleDatasets.map((dataset) =>
       publicDatasetCapabilities(dataset, query.forecastKind)),
     totalMatches: matches.length,
     truncated: matches.length > query.limit,
