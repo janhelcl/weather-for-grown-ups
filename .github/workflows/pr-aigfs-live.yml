@@ -1,4 +1,4 @@
-name: PR NOAA AIGFS live
+name: PR NOAA AI-GFS live
 
 on:
   pull_request:
@@ -8,6 +8,7 @@ on:
       - "src/catalog/models.ts"
       - "src/schema/unified-api.ts"
       - "scripts/live-smoke-aigfs.ts"
+      - "scripts/live-smoke-aigefs.ts"
       - ".github/workflows/pr-aigfs-live.yml"
       - "package.json"
 
@@ -25,3 +26,5 @@ jobs:
         run: docker build --target live-test -t weather-for-grown-ups:live-test .
       - name: Query live NOAA AIGFS
         run: docker run --rm weather-for-grown-ups:live-test npm run test:live:aigfs
+      - name: Query live NOAA AIGEFS
+        run: docker run --rm weather-for-grown-ups:live-test npm run test:live:aigefs
