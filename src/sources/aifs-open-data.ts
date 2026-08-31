@@ -13,7 +13,7 @@ export const AIFS_OPEN_DATA_MODEL = "aifs-single" as const;
 export function buildAifsOpenDataForecastUrl(
   run: Date,
   forecastHour: number,
-  baseUrl = IFS_OPEN_DATA_MIRRORS[0].baseUrl,
+  baseUrl: string = IFS_OPEN_DATA_MIRRORS[0].baseUrl,
 ): string {
   const date = yyyymmdd(run);
   const hour = run.getUTCHours().toString().padStart(2, "0");
