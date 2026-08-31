@@ -373,6 +373,206 @@ describe("AIFS unified capability", () => {
     expect(fetchSelection).not.toHaveBeenCalled();
   });
 
+  it("supports successful point-matrix queries and selection-aware latest run injection", async () => {
+    const selections = new Map<string, readonly any[]>();
+    let fileIndex = 0;
+    const fetchSelection = vi.fn(async (request: any) => {
+      const path = `aifs-matrix-${fileIndex++}`;
+      selections.set(path, request.selectors);
+      return { path, cacheHit: fileIndex % 2 === 0 };
+    });
+    const decoder = {
+      engine: "gribberish" as const,
+      extractPoint: vi.fn(async (path: string, longitude: number, latitude: number) =>
+        (selections.get(path) ?? []).map((selector: any) => ({
+          code: selector.param,
+          pressureHpa: selector.levelist,
+          value: aifsFixtureValue(selector.param, selector.levelist),
+          gridPoint: { latitude, longitude },
+        })) satisfies DecodedValue[]),
+    };
+    const latestRunProvider = {
+      resolveLatestRun: vi.fn(async () => run),
+      resolveLatestRunForRange: vi.fn(async () => run),
+    };
+    const service = new AifsForecastService({
+      source: { fetchSelection },
+      decoder,
+      latestRunProvider,
+    });
+
+    const point: any = await service.query({
+      dataset: "aifs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      forecast: { run: "latest" },
+      selection: {
+        variables: ["temperature", "wind", "specific_humidity"],
+        pressureLevelsHpa: [850],
+        fields: [
+          "temperature_2m",
+          "relative_humidity_2m",
+          "specific_humidity_2m",
+          "surface_geopotential_height",
+          "wind_100m",
+          "low_cloud_cover",
+        ],
+      },
+    } as any);
+    expect(latestRunProvider.resolveLatestRun).toHaveBeenCalled();
+    expect(point.fields.find((field: any) => field.id === "specific_humidity_2m")
+      .values.specificHumidityKgKg).toBeGreaterThan(0);
+    expect(point.fields.find((field: any) => field.id === "surface_geopotential_height")
+      .values.surfaceGeopotentialHeightGpm).toBeCloseTo(100);
+    expect(point.fields.find((field: any) => field.id === "wind_100m")
+      .values.windSpeedMs).toBe(10);
+    expect(point.fields.find((field: any) => field.id === "low_cloud_cover")
+      .values.lowCloudCoverPct).toBeCloseTo(20);
+
+    const matrix: any = await service.query({
+      dataset: "aifs",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50, longitude: 14 },
+          { latitude: 49.5, longitude: 14.5 },
+        ],
+      },
+      time: {
+        from: "2026-08-31T00:00:00Z",
+        to: "2026-08-31T06:00:00Z",
+      },
+      forecast: { run: "latest" },
+      limits: { maxPointSteps: 10 },
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+      },
+    } as any);
+    expect(latestRunProvider.resolveLatestRunForRange).toHaveBeenCalled();
+    expect(matrix.series).toHaveLength(2);
+    expect(matrix.series[0].points).toHaveLength(2);
+    expect(matrix.series[1].forecastHour).toBe(6);
+  });
+
+  it("derives AIFS layer, profile and diagnostic-time-series products", async () => {
+    const selections = new Map<string, readonly any[]>();
+    let fileIndex = 0;
+    const fetchSelection = vi.fn(async (request: any) => {
+      const path = `aifs-diagnostic-${fileIndex++}`;
+      selections.set(path, request.selectors);
+      return { path, cacheHit: true };
+    });
+    const decoder = {
+      engine: "gribberish" as const,
+      extractPoint: vi.fn(async (path: string, longitude: number, latitude: number) =>
+        (selections.get(path) ?? []).map((selector: any) => ({
+          code: selector.param,
+          pressureHpa: selector.levelist,
+          value: aifsFixtureValue(selector.param, selector.levelist),
+          gridPoint: { latitude, longitude },
+        })) satisfies DecodedValue[]),
+    };
+    const service = new AifsForecastService({
+      source: { fetchSelection },
+      decoder,
+    });
+
+    const layer: any = await service.diagnose({
+      dataset: "aifs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      forecast: { run: "2026-08-31T00:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: [
+          "temperature_lapse_rate",
+          "wind_shear",
+          "potential_temperature_gradient",
+        ],
+      },
+    } as any);
+    expect(layer.diagnostics.temperature_lapse_rate.temperatureLapseRateCPerKm)
+      .toBeGreaterThan(0);
+    expect(layer.diagnostics.wind_shear.windShearMagnitudeMs).toBeGreaterThan(0);
+
+    const profile: any = await service.diagnose({
+      dataset: "aifs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      forecast: { run: "2026-08-31T00:00:00Z" },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [850, 700, 500],
+        diagnostics: [
+          "freezing_level_crossings",
+          "temperature_inversion_layers",
+        ],
+      },
+    } as any);
+    expect(profile.diagnostics.freezing_level_crossings.crossings.length).toBeGreaterThan(0);
+    expect(profile.diagnostics.temperature_inversion_layers.layers.length).toBeGreaterThan(0);
+
+    const series: any = await service.diagnose({
+      dataset: "aifs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: {
+        from: "2026-08-31T00:00:00Z",
+        to: "2026-08-31T12:00:00Z",
+        maxSteps: 3,
+      },
+      forecast: { run: "2026-08-31T00:00:00Z" },
+      diagnostic: {
+        kind: "layer",
+        lowerPressureHpa: 850,
+        upperPressureHpa: 500,
+        diagnostics: ["wind_shear"],
+      },
+    } as any);
+    expect(series.series).toHaveLength(3);
+    expect(series.series.every((step: any) => step.kind === "layer")).toBe(true);
+    expect(series.series.every((step: any) => step.cacheHit)).toBe(true);
+  });
+
+  it("rejects unsupported AIFS selections directly in the service layer", async () => {
+    const service = new AifsForecastService({
+      source: {
+        fetchSelection: vi.fn(async () => {
+          throw new Error("network should not be reached");
+        }),
+      },
+      decoder: {
+        engine: "gribberish",
+        extractPoint: vi.fn(async () => []),
+      },
+    });
+    const base = {
+      dataset: "aifs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      forecast: { run: "2026-08-31T00:00:00Z" },
+    };
+
+    await expect(service.query({
+      ...base,
+      selection: { variables: ["relative_humidity"], pressureLevelsHpa: [850] },
+    } as any)).rejects.toThrow("pressure variables not supported");
+    await expect(service.query({
+      ...base,
+      selection: { variables: ["temperature"], pressureLevelsHpa: [825] },
+    } as any)).rejects.toThrow("pressure levels not supported");
+    await expect(service.query({
+      ...base,
+      selection: { variables: ["specific_humidity"], pressureLevelsHpa: [10] },
+    } as any)).rejects.toThrow("specific_humidity@10hPa");
+    await expect(service.query({
+      ...base,
+      selection: { fields: ["precipitable_water"] },
+    } as any)).rejects.toThrow("fields not supported");
+  });
+
   it("normalizes AIFS pressure and surface state while preserving provenance", async () => {
     const fetchSelection = vi.fn(async () => ({ path: "aifs-fixture", cacheHit: false }));
     const values: DecodedValue[] = [
@@ -438,3 +638,47 @@ describe("AIFS unified capability", () => {
     });
   });
 });
+
+
+function aifsFixtureValue(param: string, pressureHpa?: number): number {
+  if (param === "t") {
+    if (pressureHpa === 850) return 278.15;
+    if (pressureHpa === 700) return 268.15;
+    if (pressureHpa === 500) return 275.15;
+    return 280;
+  }
+  if (param === "z") {
+    if (pressureHpa === 850) return 1_500 * 9.80665;
+    if (pressureHpa === 700) return 3_000 * 9.80665;
+    if (pressureHpa === 500) return 5_600 * 9.80665;
+    return 100 * 9.80665;
+  }
+  if (param === "u") {
+    if (pressureHpa === 850) return 2;
+    if (pressureHpa === 700) return 5;
+    if (pressureHpa === 500) return 10;
+    return 3;
+  }
+  if (param === "v") {
+    if (pressureHpa === 850) return 1;
+    if (pressureHpa === 700) return 3;
+    if (pressureHpa === 500) return 7;
+    return 4;
+  }
+  if (param === "q") return 0.005;
+  if (param === "w") return 0.1;
+  if (param === "2t") return 293.15;
+  if (param === "2d") return 283.15;
+  if (param === "sp") return 100_000;
+  if (param === "msl") return 101_325;
+  if (param === "10u") return 3;
+  if (param === "10v") return 4;
+  if (param === "100u") return 6;
+  if (param === "100v") return 8;
+  if (param === "tp") return 0.012;
+  if (param === "lcc") return 0.2;
+  if (param === "mcc") return 0.3;
+  if (param === "hcc") return 0.4;
+  if (param === "tcc") return 0.5;
+  throw new Error(`Unhandled AIFS fixture parameter: ${param}`);
+}
