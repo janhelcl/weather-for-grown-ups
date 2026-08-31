@@ -196,14 +196,13 @@ export class IconD2EpsMemberFileFilter {
   ): Promise<IconD2SourceFile> {
     const inventory = await this.inventory(sourcePath);
     const ensembleTag = iconD2EpsWgrib2TagForMember(inventory, member);
-    const matchPattern = `:${escapeRegex(ensembleTag)}(?::|$)`;
     const tempPath = `${memberPath}.${process.pid}.${randomUUID()}.tmp`;
 
     try {
       const { stdout } = await this.run([
         sourcePath,
-        "-match",
-        matchPattern,
+        "-match_fs",
+        `:${ensembleTag}`,
         "-grib",
         tempPath,
       ]);
@@ -369,9 +368,6 @@ function subsetKey(request: IconD2DataRequest): string {
   })).digest("hex");
 }
 
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^$\{\}()|[\]\\]/g, "\\$&");
-}
 
 async function exists(path: string): Promise<boolean> {
   try {
