@@ -14,7 +14,7 @@ import {
 
 export const sourceProvenanceSchema = z.object({
   provider: z.union([z.literal("NOAA NOMADS"), z.literal("NOAA AWS Open Data")]),
-  access: z.union([z.literal("nomads_grib_filter"), z.literal("s3_range")]),
+  access: z.union([z.literal("nomads_grib_filter"), z.literal("nomads_range"), z.literal("s3_range")]),
   decoder: z.enum(["gribberish", "wgrib2"]),
 });
 

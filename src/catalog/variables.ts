@@ -32,6 +32,7 @@ export const ALL_SUPPORTED_GFS_CODES = [
   "MCDC",
   "HCDC",
   "CWORK",
+  "PRMSL",
 ] as const;
 
 export type GfsCode = (typeof ALL_SUPPORTED_GFS_CODES)[number];

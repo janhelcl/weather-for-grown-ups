@@ -4,7 +4,7 @@ import type { GfsGrid } from "../schema/gfs-grid.js";
 
 export type ProfileSourceId = "nomads" | "s3";
 export type ProfileProvider = "NOAA NOMADS" | "NOAA AWS Open Data";
-export type ProfileAccessMethod = "nomads_grib_filter" | "s3_range";
+export type ProfileAccessMethod = "nomads_grib_filter" | "nomads_range" | "s3_range";
 
 export interface ProfileDataRequest {
   run: Date;

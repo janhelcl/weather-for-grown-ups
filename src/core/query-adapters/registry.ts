@@ -1,4 +1,5 @@
 import type { PublicAtmosphericDataset } from "../../schema/unified-api.js";
+import { AigfsQueryAdapter, type AigfsQueryAdapterOptions } from "./aigfs.js";
 import { GefsQueryAdapter, type GefsQueryAdapterOptions } from "./gefs.js";
 import {
   GfsAnalysisQueryAdapter,
@@ -13,7 +14,8 @@ import type {
 } from "./types.js";
 
 export type DefaultAtmosphericQueryAdapterOptions =
-  GfsQueryAdapterOptions
+  AigfsQueryAdapterOptions
+  & GfsQueryAdapterOptions
   & GefsQueryAdapterOptions
   & IfsQueryAdapterOptions
   & IfsEnsQueryAdapterOptions
@@ -27,6 +29,7 @@ export function createAtmosphericQueryAdapterRegistry(
   options: AtmosphericQueryRegistryOptions = {},
 ): AtmosphericQueryAdapterRegistry {
   const defaults: AtmosphericQueryAdapterRegistry = {
+    aigfs: new AigfsQueryAdapter(options),
     gfs: new GfsQueryAdapter(options),
     gefs: new GefsQueryAdapter(options),
     ifs: new IfsQueryAdapter(options),

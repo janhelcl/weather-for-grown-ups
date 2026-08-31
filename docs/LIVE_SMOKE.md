@@ -20,6 +20,7 @@ The current aggregate script runs:
 ```text
 test:live:bundled
 test:live:s3
+test:live:aigfs
 test:live:history
 test:live:gefs
 test:live:gefs-runs
@@ -39,6 +40,10 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 ### GFS AWS
 
 `npm run test:live:s3` exercises deterministic GFS selected-message access and higher-level composition against NOAA AWS Open Data.
+
+### AIGFS
+
+`npm run test:live:aigfs` makes one bounded mixed pressure/surface query through the public `dataset: "aigfs"` path. It verifies the operational NOMADS directory/index format, partial HTTP Range transport, bundled GRIB2 decoding, canonical pressure/surface normalization, derived wind, 6-hour lead semantics and unified result identity. The test deliberately uses a valid time well behind the publication edge so it checks source compatibility rather than racing the newest cycle.
 
 ### Historical GFS analysis and forecast skill
 
@@ -110,7 +115,7 @@ Live tests should assert contracts and invariants rather than pinning today's we
 
 - current NOAA paths and inventory formats;
 - historical NCEI archive paths and NCSS response formats;
-- selected GRIB byte-range access;
+- selected GRIB byte-range access, including AIGFS `.idx` + raw NOMADS HTTP Range reads;
 - decoder compatibility with real GFS/GEFS messages;
 - requested grid/sample consistency;
 - finite normalized physical values;

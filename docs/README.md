@@ -18,6 +18,7 @@ The root [README](../README.md) explains **why Weather for Grown Ups exists**. T
 
 These documents describe **what the upstream model/archive actually means**. They are intentionally separate from the model-neutral public query vocabulary.
 
+- [AIGFS.md](AIGFS.md) — NOAA's deterministic AI forecast, native 6-hour cadence, operational field inventory and NOMADS partial-range access.
 - [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — operational GEFS plus the explicit GEFSv12 reforecast population, member sets, products, grids, cadence and member-first semantics.
 - [IFS.md](IFS.md) — deterministic IFS and IFS ENS Open Data products, cadence, 50-perturbation semantics and ECMWF access behavior.
 - [HISTORY.md](HISTORY.md) — historical GFS Grid 4 analysis, archived GFS forecasts, analog workflows and verification semantics.

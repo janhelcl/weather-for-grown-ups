@@ -381,6 +381,7 @@ describe("unified catalog", () => {
     expect(temperature).toBeDefined();
     expect(temperature?.support.map((support) => support.dataset)).toEqual([
       "gfs",
+      "aigfs",
       "gefs",
       "ifs",
       "ifs-ens",
