@@ -6,6 +6,11 @@ import {
   IconD2EpsOpenDataCache,
 } from "../cache/icon-d2-eps-open-data-cache.js";
 import {
+  IconD2EpsCdoRemapper,
+  IconD2EpsDwdRemapAssetCache,
+  IconD2EpsRemappedSubsetCache,
+} from "../cache/icon-d2-eps-remap-cache.js";
+import {
   ICON_D2_EPS_MEMBERS,
   sortIconD2EpsMembers,
   type IconD2EpsMember,
@@ -68,13 +73,25 @@ export class IconD2EpsForecastService {
       join(cacheDir, "icon-d2-eps-open-data"),
     );
     const runProvider = new IconD2RunResolver(cache);
+    const remapAssets = new IconD2EpsDwdRemapAssetCache(
+      join(cacheDir, "icon-d2-remap-assets"),
+    );
+    const remapper = new IconD2EpsCdoRemapper(
+      join(cacheDir, "icon-d2-eps-remapped"),
+      remapAssets,
+    );
+    const remappedCache = new IconD2EpsRemappedSubsetCache(cache, remapper);
     const wgrib2 = process.env.WGRIB2_PATH ?? "wgrib2";
     const memberFilter = new IconD2EpsMemberFileFilter(
       join(cacheDir, "icon-d2-eps-members"),
       wgrib2,
     );
     this.memberServiceFactory = options.memberServiceFactory ?? ((member) => {
-      const memberCache = new IconD2EpsMemberSubsetCache(cache, member, memberFilter);
+      const memberCache = new IconD2EpsMemberSubsetCache(
+        remappedCache,
+        member,
+        memberFilter,
+      );
       return new IconD2ForecastService({
         cache: memberCache,
         runProvider,
@@ -803,6 +820,11 @@ function ensembleSource(members: readonly MemberResult[]) {
     nativeGrid: {
       type: "icosahedral" as const,
       nominalResolutionKm: 2.1,
+    },
+    samplingGrid: {
+      type: "regular_latlon" as const,
+      resolutionDegrees: 0.02,
+      remapping: "dwd_official_nearest_neighbor_weights" as const,
     },
     packaging: "all_members_grib2_bz2" as const,
     memberCount: members.length,
