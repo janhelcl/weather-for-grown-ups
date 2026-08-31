@@ -443,6 +443,128 @@ describe("AIGFS deterministic service composition", () => {
     expect(distribution.distribution.extrema.min.gridPoint).toEqual({ latitude: 49, longitude: 14 });
   });
 
+  it("covers scalar field stats, accumulation semantics, and pressure distributions", async () => {
+    const mslp = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: {
+        type: "area",
+        westLongitude: 14,
+        eastLongitude: 14.5,
+        southLatitude: 49,
+        northLatitude: 49.5,
+      },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { fields: ["mean_sea_level_pressure"] },
+    })) as any;
+    expect(mslp.field).toMatchObject({
+      id: "mean_sea_level_pressure",
+      level: { type: "named_level", id: "mean_sea_level" },
+      temporal: { type: "instantaneous" },
+    });
+    expect(mslp.statistics.mean).toBe(101_325);
+
+    const precipitation = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: {
+        type: "area",
+        westLongitude: 14,
+        eastLongitude: 14.5,
+        southLatitude: 49,
+        northLatitude: 49.5,
+      },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { fields: ["total_precipitation"] },
+    })) as any;
+    expect(precipitation.field.level).toEqual({ type: "surface" });
+    expect(precipitation.field.temporal).toMatchObject({
+      type: "accumulation",
+      startForecastHour: 0,
+      endForecastHour: 6,
+      startTime: "2026-08-30T00:00:00.000Z",
+      endTime: "2026-08-30T06:00:00.000Z",
+    });
+
+    const windComponent = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: {
+        type: "area",
+        westLongitude: 14,
+        eastLongitude: 14.5,
+        southLatitude: 49,
+        northLatitude: 49.5,
+      },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { variables: ["u_wind"], pressureLevelsHpa: [850] },
+      aggregate: { percentiles: [50] },
+    })) as any;
+    expect(windComponent.variable.id).toBe("u_wind");
+    expect(windComponent.distribution.percentiles[0].value).toBe(280);
+  });
+
+  it("preserves fields in ranges and covers profile diagnostic ranges", async () => {
+    const state = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: {
+        from: "2026-08-30T06:00:00Z",
+        to: "2026-08-30T12:00:00Z",
+        maxSteps: 2,
+      },
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+        fields: ["temperature_2m"],
+      },
+    })) as any;
+    expect(state.series.every((step: any) => step.fields?.[0]?.id === "temperature_2m")).toBe(true);
+
+    const diagnostics = await service().diagnose(diagnoseAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: {
+        from: "2026-08-30T06:00:00Z",
+        to: "2026-08-30T12:00:00Z",
+        maxSteps: 2,
+      },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [1000, 925, 850, 700, 500],
+        diagnostics: ["freezing_level_crossings"],
+      },
+    })) as any;
+    expect(diagnostics.series).toHaveLength(2);
+    expect(diagnostics.series.every((step: any) => step.kind === "profile")).toBe(true);
+  });
+
+  it("uses default transect sampling and decoder provenance fallbacks", async () => {
+    const fallbackDecoder = {
+      extractPoint: vi.fn(async (_path: string, longitude: number, latitude: number) =>
+        fakeDecodedValues(longitude, latitude)),
+    };
+    const fallbackService = new AigfsForecastService({
+      cache: {
+        fetch: vi.fn(async () => ({ path: "/tmp/aigfs-test.grib2", cacheHit: true })),
+      } as any,
+      decoder: fallbackDecoder,
+      runProvider,
+      areaDecoder: areaDecoder as any,
+      areaGridDecoder: areaGridDecoder as any,
+    });
+
+    const transect = await fallbackService.query(queryAtmosphereSchema.parse({
+      dataset: "aigfs",
+      geometry: {
+        type: "transect",
+        start: { latitude: 49, longitude: 14 },
+        end: { latitude: 50, longitude: 15 },
+      },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    })) as any;
+    expect(transect.samples).toHaveLength(21);
+    expect(transect.source).toMatchObject({ decoder: "gribberish", cacheHit: true });
+  });
+
   it("derives layer/profile diagnostics at one time and through a range", async () => {
     const layer = await service().diagnose(diagnoseAtmosphereSchema.parse({
       dataset: "aigfs",
