@@ -19,6 +19,7 @@ import {
   isAifsPressureLevel,
   isAifsPressureVariable,
   isAifsRawPressureVariable,
+  isSupportedAifsPressureSelection,
   type AifsFieldId,
   type AifsPressureVariableId,
   type AifsRawFieldId,
@@ -708,6 +709,17 @@ function selectionFrom(
   if (unsupportedLevels.length > 0) {
     throw new Error(`AIFS pressure levels not supported: ${unsupportedLevels.join(", ")}`);
   }
+  const unsupportedSelections = typedPressureSelections(
+    variableIds as AifsPressureVariableId[],
+    pressureLevelsHpa,
+  ).filter(({ id, pressureHpa }) => !isSupportedAifsPressureSelection(id, pressureHpa));
+  if (unsupportedSelections.length > 0) {
+    throw new Error(
+      `AIFS pressure variable/level selections not supported: ${unsupportedSelections
+        .map(({ id, pressureHpa }) => `${id}@${pressureHpa}hPa`)
+        .join(", ")}`,
+    );
+  }
   const supportedFieldSet = new Set<string>([...AIFS_RAW_FIELD_IDS, "relative_humidity_2m", "specific_humidity_2m", "wind_10m", "wind_100m"]);
   const unsupportedFields = fieldIds.filter((id) => !supportedFieldSet.has(id));
   if (unsupportedFields.length > 0) {
@@ -748,6 +760,14 @@ function selectionFrom(
     fieldIds: [...typedFields],
     items,
   };
+}
+
+function typedPressureSelections(
+  variableIds: readonly AifsPressureVariableId[],
+  pressureLevelsHpa: readonly number[],
+): Array<{ id: AifsPressureVariableId; pressureHpa: number }> {
+  return variableIds.flatMap((id) =>
+    pressureLevelsHpa.map((pressureHpa) => ({ id, pressureHpa })));
 }
 
 function applyRawPressureValue(
