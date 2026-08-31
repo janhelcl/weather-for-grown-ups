@@ -37,9 +37,9 @@ Goals:
 
 AIGFS is the first test that WFG can change the forecasting machinery without changing the atmospheric question.
 
-### 2. AIFS
+### 2. AIFS — **implemented**
 
-Add ECMWF AIFS after AIGFS.
+ECMWF AIFS Single is now a first-class `aifs` dataset behind the shared query/diagnostic surfaces.
 
 Goals:
 
@@ -47,6 +47,8 @@ Goals:
 - reuse ECMWF Open Data access and source-policy layers where appropriate;
 - avoid any AIGFS-specific concept leaking into the public API;
 - preserve AIFS-native run, cadence, grid, field and provenance semantics.
+
+Implemented scope includes point/range/multi-point/transect/area queries plus layer/profile diagnostics over ECMWF Open Data. Parcel diagnostics remain an explicit capability boundary rather than a compatibility shim.
 
 Together, AIGFS and AIFS establish a clean provider-independent AI forecast axis.
 
