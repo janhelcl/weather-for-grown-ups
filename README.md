@@ -145,7 +145,7 @@ The common language composes a fairly broad atmospheric surface:
 - whole-profile freezing-level and inversion diagnostics;
 - parcel/LCL/LFC/EL/CAPE/CIN diagnostics where the source fields support them;
 - deterministic run deltas and ensemble distribution shifts;
-- aligned GFS↔GEFS, GFS↔IFS, GEFS↔IFS ENS and IFS↔IFS ENS comparisons;
+- restrictive aligned comparison strategies across physics, AI and hybrid families, including GFS↔AIGFS, IFS↔AIFS, GEFS↔AIGEFS, IFS ENS↔AIFS ENS and HGEFS↔constituent populations;
 - historical analog search and archived-forecast verification.
 
 Not every dataset implements every line. `catalog` / `search_catalog` is the source of truth for what a particular dataset and forecast population supports.
