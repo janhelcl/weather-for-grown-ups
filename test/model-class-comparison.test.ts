@@ -87,6 +87,73 @@ function aiEnsembleResult(
   };
 }
 
+function gefsEnsembleResult(
+  values: readonly number[],
+  members: readonly string[],
+) {
+  return {
+    model: "gefs_0p50",
+    run,
+    validTime,
+    forecastHour: 6,
+    requestedPoint: { latitude: 50, longitude: 14 },
+    gridPoint: { latitude: 50, longitude: 14 },
+    pressureSummaries: [{
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      outputField: "temperatureC",
+      unit: "degC",
+      distribution: distribution(values),
+    }],
+    members: members.map((member, index) => ({
+      member,
+      cacheHit: true,
+      pressureValues: [{
+        variable: "temperature",
+        pressureLevelHpa: 850,
+        value: values[index % values.length]!,
+      }],
+      fields: [],
+    })),
+    source: { provider: "NOAA AWS Open Data", allCacheHit: true },
+  };
+}
+
+function ifsEnsResult(
+  values: readonly number[],
+  members: readonly string[],
+) {
+  return {
+    model: "ifs_ens_0p25",
+    run,
+    validTime,
+    forecastHour: 6,
+    requestedPoint: { latitude: 50, longitude: 14 },
+    gridPoint: { latitude: 50, longitude: 14 },
+    pressureSummaries: [{
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      outputs: [{
+        field: "temperatureC",
+        unit: "degC",
+        aggregation: "numeric_distribution",
+        distribution: distribution(values),
+      }],
+    }],
+    members: members.map((member, index) => ({
+      member,
+      cacheHit: true,
+      pressureValues: [{
+        variable: "temperature",
+        pressureLevelHpa: 850,
+        values: { temperatureC: values[index % values.length]! },
+      }],
+      fields: [],
+    })),
+    source: { provider: "ECMWF Open Data", allCacheHit: true },
+  };
+}
+
 describe("model-class comparison mechanics", () => {
   it("aligns latest deterministic physics and AI forecasts onto one shared cycle", async () => {
     const calls: QueryAtmosphereInput[] = [];
