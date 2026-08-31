@@ -102,15 +102,12 @@ export const compareGefsAigefsDatasetsSchema = z.object({
 export const compareIfsEnsAifsEnsDatasetsSchema = z.object({
   datasets: z.tuple([z.literal("ifs-ens"), z.literal("aifs-ens")]),
   ...pointBase,
-  ifsEnsMembers: z.array(ifsEnsMemberSchema).min(2).default(undefined),
+  ifsEnsMembers: z.array(ifsEnsMemberSchema).min(2).optional(),
   aifsEnsMembers: z.array(aifsEnsMemberSchema).min(2).max(AIFS_ENS_MEMBERS.length)
     .default([...AIFS_ENS_MEMBERS]),
   quantiles: quantilesSchema,
   thresholdGte: z.number().optional(),
-}).transform((request) => ({
-  ...request,
-  ifsEnsMembers: request.ifsEnsMembers ?? undefined,
-})).superRefine((request, context) => {
+}).superRefine((request, context) => {
   validateRun(request.run, request.datasets, context);
   validateIfsSelection(request.variable, request.pressureLevelHpa, context);
   validateAifsSelection(request.variable, request.pressureLevelHpa, context);
