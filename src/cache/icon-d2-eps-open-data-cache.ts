@@ -246,7 +246,7 @@ export class IconD2EpsMemberFileFilter {
 
 export class IconD2EpsMemberSubsetCache implements IconD2SubsetCache {
   constructor(
-    private readonly source: IconD2EpsOpenDataCache,
+    private readonly source: IconD2SubsetCache,
     private readonly member: IconD2EpsMember,
     private readonly filter: IconD2EpsMemberFileFilter,
   ) {}
