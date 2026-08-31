@@ -566,6 +566,7 @@ function summarizeDiagnosticInstant(
   if (request.diagnostic.kind !== "profile") {
     throw new Error("Internal AIGEFS diagnostic routing error: parcel diagnostics are unsupported");
   }
+  const diagnostic = request.diagnostic;
 
   const profileMembers = members.map(({ member, result }) => ({
     member,
@@ -609,6 +610,10 @@ function summarizeDiagnosticRange(
   selectedMembers: AigefsMember[],
   quantiles: number[],
 ) {
+  if (request.diagnostic.kind === "parcel") {
+    throw new Error("Internal AIGEFS diagnostic routing error: parcel diagnostics are unsupported");
+  }
+  const diagnostic = request.diagnostic;
   const first = members[0]!.result;
   assertSameSeriesLength(members);
   return {
