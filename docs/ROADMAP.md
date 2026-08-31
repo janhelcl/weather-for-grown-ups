@@ -92,7 +92,7 @@ dataset × geometry × time × selection
 
 The registry derives model class, result kind and provider from the dataset catalog, and every strategy explicitly declares run/valid-time alignment, variable compatibility, comparison semantics, output shape and provenance shape. There is no universal fallback strategy.
 
-The AI expansion must **not** continue the old pattern of accumulating unclassified pair routing.
+**AI and hybrid comparison families — implemented.** The AI expansion now uses the same restrictive strategy registry; no unclassified pair routing was added.
 
 Each comparison strategy behind the existing public `compare_datasets` operation declares, at minimum:
 
@@ -113,18 +113,16 @@ Expected strategy classes include:
 
 The registry should be **restrictive rather than universal**. Two datasets being queryable through the same atmospheric vocabulary does not imply that every pair has a scientifically meaningful comparison.
 
-Likely comparison families include:
+Implemented comparison families now include:
 
-- GFS ↔ AIGFS;
-- IFS ↔ AIFS;
-- GEFS ↔ AIGEFS;
-- IFS ENS ↔ AIFS ENS;
-- GFS ↔ IFS;
-- AIGFS ↔ AIFS;
-- GEFS ↔ IFS ENS;
-- HGEFS ↔ its relevant constituent ensemble populations.
+- GFS ↔ GEFS and IFS ↔ IFS ENS deterministic-to-ensemble positioning;
+- GFS ↔ IFS, GFS ↔ AIGFS, IFS ↔ AIFS and AIGFS ↔ AIFS deterministic deltas;
+- GEFS ↔ IFS ENS, GEFS ↔ AIGEFS and IFS ENS ↔ AIFS ENS distribution shifts;
+- HGEFS ↔ GEFS and HGEFS ↔ AIGEFS hybrid-to-constituent distribution shifts.
 
-Existing physics-model comparison semantics have migrated behind the same strategy boundary. The next comparison work is to add scientifically justified AI and hybrid families to this registry without weakening its restrictive compatibility rules.
+IFS ENS and AIFS ENS retain their native populations rather than being forced into synthetic symmetry. HGEFS comparisons explicitly describe the constituent population as overlapping the hybrid distribution, so the two sides are not presented as statistically independent.
+
+This completes the AI/hybrid model-and-comparison line of the roadmap without weakening the registry's restrictive compatibility rules.
 
 ## Target conceptual matrix
 
@@ -153,4 +151,4 @@ Every addition in this roadmap must preserve:
 
 ## After this line
 
-Only after the AI/hybrid model matrix and comparison architecture are solid should the project reconsider the next major axis, such as high-resolution regional NWP, broader forecast verification/skill, additional meteorological structure diagnostics, or non-atmospheric domains such as waves.
+The AI/hybrid model matrix and comparison architecture are now complete. The next roadmap should choose a new major axis rather than add another model-specific public API: high-resolution regional NWP, broader forecast verification/skill, additional meteorological structure diagnostics, or a non-atmospheric domain such as waves.
