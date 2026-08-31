@@ -166,7 +166,7 @@ describe("ICON-D2-EPS native member filtering", () => {
 
   it("maps the provider inventory to p01..p20 and materializes one member-only GRIB", async () => {
     const inventory = Array.from({ length: 20 }, (_, index) =>
-      `${index + 1}:0:d=2026083100:TMP:850 mb:6 hour fcst:ENS=+${index + 1}`
+      `${index + 1}:0:d=2026083100:TMP:850 mb:6 hour fcst:ENS=? table4.6=192 pert=${index + 1}`
     ).join("\n");
     const runner = vi.fn(async (_executable: string, args: string[]) => {
       if (args.includes("-s")) return { stdout: inventory };
@@ -182,14 +182,14 @@ describe("ICON-D2-EPS native member filtering", () => {
       runner,
     );
 
-    expect(iconD2EpsWgrib2TagForMember(inventory, "p01")).toBe("ENS=+1");
-    expect(iconD2EpsWgrib2TagForMember(inventory, "p20")).toBe("ENS=+20");
+    expect(iconD2EpsWgrib2TagForMember(inventory, "p01")).toBe("ENS=? table4.6=192 pert=1");
+    expect(iconD2EpsWgrib2TagForMember(inventory, "p20")).toBe("ENS=? table4.6=192 pert=20");
 
     const first = await filter.filter(sourcePath, "p02");
     expect(first.cacheHit).toBe(false);
     expect(new TextDecoder().decode(await readFile(first.path))).toBe("GRIB-MEMBER");
     expect(runner).toHaveBeenCalledTimes(2);
-    expect(runner.mock.calls[1]![1].join(" ")).toContain("ENS=\\+2");
+    expect(runner.mock.calls[1]![1]).toEqual(expect.arrayContaining(["-match_fs", ":ENS=? table4.6=192 pert=2"]));
 
     const second = await filter.filter(sourcePath, "p02");
     expect(second).toMatchObject({ path: first.path, cacheHit: true });
@@ -198,7 +198,7 @@ describe("ICON-D2-EPS native member filtering", () => {
 
   it("rejects incomplete member inventories instead of guessing", () => {
     const inventory = Array.from({ length: 19 }, (_, index) =>
-      `${index + 1}:0:d=2026083100:TMP:850 mb:6 hour fcst:ENS=+${index + 1}`
+      `${index + 1}:0:d=2026083100:TMP:850 mb:6 hour fcst:ENS=? table4.6=192 pert=${index + 1}`
     ).join("\n");
     expect(() => iconD2EpsWgrib2TagForMember(inventory, "p01"))
       .toThrow("exposed 19 distinct forecast-member tags; expected 20");
