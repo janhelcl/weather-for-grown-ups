@@ -726,3 +726,61 @@ describe("HGEFS AI-only diagnostics", () => {
     expect(result.source.allCacheHit).toBe(true);
   });
 });
+
+
+describe("HGEFS area integrity guards", () => {
+  it("fails explicitly when a constituent omits requested rich area statistics", async () => {
+    const aigefsQuery = vi.fn(async () => ({
+      model: "aigefs_0p25",
+      run,
+      validTime,
+      forecastHour: 6,
+      members: [
+        {
+          member: "c00",
+          cacheHit: true,
+          statistics: { definedGridPoints: 10, mean: 10, min: 8, max: 12 },
+        },
+        {
+          member: "p01",
+          cacheHit: true,
+          statistics: { definedGridPoints: 10, mean: 11, min: 9, max: 13 },
+        },
+      ],
+      source: { allCacheHit: true },
+    }));
+
+    const service = new HgefsForecastService({
+      aigefs: { query: aigefsQuery, diagnose: vi.fn() } as any,
+      gefsQuery: { query: vi.fn() },
+      gefsDiagnostics: { diagnose: vi.fn() },
+    });
+    const base = {
+      dataset: "hgefs" as const,
+      geometry: {
+        type: "area" as const,
+        westLongitude: 13.5,
+        eastLongitude: 15,
+        southLatitude: 49.5,
+        northLatitude: 50.5,
+      },
+      time: { at: validTime },
+      selection: { fields: ["temperature_2m"] },
+      forecast: { run },
+      ensemble: {
+        members: ["aigefs:c00", "aigefs:p01"],
+        quantiles: [0.5],
+      },
+    };
+
+    await expect(service.query(queryAtmosphereSchema.parse({
+      ...base,
+      aggregate: { percentiles: [50] },
+    }))).rejects.toThrow("spatial percentile 50");
+
+    await expect(service.query(queryAtmosphereSchema.parse({
+      ...base,
+      aggregate: { includeExtremaLocations: true },
+    }))).rejects.toThrow("HGEFS extrema for aigefs:c00");
+  });
+});
