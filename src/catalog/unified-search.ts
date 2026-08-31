@@ -444,6 +444,7 @@ function preferredRepresentative(entries: CatalogEntry[]): CatalogEntry {
     ?? entries.find((entry) => entry.dataset === "aigefs")
     ?? entries.find((entry) => entry.dataset === "gefs")
     ?? entries.find((entry) => entry.dataset === "ifs")
+    ?? entries.find((entry) => entry.dataset === "aifs")
     ?? entries.find((entry) => entry.dataset === "ifs-ens")
     ?? entries[0]!;
 }
@@ -465,6 +466,8 @@ function supportSemantics(
         : "member-first ensemble forecast distribution";
     case "ifs":
       return "deterministic ECMWF IFS 0.25° operational forecast";
+    case "aifs":
+      return "ECMWF AIFS Single 0.25° deterministic AI forecast; four daily cycles with native 6-hour output through 360 hours";
     case "ifs-ens":
       return "ECMWF IFS ENS 0.25° distribution across 50 perturbed members; deterministic IFS is the post-50r1 unperturbed control";
     case "gfs-analysis":
