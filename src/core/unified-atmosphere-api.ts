@@ -16,3 +16,8 @@ export {
   type UnifiedForecastVerificationServiceOptions,
   type UnifiedRunComparisonServiceOptions,
 } from "./unified-specialized-api.js";
+
+export {
+  AtmosphericOutOfDomainError,
+  assertAtmosphericGeometryWithinDomain,
+} from "./atmospheric-domain.js";
