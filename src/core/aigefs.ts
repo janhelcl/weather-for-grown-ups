@@ -39,6 +39,9 @@ import {
 
 const MODEL = "aigefs_0p25" as const;
 const DEFAULT_QUANTILES = [0.1, 0.5, 0.9] as const;
+const DEFAULT_MAX_MEMBER_SAMPLES = 5_000;
+const DEFAULT_AREA_MAX_GRID_POINTS = 50_000;
+const DEFAULT_AREA_MAX_MEMBER_GRID_POINTS = 250_000;
 
 type MemberService = Pick<AigfsForecastService, "query" | "diagnose">;
 
@@ -184,15 +187,20 @@ function enforceQueryMemberLimits(
   memberCount: number,
 ): void {
   if (request.geometry.type === "area") {
-    const maxMemberGridPoints = request.limits?.maxMemberGridPoints;
-    if (maxMemberGridPoints === undefined) return;
     const longitudePoints =
       Math.ceil((request.geometry.eastLongitude - request.geometry.westLongitude) / 0.25) + 2;
     const latitudePoints =
       Math.ceil((request.geometry.northLatitude - request.geometry.southLatitude) / 0.25) + 2;
-    const memberGridPoints = Math.max(0, longitudePoints)
-      * Math.max(0, latitudePoints)
-      * memberCount;
+    const gridPoints = Math.max(0, longitudePoints) * Math.max(0, latitudePoints);
+    const maxGridPoints = request.limits?.maxGridPoints ?? DEFAULT_AREA_MAX_GRID_POINTS;
+    if (gridPoints > maxGridPoints) {
+      throw new Error(
+        `Requested AIGEFS bbox is approximately ${gridPoints} grid points per member, exceeding maxGridPoints=${maxGridPoints}`,
+      );
+    }
+    const memberGridPoints = gridPoints * memberCount;
+    const maxMemberGridPoints =
+      request.limits?.maxMemberGridPoints ?? DEFAULT_AREA_MAX_MEMBER_GRID_POINTS;
     if (memberGridPoints > maxMemberGridPoints) {
       throw new Error(
         `Requested AIGEFS bbox × member selection is approximately ${memberGridPoints} member-grid points, exceeding maxMemberGridPoints=${maxMemberGridPoints}`,
@@ -201,8 +209,8 @@ function enforceQueryMemberLimits(
     return;
   }
 
-  const maxMemberSamples = request.ensemble?.maxMemberSamples;
-  if (maxMemberSamples === undefined) return;
+  const maxMemberSamples =
+    request.ensemble?.maxMemberSamples ?? DEFAULT_MAX_MEMBER_SAMPLES;
   const spatialSamples = request.geometry.type === "point"
     ? 1
     : request.geometry.type === "points"
@@ -228,8 +236,8 @@ function enforceDiagnosticMemberLimit(
   run: Date,
   memberCount: number,
 ): void {
-  const maxMemberSamples = request.ensemble?.maxMemberSamples;
-  if (maxMemberSamples === undefined) return;
+  const maxMemberSamples =
+    request.ensemble?.maxMemberSamples ?? DEFAULT_MAX_MEMBER_SAMPLES;
   const timeSteps = "at" in request.time
     ? 1
     : aigfsNativeForecastHoursInRange(
@@ -248,7 +256,8 @@ function enforceDiagnosticMemberLimit(
 function selectedMembers(
   request: QueryAtmosphereRequest | DiagnoseAtmosphereRequest,
 ): AigefsMember[] {
-  return (request.ensemble?.members ?? AIGEFS_MEMBERS) as AigefsMember[];
+  return [...(request.ensemble?.members ?? AIGEFS_MEMBERS)]
+    .sort((left, right) => Number(left) - Number(right)) as AigefsMember[];
 }
 
 function selectedQuantiles(
