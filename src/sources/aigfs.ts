@@ -59,7 +59,7 @@ export function buildAigefsNomadsUrl(
   product: AigfsProduct,
 ): string {
   assertAigfsForecastHour(forecastHour);
-  if (!/^\\d{3}$/.test(member) || Number(member) < 0 || Number(member) > 30) {
+  if (!/^\d{3}$/.test(member) || Number(member) < 0 || Number(member) > 30) {
     throw new Error(`Invalid AIGEFS member ${member}; expected 000 through 030`);
   }
   const date = [
