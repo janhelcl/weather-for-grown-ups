@@ -2,7 +2,7 @@
 
 **Weather is the hello-world of agent tools. This is the version for when “temperature tomorrow” stops being enough.**
 
-Weather for Grown Ups (WFG) gives agents direct, structured access to numerical weather prediction: NOAA **GFS**, **AIGFS**, **GEFS** and historical GFS data, plus ECMWF **IFS** and **IFS ENS**.
+Weather for Grown Ups (WFG) gives agents direct, structured access to numerical weather prediction: NOAA **GFS**, **AIGFS**, **AIGEFS**, **GEFS** and historical GFS data, plus ECMWF **IFS** and **IFS ENS**.
 
 The central idea is deliberately simple:
 
@@ -103,6 +103,7 @@ Old GFS initializations stay `dataset: "gfs"` and route to the matching archive.
 | --- | --- | --- |
 | `gfs` | NOAA deterministic GFS | 0.25° default / 0.5° optional; operational data and archived forecasts share one public identity |
 | `aigfs` | NOAA deterministic AIGFS | AI model; 0.25°; native 6-hour output through f384; deliberately narrower field inventory than GFS |
+| `aigefs` | NOAA AIGEFS | 31-member AI ensemble; 0.25°; native 6-hour output through f384; member-first aggregation |
 | `gefs` | NOAA GEFS | member-first operational ensemble; explicit `forecast.kind: "reforecast"` selects the GEFSv12 retrospective population |
 | `ifs` | ECMWF deterministic IFS | 0.25° Open Data forecast with native ECMWF run/cadence semantics |
 | `ifs-ens` | ECMWF IFS ENS | 50 perturbations `p01`–`p50`; deterministic IFS is the Cycle-50r1 unperturbed control |
@@ -150,7 +151,7 @@ Not every dataset implements every line. `catalog` / `search_catalog` is the sou
 
 WFG is opinionated about a few things that are easy to get subtly wrong:
 
-- **Ensemble physics is member-first.** Nonlinear diagnostics are computed inside each GEFS/IFS ENS member before aggregation.
+- **Ensemble physics is member-first.** Nonlinear diagnostics are computed inside each AIGEFS/GEFS/IFS ENS member before aggregation.
 - **Spread is not calibrated uncertainty.** Member fractions and ensemble spread are reported as raw model evidence unless a dedicated calibrated layer says otherwise.
 - **History is not relabeled as “current”.** Archived GFS forecasts retain their old initialization and lead; GFS analysis retains analysis-time semantics; GEFSv12 reforecasts are explicitly retrospective forecasts, not archived operational GEFS.
 - **Provenance stays visible.** Results keep run, valid time, sampled grid, source product and archive/backend information.
@@ -162,7 +163,7 @@ The deeper reasoning is documented in [Architecture](docs/ARCHITECTURE.md).
 
 WFG selects only the upstream messages needed for a request, caches immutable slices and decodes locally.
 
-Operational GFS point/profile access favors indexed byte-range reads from NOAA AWS Open Data; ECMWF sources use Open Data access. AIGFS uses NOMADS raw products with cached `.idx` inventories and partial HTTP byte ranges. Bounded GFS areas use NOMADS geographic subsetting where that is materially better. Historical products route to NCEI or NCAR/GDEX as appropriate.
+Operational GFS point/profile access favors indexed byte-range reads from NOAA AWS Open Data; ECMWF sources use Open Data access. AIGFS uses NOMADS raw products with cached `.idx` inventories and partial HTTP byte ranges. AIGEFS reads member-specific indexed GRIB2 slices from NOAA EAGLE on AWS Open Data. Bounded GFS areas use NOMADS geographic subsetting where that is materially better. Historical products route to NCEI or NCAR/GDEX as appropriate.
 
 Provider etiquette is also source-specific: NOMADS retains its courtesy pacing, while AWS, ECMWF, NCEI, GDEX and IGRA use independent bounded-concurrency policies with transient retry/backoff. A slow provider does not impose its policy on unrelated sources.
 
@@ -178,11 +179,13 @@ Start here:
 - [Unified atmospheric API](docs/UNIFIED_API.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [NOAA AIGFS semantics](docs/AIGFS.md)
+- [NOAA AIGEFS semantics](docs/AIGEFS.md)
 - [GEFS and GEFSv12 reforecast semantics](docs/GEFS_ENSEMBLE.md)
 - [ECMWF IFS / IFS ENS semantics](docs/IFS.md)
 - [Historical GFS, archives and verification](docs/HISTORY.md)
 - [Testing](docs/TESTING.md) and [meteorology validation](docs/METEOROLOGY_VALIDATION.md)
-- [Release notes](docs/RELEASES.md)\n- [Roadmap](docs/ROADMAP.md)
+- [Release notes](docs/RELEASES.md)
+- [Roadmap](docs/ROADMAP.md)
 
 ## Scope
 

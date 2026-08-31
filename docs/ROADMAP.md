@@ -12,7 +12,7 @@ The next development line extends WFG across a new model-class axis: physics-bas
 
 WFG already exposes:
 
-- NOAA GFS and GEFS;
+- NOAA GFS, AIGFS, AIGEFS and GEFS;
 - ECMWF IFS and IFS ENS;
 - archived GFS forecasts, historical GFS analysis and GEFSv12 reforecasts;
 - deterministic and member-first ensemble semantics;
@@ -24,9 +24,9 @@ The roadmap below should preserve those boundaries rather than creating model-sp
 
 ## Next major capability line
 
-### 1. AIGFS
+### 1. AIGFS — implemented
 
-Add NOAA AIGFS as the first AI forecast dataset.
+NOAA AIGFS is now the first AI forecast dataset.
 
 Goals:
 
@@ -54,9 +54,9 @@ Together, AIGFS and AIFS establish a clean provider-independent AI forecast axis
 
 Add the corresponding ensemble/hybrid products:
 
-- NOAA AIGEFS;
-- ECMWF AIFS ENS;
-- NOAA HGEFS hybrid ensemble.
+- NOAA AIGEFS — **implemented**;
+- ECMWF AIFS ENS — planned;
+- NOAA HGEFS hybrid ensemble — planned.
 
 Ensemble meteorology remains **member first**. Nonlinear diagnostics are evaluated within each member before aggregation.
 
