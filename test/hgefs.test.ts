@@ -49,6 +49,49 @@ describe("HGEFS hybrid catalog and validation", () => {
     });
   });
 
+  it("enforces HGEFS geometry guardrails at the public schema boundary", () => {
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: {
+        type: "points",
+        points: Array.from({ length: 21 }, (_, index) => ({
+          latitude: 49 + index * 0.01,
+          longitude: 14,
+        })),
+      },
+      time: { at: validTime },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble: { members: ["gefs:c00", "aigefs:c00"] },
+    })).toThrow("at most 20 points");
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: {
+        type: "transect",
+        start: { latitude: 50, longitude: 14 },
+        end: { latitude: 49, longitude: 15 },
+        samples: 21,
+      },
+      time: { at: validTime },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble: { members: ["gefs:c00", "aigefs:c00"] },
+    })).toThrow("at most 20 samples");
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: {
+        type: "area",
+        westLongitude: 13,
+        eastLongitude: 15,
+        southLatitude: 49,
+        northLatitude: 51,
+      },
+      time: { at: validTime },
+      selection: { variables: ["wind"], pressureLevelsHpa: [850] },
+      ensemble: { members: ["gefs:c00", "aigefs:c00"] },
+    })).toThrow("HGEFS area pressure summaries require variables available as native scalar fields");
+  });
+
   it("requires population-qualified members and the real constituent inventory intersection", () => {
     expect(() => queryAtmosphereSchema.parse({
       dataset: "hgefs",
