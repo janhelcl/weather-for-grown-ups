@@ -284,6 +284,95 @@ describe("AIFS unified capability", () => {
     expect(fetchSelection).toHaveBeenCalledTimes(5);
   });
 
+  it("enforces AIFS service capability and request-size boundaries before data access", async () => {
+    const fetchSelection = vi.fn(async () => {
+      throw new Error("network should not be reached");
+    });
+    const service = new AifsForecastService({
+      source: { fetchSelection },
+      decoder: {
+        engine: "gribberish",
+        extractPoint: vi.fn(async () => []),
+      },
+    });
+
+    await expect(service.query({
+      dataset: "gfs",
+    } as any)).rejects.toThrow("only accepts dataset=aifs");
+
+    await expect(service.diagnose({
+      dataset: "gfs",
+    } as any)).rejects.toThrow("only accepts dataset=aifs");
+
+    await expect(service.diagnose({
+      dataset: "aifs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      forecast: { run: "2026-08-31T00:00:00Z" },
+      diagnostic: {
+        kind: "parcel",
+        parcel: "surface",
+      },
+    } as any)).rejects.toThrow("parcel diagnostics are not exposed");
+
+    await expect(service.query({
+      dataset: "aifs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      forecast: { run: "latest_complete" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    } as any)).rejects.toThrow("does not expose latest_complete");
+
+    await expect(service.query({
+      dataset: "aifs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: {
+        from: "2026-08-31T00:00:00Z",
+        to: "2026-08-31T18:00:00Z",
+        maxSteps: 2,
+      },
+      forecast: { run: "2026-08-31T00:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    } as any)).rejects.toThrow("exceeding maxSteps=2");
+
+    await expect(service.query({
+      dataset: "aifs",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50, longitude: 14 },
+          { latitude: 49, longitude: 15 },
+        ],
+      },
+      time: {
+        from: "2026-08-31T00:00:00Z",
+        to: "2026-08-31T12:00:00Z",
+      },
+      limits: { maxPointSteps: 5 },
+      forecast: { run: "2026-08-31T00:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    } as any)).rejects.toThrow("exceeding maxPointSteps=5");
+
+    await expect(service.query({
+      dataset: "aifs",
+      geometry: {
+        type: "area",
+        westLongitude: 13,
+        eastLongitude: 15,
+        southLatitude: 49,
+        northLatitude: 51,
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+      forecast: { run: "2026-08-31T00:00:00Z" },
+      selection: {
+        variables: ["wind"],
+        pressureLevelsHpa: [850],
+      },
+    } as any)).rejects.toThrow("one raw pressure variable");
+
+    expect(fetchSelection).not.toHaveBeenCalled();
+  });
+
   it("normalizes AIFS pressure and surface state while preserving provenance", async () => {
     const fetchSelection = vi.fn(async () => ({ path: "aifs-fixture", cacheHit: false }));
     const values: DecodedValue[] = [
