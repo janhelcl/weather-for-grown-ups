@@ -127,6 +127,7 @@ describe("atmospheric dataset capability catalog", () => {
     expect(datasetSupportsOperation("aifs_ens_0p25", "profile")).toBe(true);
     expect(datasetSupportsOperation("aifs_ens_0p25", "ensemble_distribution")).toBe(true);
     expect(datasetSupportsOperation("aifs_ens_0p25", "parcel_diagnostics")).toBe(false);
+    expect(datasetSupportsOperation("aifs_ens_0p25", "aligned_model_comparison")).toBe(true);
     expect(datasetSupportsOperation("gefs_0p50", "profile")).toBe(true);
     expect(datasetSupportsOperation("ifs_0p25", "profile")).toBe(true);
     expect(datasetSupportsOperation("ifs_0p25", "timeseries")).toBe(true);
@@ -183,7 +184,6 @@ describe("atmospheric dataset capability catalog", () => {
     expect(modelSupportsOperation("aifs_0p25", "aligned_model_comparison")).toBe(true);
     expect(modelSupportsOperation("aifs_0p25", "parcel_diagnostics")).toBe(false);
     expect(modelSupportsOperation("aifs_ens_0p25", "ensemble_distribution")).toBe(true);
-    expect(modelSupportsOperation("aifs_ens_0p25", "aligned_model_comparison")).toBe(true);
     expect(modelSupportsOperation("aifs_ens_0p25", "aligned_model_comparison")).toBe(true);
     expect(modelSupportsOperation("aifs_ens_0p25", "parcel_diagnostics")).toBe(false);
     expect(modelSupportsOperation("gefs_0p50", "ensemble_distribution")).toBe(true);
