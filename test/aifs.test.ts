@@ -423,11 +423,11 @@ describe("AIFS unified capability", () => {
     expect(point.fields.find((field: any) => field.id === "specific_humidity_2m")
       .values.specificHumidityKgKg).toBeGreaterThan(0);
     expect(point.fields.find((field: any) => field.id === "surface_geopotential_height")
-      .values.surfaceGeopotentialHeightGpm).toBeCloseTo(100);
+      .values.geopotentialHeightGpm).toBeCloseTo(100);
     expect(point.fields.find((field: any) => field.id === "wind_100m")
       .values.windSpeedMs).toBe(10);
     expect(point.fields.find((field: any) => field.id === "low_cloud_cover")
-      .values.lowCloudCoverPct).toBeCloseTo(20);
+      .values.cloudCoverPct).toBeCloseTo(20);
 
     const matrix: any = await service.query({
       dataset: "aifs",
@@ -494,9 +494,10 @@ describe("AIFS unified capability", () => {
         ],
       },
     } as any);
-    expect(layer.diagnostics.temperature_lapse_rate.temperatureLapseRateCPerKm)
-      .toBeGreaterThan(0);
-    expect(layer.diagnostics.wind_shear.windShearMagnitudeMs).toBeGreaterThan(0);
+    expect(layer.diagnostics.find((item: any) => item.id === "temperature_lapse_rate")
+      .values.temperatureLapseRateCPerKm).toBeGreaterThan(0);
+    expect(layer.diagnostics.find((item: any) => item.id === "wind_shear")
+      .values.windShearMagnitudeMs).toBeGreaterThan(0);
 
     const profile: any = await service.diagnose({
       dataset: "aifs",
@@ -512,8 +513,10 @@ describe("AIFS unified capability", () => {
         ],
       },
     } as any);
-    expect(profile.diagnostics.freezing_level_crossings.crossings.length).toBeGreaterThan(0);
-    expect(profile.diagnostics.temperature_inversion_layers.layers.length).toBeGreaterThan(0);
+    expect(profile.diagnostics.find((item: any) => item.id === "freezing_level_crossings")
+      .crossings.length).toBeGreaterThan(0);
+    expect(profile.diagnostics.find((item: any) => item.id === "temperature_inversion_layers")
+      .layers.length).toBeGreaterThan(0);
 
     const series: any = await service.diagnose({
       dataset: "aifs",
