@@ -180,11 +180,18 @@ describe("comparison strategy registry", () => {
   it("declares restrictive scientific semantics from dataset metadata", () => {
     const registry = createAtmosphericDatasetComparisonStrategyRegistry();
     expect(Object.keys(registry).sort()).toEqual([
+      "aigfs:aifs",
+      "gefs:aigefs",
       "gefs:ifs-ens",
+      "gfs:aigfs",
       "gfs:gefs",
       "gfs:ifs",
+      "hgefs:aigefs",
+      "hgefs:gefs",
+      "ifs:aifs",
       "ifs:ifs-ens",
-    ]);
+      "ifs-ens:aifs-ens",
+    ].sort());
 
     expect(registry["gfs:gefs"].metadata).toMatchObject({
       datasets: ["gfs", "gefs"],
