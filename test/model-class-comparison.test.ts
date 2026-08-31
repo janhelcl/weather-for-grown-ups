@@ -574,6 +574,53 @@ describe("model-class comparison mechanics", () => {
     })).rejects.toThrow("missing numeric comparison forecastHour");
   });
 
+
+  it("guards required string and profile-array comparison metadata", async () => {
+    const missingRun = new ModelClassComparisonService({
+      query: vi.fn(async (input: QueryAtmosphereInput) => {
+        const result: any = deterministicResult(
+          input.dataset === "gfs" ? "gfs_0p25" : "aigfs_0p25",
+          run,
+          10,
+          "NOAA",
+        );
+        delete result.run;
+        return wrapped(input.dataset, result);
+      }),
+    });
+    await expect(missingRun.compareDeterministic({
+      datasets: ["gfs", "aigfs"],
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    })).rejects.toThrow("missing comparison run");
+
+    const missingLevels = new ModelClassComparisonService({
+      query: vi.fn(async (input: QueryAtmosphereInput) => {
+        const result: any = deterministicResult(
+          input.dataset === "gfs" ? "gfs_0p25" : "aigfs_0p25",
+          run,
+          10,
+          "NOAA",
+        );
+        delete result.levels;
+        return wrapped(input.dataset, result);
+      }),
+    });
+    await expect(missingLevels.compareDeterministic({
+      datasets: ["gfs", "aigfs"],
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    })).rejects.toThrow("profile levels");
+  });
+
   it("handles zero-spread reference ensembles and rejects non-scalar ensemble variables", async () => {
     const service = new ModelClassComparisonService({
       query: vi.fn(async (input: QueryAtmosphereInput) => {
