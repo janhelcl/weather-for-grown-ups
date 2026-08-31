@@ -114,15 +114,12 @@ export function gefsVariablesForHgefs(
 ): GefsProfileVariableId[] {
   const ids = new Set<GefsProfileVariableId>();
   for (const dependency of expandAigfsRequestedVariables(requested)) {
-    if (GEFS_PROFILE_VARIABLE_SET.has(dependency.id)) {
-      ids.add(dependency.id as GefsProfileVariableId);
+    if (!GEFS_PROFILE_VARIABLE_SET.has(dependency.id)) {
+      throw new Error(
+        `HGEFS GEFS constituent cannot provide raw dependency ${dependency.id}`,
+      );
     }
-  }
-  for (const variable of requested) {
-    if (variable === "wind") continue;
-    if (GEFS_PROFILE_VARIABLE_SET.has(variable)) {
-      ids.add(variable as GefsProfileVariableId);
-    }
+    ids.add(dependency.id as GefsProfileVariableId);
   }
   return [...ids];
 }
