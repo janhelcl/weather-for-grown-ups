@@ -15,7 +15,6 @@ import {
 } from "./aigefs.js";
 import {
   GEFS_MEMBERS,
-  GEFS_PROFILE_VARIABLES,
   isSupportedGefsProfileSelection,
   type GefsMember,
   type GefsProfileVariableId,
@@ -45,7 +44,6 @@ export const HGEFS_FIELD_IDS = AIGFS_FIELD_IDS;
 export const HGEFS_AREA_FIELD_IDS = AIGFS_AREA_FIELD_IDS;
 
 const HGEFS_MEMBER_SET = new Set<string>(HGEFS_MEMBERS);
-const GEFS_PROFILE_VARIABLE_SET = new Set<string>(GEFS_PROFILE_VARIABLES);
 
 export function isHgefsMember(value: string): value is HgefsMember {
   return HGEFS_MEMBER_SET.has(value);
