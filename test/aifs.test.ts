@@ -171,6 +171,37 @@ describe("AIFS availability and latest-run resolution", () => {
     );
   });
 
+  it("skips candidate runs when the requested valid time is off native cadence", async () => {
+    const isForecastAvailable = vi.fn(async () => true);
+    const resolver = new AifsLatestRunResolver({
+      probe: { isForecastAvailable },
+      now: () => new Date("2026-08-31T19:00:00Z"),
+      maxCandidates: 2,
+    });
+
+    await expect(resolver.resolveLatestRun(
+      new Date("2026-08-31T19:00:00Z"),
+      selectors,
+    )).rejects.toThrow("No published ECMWF AIFS cycle");
+    expect(isForecastAvailable).not.toHaveBeenCalled();
+  });
+
+  it("skips range candidates containing no native AIFS output", async () => {
+    const isForecastAvailable = vi.fn(async () => true);
+    const resolver = new AifsLatestRunResolver({
+      probe: { isForecastAvailable },
+      now: () => new Date("2026-08-31T01:00:00Z"),
+      maxCandidates: 1,
+    });
+
+    await expect(resolver.resolveLatestRunForRange(
+      new Date("2026-08-31T01:00:00Z"),
+      new Date("2026-08-31T01:00:00Z"),
+      selectors,
+    )).rejects.toThrow("No published ECMWF AIFS cycle");
+    expect(isForecastAvailable).not.toHaveBeenCalled();
+  });
+
   it("rejects an inverted latest-run range before probing upstream", async () => {
     const isForecastAvailable = vi.fn(async () => true);
     const resolver = new AifsLatestRunResolver({
