@@ -786,3 +786,66 @@ describe("HGEFS field and invariant coverage", () => {
     } as any)).rejects.toThrow("parcel diagnostics");
   });
 });
+
+
+describe("HGEFS malformed constituent invariants", () => {
+  it("rejects a constituent result without a resolved run", async () => {
+    const service = new HgefsForecastService({
+      aigefs: {
+        query: vi.fn(async () => ({
+          validTime,
+          forecastHour: 6,
+        })),
+        diagnose: vi.fn(),
+      } as any,
+    });
+
+    await expect(service.query(queryAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: { type: "point", ...requestedPoint },
+      time: { at: validTime },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble: { members: selectedMembers },
+    }))).rejects.toThrow("did not return a resolved run");
+  });
+
+  it("rejects a constituent that omits the raw member payload required for exact hybrid aggregation", async () => {
+    const aigefs = {
+      query: vi.fn(async () => ({
+        run,
+        validTime,
+        forecastHour: 6,
+        requestedPoint,
+        gridPoint: aiGridPoint,
+        source: { allCacheHit: true },
+      })),
+      diagnose: vi.fn(),
+    };
+    const gefsBundle = {
+      getBundle: vi.fn(async () => ({
+        run,
+        validTime,
+        forecastHour: 6,
+        requestedPoint,
+        gridPoint: physicsGridPoint,
+        members: [
+          { member: "c00", pressureValues: [], fields: [] },
+          { member: "p01", pressureValues: [], fields: [] },
+        ],
+        source: { allCacheHit: true },
+      })),
+    };
+    const service = new HgefsForecastService({
+      aigefs: aigefs as any,
+      gefsBundle: gefsBundle as any,
+    });
+
+    await expect(service.query(queryAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: { type: "point", ...requestedPoint },
+      time: { at: validTime },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble: { members: selectedMembers },
+    }))).rejects.toThrow("HGEFS AIGEFS raw members is missing an expected member array");
+  });
+});
