@@ -110,6 +110,12 @@ const compareGfsGefsDatasetsSchema = z.object({
   gfsGrid: gfsGridSchema.optional(),
   members: z.array(z.string().min(1)).min(2).max(31).optional(),
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
+  gefsMembers: z.never().optional(),
+  aigefsMembers: z.never().optional(),
+  ifsEnsMembers: z.never().optional(),
+  aifsEnsMembers: z.never().optional(),
+  hgefsMembers: z.never().optional(),
+  thresholdGte: z.never().optional(),
 }).superRefine((request, context) => {
   validateRunSelectorForDatasets(request.run, request.datasets, ["run"], context);
 });
@@ -123,7 +129,13 @@ const compareGfsIfsDatasetsSchema = z.object({
   run: atmosphericRunSelectorSchema,
   gfsGrid: gfsGridSchema.optional(),
   members: z.never().optional(),
+  gefsMembers: z.never().optional(),
+  aigefsMembers: z.never().optional(),
+  ifsEnsMembers: z.never().optional(),
+  aifsEnsMembers: z.never().optional(),
+  hgefsMembers: z.never().optional(),
   quantiles: z.never().optional(),
+  thresholdGte: z.never().optional(),
 }).superRefine((request, context) => {
   validateRunSelectorForDatasets(request.run, request.datasets, ["run"], context);
 });
@@ -141,6 +153,9 @@ export const compareGefsIfsEnsDatasetsSchema = z.object({
   thresholdGte: z.number().optional(),
   gfsGrid: z.never().optional(),
   members: z.never().optional(),
+  aigefsMembers: z.never().optional(),
+  aifsEnsMembers: z.never().optional(),
+  hgefsMembers: z.never().optional(),
 }).superRefine((request, context) => {
   validateRunSelectorForDatasets(request.run, request.datasets, ["run"], context);
   if (!isSupportedGefsProfileSelection(request.variable, request.pressureLevelHpa)) {
@@ -173,6 +188,9 @@ export const compareIfsIfsEnsDatasetsSchema = z.object({
   gfsGrid: z.never().optional(),
   members: z.never().optional(),
   gefsMembers: z.never().optional(),
+  aigefsMembers: z.never().optional(),
+  aifsEnsMembers: z.never().optional(),
+  hgefsMembers: z.never().optional(),
   thresholdGte: z.never().optional(),
 }).superRefine((request, context) => {
   validateRunSelectorForDatasets(request.run, request.datasets, ["run"], context);
