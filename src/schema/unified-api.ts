@@ -8,6 +8,14 @@ import {
 import { AIGEFS_MEMBERS } from "../catalog/aigefs.js";
 import { AIFS_ENS_MEMBERS } from "../catalog/aifs-ens.js";
 import {
+  HGEFS_FIELD_IDS,
+  HGEFS_MEMBERS,
+  HGEFS_PRESSURE_VARIABLE_IDS,
+  isHgefsMember,
+  isSupportedHgefsPressureSelection,
+  splitHgefsMembers,
+} from "../catalog/hgefs.js";
+import {
   AIFS_AREA_FIELD_IDS,
   AIFS_FIELD_IDS,
   AIFS_PRESSURE_LEVELS_HPA,
@@ -41,7 +49,7 @@ import { areaThresholdSchema } from "./area-summary.js";
 import { gfsGridSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 
-export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "aigfs", "aigefs", "gefs", "ifs", "aifs", "aifs-ens", "ifs-ens", "gfs-analysis"] as const;
+export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "aigfs", "aigefs", "hgefs", "gefs", "ifs", "aifs", "aifs-ens", "ifs-ens", "gfs-analysis"] as const;
 export const publicAtmosphericDatasetSchema = z.enum(PUBLIC_ATMOSPHERIC_DATASET_IDS);
 export type PublicAtmosphericDataset = z.infer<typeof publicAtmosphericDatasetSchema>;
 
@@ -66,6 +74,7 @@ export const PUBLIC_DATASET_METADATA = {
   gfs: datasetMetadata("gfs_0p25"),
   aigfs: datasetMetadata("aigfs_0p25"),
   aigefs: datasetMetadata("aigefs_0p25"),
+  hgefs: datasetMetadata("hgefs_0p25"),
   gefs: datasetMetadata("gefs_0p50"),
   ifs: datasetMetadata("ifs_0p25"),
   aifs: datasetMetadata("aifs_0p25"),
@@ -223,7 +232,7 @@ export const atmosphericForecastOptionsSchema = z.object({
 });
 
 export const atmosphericEnsembleOptionsSchema = z.object({
-  members: z.array(z.string().min(1)).min(2).max(51).optional(),
+  members: z.array(z.string().min(1)).min(2).max(62).optional(),
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
   includeMembers: z.boolean().optional(),
   maxMemberSamples: z.number().int().min(1).max(20_000).optional(),
@@ -543,6 +552,10 @@ function validateDatasetModifiers(
     validateAigfsModifiers(request, context);
   }
 
+  if (request.dataset === "hgefs") {
+    validateHgefsModifiers(request, context);
+  }
+
   if (request.dataset === "aifs" || request.dataset === "aifs-ens") {
     validateAifsModifiers(request, context);
   }
@@ -609,7 +622,7 @@ function validateDatasetModifiers(
     context.addIssue({
       code: "custom",
       path: ["ensemble"],
-      message: "ensemble controls are only valid for ensemble datasets: aigefs, gefs, aifs-ens, or ifs-ens",
+      message: "ensemble controls are only valid for ensemble datasets: aigefs, hgefs, gefs, aifs-ens, or ifs-ens",
     });
   }
   if (request.dataset !== "gfs" && request.source !== undefined) {
@@ -617,6 +630,131 @@ function validateDatasetModifiers(
       code: "custom",
       path: ["source"],
       message: "source override is only valid for gfs",
+    });
+  }
+}
+
+
+function validateHgefsModifiers(
+  request: any,
+  context: z.RefinementCtx,
+): void {
+  if (request.geometry?.type !== "point") {
+    context.addIssue({
+      code: "custom",
+      path: ["geometry"],
+      message: "HGEFS currently supports point geometry only; multi-point, transect and area queries remain disabled until constituent-grid alignment is explicit",
+    });
+  }
+
+  if (request.diagnostic !== undefined && "from" in request.time) {
+    context.addIssue({
+      code: "custom",
+      path: ["time"],
+      message: "HGEFS diagnostic time series are not exposed yet; use an instant diagnostic query",
+    });
+  }
+
+  if (request.diagnostic?.kind === "parcel") {
+    context.addIssue({
+      code: "custom",
+      path: ["diagnostic"],
+      message: "HGEFS parcel diagnostics are not exposed because the AIGEFS constituent lacks the required parcel initialization state",
+    });
+  }
+
+  if (request.selection !== undefined) {
+    const supportedVariables = new Set<string>(HGEFS_PRESSURE_VARIABLE_IDS);
+    const unsupportedVariables = (request.selection.variables ?? [])
+      .filter((variable: string) => !supportedVariables.has(variable));
+    if (unsupportedVariables.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "variables"],
+        message: `HGEFS pressure variables must be available with compatible semantics in both GEFS and AIGEFS; unsupported: ${unsupportedVariables.join(", ")}`,
+      });
+    }
+
+    for (const variable of request.selection.variables ?? []) {
+      if (!supportedVariables.has(variable)) continue;
+      for (const pressureLevelHpa of request.selection.pressureLevelsHpa ?? []) {
+        if (!isSupportedHgefsPressureSelection(variable, pressureLevelHpa)) {
+          context.addIssue({
+            code: "custom",
+            path: ["selection", "pressureLevelsHpa"],
+            message: `HGEFS cannot satisfy ${variable} at ${pressureLevelHpa} hPa in both constituent populations`,
+          });
+        }
+      }
+    }
+
+    const supportedFields = new Set<string>(HGEFS_FIELD_IDS);
+    const unsupportedFields = (request.selection.fields ?? [])
+      .filter((field: string) => !supportedFields.has(field));
+    if (unsupportedFields.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "fields"],
+        message: `HGEFS fields must be available with compatible semantics in both GEFS and AIGEFS; unsupported: ${unsupportedFields.join(", ")}`,
+      });
+    }
+  }
+
+  if (request.ensemble?.members !== undefined) {
+    const unsupported = request.ensemble.members.filter(
+      (member: string) => !isHgefsMember(member),
+    );
+    if (unsupported.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["ensemble", "members"],
+        message: `HGEFS members are namespaced as gefs:c00,p01..p30 and aigefs:c00,p01..p30; unsupported: ${unsupported.join(", ")}`,
+      });
+    } else {
+      try {
+        splitHgefsMembers(request.ensemble.members);
+      } catch (error) {
+        context.addIssue({
+          code: "custom",
+          path: ["ensemble", "members"],
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  if (
+    request.forecast?.run !== undefined
+    && request.forecast.run !== "latest"
+    && request.forecast.run !== "latest_complete"
+  ) {
+    const run = new Date(request.forecast.run);
+    const validTimes = "at" in request.time
+      ? [new Date(request.time.at)]
+      : [new Date(request.time.from), new Date(request.time.to)];
+    for (const validTime of validTimes) {
+      const forecastHour = (validTime.getTime() - run.getTime()) / 3_600_000;
+      if (
+        !Number.isInteger(forecastHour)
+        || forecastHour < 0
+        || forecastHour > 240
+        || forecastHour % 6 !== 0
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["time"],
+          message: "HGEFS supports native 6-hour valid times from f000 through f240 relative to the selected run",
+        });
+        break;
+      }
+    }
+  }
+
+  if (request.ensemble?.members === undefined && HGEFS_MEMBERS.length !== 62) {
+    context.addIssue({
+      code: "custom",
+      path: ["ensemble"],
+      message: "Internal HGEFS member catalog is incomplete",
     });
   }
 }
