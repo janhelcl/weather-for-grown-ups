@@ -26,6 +26,15 @@ export function assertAtmosphericGeometryWithinDomain(
   geometry: AtmosphericCoverageGeometry,
 ): void {
   const domain = ATMOSPHERIC_DATASET_CATALOG[internalDatasetId].spatialDomain;
+  assertGeometryWithinSpatialDomain(dataset, internalDatasetId, domain, geometry);
+}
+
+export function assertGeometryWithinSpatialDomain(
+  dataset: string,
+  internalDatasetId: AtmosphericDatasetId,
+  domain: AtmosphericSpatialDomain,
+  geometry: AtmosphericCoverageGeometry,
+): void {
   if (spatialDomainCoversGeometry(domain, geometry)) return;
   throw new AtmosphericOutOfDomainError(dataset, internalDatasetId, domain, geometry);
 }
