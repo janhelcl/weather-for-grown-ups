@@ -57,6 +57,28 @@ describe("AROME 0.01 Open Data naming and cadence", () => {
     expect(floorToAromeCycle(new Date("2026-08-31T20:59:59Z")).toISOString())
       .toBe("2026-08-31T18:00:00.000Z");
   });
+
+  it("rejects malformed runs, fractional/negative leads, and empty native ranges", () => {
+    expect(() => parseAromeRun("not-a-date")).toThrow("Invalid AROME run");
+    expect(() => aromeForecastHour(
+      run,
+      new Date("2026-08-31T12:30:00Z"),
+    )).toThrow("whole forecast hour");
+    expect(() => aromeForecastHour(
+      run,
+      new Date("2026-08-31T11:00:00Z"),
+    )).toThrow("at or after run time");
+    expect(() => aromeNativeForecastHoursInRange(
+      run,
+      new Date("2026-08-31T15:00:00Z"),
+      new Date("2026-08-31T14:00:00Z"),
+    )).toThrow("endTime must be at or after startTime");
+    expect(() => aromeNativeForecastHoursInRange(
+      run,
+      new Date("2026-09-02T16:00:00Z"),
+      new Date("2026-09-02T18:00:00Z"),
+    )).toThrow("No native AROME forecast outputs");
+  });
 });
 
 describe("AROME selected-package cache", () => {
@@ -281,6 +303,13 @@ describe("AROME unified capabilities", () => {
 
     expect(() => queryAtmosphereSchema.parse({
       dataset: "arome",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2026-08-31T18:00:00Z" },
+      selection: { fields: ["mean_sea_level_pressure"] },
+    })).toThrow("AROME 0.01° fields not supported");
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "arome",
       geometry: {
         type: "area",
         westLongitude: 2,
@@ -477,7 +506,45 @@ describe("AROME deterministic field operations", () => {
     expect(decoder.extractPoint).toHaveBeenCalledTimes(3);
   });
 
-  it("enforces the multi-point range work bound", async () => {
+  it("supports bounded multi-point time ranges with one package fetch per lead", async () => {
+    const result = await service().query(queryAtmosphereSchema.parse({
+      dataset: "arome",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 48.86, longitude: 2.35 },
+          { latitude: 50.85, longitude: 4.35 },
+        ],
+      },
+      time: {
+        from: "2026-08-31T18:00:00Z",
+        to: "2026-08-31T19:00:00Z",
+      },
+      selection: { fields: ["temperature_2m"] },
+      limits: { maxPointSteps: 4 },
+      forecast: { run: run.toISOString() },
+    })) as any;
+
+    expect(result.series.map((step: any) => step.forecastHour)).toEqual([6, 7]);
+    expect(result.series.every((step: any) => step.points.length === 2)).toBe(true);
+    expect(cache.fetch).toHaveBeenCalledTimes(2);
+    expect(decoder.extractPoint).toHaveBeenCalledTimes(4);
+  });
+
+  it("enforces native-step and multi-point range work bounds", async () => {
+    await expect(service().query(queryAtmosphereSchema.parse({
+      dataset: "arome",
+      geometry: { type: "point", latitude: 48.86, longitude: 2.35 },
+      time: {
+        from: "2026-08-31T18:00:00Z",
+        to: "2026-08-31T20:00:00Z",
+        maxSteps: 2,
+      },
+      selection: { fields: ["temperature_2m"] },
+      forecast: { run: run.toISOString() },
+    }))).rejects.toThrow("exceeding maxSteps=2");
+
+    await expect(service().query(queryAtmosphereSchema.parse({
     await expect(service().query(queryAtmosphereSchema.parse({
       dataset: "arome",
       geometry: {
@@ -495,6 +562,41 @@ describe("AROME deterministic field operations", () => {
       limits: { maxPointSteps: 5 },
       forecast: { run: run.toISOString() },
     }))).rejects.toThrow("exceeding maxPointSteps=5");
+  });
+
+  it("rejects oversized areas before source access and empty decoder output clearly", async () => {
+    await expect(service().query(queryAtmosphereSchema.parse({
+      dataset: "arome",
+      geometry: {
+        type: "area",
+        westLongitude: 2,
+        eastLongitude: 3,
+        southLatitude: 48,
+        northLatitude: 49,
+      },
+      time: { at: "2026-08-31T18:00:00Z" },
+      selection: { fields: ["temperature_2m"] },
+      limits: { maxGridPoints: 100 },
+      forecast: { run: run.toISOString() },
+    }))).rejects.toThrow("exceeding maxGridPoints=100");
+    expect(cache.fetch).not.toHaveBeenCalled();
+
+    const emptyDecoderService = new AromeForecastService({
+      cache,
+      decoder: {
+        engine: "gribberish",
+        extractPoint: vi.fn(async () => []),
+      },
+      areaDecoder: areaDecoder as any,
+      areaGridDecoder: areaGridDecoder as any,
+    });
+    await expect(emptyDecoderService.query(queryAtmosphereSchema.parse({
+      dataset: "arome",
+      geometry: { type: "point", latitude: 48.86, longitude: 2.35 },
+      time: { at: "2026-08-31T18:00:00Z" },
+      selection: { fields: ["temperature_2m"] },
+      forecast: { run: run.toISOString() },
+    }))).rejects.toThrow("decoder returned no grid point");
   });
 
   it("supports bounded-area scalar summaries and distributions", async () => {
