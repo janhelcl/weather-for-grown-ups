@@ -54,7 +54,7 @@ export function isHgefsMember(value: string): value is HgefsMember {
 export function sortHgefsMembers(members: readonly HgefsMember[]): HgefsMember[] {
   const index = new Map(HGEFS_MEMBERS.map((member, position) => [member, position]));
   return [...members].sort(
-    (left, right) => (index.get(left) ?? 999) - (index.get(right) ?? 999),
+    (left, right) => index.get(left)! - index.get(right)!,
   );
 }
 
@@ -102,7 +102,6 @@ export function isSupportedHgefsPressureSelection(
     return isSupportedGefsProfileSelection("u_wind", pressureLevelHpa)
       && isSupportedGefsProfileSelection("v_wind", pressureLevelHpa);
   }
-  if (!GEFS_PROFILE_VARIABLE_SET.has(variable)) return false;
   return isSupportedGefsProfileSelection(
     variable as GefsProfileVariableId,
     pressureLevelHpa,
