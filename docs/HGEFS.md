@@ -91,8 +91,9 @@ The common non-isobaric field subset currently includes:
 - 2 m temperature;
 - 10 m U and V wind;
 - derived 10 m wind;
-- mean sea-level pressure;
-- total precipitation.
+- mean sea-level pressure.
+
+Accumulated precipitation is intentionally not in the advertised hybrid intersection yet: GEFS and AIGEFS can publish different native accumulation windows at the same 6-hour hybrid valid time, and WFG will not compare or pool unlike intervals.
 
 For exact current support, use:
 
