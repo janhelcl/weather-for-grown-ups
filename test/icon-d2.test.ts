@@ -795,6 +795,12 @@ describe("ICON-D2 guard and inventory branches", () => {
     const run = new Date("2026-08-31T00:00:00Z");
     expect(() => parseIconD2Run("not-a-date")).toThrow("Invalid ICON-D2 run");
     expect(() => parseIconD2Run("2026-08-31T01:00:00Z")).toThrow("3-hourly UTC cycle");
+    expect(() => parseIconD2Run("2026-08-31T00:30:00Z")).toThrow("3-hourly UTC cycle");
+    expect(() => parseIconD2Run("2026-08-31T00:00:01Z")).toThrow("3-hourly UTC cycle");
+    expect(() => iconD2ForecastHour(run, new Date("2026-08-31T00:30:00Z")))
+      .toThrow("whole forecast hour");
+    expect(() => iconD2ForecastHour(run, new Date("2026-08-30T23:00:00Z")))
+      .toThrow("at or after run time");
     expect(() => iconD2ValidTime(run, -1)).toThrow("0 to 48");
     expect(() => iconD2ValidTime(run, 49)).toThrow("0 to 48");
     expect(() => iconD2NativeForecastHoursInRange(
