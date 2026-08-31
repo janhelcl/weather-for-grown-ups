@@ -140,7 +140,7 @@ export class IfsIfsEnsComparisonStrategy implements AtmosphericDatasetComparison
 
 
 abstract class NormalizedModelClassComparisonStrategy {
-  protected constructor(
+  constructor(
     protected readonly service: Pick<
       ModelClassComparisonService,
       "compareDeterministic" | "compareEnsembles" | "compareHybridConstituent"
