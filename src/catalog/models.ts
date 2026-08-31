@@ -16,7 +16,61 @@ export type AtmosphericDatasetId = (typeof ATMOSPHERIC_DATASET_IDS)[number];
 export type AtmosphericDatasetKind = "deterministic" | "ensemble";
 export type AtmosphericDatasetRole = "forecast" | "analysis";
 export type AtmosphericModelClass = "physics" | "ai" | "hybrid";
-export type AtmosphericProvider = "noaa" | "ecmwf";
+export type AtmosphericProvider = "noaa" | "ecmwf" | "dwd" | "meteo_france";
+export type AtmosphericSpatialScope = "global" | "limited_area";
+export type AtmosphericHorizontalGridType =
+  | "regular_latlon"
+  | "rotated_latlon"
+  | "icosahedral"
+  | "lambert_conformal"
+  | "mixed";
+export type AtmosphericResolutionUnit = "degrees" | "km";
+
+export interface AtmosphericBoundingBox {
+  westLongitude: number;
+  eastLongitude: number;
+  southLatitude: number;
+  northLatitude: number;
+}
+
+export type AtmosphericSpatialDomain =
+  | { scope: "global" }
+  | {
+      scope: "limited_area";
+      name: string;
+      bounds: AtmosphericBoundingBox;
+    };
+
+export interface AtmosphericNominalResolution {
+  value: number;
+  unit: AtmosphericResolutionUnit;
+}
+
+export interface AtmosphericNativeGrid {
+  type: AtmosphericHorizontalGridType;
+  nominalResolution?: AtmosphericNominalResolution;
+  components?: readonly {
+    dataset: AtmosphericDatasetId;
+    type: Exclude<AtmosphericHorizontalGridType, "mixed">;
+    nominalResolution: AtmosphericNominalResolution;
+  }[];
+}
+
+export type AtmosphericCoverageGeometry =
+  | { type: "point"; latitude: number; longitude: number }
+  | { type: "points"; points: readonly { latitude: number; longitude: number }[] }
+  | {
+      type: "transect";
+      start: { latitude: number; longitude: number };
+      end: { latitude: number; longitude: number };
+    }
+  | {
+      type: "area";
+      westLongitude: number;
+      eastLongitude: number;
+      southLatitude: number;
+      northLatitude: number;
+    };
 
 export const ATMOSPHERIC_RUN_SELECTOR_IDS = ["latest", "latest_complete", "explicit"] as const;
 export type AtmosphericRunSelectorId = (typeof ATMOSPHERIC_RUN_SELECTOR_IDS)[number];
@@ -46,8 +100,16 @@ export interface AtmosphericDatasetDefinition {
   modelClass: AtmosphericModelClass;
   kind: AtmosphericDatasetKind;
   role: AtmosphericDatasetRole;
-  horizontalGridDegrees: number;
+  /**
+   * Compatibility metadata for regular latitude/longitude products.
+   * Regional datasets are not required to express their native grid in degrees.
+   */
+  horizontalGridDegrees?: number;
+  spatialDomain: AtmosphericSpatialDomain;
+  nativeGrid: AtmosphericNativeGrid;
   maxForecastHour?: number;
+  /** Native output intervals that callers may encounter across the forecast horizon/run classes. */
+  nativeTimeCadenceHours: readonly number[];
   nativeForecastIntervalHours?: number;
   members?: number;
   constituents?: readonly {
@@ -68,7 +130,10 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "deterministic",
     role: "forecast",
     horizontalGridDegrees: 0.25,
+    spatialDomain: { scope: "global" },
+    nativeGrid: { type: "regular_latlon", nominalResolution: { value: 0.25, unit: "degrees" } },
     maxForecastHour: 384,
+    nativeTimeCadenceHours: [1, 3],
     runSelectors: ["latest", "latest_complete", "explicit"],
     operations: [
       "profile",
@@ -93,7 +158,10 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "deterministic",
     role: "forecast",
     horizontalGridDegrees: 0.5,
+    spatialDomain: { scope: "global" },
+    nativeGrid: { type: "regular_latlon", nominalResolution: { value: 0.5, unit: "degrees" } },
     maxForecastHour: 384,
+    nativeTimeCadenceHours: [3],
     runSelectors: ["latest", "latest_complete", "explicit"],
     operations: [
       "profile",
@@ -118,7 +186,10 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "deterministic",
     role: "forecast",
     horizontalGridDegrees: 0.25,
+    spatialDomain: { scope: "global" },
+    nativeGrid: { type: "regular_latlon", nominalResolution: { value: 0.25, unit: "degrees" } },
     maxForecastHour: 384,
+    nativeTimeCadenceHours: [6],
     nativeForecastIntervalHours: 6,
     runSelectors: ["latest", "latest_complete", "explicit"],
     operations: [
@@ -142,7 +213,10 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "ensemble",
     role: "forecast",
     horizontalGridDegrees: 0.25,
+    spatialDomain: { scope: "global" },
+    nativeGrid: { type: "regular_latlon", nominalResolution: { value: 0.25, unit: "degrees" } },
     maxForecastHour: 384,
+    nativeTimeCadenceHours: [6],
     nativeForecastIntervalHours: 6,
     members: 31,
     runSelectors: ["latest", "latest_complete", "explicit"],
@@ -168,7 +242,16 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "ensemble",
     role: "forecast",
     horizontalGridDegrees: 0.25,
+    spatialDomain: { scope: "global" },
+    nativeGrid: {
+      type: "mixed",
+      components: [
+        { dataset: "gefs_0p50", type: "regular_latlon", nominalResolution: { value: 0.5, unit: "degrees" } },
+        { dataset: "aigefs_0p25", type: "regular_latlon", nominalResolution: { value: 0.25, unit: "degrees" } },
+      ],
+    },
     maxForecastHour: 240,
+    nativeTimeCadenceHours: [6],
     nativeForecastIntervalHours: 6,
     members: 62,
     constituents: [
@@ -198,7 +281,10 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "deterministic",
     role: "forecast",
     horizontalGridDegrees: 0.25,
+    spatialDomain: { scope: "global" },
+    nativeGrid: { type: "regular_latlon", nominalResolution: { value: 0.25, unit: "degrees" } },
     maxForecastHour: 360,
+    nativeTimeCadenceHours: [6],
     nativeForecastIntervalHours: 6,
     runSelectors: ["latest", "explicit"],
     operations: [
@@ -222,7 +308,10 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "ensemble",
     role: "forecast",
     horizontalGridDegrees: 0.25,
+    spatialDomain: { scope: "global" },
+    nativeGrid: { type: "regular_latlon", nominalResolution: { value: 0.25, unit: "degrees" } },
     maxForecastHour: 360,
+    nativeTimeCadenceHours: [6],
     nativeForecastIntervalHours: 6,
     members: 51,
     runSelectors: ["latest", "explicit"],
@@ -248,7 +337,10 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "ensemble",
     role: "forecast",
     horizontalGridDegrees: 0.5,
+    spatialDomain: { scope: "global" },
+    nativeGrid: { type: "regular_latlon", nominalResolution: { value: 0.5, unit: "degrees" } },
     maxForecastHour: 384,
+    nativeTimeCadenceHours: [3],
     members: 31,
     runSelectors: ["latest", "explicit"],
     operations: [
@@ -275,7 +367,10 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "deterministic",
     role: "forecast",
     horizontalGridDegrees: 0.25,
+    spatialDomain: { scope: "global" },
+    nativeGrid: { type: "regular_latlon", nominalResolution: { value: 0.25, unit: "degrees" } },
     maxForecastHour: 240,
+    nativeTimeCadenceHours: [3, 6],
     runSelectors: ["latest", "explicit"],
     operations: [
       "profile",
@@ -299,7 +394,10 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "ensemble",
     role: "forecast",
     horizontalGridDegrees: 0.25,
+    spatialDomain: { scope: "global" },
+    nativeGrid: { type: "regular_latlon", nominalResolution: { value: 0.25, unit: "degrees" } },
     maxForecastHour: 360,
+    nativeTimeCadenceHours: [3, 6],
     members: 50,
     runSelectors: ["latest", "explicit"],
     operations: [
@@ -326,6 +424,9 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     kind: "deterministic",
     role: "analysis",
     horizontalGridDegrees: 0.5,
+    spatialDomain: { scope: "global" },
+    nativeGrid: { type: "regular_latlon", nominalResolution: { value: 0.5, unit: "degrees" } },
+    nativeTimeCadenceHours: [6],
     runSelectors: [],
     operations: [
       "profile",
@@ -341,6 +442,46 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     ],
   },
 };
+
+export function spatialDomainCoversGeometry(
+  domain: AtmosphericSpatialDomain,
+  geometry: AtmosphericCoverageGeometry,
+): boolean {
+  if (domain.scope === "global") return true;
+  const bounds = domain.bounds;
+  const coversPoint = (point: { latitude: number; longitude: number }) =>
+    point.latitude >= bounds.southLatitude
+    && point.latitude <= bounds.northLatitude
+    && point.longitude >= bounds.westLongitude
+    && point.longitude <= bounds.eastLongitude;
+
+  switch (geometry.type) {
+    case "point":
+      return coversPoint(geometry);
+    case "points":
+      return geometry.points.every(coversPoint);
+    case "transect":
+      // Limited-area datasets currently declare conservative rectangular coverage.
+      // Both endpoints must be inside; dataset integrations may tighten this further
+      // if their native domain needs a more exact boundary representation.
+      return coversPoint(geometry.start) && coversPoint(geometry.end);
+    case "area":
+      return geometry.westLongitude >= bounds.westLongitude
+        && geometry.eastLongitude <= bounds.eastLongitude
+        && geometry.southLatitude >= bounds.southLatitude
+        && geometry.northLatitude <= bounds.northLatitude;
+  }
+}
+
+export function datasetCoversGeometry(
+  dataset: AtmosphericDatasetId,
+  geometry: AtmosphericCoverageGeometry,
+): boolean {
+  return spatialDomainCoversGeometry(
+    ATMOSPHERIC_DATASET_CATALOG[dataset].spatialDomain,
+    geometry,
+  );
+}
 
 export function datasetSupportsRunSelector(
   dataset: AtmosphericDatasetId,
