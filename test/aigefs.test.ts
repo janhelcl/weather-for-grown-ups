@@ -28,6 +28,10 @@ describe("AIGEFS source and catalog", () => {
       "https://noaa-nws-graphcastgfs-pds.s3.amazonaws.com/EAGLE_ensemble/aigefs.20260830/00/mem001/model/atmos/grib2/aigefs.t00z.pres.f006.grib2",
     );
     expect(buildAigefsS3IndexUrl(run, 6, "p01", "pres")).toMatch(/\.grib2\.idx$/);
+    expect(() => buildAigefsS3Url(run, -6, "c00", "pres")).toThrow("whole number from 0");
+    expect(() => buildAigefsS3Url(run, 384.5, "c00", "pres")).toThrow("whole number from 0");
+    expect(() => buildAigefsS3Url(run, 390, "c00", "pres")).toThrow("whole number from 0");
+    expect(() => buildAigefsS3Url(run, 3, "c00", "pres")).toThrow("every 6 forecast hours");
   });
 
   it("registers AIGEFS as a first-class AI ensemble dataset", () => {
