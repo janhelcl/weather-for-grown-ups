@@ -296,6 +296,197 @@ describe("ICON-D2-EPS service guards and defaults", () => {
   });
 });
 
+describe("ICON-D2-EPS geometry dispatch", () => {
+  it("routes range, multi-point, transect and area requests through member-first summaries", async () => {
+    const service = new IconD2EpsForecastService({
+      memberServiceFactory: () => ({
+        query: vi.fn(async (request: any) => {
+          const source = {
+            provider: "DWD Open Data",
+            access: "dwd_open_data",
+            decoder: "wgrib2",
+            cacheHit: true,
+          };
+          const profile = {
+            requestedPoint: { latitude: 50.08, longitude: 14.43 },
+            gridPoint: { latitude: 50.08, longitude: 14.42 },
+            levels: [{ pressureHpa: 850, temperatureC: 10 }],
+          };
+
+          if (request.geometry.type === "point" && !("at" in request.time)) {
+            return {
+              model: "icon_d2_0p02",
+              run: "2026-08-31T00:00:00.000Z",
+              requestedStartTime: request.time.start,
+              requestedEndTime: request.time.end,
+              ...profile,
+              series: [
+                {
+                  validTime: "2026-08-31T06:00:00.000Z",
+                  forecastHour: 6,
+                  levels: profile.levels,
+                  cacheHit: true,
+                },
+              ],
+              source,
+            };
+          }
+
+          if (request.geometry.type === "points" && "at" in request.time) {
+            return {
+              model: "icon_d2_0p02",
+              run: "2026-08-31T00:00:00.000Z",
+              validTime: "2026-08-31T06:00:00.000Z",
+              forecastHour: 6,
+              points: [
+                profile,
+                {
+                  requestedPoint: { latitude: 50.1, longitude: 14.5 },
+                  gridPoint: { latitude: 50.1, longitude: 14.5 },
+                  levels: profile.levels,
+                },
+              ],
+              source,
+            };
+          }
+
+          if (request.geometry.type === "points") {
+            return {
+              model: "icon_d2_0p02",
+              run: "2026-08-31T00:00:00.000Z",
+              requestedStartTime: request.time.start,
+              requestedEndTime: request.time.end,
+              series: [{
+                validTime: "2026-08-31T06:00:00.000Z",
+                forecastHour: 6,
+                points: [
+                  profile,
+                  {
+                    requestedPoint: { latitude: 50.1, longitude: 14.5 },
+                    gridPoint: { latitude: 50.1, longitude: 14.5 },
+                    levels: profile.levels,
+                  },
+                ],
+                cacheHit: true,
+              }],
+              source,
+            };
+          }
+
+          if (request.geometry.type === "transect") {
+            return {
+              model: "icon_d2_0p02",
+              run: "2026-08-31T00:00:00.000Z",
+              validTime: "2026-08-31T06:00:00.000Z",
+              forecastHour: 6,
+              startPoint: request.geometry.start,
+              endPoint: request.geometry.end,
+              totalDistanceKm: 10,
+              samples: [{
+                index: 0,
+                fraction: 0,
+                distanceKm: 0,
+                ...profile,
+              }],
+              source,
+            };
+          }
+
+          return {
+            model: "icon_d2_0p02",
+            run: "2026-08-31T00:00:00.000Z",
+            validTime: "2026-08-31T06:00:00.000Z",
+            forecastHour: 6,
+            bbox: request.geometry,
+            variable: "temperature",
+            statistics: {
+              definedGridPoints: 100,
+              mean: 10,
+              min: 5,
+              max: 15,
+            },
+            source,
+          };
+        }),
+        diagnose: vi.fn(),
+      }),
+    });
+
+    const common = {
+      dataset: "icon-d2-eps",
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble: { members: ["p01", "p02"], quantiles: [0.5] },
+    } as const;
+
+    const range = await service.query({
+      ...common,
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: {
+        start: "2026-08-31T06:00:00Z",
+        end: "2026-08-31T06:00:00Z",
+      },
+    } as any) as any;
+    expect(range.series).toHaveLength(1);
+
+    const points = await service.query({
+      ...common,
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50.08, longitude: 14.43 },
+          { latitude: 50.1, longitude: 14.5 },
+        ],
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+    } as any) as any;
+    expect(points.points).toHaveLength(2);
+
+    const pointsRange = await service.query({
+      ...common,
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 50.08, longitude: 14.43 },
+          { latitude: 50.1, longitude: 14.5 },
+        ],
+      },
+      time: {
+        start: "2026-08-31T06:00:00Z",
+        end: "2026-08-31T06:00:00Z",
+      },
+    } as any) as any;
+    expect(pointsRange.series[0].points).toHaveLength(2);
+
+    const transect = await service.query({
+      ...common,
+      geometry: {
+        type: "transect",
+        start: { latitude: 50.08, longitude: 14.43 },
+        end: { latitude: 50.1, longitude: 14.5 },
+        samples: 2,
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+    } as any) as any;
+    expect(transect.samples).toHaveLength(1);
+
+    const area = await service.query({
+      ...common,
+      geometry: {
+        type: "area",
+        westLongitude: 14.3,
+        eastLongitude: 14.5,
+        southLatitude: 50.0,
+        northLatitude: 50.2,
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+    } as any) as any;
+    expect(area.methodology).toBe(
+      "spatial_statistics_per_member_then_ensemble_distribution",
+    );
+    expect(area.statistics.mean.memberCount).toBe(2);
+  });
+});
+
 describe("ICON-D2-EPS member-first aggregation", () => {
   it("runs the deterministic regional engine per member and pins one resolved run", async () => {
     const calls: Array<{ member: string; request: any }> = [];
