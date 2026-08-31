@@ -86,6 +86,144 @@ describe("AI and hybrid comparison registry contract", () => {
     })).toThrow();
   });
 
+
+  it("rejects dataset-specific variable and level mismatches at the comparison boundary", () => {
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["gfs", "aigfs"],
+      variable: "relative_humidity",
+    })).toThrow("AIGFS comparison variables");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["gfs", "aigfs"],
+      pressureLevelHpa: 775,
+    })).toThrow("AIGFS does not publish");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["ifs", "aifs"],
+      variable: "absolute_vorticity",
+    })).toThrow("AIFS does not support comparison variable");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["ifs", "aifs"],
+      variable: "specific_humidity",
+      pressureLevelHpa: 10,
+    })).toThrow("AIFS cannot satisfy");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["ifs", "aifs"],
+      variable: "not_a_variable",
+    })).toThrow();
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["ifs", "aifs"],
+      pressureLevelHpa: 775,
+    })).toThrow();
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["gefs", "aigefs"],
+      pressureLevelHpa: 600,
+    })).toThrow("GEFS cannot satisfy");
+  });
+
+  it("rejects invalid ensemble member, quantile, and scalar comparison controls", () => {
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["gefs", "aigefs"],
+      gefsMembers: ["c00", "c00"],
+    })).toThrow("GEFS member selection must not contain duplicates");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["gefs", "aigefs"],
+      aigefsMembers: ["c00", "c00"],
+    })).toThrow("AIGEFS member selection must not contain duplicates");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["gefs", "aigefs"],
+      quantiles: [0.5, 0.5],
+    })).toThrow("Quantile selection must not contain duplicates");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["gefs", "aigefs"],
+      variable: "wind",
+    })).toThrow("requires one scalar output");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["ifs-ens", "aifs-ens"],
+      ifsEnsMembers: ["p01", "p01"],
+    })).toThrow("IFS ENS member selection must not contain duplicates");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["ifs-ens", "aifs-ens"],
+      aifsEnsMembers: ["c00", "c00"],
+    })).toThrow("AIFS ENS member selection must not contain duplicates");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["ifs-ens", "aifs-ens"],
+      quantiles: [0.9, 0.9],
+    })).toThrow("Quantile selection must not contain duplicates");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["ifs-ens", "aifs-ens"],
+      variable: "wind",
+    })).toThrow("requires one scalar output");
+  });
+
+  it("keeps HGEFS comparisons genuinely hybrid and population-qualified", () => {
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["hgefs", "gefs"],
+      hgefsMembers: ["gefs:c00", "gefs:p01", "gefs:p02", "aigefs:c00"],
+    })).toThrow("at least two selected GEFS and two selected AIGEFS members");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["hgefs", "aigefs"],
+      hgefsMembers: ["gefs:c00", "aigefs:c00", "aigefs:p01", "aigefs:p02"],
+    })).toThrow();
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["hgefs", "gefs"],
+      hgefsMembers: ["gefs:c00", "gefs:c00", "aigefs:c00", "aigefs:p01"],
+    })).toThrow("HGEFS member selection must not contain duplicates");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["hgefs", "gefs"],
+      hgefsMembers: ["gefs:c00", "gefs:p01", "aigefs:c00", "aigefs:p01"],
+      quantiles: [0.5, 0.5],
+    })).toThrow("Quantile selection must not contain duplicates");
+
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["hgefs", "gefs"],
+      hgefsMembers: ["gefs:c00", "gefs:p01", "aigefs:c00", "aigefs:p01"],
+      variable: "wind",
+    })).toThrow("requires one scalar output");
+  });
+
+  it("accepts the ordinary latest selector when both datasets support it", () => {
+    expect(() => compareAtmosphericDatasetsSchema.parse({
+      ...base,
+      datasets: ["gefs", "aigefs"],
+      run: "latest",
+    })).not.toThrow();
+  });
+
   it("declares model-class and hybrid comparison semantics in registry metadata", () => {
     const registry = createAtmosphericDatasetComparisonStrategyRegistry();
 
