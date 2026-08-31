@@ -37,6 +37,10 @@ describe("upstream access policy registry", () => {
       maxConcurrency: 4,
       minIntervalMs: 0,
     });
+    expect(UPSTREAM_ACCESS_POLICIES.dwdOpenData).toMatchObject({
+      maxConcurrency: 4,
+      minIntervalMs: 0,
+    });
   });
 
   it("records bounded defaults for cloud object access without adding a courtesy delay", () => {
