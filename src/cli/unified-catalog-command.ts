@@ -93,18 +93,17 @@ function parseCoverage(options: Record<string, any>):
     throw new Error("Use only one of --covers-point or --covers-area");
   }
   if (options.coversPoint !== undefined) {
-    const [latitude, longitude] = parseNumberTuple(options.coversPoint, 2, "--covers-point");
-    return { type: "point", latitude, longitude };
+    const values = parseNumberTuple(options.coversPoint, 2, "--covers-point");
+    return { type: "point", latitude: values[0]!, longitude: values[1]! };
   }
   if (options.coversArea !== undefined) {
-    const [westLongitude, eastLongitude, southLatitude, northLatitude] =
-      parseNumberTuple(options.coversArea, 4, "--covers-area");
+    const values = parseNumberTuple(options.coversArea, 4, "--covers-area");
     return {
       type: "area",
-      westLongitude,
-      eastLongitude,
-      southLatitude,
-      northLatitude,
+      westLongitude: values[0]!,
+      eastLongitude: values[1]!,
+      southLatitude: values[2]!,
+      northLatitude: values[3]!,
     };
   }
   return undefined;
