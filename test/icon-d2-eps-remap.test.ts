@@ -119,6 +119,46 @@ describe("ICON-D2-EPS official DWD remapping assets", () => {
     );
   });
 
+
+  it("retries asset initialization after a transient failure", async () => {
+    const tar = makeTar([
+      ["target_grid_icon_d2_002.txt", encoder.encode("grid")],
+      ["weights_icon_d2_002.nc", encoder.encode("weights")],
+    ]);
+    let calls = 0;
+    const fetchFn = vi.fn(async () => {
+      calls += 1;
+      return calls === 1
+        ? new Response("retry", { status: 503 })
+        : new Response(tar, { status: 200 });
+    });
+    const cache = new IconD2EpsDwdRemapAssetCache(
+      join(rootDir, "retry"),
+      fetchFn as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+    );
+
+    await expect(cache.paths()).rejects.toThrow("HTTP 503");
+    await expect(cache.paths()).resolves.toMatchObject({
+      targetGridPath: expect.stringContaining("target_grid_icon_d2_002.txt"),
+      weightsPath: expect.stringContaining("weights_icon_d2_002.nc"),
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("handles zero-size tar entries and rejects invalid octal sizes", () => {
+    const zero = makeTar([["empty.txt", new Uint8Array()]]);
+    const extracted = extractSelectedTarFiles(zero, new Set(["empty.txt"]));
+    expect(extracted.get("empty.txt")?.byteLength).toBe(0);
+
+    const invalidHeader = tarHeader("bad.txt", 1);
+    writeAscii(invalidHeader, 124, 12, "99999999999");
+    const invalid = new Uint8Array(1024);
+    invalid.set(invalidHeader, 0);
+    expect(() => extractSelectedTarFiles(invalid, new Set(["bad.txt"])))
+      .toThrow("Invalid tar size field");
+  });
+
   it("rejects truncated tar entries rather than returning partial support data", () => {
     const header = tarHeader("weights_icon_d2_002.nc", 1024);
     const truncated = new Uint8Array(512 + 12);
@@ -176,6 +216,58 @@ describe("ICON-D2-EPS CDO remap cache", () => {
     const second = await remapper.remap(sourcePath);
     expect(second).toMatchObject({ path: first.path, cacheHit: true });
     expect(runner).toHaveBeenCalledTimes(1);
+  });
+
+
+  it("deduplicates concurrent remaps and reports the waiter as a cache hit", async () => {
+    const sourcePath = join(rootDir, "native-concurrent.grib2");
+    const targetGridPath = join(rootDir, "target-concurrent.txt");
+    const weightsPath = join(rootDir, "weights-concurrent.nc");
+    await Promise.all([
+      writeFile(sourcePath, "GRIB-NATIVE"),
+      writeFile(targetGridPath, "grid"),
+      writeFile(weightsPath, "weights"),
+    ]);
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const runner = vi.fn(async (_executable: string, args: string[]) => {
+      await gate;
+      await writeFile(args.at(-1)!, "GRIB-REMAPPED");
+      return { stdout: "processed" };
+    });
+    const remapper = new IconD2EpsCdoRemapper(
+      join(rootDir, "concurrent"),
+      { paths: async () => ({ targetGridPath, weightsPath }) },
+      "cdo-test",
+      runner,
+    );
+
+    const firstPending = remapper.remap(sourcePath);
+    const secondPending = remapper.remap(sourcePath);
+    release();
+    const [first, second] = await Promise.all([firstPending, secondPending]);
+
+    expect(first.cacheHit).toBe(false);
+    expect(second).toEqual({ path: first.path, cacheHit: true });
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves non-ENOENT CDO failures unchanged", async () => {
+    const sourcePath = join(rootDir, "native-error.grib2");
+    await writeFile(sourcePath, "GRIB-NATIVE");
+    const remapper = new IconD2EpsCdoRemapper(
+      join(rootDir, "generic-error"),
+      {
+        paths: async () => ({
+          targetGridPath: join(rootDir, "target.txt"),
+          weightsPath: join(rootDir, "weights.nc"),
+        }),
+      },
+      "cdo-test",
+      async () => { throw new Error("CDO processing failed"); },
+    );
+    await expect(remapper.remap(sourcePath)).rejects.toThrow("CDO processing failed");
   });
 
   it("surfaces missing CDO and empty remap output clearly", async () => {
