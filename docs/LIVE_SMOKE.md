@@ -23,6 +23,8 @@ test:live:s3
 test:live:aigfs
 test:live:aigefs
 test:live:hgefs
+test:live:icon-d2
+test:live:icon-d2-eps
 test:live:history
 test:live:gefs
 test:live:gefs-runs
@@ -58,6 +60,12 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 ### HGEFS
 
 `npm run test:live:hgefs` makes one bounded hybrid query through public `dataset: "hgefs"`, selecting one GEFS and one AIGEFS member. The composition service pads each constituent internally only as required by the existing constituent primitives, discards those padding members from the hybrid result, and verifies population-qualified IDs, common-cycle alignment, separate constituent grid provenance and a finite pooled pressure distribution. This is a source/composition compatibility smoke, not a representative 62-member forecast sample.
+
+### DWD ICON-D2 and ICON-D2-EPS
+
+`npm run test:live:icon-d2` checks the deterministic DWD regional transport, bzip2 decode path, pressure/surface normalization and the distinction between the model's native ~2.1 km icosahedral mesh and the 0.02° regular-lat/lon Open Data access product.
+
+`npm run test:live:icon-d2-eps` makes one bounded two-member query through public `dataset: "icon-d2-eps"`. It checks DWD's native all-members icosahedral GRIB packaging, member selection from GRIB ensemble metadata, one pressure distribution, the 20-member population contract and member-first aggregation. The `p01,p02` selection is deliberately a source-compatibility smoke rather than a representative probabilistic sample.
 
 ### Historical GFS analysis and forecast skill
 
@@ -136,7 +144,7 @@ Live tests should assert contracts and invariants rather than pinning today's we
 - fixed-cycle semantics across time;
 - upstream slice reuse across coordinates;
 - explicit temporal semantics for accumulation/average fields;
-- member-first AIGEFS/HGEFS/AIFS ENS/GEFS computation and raw-member interpretation labels.
+- member-first AIGEFS/HGEFS/AIFS ENS/ICON-D2-EPS/GEFS computation and raw-member interpretation labels.
 
 ## Failure triage
 
