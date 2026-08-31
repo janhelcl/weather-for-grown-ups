@@ -1,9 +1,9 @@
 import { AIGEFS_MEMBERS } from "../catalog/aigefs.js";
 import { AIFS_ENS_MEMBERS } from "../catalog/aifs-ens.js";
 import { GEFS_MEMBERS } from "../catalog/gefs.js";
+import { IFS_ENS_MEMBERS } from "../catalog/ifs-ens.js";
 import {
   HGEFS_MEMBERS,
-  splitHgefsMembers,
   type HgefsMember,
   type HgefsPopulation,
 } from "../catalog/hgefs.js";
@@ -635,8 +635,7 @@ function defaultMembers(dataset: PublicAtmosphericDataset): readonly string[] {
     case "aigefs":
       return AIGEFS_MEMBERS;
     case "ifs-ens":
-      return Array.from({ length: 50 }, (_, index) =>
-        `p${String(index + 1).padStart(2, "0")}`);
+      return IFS_ENS_MEMBERS;
     case "aifs-ens":
       return AIFS_ENS_MEMBERS;
     default:
