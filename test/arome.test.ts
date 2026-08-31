@@ -10,6 +10,7 @@ import {
 } from "../src/catalog/arome.js";
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
 import { AromeForecastService } from "../src/core/arome.js";
+import { AromeRunResolver } from "../src/core/arome-run.js";
 import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-api.js";
 import {
   publicDatasetCoversGeometry,
@@ -104,6 +105,45 @@ describe("AROME selected-package cache", () => {
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 
+  it("rejects empty selections and non-GRIB upstream payloads", async () => {
+    const cache = new AromeOpenDataCache(
+      rootDir,
+      vi.fn(async () => new Response("not grib", { status: 200 })) as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+    );
+
+    await expect(cache.fetch({
+      run: new Date("2026-08-31T12:00:00Z"),
+      forecastHour: 6,
+      fields: [],
+    })).rejects.toThrow("at least one supported field");
+
+    await expect(cache.fetch({
+      run: new Date("2026-08-31T12:00:00Z"),
+      forecastHour: 6,
+      fields: expandArome0p01RequestedFields(["temperature_2m"]),
+    })).rejects.toThrow("did not start with GRIB");
+  });
+
+  it("treats missing requested package probes as unavailable", async () => {
+    const fetchFn = vi.fn(async () => new Response(null, { status: 404 }));
+    const cache = new AromeOpenDataCache(
+      rootDir,
+      fetchFn as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+    );
+    expect(await cache.isForecastAvailable(
+      new Date("2026-08-31T12:00:00Z"),
+      6,
+      { sp1: true, hp1: false },
+    )).toBe(false);
+    expect(await cache.isForecastAvailable(
+      new Date("2026-08-31T12:00:00Z"),
+      6,
+      { sp1: false, hp1: false },
+    )).toBe(false);
+  });
+
   it("uses HEAD probes only for packages required by run resolution", async () => {
     const fetchFn = vi.fn(async () => new Response(null, { status: 200 }));
     const cache = new AromeOpenDataCache(
@@ -118,6 +158,96 @@ describe("AROME selected-package cache", () => {
     )).toBe(true);
     expect(fetchFn).toHaveBeenCalledTimes(1);
     expect(fetchFn.mock.calls[0]?.[1]?.method).toBe("HEAD");
+  });
+});
+
+
+describe("AROME run resolution", () => {
+  const products = { sp1: true, hp1: false };
+
+  it("walks back unpublished cycles and caches the resolved latest run", async () => {
+    const probe = {
+      isForecastAvailable: vi.fn(async (run: Date) => run.getUTCHours() === 15),
+    };
+    const resolver = new AromeRunResolver(
+      probe,
+      () => new Date("2026-08-31T20:00:00Z").getTime(),
+      60_000,
+      4,
+    );
+    const requirement = {
+      type: "valid_time" as const,
+      validTime: new Date("2026-08-31T18:00:00Z"),
+      products,
+    };
+
+    expect((await resolver.resolveLatestRun(requirement)).toISOString())
+      .toBe("2026-08-31T15:00:00.000Z");
+    expect(probe.isForecastAvailable).toHaveBeenCalledTimes(2);
+
+    expect((await resolver.resolveLatestRun(requirement)).toISOString())
+      .toBe("2026-08-31T15:00:00.000Z");
+    expect(probe.isForecastAvailable).toHaveBeenCalledTimes(2);
+  });
+
+  it("resolves a latest complete run by probing the terminal lead", async () => {
+    const probe = {
+      isForecastAvailable: vi.fn(async (run: Date, forecastHour: number) =>
+        run.getUTCHours() === 15 && forecastHour === 51),
+    };
+    const resolver = new AromeRunResolver(
+      probe,
+      () => new Date("2026-08-31T20:00:00Z").getTime(),
+      60_000,
+      4,
+    );
+
+    expect((await resolver.resolveLatestCompleteRun(products)).toISOString())
+      .toBe("2026-08-31T15:00:00.000Z");
+    expect(probe.isForecastAvailable.mock.calls.map(([, hour]) => hour))
+      .toEqual([51, 51]);
+  });
+
+  it("checks both ends of a requested time range and rejects ranges beyond f51", async () => {
+    const probe = {
+      isForecastAvailable: vi.fn(async () => true),
+    };
+    const resolver = new AromeRunResolver(
+      probe,
+      () => new Date("2026-08-31T20:00:00Z").getTime(),
+      60_000,
+      4,
+    );
+
+    expect((await resolver.resolveLatestRun({
+      type: "time_range",
+      startTime: new Date("2026-08-31T17:00:00Z"),
+      endTime: new Date("2026-08-31T19:00:00Z"),
+      products,
+    })).toISOString()).toBe("2026-08-31T15:00:00.000Z");
+    expect(probe.isForecastAvailable.mock.calls.map(([, hour]) => hour))
+      .toEqual([2, 4]);
+
+    await expect(resolver.resolveLatestRun({
+      type: "time_range",
+      startTime: new Date("2026-08-31T18:00:00Z"),
+      endTime: new Date("2026-09-03T00:00:00Z"),
+      products,
+    })).rejects.toThrow("beyond the 51-hour AROME horizon");
+  });
+
+  it("fails clearly when no recent published cycle satisfies the request", async () => {
+    const resolver = new AromeRunResolver(
+      { isForecastAvailable: vi.fn(async () => false) },
+      () => new Date("2026-08-31T20:00:00Z").getTime(),
+      60_000,
+      2,
+    );
+    await expect(resolver.resolveLatestRun({
+      type: "valid_time",
+      validTime: new Date("2026-08-31T18:00:00Z"),
+      products,
+    })).rejects.toThrow("Could not find an AROME run");
   });
 });
 
@@ -347,6 +477,26 @@ describe("AROME deterministic field operations", () => {
     expect(decoder.extractPoint).toHaveBeenCalledTimes(3);
   });
 
+  it("enforces the multi-point range work bound", async () => {
+    await expect(service().query(queryAtmosphereSchema.parse({
+      dataset: "arome",
+      geometry: {
+        type: "points",
+        points: [
+          { latitude: 48.86, longitude: 2.35 },
+          { latitude: 50.85, longitude: 4.35 },
+        ],
+      },
+      time: {
+        from: "2026-08-31T18:00:00Z",
+        to: "2026-08-31T20:00:00Z",
+      },
+      selection: { fields: ["temperature_2m"] },
+      limits: { maxPointSteps: 5 },
+      forecast: { run: run.toISOString() },
+    }))).rejects.toThrow("exceeding maxPointSteps=5");
+  });
+
   it("supports bounded-area scalar summaries and distributions", async () => {
     const area = await service().query(queryAtmosphereSchema.parse({
       dataset: "arome",
@@ -373,6 +523,25 @@ describe("AROME deterministic field operations", () => {
       resolutionDegrees: 0.01,
       product: "EURW1S100",
     });
+
+    vi.clearAllMocks();
+    const compact = await service().query(queryAtmosphereSchema.parse({
+      dataset: "arome",
+      geometry: {
+        type: "area",
+        westLongitude: 2,
+        eastLongitude: 2.2,
+        southLatitude: 48,
+        northLatitude: 48.2,
+      },
+      time: { at: "2026-08-31T18:00:00Z" },
+      selection: { fields: ["temperature_2m"] },
+      forecast: { run: run.toISOString() },
+    })) as any;
+    expect(compact.distribution).toBeUndefined();
+    expect(compact.statistics.mean).toBeCloseTo(6.85, 8);
+    expect(areaDecoder.summarizeSelectedMessage).toHaveBeenCalledOnce();
+    expect(areaGridDecoder.extractSelectedMessage).not.toHaveBeenCalled();
   });
 });
 
