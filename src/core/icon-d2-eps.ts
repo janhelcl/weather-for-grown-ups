@@ -1,6 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { IconD2EpsOpenDataCache } from "../cache/icon-d2-eps-open-data-cache.js";
+import {
+  IconD2EpsMemberFileFilter,
+  IconD2EpsMemberSubsetCache,
+  IconD2EpsOpenDataCache,
+} from "../cache/icon-d2-eps-open-data-cache.js";
 import {
   ICON_D2_EPS_MEMBERS,
   sortIconD2EpsMembers,
@@ -16,12 +20,9 @@ import type {
   ProfileLevel,
 } from "./types.js";
 import { IconD2RunResolver } from "./icon-d2-run.js";
-import {
-  IconD2EpsMemberGridDecoder,
-  IconD2EpsMemberPointDecoder,
-  IconD2EpsMemberReader,
-  IconD2EpsMemberStatsDecoder,
-} from "../grib/icon-d2-eps-member.js";
+import { Wgrib2Decoder } from "../grib/wgrib2.js";
+import { Wgrib2GridDecoder } from "../grib/wgrib2-grid.js";
+import { Wgrib2StatsDecoder } from "../grib/wgrib2-stats.js";
 import { IconD2ForecastService } from "./icon-d2.js";
 import { mapConcurrent } from "./concurrency.js";
 import {
@@ -67,15 +68,21 @@ export class IconD2EpsForecastService {
       join(cacheDir, "icon-d2-eps-open-data"),
     );
     const runProvider = new IconD2RunResolver(cache);
-    const reader = new IconD2EpsMemberReader();
-    this.memberServiceFactory = options.memberServiceFactory ?? ((member) =>
-      new IconD2ForecastService({
-        cache,
+    const wgrib2 = process.env.WGRIB2_PATH ?? "wgrib2";
+    const memberFilter = new IconD2EpsMemberFileFilter(
+      join(cacheDir, "icon-d2-eps-members"),
+      wgrib2,
+    );
+    this.memberServiceFactory = options.memberServiceFactory ?? ((member) => {
+      const memberCache = new IconD2EpsMemberSubsetCache(cache, member, memberFilter);
+      return new IconD2ForecastService({
+        cache: memberCache,
         runProvider,
-        decoder: new IconD2EpsMemberPointDecoder(member, reader),
-        areaDecoder: new IconD2EpsMemberStatsDecoder(member, reader),
-        areaGridDecoder: new IconD2EpsMemberGridDecoder(member, reader),
-      }));
+        decoder: new Wgrib2Decoder(wgrib2),
+        areaDecoder: new Wgrib2StatsDecoder(wgrib2),
+        areaGridDecoder: new Wgrib2GridDecoder(wgrib2),
+      });
+    });
   }
 
   async query(request: QueryAtmosphereRequest): Promise<unknown> {
@@ -792,7 +799,7 @@ function ensembleSource(members: readonly MemberResult[]) {
     provider: "DWD Open Data" as const,
     product: "icon_d2_eps_native_icosahedral" as const,
     access: "dwd_open_data" as const,
-    decoder: "gribberish" as const,
+    decoder: "wgrib2" as const,
     nativeGrid: {
       type: "icosahedral" as const,
       nominalResolutionKm: 2.1,
