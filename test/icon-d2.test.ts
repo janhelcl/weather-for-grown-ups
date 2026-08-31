@@ -190,8 +190,8 @@ describe("ICON-D2 unified capabilities", () => {
     })).toBe(true);
     expect(publicDatasetCoversGeometry("icon-d2", {
       type: "point",
-      latitude: 51.51,
-      longitude: -0.12,
+      latitude: 40.42,
+      longitude: -3.70,
     })).toBe(false);
 
     const result = searchAtmosphereCatalog({
