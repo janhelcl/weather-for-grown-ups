@@ -101,6 +101,33 @@ describe("architecture boundaries", () => {
     }
   });
 
+  it("keeps comparison strategy responsibilities separated", async () => {
+    const [barrel, pairNative, modelClass] = await Promise.all([
+      readFile("src/core/comparison-strategies/strategies.ts", "utf8"),
+      readFile("src/core/comparison-strategies/pair-native-strategies.ts", "utf8"),
+      readFile("src/core/comparison-strategies/model-class-strategies.ts", "utf8"),
+    ]);
+
+    expect(barrel).not.toContain("class ");
+    expect(pairNative).not.toContain("ModelClassComparisonService");
+    expect(modelClass).toContain("ModelClassComparisonService");
+    expect(modelClass).not.toMatch(
+      /GfsGefsComparisonService|GfsIfsComparisonService|GefsIfsEnsComparisonService|IfsIfsEnsComparisonService/,
+    );
+  });
+
+  it("isolates heterogeneous comparison-result reading from query orchestration", async () => {
+    const [service, reader] = await Promise.all([
+      readFile("src/core/model-class-comparison.ts", "utf8"),
+      readFile("src/core/comparison-result-reader.ts", "utf8"),
+    ]);
+
+    expect(service).toContain("./comparison-result-reader.js");
+    expect(service).not.toContain("Record<string, any>");
+    expect(reader).not.toContain("UnifiedAtmosphereQueryService");
+    expect(reader).not.toMatch(/from ["']\.\.\/(?:access|sources|cache|grib)\//);
+  });
+
   it("keeps provider sources independent of application core", async () => {
     const files = await tsFiles("src/sources");
     for (const path of files) {
