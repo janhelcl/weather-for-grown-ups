@@ -25,7 +25,7 @@ AIFS Open Data pressure levels exposed by WFG:
 
 `1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50, 10 hPa`
 
-Native pressure variables:
+Native pressure variables (all use the listed pressure-level vocabulary except specific humidity, which is available through 50 hPa but not 10 hPa in AIFS Single v2):
 
 - `temperature` ← ECMWF `t`
 - `u_wind` ← `u`
