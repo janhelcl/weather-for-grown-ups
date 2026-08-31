@@ -46,7 +46,6 @@ export const HGEFS_FIELD_IDS = [
   "v_wind_10m",
   "wind_10m",
   "mean_sea_level_pressure",
-  "total_precipitation",
 ] as const satisfies readonly NonIsobaricFieldId[];
 
 export type HgefsFieldId = (typeof HGEFS_FIELD_IDS)[number];
