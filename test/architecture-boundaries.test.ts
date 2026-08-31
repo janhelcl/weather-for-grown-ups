@@ -34,7 +34,7 @@ describe("architecture boundaries", () => {
         "ifs:aifs",
         "ifs:ifs-ens",
         "ifs-ens:aifs-ens",
-      ],
+      ].sort(),
     );
     expect(Object.keys(createAtmosphericVerificationAdapterRegistry()).sort()).toEqual(
       ["gfs-analysis", "igra"],
