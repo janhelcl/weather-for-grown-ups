@@ -2,9 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AIGEFS_MEMBERS,
   aigefsSourceMember,
+  sortAigefsMembers,
 } from "../src/catalog/aigefs.js";
 import { ATMOSPHERIC_DATASET_CATALOG } from "../src/catalog/models.js";
 import { AigefsForecastService } from "../src/core/aigefs.js";
+import { AigefsQueryAdapter } from "../src/core/query-adapters/aigefs.js";
+import { AigefsDiagnosticAdapter } from "../src/core/diagnostic-adapters/aigefs.js";
 import {
   publicDatasetCapabilities,
   queryAtmosphereSchema,
@@ -609,5 +612,65 @@ describe("AIGEFS composition coverage", () => {
     } as any)).rejects.toThrow("at least two selected members");
 
     expect(() => aigefsSourceMember("not-a-member" as any)).toThrow("Unknown AIGEFS member");
+  });
+});
+
+
+describe("AIGEFS remaining guard branches", () => {
+  it("keeps canonical ordering even when a direct internal caller supplies an unknown member", () => {
+    expect(sortAigefsMembers(["p01", "c00"])).toEqual(["c00", "p01"]);
+    expect(sortAigefsMembers(["not-a-member", "c00"] as any)).toEqual(["c00", "not-a-member"]);
+  });
+
+  it("supports dependency injection through both unified adapters", async () => {
+    const query = vi.fn(async () => ({ route: "aigefs-query" }));
+    const diagnose = vi.fn(async () => ({ route: "aigefs-diagnose" }));
+    const queryAdapter = new AigefsQueryAdapter({ aigefs: { query } as any });
+    const diagnosticAdapter = new AigefsDiagnosticAdapter({
+      aigefsDiagnostics: { diagnose } as any,
+    });
+
+    expect(await queryAdapter.query({ dataset: "aigefs" } as any)).toEqual({
+      route: "aigefs-query",
+    });
+    expect(await diagnosticAdapter.diagnose({ dataset: "aigefs" } as any)).toEqual({
+      route: "aigefs-diagnose",
+    });
+    expect(query).toHaveBeenCalledOnce();
+    expect(diagnose).toHaveBeenCalledOnce();
+  });
+
+  it("rejects member grid disagreement before producing an ensemble point", async () => {
+    const service = new AigefsForecastService({
+      memberServiceFactory: (member) => ({
+        query: vi.fn(async () => ({
+          model: "aigfs_0p25",
+          run: "2026-08-30T00:00:00.000Z",
+          validTime: "2026-08-30T06:00:00.000Z",
+          forecastHour: 6,
+          requestedPoint: { latitude: 50.08, longitude: 14.43 },
+          gridPoint: {
+            latitude: 50,
+            longitude: member === "c00" ? 14.5 : 14.75,
+          },
+          levels: [{ pressureHpa: 850, temperatureC: 10 }],
+          source: {
+            provider: "NOAA NOMADS",
+            access: "nomads_range",
+            decoder: "gribberish",
+            cacheHit: true,
+          },
+        })),
+        diagnose: vi.fn(),
+      } as any),
+    });
+
+    await expect(service.query(queryAtmosphereSchema.parse({
+      dataset: "aigefs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble: { members: ["c00", "p01"], quantiles: [0.5] },
+    }))).rejects.toThrow("inconsistent grid points");
   });
 });
