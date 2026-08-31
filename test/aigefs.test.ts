@@ -715,3 +715,126 @@ describe("AIGEFS default ensemble contract", () => {
     expect(result.pressureSummaries[0].distribution.memberCount).toBe(31);
   });
 });
+
+
+describe("AIGEFS defensive aggregation coverage", () => {
+  const basePointRequest = {
+    dataset: "aigefs" as const,
+    geometry: { type: "point" as const, latitude: 50.08, longitude: 14.43 },
+    time: { at: "2026-08-30T06:00:00Z" },
+    selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    ensemble: { members: ["c00", "p01"], quantiles: [0.5] },
+  };
+
+  it("fails clearly when the run-resolving member returns no run", async () => {
+    const service = new AigefsForecastService({
+      memberServiceFactory: () => ({
+        query: vi.fn(async () => ({})),
+        diagnose: vi.fn(),
+      } as any),
+    });
+    await expect(service.query(basePointRequest as any))
+      .rejects.toThrow("did not return a resolved run");
+  });
+
+  it("fails clearly when a member omits a scalar required for aggregation", async () => {
+    const service = new AigefsForecastService({
+      memberServiceFactory: (member) => ({
+        query: vi.fn(async () => ({
+          run: "2026-08-30T00:00:00.000Z",
+          validTime: "2026-08-30T06:00:00.000Z",
+          forecastHour: 6,
+          requestedPoint: basePointRequest.geometry,
+          gridPoint: { latitude: 50, longitude: 14.5 },
+          levels: [{
+            pressureHpa: 850,
+            ...(member === "c00" ? { temperatureC: 10 } : {}),
+          }],
+          source: { decoder: "gribberish", cacheHit: true },
+        })),
+        diagnose: vi.fn(),
+      } as any),
+    });
+    await expect(service.query(basePointRequest as any))
+      .rejects.toThrow("missing AIGEFS profile temperatureC@850mb");
+  });
+
+  it("rejects a missing sampled grid point before aggregation", async () => {
+    const service = new AigefsForecastService({
+      memberServiceFactory: () => ({
+        query: vi.fn(async () => ({
+          run: "2026-08-30T00:00:00.000Z",
+          validTime: "2026-08-30T06:00:00.000Z",
+          forecastHour: 6,
+          requestedPoint: basePointRequest.geometry,
+          levels: [{ pressureHpa: 850, temperatureC: 10 }],
+          source: { decoder: "gribberish", cacheHit: true },
+        })),
+        diagnose: vi.fn(),
+      } as any),
+    });
+    await expect(service.query(basePointRequest as any))
+      .rejects.toThrow("returned no grid point");
+  });
+
+  it("rejects unsupported members even for direct internal service callers", async () => {
+    const service = new AigefsForecastService({
+      memberServiceFactory: () => ({
+        query: vi.fn(),
+        diagnose: vi.fn(),
+      } as any),
+    });
+    await expect(service.query({
+      ...basePointRequest,
+      ensemble: { members: ["c00", "bad-member"], quantiles: [0.5] },
+    } as any)).rejects.toThrow("unsupported: bad-member");
+  });
+
+  it("requires member extrema when extrema locations are requested", async () => {
+    const service = new AigefsForecastService({
+      memberServiceFactory: () => ({
+        query: vi.fn(async () => ({
+          run: "2026-08-30T00:00:00.000Z",
+          validTime: "2026-08-30T06:00:00.000Z",
+          forecastHour: 6,
+          bbox: {
+            westLongitude: 14,
+            eastLongitude: 14.5,
+            southLatitude: 49,
+            northLatitude: 49.5,
+          },
+          variable: {
+            id: "temperature",
+            pressureHpa: 850,
+            field: "temperatureC",
+            unit: "degC",
+          },
+          statistics: {
+            definedGridPoints: 4,
+            mean: 10,
+            min: 8,
+            max: 12,
+          },
+          distribution: {},
+          source: { decoder: "gribberish", cacheHit: true },
+        })),
+        diagnose: vi.fn(),
+      } as any),
+    });
+
+    await expect(service.query({
+      dataset: "aigefs",
+      geometry: {
+        type: "area",
+        westLongitude: 14,
+        eastLongitude: 14.5,
+        southLatitude: 49,
+        northLatitude: 49.5,
+      },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble: { members: ["c00", "p01"], quantiles: [0.5] },
+      aggregate: { includeExtremaLocations: true },
+    } as any)).rejects.toThrow("missing AIGEFS member extrema");
+  });
+});
