@@ -62,9 +62,13 @@ Current upstream characteristics make these a useful architecture test:
 
 Exact public inventories, run schedules, retention, licences and access policies must be verified against the provider before each implementation. Provider-specific access constraints remain source-policy concerns rather than public query dimensions.
 
-## 1. Spatial domain and grid semantics
+## 1. Spatial domain and grid semantics ✅
 
-**First milestone. Implement before the first regional dataset is considered complete.**
+**Implemented as the shared regional-capability foundation.**
+
+The dataset registry now carries first-class spatial domain, native-grid, nominal-resolution, horizon and native-cadence metadata. Catalog discovery can filter by global versus limited-area scope and by whether a declared domain fully covers a point or bounded area. Query and diagnostic dispatch enforce the same domain contract before source access and raise a distinct `OUT_OF_DOMAIN` failure.
+
+No regional model has been added by this milestone alone; instead, ICON-D2, ICON-D2-EPS, AROME and PE-AROME can now plug into the existing query language without teaching the public schema model-specific geometry or degree-grid assumptions.
 
 Limited-area NWP introduces semantics that global models never forced WFG to represent explicitly enough.
 
