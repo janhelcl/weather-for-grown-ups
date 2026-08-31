@@ -24,7 +24,7 @@ describe("unified dataset capability registry", () => {
   it("declares domain, native grid, and cadence for every current dataset", () => {
     for (const dataset of ATMOSPHERIC_DATASET_IDS) {
       const definition = ATMOSPHERIC_DATASET_CATALOG[dataset];
-      if (dataset === "icon_d2_0p02") {
+      if (dataset === "icon_d2_0p02" || dataset === "icon_d2_eps_2p1km") {
         expect(definition.spatialDomain).toMatchObject({
           scope: "limited_area",
           bounds: {
@@ -70,6 +70,20 @@ describe("unified dataset capability registry", () => {
       maxForecastHour: 48,
       nativeTimeCadenceHours: [1],
       nativeForecastIntervalHours: 1,
+    });
+
+    expect(publicDatasetCapabilities("icon-d2-eps")).toMatchObject({
+      provider: "dwd",
+      kind: "ensemble",
+      spatialDomain: { scope: "limited_area" },
+      nativeGrid: {
+        type: "icosahedral",
+        nominalResolution: { value: 2.1, unit: "km" },
+      },
+      maxForecastHour: 48,
+      nativeTimeCadenceHours: [1],
+      nativeForecastIntervalHours: 1,
+      members: 20,
     });
 
     expect(publicDatasetCapabilities("ifs")).toMatchObject({
