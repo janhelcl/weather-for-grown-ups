@@ -12,7 +12,7 @@ The next development line extends WFG across a new model-class axis: physics-bas
 
 WFG already exposes:
 
-- NOAA GFS, AIGFS, AIGEFS and GEFS;
+- NOAA GFS, AIGFS, AIGEFS, HGEFS and GEFS;
 - ECMWF IFS and IFS ENS;
 - archived GFS forecasts, historical GFS analysis and GEFSv12 reforecasts;
 - deterministic and member-first ensemble semantics;
@@ -58,13 +58,13 @@ Add the corresponding ensemble/hybrid products:
 
 - NOAA AIGEFS — **implemented**;
 - ECMWF AIFS ENS — **implemented**;
-- NOAA HGEFS hybrid ensemble — planned.
+- NOAA HGEFS hybrid ensemble — **implemented**.
 
 Ensemble meteorology remains **member first**. Nonlinear diagnostics are evaluated within each member before aggregation.
 
 AIFS ENS now exposes its native 51-member stochastic population (`c00,p01..p50`) over ECMWF Open Data. Its dedicated control remains distinct from AIFS Single, and control/perturbed `cf`/`pf` packaging is hidden behind the same public ensemble query language without erasing provenance.
 
-Hybrid semantics must be explicit. HGEFS must not be treated as an ordinary homogeneous ensemble if its member population contains materially different model classes. Results and provenance should retain enough information to distinguish physics, AI and hybrid composition where that distinction matters.
+HGEFS now exposes the operational 62-member hybrid as two explicitly namespaced populations: 31 GEFS physics members plus 31 AIGEFS AI members. Hybrid distributions are recomputed member-first from the constituent operational member products, while result provenance retains population identity and the actual native grid used by each constituent. Point state/range plus instant layer/profile diagnostics are implemented. Multi-point, transect, area and diagnostic time-series capabilities remain intentionally unadvertised until their mixed-grid/member-payload semantics are explicit rather than synthetic.
 
 ## Model-class metadata
 
