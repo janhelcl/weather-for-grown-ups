@@ -1,7 +1,7 @@
 {
   "name": "weather-for-grown-ups",
   "version": "0.3.0",
-  "description": "Unified agent-native access to NOAA GFS/AIGFS/AIGEFS/GEFS, ECMWF IFS/IFS ENS, and historical GFS analysis.",
+  "description": "Unified agent-native access to NOAA GFS/AIGFS/AIGEFS/GEFS, ECMWF IFS/AIFS/IFS ENS, and historical GFS analysis.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -18,6 +18,7 @@
     "aigefs",
     "gefs",
     "ifs",
+    "aifs",
     "ecmwf",
     "noaa",
     "weather",
