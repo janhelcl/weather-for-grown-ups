@@ -1,6 +1,6 @@
 # Unified atmospheric API
 
-WFG's public API is organized around a small operation vocabulary and nine atmospheric datasets.
+WFG's public API is organized around a small operation vocabulary and ten atmospheric datasets.
 
 > **One query language for atmospheric state; datasets preserve their semantics.**
 
@@ -11,6 +11,7 @@ WFG's public API is organized around a small operation vocabulary and nine atmos
 | `gfs` | `gfs_0p25` / `gfs_0p50` operational; grid-matched 0.25° GDEX or 0.5° NCEI archive for old explicit runs | forecast | deterministic physics model |
 | `aigfs` | `aigfs_0p25` NOAA operational AIGFS | forecast | deterministic AI model |
 | `aigefs` | `aigefs_0p25` NOAA operational AIGEFS | forecast | 31-member AI ensemble |
+| `hgefs` | `hgefs_0p25` NOAA operational hybrid population | forecast | 62-member GEFS + AIGEFS hybrid ensemble |
 | `aifs` | `aifs_0p25` ECMWF AIFS Single | forecast | deterministic AI forecast |
 | `aifs-ens` | `aifs_ens_0p25` ECMWF AIFS ENS | forecast | 51-member stochastic AI ensemble |
 | `gefs` | operational `gefs_0p50`; explicit `forecast.kind=reforecast` resolves to `gefs_v12_reforecast` for supported retrospective queries | forecast | member-first ensemble |
@@ -21,6 +22,8 @@ WFG's public API is organized around a small operation vocabulary and nine atmos
 `aigfs` keeps the same public state vocabulary while preserving its narrower native product: 0.25°, 00/06/12/18Z initializations, 6-hour output through f384, six native pressure variables and a small surface-field set. It supports point/range, multi-point/range, transect, scalar area, layer and structural profile diagnostics. Parcel diagnostics are explicitly absent because the operational surface product lacks the complete parcel initialization state used by WFG. See [AIGFS.md](AIGFS.md).
 
 `aigefs` preserves the same AI-state inventory while changing the result semantics to a 31-member ensemble on the native 0.25° / 6-hour / f384 product. WFG evaluates deterministic normalization and nonlinear layer/profile diagnostics independently inside each selected member before aggregation. Parcel diagnostics and comparison operations are not advertised yet. See [AIGEFS.md](AIGEFS.md).
+
+`hgefs` composes 31 GEFS physics members with 31 AIGEFS AI members under one common 00/06/12/18Z initialization, native 6-hour output and f240 horizon. Member IDs are population-qualified (`gefs:c00..p30`, `aigefs:c00..p30`). WFG only exposes the scientifically compatible inventory intersection, computes nonlinear diagnostics inside each constituent member, and preserves constituent-native grids rather than inventing one homogeneous grid. See [HGEFS.md](HGEFS.md).
 
 AIFS ENS uses the same canonical AIFS atmospheric inventory while preserving its native stochastic member population: a dedicated control `c00` and 50 perturbations `p01..p50`. The control is an AIFS ENS forecast, not AIFS Single; ECMWF packages it as `cf` while perturbations live in the indexed `pf` product. WFG evaluates state normalization and nonlinear layer/profile diagnostics independently inside each member before aggregation. See [AIFS_ENS.md](AIFS_ENS.md).
 
@@ -51,6 +54,14 @@ or:
 ```json
 { "dataset": "aigefs" }
 ```
+
+or:
+
+```json
+{ "dataset": "hgefs" }
+```
+
+or:
 
 ```json
 { "dataset": "aifs-ens" }
@@ -234,7 +245,7 @@ The compact public vocabulary is:
 | `verify_forecast` | Compare an archived GFS forecast with later GFS analysis or an IGRA radiosonde |
 | `find_analogs` | Search materialized historical atmospheric analogs |
 
-`search_catalog` returns a top-level `datasetCapabilities` section alongside field/diagnostic matches. It exposes each selected dataset's role, deterministic/ensemble kind, model class, provider, native grid/cadence metadata, forecast populations, supported run selectors, and operations; the CLI `wfg catalog` prints the same capability summary before its match table. This is the canonical discovery surface for source differences rather than requiring callers to learn dataset-specific exceptions.
+`search_catalog` returns a top-level `datasetCapabilities` section alongside field/diagnostic matches. It exposes each selected dataset's role, deterministic/ensemble kind, model class, provider, native grid/cadence metadata, hybrid constituent metadata where applicable, forecast populations, supported run selectors, and operations; the CLI `wfg catalog` prints the same capability summary before its match table. This is the canonical discovery surface for source differences rather than requiring callers to learn dataset-specific exceptions.
 
 `search_catalog` defaults to operational capabilities. To plan a GEFSv12 retrospective query, pass `datasets: ["gefs"]` and `forecastKind: "reforecast"`. The result contains only capabilities currently exposed by the reforecast path: the verified retrospective single-level fields, six native pressure variables, three layer diagnostics and two structural profile diagnostics. Derived pressure thermodynamics and parcel diagnostics remain absent because the retrospective source subset does not expose the dependencies needed to support them truthfully. The CLI equivalent is `wfg catalog --dataset gefs --forecast-kind reforecast`.
 
@@ -549,6 +560,7 @@ Examples:
 - archived GFS forecasts preserve grid-native cadence and inventory: 0.25° GDEX uses 3-hour steps through +240 h then 12-hour steps through +384 h, while 0.5° Grid 4 uses 3-hour steps through +192 h;
 - historical analysis does not expose forecast accumulation products as if they were instantaneous analysis state;
 - ensemble-only controls are rejected for deterministic datasets;
+- HGEFS member IDs must retain their `gefs:` or `aigefs:` population prefix and HGEFS selections must exist in both constituent inventories;
 - forecast run controls are rejected for `gfs-analysis`;
 - transport failures remain distinct from capability failures: an exhausted NCEI 5xx response is reported as upstream source unavailability rather than "unsupported data";
 - retrospective archive inventory can vary by run/file even inside a globally supported capability; those errors report the requested variable/level and what the decoded file actually contains.
