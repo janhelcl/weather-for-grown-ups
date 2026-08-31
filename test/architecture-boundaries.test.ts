@@ -128,6 +128,23 @@ describe("architecture boundaries", () => {
     expect(reader).not.toMatch(/from ["']\.\.\/(?:access|sources|cache|grib)\//);
   });
 
+  it("keeps dataset-specific capability validation out of the shared unified schema", async () => {
+    const [schema, datasetValidation] = await Promise.all([
+      readFile("src/schema/unified-api.ts", "utf8"),
+      readFile("src/schema/dataset-capability-validation.ts", "utf8"),
+    ]);
+
+    expect(schema).toContain("./dataset-capability-validation.js");
+    expect(schema).not.toMatch(
+      /AIGFS_PRESSURE_|AIGEFS_MEMBERS|AIFS_PRESSURE_|AIFS_ENS_MEMBERS|HGEFS_MEMBERS|HGEFS_AREA_PRESSURE_/,
+    );
+    expect(schema).not.toMatch(
+      /request\.dataset\s*===\s*["'](?:aigfs|aigefs|hgefs|aifs|aifs-ens)["']/,
+    );
+    expect(datasetValidation).toContain("DATASET_CAPABILITY_VALIDATORS");
+    expect(datasetValidation).not.toMatch(/from ["']\.\.\/(?:core|sources|access|cache|grib)\//);
+  });
+
   it("keeps provider sources independent of application core", async () => {
     const files = await tsFiles("src/sources");
     for (const path of files) {
