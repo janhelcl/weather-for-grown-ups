@@ -678,3 +678,40 @@ describe("AIGEFS remaining guard branches", () => {
     }))).rejects.toThrow("inconsistent grid points");
   });
 });
+
+
+describe("AIGEFS default ensemble contract", () => {
+  it("uses the full 31-member population and standard quantiles when ensemble controls are omitted", async () => {
+    const service = new AigefsForecastService({
+      memberServiceFactory: () => ({
+        query: vi.fn(async () => ({
+          model: "aigfs_0p25",
+          run: "2026-08-30T00:00:00.000Z",
+          validTime: "2026-08-30T06:00:00.000Z",
+          forecastHour: 6,
+          requestedPoint: { latitude: 50.08, longitude: 14.43 },
+          gridPoint: { latitude: 50, longitude: 14.5 },
+          levels: [{ pressureHpa: 850, temperatureC: 10 }],
+          source: {
+            provider: "NOAA NOMADS",
+            access: "nomads_range",
+            decoder: "gribberish",
+            cacheHit: true,
+          },
+        })),
+        diagnose: vi.fn(),
+      } as any),
+    });
+
+    const result = await service.query(queryAtmosphereSchema.parse({
+      dataset: "aigefs",
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    })) as any;
+
+    expect(result.selection.members).toEqual([...AIGEFS_MEMBERS]);
+    expect(result.selection.quantiles).toEqual([0.1, 0.5, 0.9]);
+    expect(result.pressureSummaries[0].distribution.memberCount).toBe(31);
+  });
+});
