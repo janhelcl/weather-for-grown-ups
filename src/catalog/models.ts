@@ -327,6 +327,7 @@ export const ATMOSPHERIC_MODEL_IDS = [
   "aigfs_0p25",
   "aigefs_0p25",
   "aifs_0p25",
+  "aifs_ens_0p25",
   "gefs_0p50",
   "ifs_0p25",
   "ifs_ens_0p25",
