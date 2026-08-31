@@ -35,7 +35,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("search_catalog", {
     title: "Search atmospheric datasets and capabilities",
-    description: "Search one canonical catalog across all atmospheric datasets. Results use shared variable, field and diagnostic IDs and explicitly list which datasets support each match. For GEFS, forecastKind can distinguish operational capabilities from the narrower GEFSv12 reforecast subset, so retrospective queries are discoverable without pretending operational-only diagnostics exist.",
+    description: "Search one canonical catalog across all atmospheric datasets. Results use shared variable, field and diagnostic IDs and explicitly list which datasets support each match. Use spatialScope and coverage to discover global or limited-area datasets that fully cover a point or bounded area; capability rows expose native grid, nominal resolution, cadence and horizon. For GEFS, forecastKind can distinguish operational capabilities from the narrower GEFSv12 reforecast subset, so retrospective queries are discoverable without pretending operational-only diagnostics exist.",
     inputSchema: searchAtmosphereCatalogSchema,
     outputSchema: unifiedCatalogResultSchema,
   }, async (query) => {
