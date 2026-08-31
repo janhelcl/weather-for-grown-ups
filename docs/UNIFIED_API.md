@@ -1,6 +1,6 @@
 # Unified atmospheric API
 
-WFG's public API is organized around a small operation vocabulary and nine atmospheric datasets.
+WFG's public API is organized around a small operation vocabulary and ten atmospheric datasets.
 
 > **One query language for atmospheric state; datasets preserve their semantics.**
 
@@ -11,6 +11,7 @@ WFG's public API is organized around a small operation vocabulary and nine atmos
 | `gfs` | `gfs_0p25` / `gfs_0p50` operational; grid-matched 0.25° GDEX or 0.5° NCEI archive for old explicit runs | forecast | deterministic physics model |
 | `aigfs` | `aigfs_0p25` NOAA operational AIGFS | forecast | deterministic AI model |
 | `aigefs` | `aigefs_0p25` NOAA operational AIGEFS | forecast | 31-member AI ensemble |
+| `hgefs` | `hgefs_0p25` NOAA operational HGEFS | forecast | 62-member hybrid ensemble: 31 GEFS physics + 31 AIGEFS AI |
 | `aifs` | `aifs_0p25` ECMWF AIFS Single | forecast | deterministic AI forecast |
 | `aifs-ens` | `aifs_ens_0p25` ECMWF AIFS ENS | forecast | 51-member stochastic AI ensemble |
 | `gefs` | operational `gefs_0p50`; explicit `forecast.kind=reforecast` resolves to `gefs_v12_reforecast` for supported retrospective queries | forecast | member-first ensemble |
@@ -21,6 +22,8 @@ WFG's public API is organized around a small operation vocabulary and nine atmos
 `aigfs` keeps the same public state vocabulary while preserving its narrower native product: 0.25°, 00/06/12/18Z initializations, 6-hour output through f384, six native pressure variables and a small surface-field set. It supports point/range, multi-point/range, transect, scalar area, layer and structural profile diagnostics. Parcel diagnostics are explicitly absent because the operational surface product lacks the complete parcel initialization state used by WFG. See [AIGFS.md](AIGFS.md).
 
 `aigefs` preserves the same AI-state inventory while changing the result semantics to a 31-member ensemble on the native 0.25° / 6-hour / f384 product. WFG evaluates deterministic normalization and nonlinear layer/profile diagnostics independently inside each selected member before aggregation. Parcel diagnostics and comparison operations are not advertised yet. See [AIGEFS.md](AIGEFS.md).
+
+`hgefs` is the hybrid 62-member population: 31 GEFS physics members plus 31 AIGEFS AI members. Public members are namespaced (`gefs:c00..p30`, `aigefs:c00..p30`) so model-class identity is never erased. WFG composes the aligned constituent member products and aggregates only after per-member normalization/diagnostics. Point state and point ranges use the native 6-hour HGEFS cadence through f240; instant layer/profile diagnostics are supported. Mixed-grid multi-point/transect/area operations, diagnostic ranges and parcels remain explicit capability boundaries. See [HGEFS.md](HGEFS.md).
 
 AIFS ENS uses the same canonical AIFS atmospheric inventory while preserving its native stochastic member population: a dedicated control `c00` and 50 perturbations `p01..p50`. The control is an AIFS ENS forecast, not AIFS Single; ECMWF packages it as `cf` while perturbations live in the indexed `pf` product. WFG evaluates state normalization and nonlinear layer/profile diagnostics independently inside each member before aggregation. See [AIFS_ENS.md](AIFS_ENS.md).
 
