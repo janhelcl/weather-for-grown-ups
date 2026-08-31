@@ -621,6 +621,64 @@ describe("model-class comparison mechanics", () => {
     })).rejects.toThrow("profile levels");
   });
 
+
+  it("rejects malformed ensemble member payloads missing selected pressure values", async () => {
+    const service = new ModelClassComparisonService({
+      query: vi.fn(async (input: QueryAtmosphereInput) => {
+        const members = input.ensemble?.members ?? ["c00", "p01"];
+        const result: any = input.dataset === "gefs"
+          ? gefsEnsembleResult([10, 12], members)
+          : aiEnsembleResult("aigefs_0p25", [11, 13], members, "NOAA");
+        if (input.dataset === "gefs") result.members[0].pressureValues = [];
+        return wrapped(input.dataset, result);
+      }),
+    });
+
+    await expect(service.compareEnsembles({
+      datasets: ["gefs", "aigefs"],
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      leftMembers: ["c00", "p01"],
+      rightMembers: ["c00", "p01"],
+      quantiles: [0.5],
+      thresholdGte: 10,
+    })).rejects.toThrow("member is missing temperature@850hPa");
+  });
+
+  it("rejects malformed hybrid member payloads missing the selected profile level", async () => {
+    const service = new ModelClassComparisonService({
+      query: vi.fn(async () => wrapped("hgefs", {
+        model: "hgefs_0p25",
+        run,
+        validTime,
+        forecastHour: 6,
+        members: [
+          { member: "gefs:c00", population: "gefs", levels: [{ pressureHpa: 700, temperatureC: 10 }] },
+          { member: "gefs:p01", population: "gefs", levels: [{ pressureHpa: 850, temperatureC: 12 }] },
+          { member: "aigefs:c00", population: "aigefs", levels: [{ pressureHpa: 850, temperatureC: 14 }] },
+          { member: "aigefs:p01", population: "aigefs", levels: [{ pressureHpa: 850, temperatureC: 16 }] },
+        ],
+        source: { provider: "NOAA" },
+      })),
+    });
+
+    await expect(service.compareHybridConstituent({
+      constituent: "gefs",
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["gefs:c00", "gefs:p01", "aigefs:c00", "aigefs:p01"],
+      quantiles: [0.5],
+    })).rejects.toThrow("member is missing 850 hPa");
+  });
+
   it("handles zero-spread reference ensembles and rejects non-scalar ensemble variables", async () => {
     const service = new ModelClassComparisonService({
       query: vi.fn(async (input: QueryAtmosphereInput) => {
