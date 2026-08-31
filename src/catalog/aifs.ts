@@ -7,6 +7,10 @@ export const AIFS_PRESSURE_LEVELS_HPA = [
   1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50, 10,
 ] as const;
 
+export const AIFS_MOISTURE_PRESSURE_LEVELS_HPA = [
+  1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50,
+] as const;
+
 export const AIFS_RAW_PRESSURE_VARIABLE_IDS = [
   "temperature",
   "u_wind",
@@ -149,6 +153,14 @@ const pressureVariableSet = new Set<string>(AIFS_PRESSURE_VARIABLE_IDS);
 const rawPressureVariableSet = new Set<string>(AIFS_RAW_PRESSURE_VARIABLE_IDS);
 const fieldSet = new Set<string>(AIFS_FIELD_IDS);
 const areaFieldSet = new Set<string>(AIFS_AREA_FIELD_IDS);
+const moistureDependentPressureVariableSet = new Set<string>([
+  "specific_humidity",
+  "mixing_ratio",
+  "virtual_temperature",
+  "air_density",
+  "wet_bulb_temperature",
+  "equivalent_potential_temperature",
+]);
 
 export function isAifsPressureLevel(value: number): boolean {
   return pressureLevelSet.has(value);
@@ -168,6 +180,21 @@ export function isAifsField(value: string): value is AifsFieldId {
 
 export function isAifsAreaField(value: string): value is AifsRawFieldId {
   return areaFieldSet.has(value);
+}
+
+export function aifsSupportedPressureLevelsForVariable(
+  id: AifsPressureVariableId,
+): readonly number[] {
+  return moistureDependentPressureVariableSet.has(id)
+    ? AIFS_MOISTURE_PRESSURE_LEVELS_HPA
+    : AIFS_PRESSURE_LEVELS_HPA;
+}
+
+export function isSupportedAifsPressureSelection(
+  id: AifsPressureVariableId,
+  pressureHpa: number,
+): boolean {
+  return aifsSupportedPressureLevelsForVariable(id).includes(pressureHpa as never);
 }
 
 export function expandAifsPressureVariables(ids: readonly AifsPressureVariableId[]): AifsRawPressureVariableId[] {
@@ -217,7 +244,7 @@ export function getAifsCatalog() {
         description: definition.description,
         levelType: "isobaric_hpa" as const,
         outputs: definition.outputs.map((output) => ({ ...output })),
-        supportedPressureLevelsHpa: [...AIFS_PRESSURE_LEVELS_HPA],
+        supportedPressureLevelsHpa: [...aifsSupportedPressureLevelsForVariable(id)],
         ...(definition.kind === "raw"
           ? { sourceParam: AIFS_RAW_PRESSURE_VARIABLE_CATALOG[id as AifsRawPressureVariableId].param }
           : { dependencies: [...definition.dependencies] }),
