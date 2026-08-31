@@ -3,6 +3,7 @@ import {
   AIGFS_FIELD_IDS,
   AIGFS_PRESSURE_VARIABLE_IDS,
 } from "./aigfs.js";
+import { AROME_0P01_FIELD_IDS } from "./arome.js";
 import {
   ICON_D2_FIELD_IDS,
   ICON_D2_PRESSURE_VARIABLE_IDS,
@@ -90,6 +91,7 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
     ...(datasets.has("hgefs") ? aigfsEntries("hgefs") : []),
     ...(datasets.has("icon-d2") ? iconD2Entries("icon-d2") : []),
     ...(datasets.has("icon-d2-eps") ? iconD2Entries("icon-d2-eps") : []),
+    ...(datasets.has("arome") ? aromeEntries() : []),
     ...(datasets.has("gefs")
       ? (query.forecastKind === "reforecast" ? gefsReforecastEntries() : gefsEntries())
       : []),
@@ -189,6 +191,23 @@ function aigfsEntries(dataset: "aigfs" | "aigefs" | "hgefs"): CatalogEntry[] {
   ];
 }
 
+
+function aromeEntries(): CatalogEntry[] {
+  return AROME_0P01_FIELD_IDS.map((id) => {
+    const definition = NON_ISOBARIC_FIELD_CATALOG[id];
+    return {
+      dataset: "arome" as const,
+      section: "fields" as const,
+      id: definition.id,
+      classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
+      kind: definition.kind,
+      description: definition.description,
+      verticalSemantics: definition.level.gribLevel,
+      temporalSemantics: definition.temporalSemantics,
+      outputs: definition.outputs.map((output) => ({ ...output })),
+    };
+  });
+}
 
 function iconD2Entries(
   dataset: "icon-d2" | "icon-d2-eps",
