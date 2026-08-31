@@ -14,7 +14,7 @@ No weather API key. No model-specific public namespaces. No need to teach the ag
 
 ## 30-second start
 
-Node.js 20+ is enough for the normal npm path. The package includes its GRIB2 decoder; `icon-d2-eps` is the one current exception and needs native `wgrib2` (the Docker image already includes it).
+Node.js 20+ is enough for the normal npm path. The package includes its GRIB2 decoder; `icon-d2-eps` is the one current exception and needs native CDO plus `wgrib2` for DWD's official triangular-grid remapping/member extraction path (the Docker image includes both).
 
 ```bash
 npx weather-for-grown-ups --help
@@ -106,7 +106,7 @@ Old GFS initializations stay `dataset: "gfs"` and route to the matching archive.
 | `aigefs` | NOAA AIGEFS | 31-member AI ensemble; 0.25°; native 6-hour output through f384; member-first aggregation |
 | `hgefs` | NOAA HGEFS | 62-member hybrid ensemble: 31 GEFS physics + 31 AIGEFS AI members; 6-hourly through f240; constituent identity and native grids preserved |
 | `icon-d2` | DWD ICON-D2 | limited-area convection-permitting deterministic forecast; native ~2.1 km icosahedral model grid; 3-hourly cycles; hourly output through f48 |
-| `icon-d2-eps` | DWD ICON-D2-EPS | 20-member convection-permitting regional ensemble; native ~2.1 km icosahedral grid; member-first aggregation; hourly output through f48; native `wgrib2` decoder required |
+| `icon-d2-eps` | DWD ICON-D2-EPS | 20-member convection-permitting regional ensemble; native ~2.1 km icosahedral grid; member-first aggregation; hourly output through f48; native CDO + `wgrib2` required for official DWD remapping/member extraction |
 | `gefs` | NOAA GEFS | member-first operational ensemble; explicit `forecast.kind: "reforecast"` selects the GEFSv12 retrospective population |
 | `ifs` | ECMWF deterministic IFS | 0.25° Open Data forecast with native ECMWF run/cadence semantics |
 | `aifs` | ECMWF AIFS Single | deterministic AI forecast; 0.25°; four daily cycles; native 6-hour output through f360; AIFS-native field inventory |
