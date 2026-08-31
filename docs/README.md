@@ -12,13 +12,15 @@ The root [README](../README.md) explains **why Weather for Grown Ups exists**. T
 | discover fields and capabilities | [CATALOG_SEARCH.md](CATALOG_SEARCH.md) |
 | contribute or debug tests | [TESTING.md](TESTING.md) |
 | understand physical/numerical validation | [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md) |
-| see release-level compatibility changes | [RELEASES.md](RELEASES.md) |\n| see what WFG is building next | [ROADMAP.md](ROADMAP.md) |
+| see release-level compatibility changes | [RELEASES.md](RELEASES.md) |
+| see what WFG is building next | [ROADMAP.md](ROADMAP.md) |
 
 ## Dataset and source semantics
 
 These documents describe **what the upstream model/archive actually means**. They are intentionally separate from the model-neutral public query vocabulary.
 
 - [AIGFS.md](AIGFS.md) — NOAA's deterministic AI forecast, native 6-hour cadence, operational field inventory and NOMADS partial-range access.
+- [AIGEFS.md](AIGEFS.md) — NOAA's 31-member AI ensemble, member mapping, member-first diagnostics and EAGLE AWS access.
 - [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — operational GEFS plus the explicit GEFSv12 reforecast population, member sets, products, grids, cadence and member-first semantics.
 - [IFS.md](IFS.md) — deterministic IFS and IFS ENS Open Data products, cadence, 50-perturbation semantics and ECMWF access behavior.
 - [HISTORY.md](HISTORY.md) — historical GFS Grid 4 analysis, archived GFS forecasts, analog workflows and verification semantics.
@@ -58,7 +60,8 @@ The files below document ensemble-specific composition details. They should not 
 - [TESTING.md](TESTING.md) — deterministic unit/integration coverage and test organization.
 - [LIVE_SMOKE.md](LIVE_SMOKE.md) — bounded live-source checks across NOAA and ECMWF.
 - [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md) — physical invariants and numerical expectations.
-- [RELEASES.md](RELEASES.md) — release history and public compatibility notes.\n- [ROADMAP.md](ROADMAP.md) — planned AI, ensemble, hybrid and comparison-architecture work.
+- [RELEASES.md](RELEASES.md) — release history and public compatibility notes.
+- [ROADMAP.md](ROADMAP.md) — planned AI, ensemble, hybrid and comparison-architecture work.
 
 ## Documentation rules
 
