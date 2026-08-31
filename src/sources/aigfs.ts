@@ -8,6 +8,13 @@ export const AIGFS_NATIVE_FORECAST_HOURS = Object.freeze(
 );
 
 export type AigfsProduct = "pres" | "sfc";
+export type AigefsStatistic = "avg" | "spr";
+
+export interface AigfsNomadsPathResolver {
+  label: string;
+  buildUrl(run: Date, forecastHour: number, product: AigfsProduct): string;
+  buildIndexUrl(run: Date, forecastHour: number, product: AigfsProduct): string;
+}
 
 export function buildAigfsNomadsUrl(
   run: Date,
@@ -37,6 +44,92 @@ export function buildAigfsNomadsIndexUrl(
   product: AigfsProduct,
 ): string {
   return `${buildAigfsNomadsUrl(run, forecastHour, product)}.idx`;
+}
+
+export const AIGFS_NOMADS_PATHS: AigfsNomadsPathResolver = {
+  label: "AIGFS",
+  buildUrl: buildAigfsNomadsUrl,
+  buildIndexUrl: buildAigfsNomadsIndexUrl,
+};
+
+export function buildAigefsNomadsUrl(
+  run: Date,
+  forecastHour: number,
+  member: string,
+  product: AigfsProduct,
+): string {
+  assertAigfsForecastHour(forecastHour);
+  if (!/^\\d{3}$/.test(member) || Number(member) < 0 || Number(member) > 30) {
+    throw new Error(`Invalid AIGEFS member ${member}; expected 000 through 030`);
+  }
+  const date = [
+    run.getUTCFullYear(),
+    String(run.getUTCMonth() + 1).padStart(2, "0"),
+    String(run.getUTCDate()).padStart(2, "0"),
+  ].join("");
+  const cycle = String(run.getUTCHours()).padStart(2, "0");
+  const hour = String(forecastHour).padStart(3, "0");
+  return [
+    "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aigefs/prod",
+    `aigefs.${date}`,
+    cycle,
+    `mem${member}/model/atmos/grib2`,
+    `aigefs.t${cycle}z.${product}.f${hour}.grib2`,
+  ].join("/");
+}
+
+export function buildAigefsNomadsIndexUrl(
+  run: Date,
+  forecastHour: number,
+  member: string,
+  product: AigfsProduct,
+): string {
+  return `${buildAigefsNomadsUrl(run, forecastHour, member, product)}.idx`;
+}
+
+export function aigefsMemberNomadsPaths(member: string): AigfsNomadsPathResolver {
+  return {
+    label: `AIGEFS member ${member}`,
+    buildUrl: (run, forecastHour, product) =>
+      buildAigefsNomadsUrl(run, forecastHour, member, product),
+    buildIndexUrl: (run, forecastHour, product) =>
+      buildAigefsNomadsIndexUrl(run, forecastHour, member, product),
+  };
+}
+
+export function buildAigefsStatisticNomadsUrl(
+  run: Date,
+  forecastHour: number,
+  statistic: AigefsStatistic,
+  product: AigfsProduct,
+): string {
+  assertAigfsForecastHour(forecastHour);
+  const date = [
+    run.getUTCFullYear(),
+    String(run.getUTCMonth() + 1).padStart(2, "0"),
+    String(run.getUTCDate()).padStart(2, "0"),
+  ].join("");
+  const cycle = String(run.getUTCHours()).padStart(2, "0");
+  const hour = String(forecastHour).padStart(3, "0");
+  return [
+    "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aigefs/prod",
+    `aigefs.${date}`,
+    cycle,
+    "ensstat/products/atmos/grib2",
+    `aigefs.t${cycle}z.${product}.${statistic}.f${hour}.grib2`,
+  ].join("/");
+}
+
+export function aigefsStatisticNomadsPaths(
+  statistic: AigefsStatistic = "avg",
+): AigfsNomadsPathResolver {
+  return {
+    label: `AIGEFS ensemble ${statistic}`,
+    buildUrl: (run, forecastHour, product) =>
+      buildAigefsStatisticNomadsUrl(run, forecastHour, statistic, product),
+    buildIndexUrl: (run, forecastHour, product) =>
+      `${buildAigefsStatisticNomadsUrl(run, forecastHour, statistic, product)}.idx`,
+  };
 }
 
 export function parseAigfsRun(value: string): Date {
