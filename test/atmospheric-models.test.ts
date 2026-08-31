@@ -64,6 +64,20 @@ describe("atmospheric dataset capability catalog", () => {
         nominalResolution: { value: 2.1, unit: "km" },
       },
     });
+    expect(ATMOSPHERIC_DATASET_CATALOG.icon_d2_eps_2p1km).toMatchObject({
+      family: "icon-d2-eps",
+      provider: "dwd",
+      modelClass: "physics",
+      kind: "ensemble",
+      role: "forecast",
+      maxForecastHour: 48,
+      nativeForecastIntervalHours: 1,
+      members: 20,
+      nativeGrid: {
+        type: "icosahedral",
+        nominalResolution: { value: 2.1, unit: "km" },
+      },
+    });
     expect(ATMOSPHERIC_DATASET_CATALOG.aifs_0p25).toMatchObject({
       family: "aifs",
       provider: "ecmwf",
@@ -140,6 +154,10 @@ describe("atmospheric dataset capability catalog", () => {
     expect(datasetSupportsOperation("icon_d2_0p02", "area_summary")).toBe(true);
     expect(datasetSupportsOperation("icon_d2_0p02", "parcel_diagnostics")).toBe(false);
     expect(datasetSupportsOperation("icon_d2_0p02", "aligned_model_comparison")).toBe(false);
+    expect(datasetSupportsOperation("icon_d2_eps_2p1km", "profile")).toBe(true);
+    expect(datasetSupportsOperation("icon_d2_eps_2p1km", "ensemble_distribution")).toBe(true);
+    expect(datasetSupportsOperation("icon_d2_eps_2p1km", "parcel_diagnostics")).toBe(false);
+    expect(datasetSupportsOperation("icon_d2_eps_2p1km", "aligned_model_comparison")).toBe(false);
     expect(datasetSupportsOperation("aifs_0p25", "profile")).toBe(true);
     expect(datasetSupportsOperation("aifs_0p25", "layer_diagnostics")).toBe(true);
     expect(datasetSupportsOperation("aifs_0p25", "parcel_diagnostics")).toBe(false);
@@ -184,6 +202,7 @@ describe("atmospheric dataset capability catalog", () => {
       "aigefs_0p25",
       "hgefs_0p25",
       "icon_d2_0p02",
+      "icon_d2_eps_2p1km",
       "aifs_0p25",
       "aifs_ens_0p25",
       "gefs_0p50",
@@ -205,6 +224,8 @@ describe("atmospheric dataset capability catalog", () => {
     expect(modelSupportsOperation("icon_d2_0p02", "profile")).toBe(true);
     expect(modelSupportsOperation("icon_d2_0p02", "area_summary")).toBe(true);
     expect(modelSupportsOperation("icon_d2_0p02", "aligned_model_comparison")).toBe(false);
+    expect(modelSupportsOperation("icon_d2_eps_2p1km", "ensemble_distribution")).toBe(true);
+    expect(modelSupportsOperation("icon_d2_eps_2p1km", "aligned_model_comparison")).toBe(false);
     expect(modelSupportsOperation("aifs_0p25", "profile")).toBe(true);
     expect(modelSupportsOperation("aifs_0p25", "aligned_model_comparison")).toBe(true);
     expect(modelSupportsOperation("aifs_0p25", "parcel_diagnostics")).toBe(false);
