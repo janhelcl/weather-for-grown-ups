@@ -54,7 +54,7 @@ Together, AIGFS and AIFS establish a clean provider-independent AI forecast axis
 
 Add the corresponding ensemble/hybrid products:
 
-- NOAA AIGEFS;
+- NOAA AIGEFS — **implemented** as the 31-member `aigefs` dataset with member-first state, area and diagnostic aggregation;
 - ECMWF AIFS ENS;
 - NOAA HGEFS hybrid ensemble.
 
