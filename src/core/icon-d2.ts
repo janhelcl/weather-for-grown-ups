@@ -128,7 +128,7 @@ export class IconD2ForecastService {
     const cacheDir = options.cacheDir
       ?? process.env.WFG_CACHE_DIR
       ?? join(homedir(), ".cache", "wfg");
-    this.cache = options.cache ?? new IconD2OpenDataCache(join(cacheDir, "iconD2"));
+    this.cache = options.cache ?? new IconD2OpenDataCache(join(cacheDir, "icon-d2"));
     this.decoder = options.decoder ?? new Wgrib2Decoder();
     this.runProvider = options.runProvider ?? new IconD2RunResolver(this.cache);
     this.areaDecoder = options.areaDecoder ?? new Wgrib2StatsDecoder();
@@ -136,8 +136,8 @@ export class IconD2ForecastService {
   }
 
   async query(request: QueryAtmosphereRequest): Promise<unknown> {
-    if (request.dataset !== "iconD2") {
-      throw new Error("ICON-D2 service only accepts dataset=iconD2");
+    if (request.dataset !== "icon-d2") {
+      throw new Error("ICON-D2 service only accepts dataset=icon-d2");
     }
     if (request.geometry.type === "point") {
       return "at" in request.time
@@ -154,8 +154,8 @@ export class IconD2ForecastService {
   }
 
   async diagnose(request: DiagnoseAtmosphereRequest): Promise<unknown> {
-    if (request.dataset !== "iconD2") {
-      throw new Error("ICON-D2 service only accepts dataset=iconD2");
+    if (request.dataset !== "icon-d2") {
+      throw new Error("ICON-D2 service only accepts dataset=icon-d2");
     }
     if (request.diagnostic.kind === "parcel") {
       throw new Error("ICON-D2 does not expose parcel diagnostics because its surface product lacks the required parcel initialization state");
