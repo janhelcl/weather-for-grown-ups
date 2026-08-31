@@ -15,6 +15,7 @@ FROM mambaorg/micromamba:2.9.0-debian12-slim AS runtime-base
 USER root
 RUN micromamba install --yes --name base --channel conda-forge \
       nodejs=24 \
+      cdo \
       wgrib2=3.8.0 \
   && micromamba clean --all --yes
 
