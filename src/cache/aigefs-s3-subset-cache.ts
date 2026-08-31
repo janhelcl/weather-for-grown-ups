@@ -268,7 +268,8 @@ function coalesceAdjacentRanges(ranges: readonly ByteRange[]): ByteRange[] {
       && previous.end !== undefined
       && range.start <= previous.end + 1
     ) {
-      previous.end = range.end;
+      if (range.end === undefined) delete previous.end;
+      else previous.end = range.end;
       continue;
     }
     result.push({ ...range });
