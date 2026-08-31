@@ -356,7 +356,7 @@ async function alignedQueries(
     service.query(leftInput),
     service.query(rightInput),
   ]);
-  if (requestedRun !== "latest") return [left, right];
+  if (requestedRun !== "latest" && requestedRun !== "latest_complete") return [left, right];
 
   const leftRun = requiredString(objectResult(left).run, "left latest run");
   const rightRun = requiredString(objectResult(right).run, "right latest run");
