@@ -4,6 +4,7 @@ import {
   AigfsNomadsSubsetCache,
   type AigfsDataRequest,
   type AigfsSourceFile,
+  type AigfsSubsetCache,
 } from "../cache/aigfs-nomads-subset-cache.js";
 import {
   AIGFS_RAW_PRESSURE_VARIABLE_IDS,
@@ -84,7 +85,7 @@ export interface AigfsPointDecoder {
 
 export interface AigfsForecastServiceOptions {
   cacheDir?: string;
-  cache?: AigfsNomadsSubsetCache;
+  cache?: AigfsSubsetCache;
   decoder?: AigfsPointDecoder;
   runProvider?: AigfsRunProvider;
   areaDecoder?: Wgrib2StatsDecoder;
@@ -117,7 +118,7 @@ interface AigfsProfileResult {
 }
 
 export class AigfsForecastService {
-  private readonly cache: AigfsNomadsSubsetCache;
+  private readonly cache: AigfsSubsetCache;
   private readonly decoder: AigfsPointDecoder;
   private readonly runProvider: AigfsRunProvider;
   private readonly areaDecoder: Wgrib2StatsDecoder;
