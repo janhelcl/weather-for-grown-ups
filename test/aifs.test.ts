@@ -79,6 +79,19 @@ describe("AIFS availability and latest-run resolution", () => {
     { key: "temperature@850", param: "t", levtype: "pl" as const, levelist: 850 },
   ];
 
+  it("runs AIFS availability requests through the configured ECMWF access policy", async () => {
+    const fetchFn = vi.fn(async () => new Response(
+      '{"date":"20260831","time":"0000","step":"6","levtype":"pl","levelist":"850","param":"t","_offset":0,"_length":10}',
+      { status: 200 },
+    )) as typeof fetch;
+    const accessRun = vi.fn(async <T>(_url: string, operation: () => Promise<T>) => operation());
+    const probe = new AifsOpenDataRunProbe(fetchFn, { run: accessRun });
+
+    await expect(probe.isForecastAvailable(run, 6, selectors)).resolves.toBe(true);
+    expect(accessRun).toHaveBeenCalledTimes(1);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
   it("fails over between ECMWF Open Data mirrors and checks selected inventory", async () => {
     const fetchFn = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
@@ -156,6 +169,21 @@ describe("AIFS availability and latest-run resolution", () => {
       6,
       selectors,
     );
+  });
+
+  it("rejects an inverted latest-run range before probing upstream", async () => {
+    const isForecastAvailable = vi.fn(async () => true);
+    const resolver = new AifsLatestRunResolver({
+      probe: { isForecastAvailable },
+      now: () => new Date("2026-08-31T19:00:00Z"),
+    });
+
+    await expect(resolver.resolveLatestRunForRange(
+      new Date("2026-08-31T18:00:00Z"),
+      new Date("2026-08-31T12:00:00Z"),
+      selectors,
+    )).rejects.toThrow("end time must be at or after start time");
+    expect(isForecastAvailable).not.toHaveBeenCalled();
   });
 
   it("fails cleanly when no candidate cycle can satisfy the selection or range", async () => {
