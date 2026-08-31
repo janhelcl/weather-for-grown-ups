@@ -34,6 +34,13 @@ export const HGEFS_MEMBERS: readonly HgefsMember[] = [
 
 export const HGEFS_PRESSURE_VARIABLE_IDS = AIGFS_PRESSURE_VARIABLE_IDS;
 export const HGEFS_PRESSURE_LEVELS_HPA = AIGFS_PRESSURE_LEVELS_HPA;
+export const HGEFS_AREA_PRESSURE_VARIABLE_IDS = [
+  "temperature",
+  "u_wind",
+  "v_wind",
+  "geopotential_height",
+  "vertical_velocity",
+] as const;
 export const HGEFS_FIELD_IDS = AIGFS_FIELD_IDS;
 export const HGEFS_AREA_FIELD_IDS = AIGFS_AREA_FIELD_IDS;
 
