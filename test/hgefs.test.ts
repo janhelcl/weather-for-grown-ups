@@ -93,6 +93,17 @@ describe("HGEFS hybrid catalog and validation", () => {
 
     expect(() => queryAtmosphereSchema.parse({
       dataset: "hgefs",
+      geometry: { type: "point", ...requestedPoint },
+      time: { at: validTime },
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [825],
+      },
+      ensemble: { members: selectedMembers },
+    })).toThrow("cannot satisfy temperature at 825 hPa");
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "hgefs",
       geometry: {
         type: "points",
         points: [requestedPoint, { latitude: 49.2, longitude: 16.61 }],
