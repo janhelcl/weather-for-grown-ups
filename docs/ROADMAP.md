@@ -112,7 +112,13 @@ Goals:
 
 The first implementation should prefer a coherent, well-tested shared-variable subset over pretending to match the full GFS/IFS inventories.
 
-## 3. ICON-D2-EPS
+## 3. ICON-D2-EPS ✅
+
+**Implemented as the first convection-permitting regional ensemble.**
+
+DWD ICON-D2-EPS now uses the same limited-area capability/domain contract and public atmospheric query language as ICON-D2 while preserving its native 20-member population. WFG reads DWD's all-members bzip2/GRIB2 parameter objects on the native ~2.1 km icosahedral grid, selects members from GRIB ensemble metadata, runs shared nonlinear diagnostics independently per member, and only then aggregates distributions.
+
+Point, time-range, multi-point, multi-point-range, transect and bounded-area ensemble summaries are routed through the existing ensemble result semantics, with layer/profile diagnostic summaries, native member IDs, run pinning and source provenance. Source packaging, decompression, DWD request policy and caching remain isolated below the unified adapter boundary. A focused live smoke exercises the real two-member Open Data decode path.
 
 Add ICON-D2-EPS as the first convection-permitting regional ensemble.
 
