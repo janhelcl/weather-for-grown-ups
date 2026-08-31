@@ -105,10 +105,10 @@ describe("AIFS unified capability", () => {
       uWindMs: 3,
       vWindMs: 4,
       windSpeedMs: 5,
-      geopotentialHeightGpm: 1500,
       specificHumidityKgKg: 0.005,
     });
     expect(result.levels[0].temperatureC).toBeCloseTo(6.85);
+    expect(result.levels[0].geopotentialHeightGpm).toBeCloseTo(1500, 8);
     expect(result.fields.find((field: any) => field.id === "temperature_2m")
       .values.temperatureC).toBeCloseTo(20);
     expect(result.fields.find((field: any) => field.id === "wind_10m")
