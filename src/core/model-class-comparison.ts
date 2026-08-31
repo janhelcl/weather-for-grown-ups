@@ -7,6 +7,7 @@ import {
   type HgefsMember,
   type HgefsPopulation,
 } from "../catalog/hgefs.js";
+import { VARIABLE_CATALOG } from "../catalog/variables.js";
 import type {
   PublicAtmosphericDataset,
   QueryAtmosphereInput,
