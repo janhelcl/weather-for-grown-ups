@@ -63,7 +63,7 @@ The files below document ensemble-specific composition details. They should not 
 - [LIVE_SMOKE.md](LIVE_SMOKE.md) — bounded live-source checks across NOAA and ECMWF.
 - [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md) — physical invariants and numerical expectations.
 - [RELEASES.md](RELEASES.md) — release history and public compatibility notes.
-- [ROADMAP.md](ROADMAP.md) — planned AI, ensemble, hybrid and comparison-architecture work.
+- [ROADMAP.md](ROADMAP.md) — the regional/convection-permitting roadmap plus the following verification, waves and extended-range axes.
 
 ## Documentation rules
 
