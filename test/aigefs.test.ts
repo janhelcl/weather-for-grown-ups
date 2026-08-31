@@ -114,7 +114,7 @@ describe("AIGEFS member-first service", () => {
         fields: ["temperature_2m"],
       },
       ensemble: {
-        members: ["000", "001"],
+        members: ["001", "000"],
         quantiles: [0, 0.5, 1],
         includeMembers: true,
       },
@@ -141,6 +141,34 @@ describe("AIGEFS member-first service", () => {
       memberPopulation: "000-030",
       allCacheHit: false,
     });
+  });
+
+
+  it("enforces default member-sample guardrails before member fan-out", async () => {
+    const factory = vi.fn((member) => ({
+      query: vi.fn(async () => pointResult(member)),
+      diagnose: vi.fn(),
+    }) as any);
+    const service = new AigefsForecastService({
+      runProvider,
+      memberServiceFactory: factory,
+    });
+
+    const request = queryAtmosphereSchema.parse({
+      dataset: "aigefs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-30T06:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble: {
+        members: ["000", "001"],
+        maxMemberSamples: 1,
+      },
+    });
+
+    await expect(service.query(request)).rejects.toThrow(
+      "2 member samples, exceeding maxMemberSamples=1",
+    );
+    expect(factory).not.toHaveBeenCalled();
   });
 
   it("keeps area spatial aggregation inside each member before ensemble summaries", async () => {
