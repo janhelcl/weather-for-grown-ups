@@ -759,6 +759,23 @@ function validateHgefsModifiers(
   request: any,
   context: z.RefinementCtx,
 ): void {
+  if (request.geometry?.type === "points" && request.geometry.points.length > 20) {
+    context.addIssue({
+      code: "custom",
+      path: ["geometry", "points"],
+      message: "HGEFS multi-point queries currently support at most 20 points because the GEFS constituent reuses one member file across the point batch",
+    });
+  }
+  if (
+    request.geometry?.type === "transect"
+    && (request.geometry.samples ?? 20) > 20
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["geometry", "samples"],
+      message: "HGEFS transects currently support at most 20 samples because the GEFS constituent reuses the native ensemble transect primitive",
+    });
+  }
   if (request.selection !== undefined) {
     const variables = request.selection.variables ?? [];
     const pressureLevelsHpa = request.selection.pressureLevelsHpa ?? [];
