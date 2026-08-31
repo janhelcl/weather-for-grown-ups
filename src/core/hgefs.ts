@@ -180,7 +180,10 @@ export class HgefsForecastService {
         run: run.toISOString(),
         requestedStartTime: request.time.from,
         requestedEndTime: request.time.to,
-        requestedPoint: { ...request.geometry },
+        requestedPoint: {
+          latitude: request.geometry.latitude,
+          longitude: request.geometry.longitude,
+        },
         selection: hybridSelection(request, members, quantiles),
         constituentGridPoints: first.constituentGridPoints,
         series: steps.map(compactPointStep),
@@ -251,7 +254,10 @@ export class HgefsForecastService {
       run: run.toISOString(),
       requestedStartTime: request.time.from,
       requestedEndTime: request.time.to,
-      requestedPoint: { ...request.geometry },
+      requestedPoint: {
+          latitude: request.geometry.latitude,
+          longitude: request.geometry.longitude,
+        },
       diagnostic: request.diagnostic,
       selection: hybridDiagnosticSelection(members, quantiles),
       constituentGridPoints: first.constituentGridPoints,
@@ -498,8 +504,8 @@ export class HgefsForecastService {
 
     if (request.diagnostic.kind === "layer") {
       const memberDiagnostics = [
-        ...diagnosticLayerMembers("aigefs", split.aigefs, aigefs),
         ...diagnosticLayerMembers("gefs", split.gefs, gefs),
+        ...diagnosticLayerMembers("aigefs", split.aigefs, aigefs),
       ];
       const aggregate = summarizeEnsembleLayerDiagnostics(
         request.diagnostic.diagnostics,
@@ -515,7 +521,10 @@ export class HgefsForecastService {
         run: runIso,
         validTime: validTime.toISOString(),
         forecastHour,
-        requestedPoint: { ...request.geometry },
+        requestedPoint: {
+          latitude: request.geometry.latitude,
+          longitude: request.geometry.longitude,
+        },
         constituentGridPoints: diagnosticGridPoints(aigefs, gefs),
         pressureLayer: {
           lowerPressureHpa: request.diagnostic.lowerPressureHpa,
@@ -535,15 +544,18 @@ export class HgefsForecastService {
     }
 
     const memberProfiles = [
-      ...diagnosticProfileMembers("aigefs", split.aigefs, aigefs),
       ...diagnosticProfileMembers("gefs", split.gefs, gefs),
+      ...diagnosticProfileMembers("aigefs", split.aigefs, aigefs),
     ];
     return {
       model: MODEL,
       run: runIso,
       validTime: validTime.toISOString(),
       forecastHour,
-      requestedPoint: { ...request.geometry },
+      requestedPoint: {
+          latitude: request.geometry.latitude,
+          longitude: request.geometry.longitude,
+        },
       constituentGridPoints: diagnosticGridPoints(aigefs, gefs),
       sampledPressureLevelsHpa: request.diagnostic.pressureLevelsHpa,
       selection: {
@@ -680,7 +692,10 @@ function summarizePointInstant(
     run: run.toISOString(),
     validTime: validTime.toISOString(),
     forecastHour,
-    requestedPoint: { ...request.geometry },
+    requestedPoint: {
+          latitude: request.geometry.latitude,
+          longitude: request.geometry.longitude,
+        },
     constituentGridPoints: gridPointsFromSnapshots(snapshots),
     selection: hybridSelection(request, members, quantiles),
     ...profileSummaries(snapshots.map((snapshot) => snapshot), quantiles),
@@ -879,8 +894,8 @@ function pointSnapshots(
     throw new Error("Internal HGEFS routing error: expected point");
   }
   return [
-    ...aigefsPointSnapshots(constituents.selectedAigefs, constituents.aigefs),
     ...gefsPointSnapshots(request, constituents.selectedGefs, constituents.gefs),
+    ...aigefsPointSnapshots(constituents.selectedAigefs, constituents.aigefs),
   ];
 }
 
@@ -890,6 +905,19 @@ function pointIndexSnapshots(
   pointIndex: number,
 ): HybridMemberSnapshot[] {
   const snapshots: HybridMemberSnapshot[] = [];
+  if (constituents.gefs !== undefined) {
+    const point = constituents.gefs.points?.[pointIndex];
+    if (point === undefined) throw new Error(`HGEFS GEFS result is missing point ${pointIndex}`);
+    for (const member of constituents.selectedGefs) {
+      const rawMember = requiredMember(point.members, member, "GEFS");
+      snapshots.push(normalizeGefsMember(
+        request,
+        member,
+        rawMember,
+        point.gridPoint,
+      ));
+    }
+  }
   if (constituents.aigefs !== undefined) {
     for (const member of constituents.selectedAigefs) {
       const rawMember = requiredMember(constituents.aigefs.members, member, "AIGEFS");
@@ -906,19 +934,6 @@ function pointIndexSnapshots(
       });
     }
   }
-  if (constituents.gefs !== undefined) {
-    const point = constituents.gefs.points?.[pointIndex];
-    if (point === undefined) throw new Error(`HGEFS GEFS result is missing point ${pointIndex}`);
-    for (const member of constituents.selectedGefs) {
-      const rawMember = requiredMember(point.members, member, "GEFS");
-      snapshots.push(normalizeGefsMember(
-        request,
-        member,
-        rawMember,
-        point.gridPoint,
-      ));
-    }
-  }
   return snapshots;
 }
 
@@ -928,6 +943,21 @@ function transectSnapshots(
   sampleIndex: number,
 ): HybridMemberSnapshot[] {
   const snapshots: HybridMemberSnapshot[] = [];
+  if (constituents.gefs !== undefined) {
+    const sample = constituents.gefs.samples?.[sampleIndex];
+    if (sample === undefined) {
+      throw new Error(`HGEFS GEFS result is missing transect sample ${sampleIndex}`);
+    }
+    for (const member of constituents.selectedGefs) {
+      const rawMember = requiredMember(sample.members, member, "GEFS");
+      snapshots.push(normalizeGefsMember(
+        request,
+        member,
+        rawMember,
+        sample.gridPoint,
+      ));
+    }
+  }
   if (constituents.aigefs !== undefined) {
     for (const member of constituents.selectedAigefs) {
       const rawMember = requiredMember(constituents.aigefs.members, member, "AIGEFS");
@@ -944,21 +974,6 @@ function transectSnapshots(
         levels: sample.levels,
         ...(sample.fields === undefined ? {} : { fields: sample.fields }),
       });
-    }
-  }
-  if (constituents.gefs !== undefined) {
-    const sample = constituents.gefs.samples?.[sampleIndex];
-    if (sample === undefined) {
-      throw new Error(`HGEFS GEFS result is missing transect sample ${sampleIndex}`);
-    }
-    for (const member of constituents.selectedGefs) {
-      const rawMember = requiredMember(sample.members, member, "GEFS");
-      snapshots.push(normalizeGefsMember(
-        request,
-        member,
-        rawMember,
-        sample.gridPoint,
-      ));
     }
   }
   return snapshots;
@@ -1054,19 +1069,6 @@ function publicFieldLevel(level: NonIsobaricLevel): NonIsobaricFieldResult["leve
 
 function areaMemberResults(constituents: ConstituentQueryResults): HybridAreaMember[] {
   const results: HybridAreaMember[] = [];
-  if (constituents.aigefs !== undefined) {
-    for (const member of constituents.selectedAigefs) {
-      const raw = requiredMember(constituents.aigefs.members, member, "AIGEFS");
-      results.push({
-        member: hgefsMember("aigefs", member),
-        population: "aigefs",
-        modelClass: "ai",
-        cacheHit: raw.cacheHit ?? false,
-        statistics: raw.statistics,
-        ...(raw.distribution === undefined ? {} : { distribution: raw.distribution }),
-      });
-    }
-  }
   if (constituents.gefs !== undefined) {
     for (const member of constituents.selectedGefs) {
       const raw = requiredMember(constituents.gefs.members, member, "GEFS");
@@ -1083,6 +1085,19 @@ function areaMemberResults(constituents: ConstituentQueryResults): HybridAreaMem
             : { thresholdFractions: raw.thresholdFractions }),
           ...(raw.extrema === undefined ? {} : { extrema: raw.extrema }),
         },
+      });
+    }
+  }
+  if (constituents.aigefs !== undefined) {
+    for (const member of constituents.selectedAigefs) {
+      const raw = requiredMember(constituents.aigefs.members, member, "AIGEFS");
+      results.push({
+        member: hgefsMember("aigefs", member),
+        population: "aigefs",
+        modelClass: "ai",
+        cacheHit: raw.cacheHit ?? false,
+        statistics: raw.statistics,
+        ...(raw.distribution === undefined ? {} : { distribution: raw.distribution }),
       });
     }
   }
@@ -1240,17 +1255,17 @@ function populationSelection(members: readonly HgefsMember[]) {
 
 function querySource(constituents: ConstituentQueryResults) {
   return hybridSource([
-    ...(constituents.aigefs === undefined ? [] : [{
-      population: "aigefs" as const,
-      modelClass: "ai" as const,
-      selectedMemberCount: constituents.selectedAigefs.length,
-      result: constituents.aigefs,
-    }]),
     ...(constituents.gefs === undefined ? [] : [{
       population: "gefs" as const,
       modelClass: "physics" as const,
       selectedMemberCount: constituents.selectedGefs.length,
       result: constituents.gefs,
+    }]),
+    ...(constituents.aigefs === undefined ? [] : [{
+      population: "aigefs" as const,
+      modelClass: "ai" as const,
+      selectedMemberCount: constituents.selectedAigefs.length,
+      result: constituents.aigefs,
     }]),
   ]);
 }
