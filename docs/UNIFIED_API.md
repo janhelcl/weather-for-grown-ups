@@ -1,6 +1,6 @@
 # Unified atmospheric API
 
-WFG's public API is organized around a small operation vocabulary and six atmospheric datasets.
+WFG's public API is organized around a small operation vocabulary and seven atmospheric datasets.
 
 > **One query language for atmospheric state; datasets preserve their semantics.**
 
@@ -10,12 +10,15 @@ WFG's public API is organized around a small operation vocabulary and six atmosp
 | --- | --- | --- | --- |
 | `gfs` | `gfs_0p25` / `gfs_0p50` operational; grid-matched 0.25° GDEX or 0.5° NCEI archive for old explicit runs | forecast | deterministic physics model |
 | `aigfs` | `aigfs_0p25` NOAA operational AIGFS | forecast | deterministic AI model |
+| `aigefs` | `aigefs_0p25` NOAA operational AIGEFS | forecast | 31-member member-first AI ensemble |
 | `gefs` | operational `gefs_0p50`; explicit `forecast.kind=reforecast` resolves to `gefs_v12_reforecast` for supported retrospective queries | forecast | member-first ensemble |
 | `ifs` | `ifs_0p25` ECMWF Open Data operational forecast | forecast | deterministic |
 | `ifs-ens` | `ifs_ens_0p25` ECMWF Open Data ENS direct output | forecast | 50-member perturbed distribution |
 | `gfs-analysis` | `gfs_grid4_analysis_0p5` | historical analysis | deterministic analyzed state |
 
 `aigfs` keeps the same public state vocabulary while preserving its narrower native product: 0.25°, 00/06/12/18Z initializations, 6-hour output through f384, six native pressure variables and a small surface-field set. It supports point/range, multi-point/range, transect, scalar area, layer and structural profile diagnostics. Parcel diagnostics are explicitly absent because the operational surface product lacks the complete parcel initialization state used by WFG. See [AIGFS.md](AIGFS.md).
+
+`aigefs` exposes the matching 31-member AI ensemble (`000`–`030`) on the same 0.25° / 6-hour / f384 atmospheric inventory. State derivations and nonlinear diagnostics are evaluated independently inside each member before aggregation; bounded areas likewise compute spatial statistics per member before summarizing those statistics across the ensemble. Raw member payloads are optional for bounded single-time requests and range outputs stay compact. See [AIGEFS.md](AIGEFS.md).
 
 Deterministic IFS supports point and multi-point access, native-cadence ranges, transects, raw scalar bbox area summaries, deterministic diagnostics, and run-to-run comparison while preserving ECMWF-native cadence and field semantics. IFS ENS supports point and multi-point member-first bundles, great-circle transects, member-first scalar area statistics, native-cadence point/multi-point state ranges and diagnostic time ranges, layer/profile/parcel diagnostics, and run-to-run distribution shifts with the same canonical pressure vocabulary, 50 perturbations and requested quantiles. Raw member payloads are opt-in for single-time/state queries; diagnostic ranges and run comparisons stay compact. The Cycle 50r1 unperturbed control is exposed as deterministic `ifs`. Unsupported combinations fail explicitly rather than falling through to another dataset. The short public IDs are query vocabulary. Full internal dataset IDs remain visible in result metadata/provenance. Historical forecasts are deliberately **not** a separate public dataset: an explicit old `forecast.run` still uses `dataset: "gfs"`, while WFG resolves the backing archive transparently. GEFS reforecasts follow the same public-vocabulary principle but preserve a different physical meaning: `dataset: "gefs"` plus `forecast.kind: "reforecast"` selects a retrospective GEFSv12 forecast population, not an archive of whatever operational GEFS happened to run on that date.
 
@@ -155,13 +158,14 @@ Run selection is capability-driven rather than syntactically pretending every fo
 | --- | --- |
 | GFS operational | `latest`, `latest_complete`, explicit ISO cycle |
 | AIGFS operational | `latest`, `latest_complete`, explicit ISO cycle |
+| AIGEFS operational | `latest`, `latest_complete`, explicit ISO cycle |
 | GEFS operational | `latest`, explicit ISO cycle |
 | IFS operational | `latest`, explicit ISO cycle |
 | IFS ENS operational | `latest`, explicit ISO cycle |
 | GEFSv12 reforecast | explicit historical 00Z cycle only |
 | GFS analysis | no forecast run axis |
 
-`latest` means the newest published cycle that can satisfy the requested valid time/selection. GFS and AIGFS expose `latest_complete` for callers that specifically require a run published through its full horizon. Unsupported selectors fail at the dataset capability boundary; WFG does not manufacture equivalent semantics for sources that do not provide them. The same rule applies to query, diagnostic, run-comparison, and cross-dataset comparison surfaces.
+`latest` means the newest published cycle that can satisfy the requested valid time/selection. GFS, AIGFS and AIGEFS expose `latest_complete` for callers that specifically require a run published through its full horizon. Unsupported selectors fail at the dataset capability boundary; WFG does not manufacture equivalent semantics for sources that do not provide them. The same rule applies to query, diagnostic, run-comparison, and cross-dataset comparison surfaces.
 
 The caller always asks for an atmospheric state valid at a time. Dataset-native time semantics stay in the result:
 
@@ -197,7 +201,7 @@ Non-isobaric fields:
 
 Where the dataset supports it, the two may be mixed in one request.
 
-For `aigfs`, native range sampling is every 6 forecast hours. Pressure-level requests are restricted to the published 50/100/150/200/250/300/400/500/600/700/850/925/1000 hPa surfaces. Pressure variables are temperature, U/V wind, geopotential height, specific humidity and vertical velocity plus derivations whose dependencies exist. Supported surface selections are 2 m temperature, 10 m U/V wind (plus derived `wind_10m`), mean-sea-level pressure and total precipitation. Unsupported state such as pressure-level relative humidity is rejected rather than substituted. Operational access uses cached NOMADS `.idx` inventories and partial HTTP ranges under the shared NOMADS access policy.
+For `aigfs` and `aigefs`, native range sampling is every 6 forecast hours. Pressure-level requests are restricted to the published 50/100/150/200/250/300/400/500/600/700/850/925/1000 hPa surfaces. Pressure variables are temperature, U/V wind, geopotential height, specific humidity and vertical velocity plus derivations whose dependencies exist. Supported surface selections are 2 m temperature, 10 m U/V wind (plus derived `wind_10m`), mean-sea-level pressure and total precipitation. Unsupported state such as pressure-level relative humidity is rejected rather than substituted. Operational access uses cached NOMADS `.idx` inventories and partial HTTP ranges under the shared NOMADS access policy. AIGEFS applies that same inventory member by member; its upstream `avg`/`spr` products are not substituted for member data. Member selection uses `000` through `030`, numeric/circular summaries are computed after member-level derivation, and `maxMemberSamples` / `maxMemberGridPoints` bound ensemble fan-out.
 
 For `gefs`, source resolution follows selection semantics rather than adding another public dataset. Field-only requests use the 0.25° selected-field product through `f240`. Any pressure-level selection, including a mixed pressure/field bundle, uses the 0.5° pressure product. A field-only time range that extends beyond `f240` uses 0.5° for the entire range so sampling resolution cannot change between steps.
 
