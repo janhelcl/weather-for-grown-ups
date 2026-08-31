@@ -9,6 +9,7 @@ import {
 } from "./gefs-reforecast.js";
 import { getGfsPressureCatalog } from "./catalog.js";
 import { getIfsCatalog } from "./ifs.js";
+import { getAifsCatalog } from "./aifs.js";
 import { LAYER_DIAGNOSTIC_CATALOG } from "./layer-diagnostics.js";
 import { NON_ISOBARIC_FIELD_CATALOG } from "./non-isobaric-fields.js";
 import { PARCEL_DIAGNOSTIC_CATALOG } from "./parcel-diagnostics.js";
@@ -69,6 +70,7 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
       ? (query.forecastKind === "reforecast" ? gefsReforecastEntries() : gefsEntries())
       : []),
     ...(datasets.has("ifs") ? ifsEntries("ifs") : []),
+    ...(datasets.has("aifs") ? aifsEntries() : []),
     ...(datasets.has("ifs-ens") ? ifsEntries("ifs-ens") : []),
     ...(datasets.has("gfs-analysis") ? historyEntries() : []),
   ].filter((entry) => {
@@ -274,6 +276,38 @@ function gefsReforecastEntries(): CatalogEntry[] {
       diagnosticEntry("gefs", "layer_diagnostics", definition)),
     ...catalog.profileDiagnostics.map((definition) =>
       diagnosticEntry("gefs", "profile_diagnostics", definition)),
+  ];
+}
+
+function aifsEntries(): CatalogEntry[] {
+  const catalog = getAifsCatalog();
+  const dataset = "aifs" as const;
+  return [
+    ...catalog.variables.map((definition) => ({
+      dataset,
+      section: "variables" as const,
+      id: definition.id,
+      classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
+      kind: definition.kind,
+      description: definition.description,
+      verticalSemantics: definition.levelType,
+      outputs: definition.outputs.map((output) => ({ ...output })),
+    })),
+    ...catalog.fields.map((definition) => ({
+      dataset,
+      section: "fields" as const,
+      id: definition.id,
+      classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
+      kind: definition.kind,
+      description: definition.description,
+      verticalSemantics: definition.verticalSemantics,
+      temporalSemantics: definition.temporalSemantics,
+      outputs: definition.outputs.map((output) => ({ ...output })),
+    })),
+    ...Object.values(LAYER_DIAGNOSTIC_CATALOG).map((definition) =>
+      diagnosticEntry(dataset, "layer_diagnostics", definition)),
+    ...Object.values(PROFILE_DIAGNOSTIC_CATALOG).map((definition) =>
+      diagnosticEntry(dataset, "profile_diagnostics", definition)),
   ];
 }
 
