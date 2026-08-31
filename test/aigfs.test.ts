@@ -272,7 +272,9 @@ describe("AIGFS deterministic service composition", () => {
     summarizeBox: vi.fn(async () => fakeStats(280, 278, 282)),
     summarizeSelectedMessage: vi.fn(async (_path: string, _box: unknown, selector: any) => ({
       ...fakeStats(selector.code === "TMP" ? 280 : 101_325, selector.code === "TMP" ? 278 : 101_000, selector.code === "TMP" ? 282 : 101_700),
-      temporal: { type: "instantaneous" as const },
+      temporal: selector.temporalSemantics === "accumulation"
+        ? { type: "accumulation" as const, startForecastHour: 0, endForecastHour: 6 }
+        : { type: "instantaneous" as const },
     })),
   };
   const areaGridDecoder = {
@@ -288,7 +290,9 @@ describe("AIGFS deterministic service composition", () => {
         { longitude: 14.25, latitude: 49, value: selector.code === "TMP" ? 280 : 101_325 },
         { longitude: 14.5, latitude: 49, value: selector.code === "TMP" ? 282 : 101_700 },
       ],
-      temporal: { type: "instantaneous" as const },
+      temporal: selector.temporalSemantics === "accumulation"
+        ? { type: "accumulation" as const, startForecastHour: 0, endForecastHour: 6 }
+        : { type: "instantaneous" as const },
     })),
   };
 
