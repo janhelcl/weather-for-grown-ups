@@ -531,3 +531,131 @@ describe("HGEFS diagnostic ranges", () => {
     expect(gefsDiagnose).toHaveBeenCalledTimes(2);
   });
 });
+
+
+describe("HGEFS additional compact branches", () => {
+  it("returns compact multi-point ranges across native steps", async () => {
+    const points = [
+      { latitude: 50.08, longitude: 14.43 },
+      { latitude: 49.2, longitude: 16.61 },
+    ];
+    const fh = (time: string) =>
+      (new Date(time).getTime() - new Date(run).getTime()) / 3_600_000;
+
+    const aigefsQuery = vi.fn(async (request: any) => ({
+      model: "aigefs_0p25",
+      run,
+      validTime: request.time.at,
+      forecastHour: fh(request.time.at),
+      members: request.ensemble.members.map((member: string) => ({
+        member,
+        cacheHit: true,
+        points: points.map((requestedPoint, index) => ({
+          requestedPoint,
+          gridPoint: { latitude: 50 - index, longitude: 14.5 + index },
+          levels: [{ pressureHpa: 850, temperatureC: fh(request.time.at) + index }],
+        })),
+      })),
+      source: { allCacheHit: true },
+    }));
+    const gefsQuery = vi.fn(async (request: any) => ({
+      model: "gefs_0p50",
+      run,
+      validTime: request.time.at,
+      forecastHour: fh(request.time.at),
+      points: points.map((requestedPoint, index) => ({
+        requestedPoint,
+        gridPoint: { latitude: 50 - index, longitude: 14 + index },
+        members: request.ensemble.members.map((member: string) => ({
+          member,
+          cacheHit: true,
+          pressureValues: [{
+            variable: "temperature",
+            pressureLevelHpa: 850,
+            value: fh(request.time.at) + index + 2,
+          }],
+          fields: [],
+        })),
+      })),
+      source: { allCacheHit: true },
+    }));
+
+    const service = new HgefsForecastService({
+      aigefs: { query: aigefsQuery, diagnose: vi.fn() } as any,
+      gefsQuery: { query: gefsQuery },
+      gefsDiagnostics: { diagnose: vi.fn() },
+      stepConcurrency: 1,
+    });
+
+    const result = await service.query(queryAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: { type: "points", points },
+      time: {
+        from: "2026-08-31T06:00:00.000Z",
+        to: "2026-08-31T12:00:00.000Z",
+      },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      forecast: { run },
+      ensemble: {
+        members: ["gefs:c00", "aigefs:c00"],
+        quantiles: [0.5],
+      },
+    })) as any;
+
+    expect(result.series).toHaveLength(2);
+    expect(result.series[0].points).toHaveLength(2);
+    expect(result.series[1].points[1].pressureSummaries[0].distribution.mean).toBe(14);
+  });
+
+  it("returns a minimal AIGEFS-only area result without optional rich outputs", async () => {
+    const aigefsQuery = vi.fn(async (request: any) => ({
+      model: "aigefs_0p25",
+      run,
+      validTime,
+      forecastHour: 6,
+      members: request.ensemble.members.map((member: string, index: number) => ({
+        member,
+        cacheHit: true,
+        statistics: {
+          definedGridPoints: 12,
+          mean: 10 + index,
+          min: 7 + index,
+          max: 13 + index,
+        },
+      })),
+      source: { allCacheHit: true },
+    }));
+    const gefsQuery = vi.fn();
+
+    const service = new HgefsForecastService({
+      aigefs: { query: aigefsQuery, diagnose: vi.fn() } as any,
+      gefsQuery: { query: gefsQuery },
+      gefsDiagnostics: { diagnose: vi.fn() },
+    });
+
+    const result = await service.query(queryAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: {
+        type: "area",
+        westLongitude: 13.5,
+        eastLongitude: 15,
+        southLatitude: 49.5,
+        northLatitude: 50.5,
+      },
+      time: { at: validTime },
+      selection: { fields: ["temperature_2m"] },
+      forecast: { run },
+      ensemble: {
+        members: ["aigefs:c00", "aigefs:p01"],
+        quantiles: [0.5],
+      },
+    })) as any;
+
+    expect(gefsQuery).not.toHaveBeenCalled();
+    expect(result.definedGridPointsByPopulation).toHaveLength(1);
+    expect(result.spatialPercentiles).toBeUndefined();
+    expect(result.spatialThresholdFractions).toBeUndefined();
+    expect(result.memberExtrema).toBeUndefined();
+    expect(result.members).toBeUndefined();
+  });
+});
