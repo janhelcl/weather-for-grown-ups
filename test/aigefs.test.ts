@@ -254,3 +254,360 @@ describe("AIGEFS member-first aggregation", () => {
     ).distribution.mean).toBe(7);
   });
 });
+
+
+describe("AIGEFS composition coverage", () => {
+  const point = { latitude: 50.08, longitude: 14.43 };
+  const gridPoint = { latitude: 50, longitude: 14.5 };
+  const run = "2026-08-30T00:00:00.000Z";
+  const instant = "2026-08-30T06:00:00.000Z";
+
+  function factory(member: "c00" | "p01") {
+    const offset = member === "c00" ? 0 : 2;
+    const level = { pressureHpa: 850, temperatureC: 10 + offset };
+    const source = {
+      provider: "NOAA NOMADS",
+      access: "nomads_range",
+      decoder: "gribberish",
+      cacheHit: member === "c00",
+    };
+    return {
+      query: vi.fn(async (request: any) => {
+        if (request.geometry.type === "point") {
+          if ("from" in request.time) {
+            return {
+              model: "aigfs_0p25",
+              run,
+              requestedStartTime: request.time.from,
+              requestedEndTime: request.time.to,
+              requestedPoint: point,
+              gridPoint,
+              source: {
+                provider: source.provider,
+                access: source.access,
+                decoder: source.decoder,
+              },
+              series: [{
+                validTime: instant,
+                forecastHour: 6,
+                levels: [level],
+                cacheHit: source.cacheHit,
+              }],
+            };
+          }
+          return {
+            model: "aigfs_0p25",
+            run,
+            validTime: instant,
+            forecastHour: 6,
+            requestedPoint: point,
+            gridPoint,
+            levels: [level],
+            source,
+          };
+        }
+
+        if (request.geometry.type === "points") {
+          const points = request.geometry.points.map((requestedPoint: any) => ({
+            requestedPoint,
+            gridPoint,
+            levels: [level],
+          }));
+          if ("from" in request.time) {
+            return {
+              model: "aigfs_0p25",
+              run,
+              requestedStartTime: request.time.from,
+              requestedEndTime: request.time.to,
+              source: {
+                provider: source.provider,
+                access: source.access,
+                decoder: source.decoder,
+              },
+              series: [{
+                validTime: instant,
+                forecastHour: 6,
+                points,
+                cacheHit: source.cacheHit,
+              }],
+            };
+          }
+          return {
+            model: "aigfs_0p25",
+            run,
+            validTime: instant,
+            forecastHour: 6,
+            points,
+            source,
+          };
+        }
+
+        if (request.geometry.type === "transect") {
+          return {
+            model: "aigfs_0p25",
+            run,
+            validTime: instant,
+            forecastHour: 6,
+            startPoint: request.geometry.start,
+            endPoint: request.geometry.end,
+            totalDistanceKm: 100,
+            samples: [request.geometry.start, request.geometry.end].map(
+              (requestedPoint: any, index: number) => ({
+                index,
+                fraction: index,
+                distanceKm: index * 100,
+                requestedPoint,
+                gridPoint,
+                levels: [level],
+              }),
+            ),
+            source,
+          };
+        }
+
+        return {
+          model: "aigfs_0p25",
+          run,
+          validTime: instant,
+          forecastHour: 6,
+          bbox: {
+            westLongitude: request.geometry.westLongitude,
+            eastLongitude: request.geometry.eastLongitude,
+            southLatitude: request.geometry.southLatitude,
+            northLatitude: request.geometry.northLatitude,
+          },
+          variable: {
+            id: "temperature",
+            pressureHpa: 850,
+            field: "temperatureC",
+            unit: "degC",
+          },
+          statistics: {
+            definedGridPoints: 4,
+            mean: 10 + offset,
+            min: 8 + offset,
+            max: 12 + offset,
+            meanKind: "unweighted_grid_point_mean",
+          },
+          distribution: {
+            percentiles: [{ percentile: 50, value: 10 + offset }],
+            thresholdFractions: [{
+              operator: "gte",
+              threshold: 10,
+              count: 2,
+              fraction: 0.5,
+            }],
+            extrema: {
+              min: { value: 8 + offset, gridPoint },
+              max: { value: 12 + offset, gridPoint },
+            },
+          },
+          source,
+        };
+      }),
+      diagnose: vi.fn(async (request: any) => {
+        const diagnostics = [{
+          id: "freezing_level_crossings",
+          crossings: member === "c00"
+            ? []
+            : [{ pressureHpa: 800, geopotentialHeightGpm: 1800 }],
+        }];
+        if ("from" in request.time) {
+          return {
+            model: "aigfs_0p25",
+            run,
+            requestedStartTime: request.time.from,
+            requestedEndTime: request.time.to,
+            requestedPoint: point,
+            gridPoint,
+            source: {
+              provider: source.provider,
+              access: source.access,
+              decoder: source.decoder,
+            },
+            diagnostic: request.diagnostic,
+            series: [{
+              kind: "profile",
+              validTime: instant,
+              forecastHour: 6,
+              diagnostics,
+              cacheHit: source.cacheHit,
+            }],
+          };
+        }
+        return {
+          model: "aigfs_0p25",
+          run,
+          validTime: instant,
+          forecastHour: 6,
+          requestedPoint: point,
+          gridPoint,
+          sampledPressureLevelsHpa: [1000, 850],
+          levels: [],
+          diagnostics,
+          source,
+        };
+      }),
+    } as any;
+  }
+
+  function service() {
+    return new AigefsForecastService({
+      memberServiceFactory: (member) => factory(member as "c00" | "p01"),
+    });
+  }
+
+  const ensemble = {
+    members: ["c00", "p01"],
+    quantiles: [0.5],
+  };
+
+  it("composes ranges, multi-point state, multi-point ranges, and transects", async () => {
+    const range = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigefs",
+      geometry: { type: "point", ...point },
+      time: { from: instant, to: instant },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble,
+    })) as any;
+    expect(range.series[0].pressureSummaries[0].distribution.mean).toBe(11);
+    expect(range.source.allCacheHit).toBe(false);
+
+    const points = [{ latitude: 50.08, longitude: 14.43 }, { latitude: 49.2, longitude: 16.61 }];
+    const multi = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigefs",
+      geometry: { type: "points", points },
+      time: { at: instant },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble: { ...ensemble, includeMembers: true },
+    })) as any;
+    expect(multi.points).toHaveLength(2);
+    expect(multi.members).toHaveLength(2);
+
+    const matrix = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigefs",
+      geometry: { type: "points", points },
+      time: { from: instant, to: instant },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble,
+    })) as any;
+    expect(matrix.series[0].points).toHaveLength(2);
+
+    const transect = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigefs",
+      geometry: {
+        type: "transect",
+        start: { latitude: 49, longitude: 14 },
+        end: { latitude: 50, longitude: 15 },
+        samples: 2,
+      },
+      time: { at: instant },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble,
+    })) as any;
+    expect(transect.samples).toHaveLength(2);
+  });
+
+  it("aggregates member-level area evidence without flattening member × grid cells", async () => {
+    const area = await service().query(queryAtmosphereSchema.parse({
+      dataset: "aigefs",
+      geometry: {
+        type: "area",
+        westLongitude: 14,
+        eastLongitude: 14.5,
+        southLatitude: 49,
+        northLatitude: 49.5,
+      },
+      time: { at: instant },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble: { ...ensemble, includeMembers: true },
+      aggregate: {
+        percentiles: [50],
+        thresholds: [{ operator: "gte", value: 10 }],
+        includeExtremaLocations: true,
+      },
+      limits: { maxMemberGridPoints: 100 },
+    })) as any;
+
+    expect(area.methodology).toBe("spatial_statistics_per_member_then_ensemble_distribution");
+    expect(area.statistics.mean.mean).toBe(11);
+    expect(area.spatialPercentiles[0].distribution.mean).toBe(11);
+    expect(area.spatialThresholdFractions[0].distribution.mean).toBe(0.5);
+    expect(area.memberExtrema).toHaveLength(2);
+    expect(area.members).toHaveLength(2);
+
+    await expect(service().query(queryAtmosphereSchema.parse({
+      dataset: "aigefs",
+      geometry: {
+        type: "area",
+        westLongitude: 14,
+        eastLongitude: 14.5,
+        southLatitude: 49,
+        northLatitude: 49.5,
+      },
+      time: { at: instant },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble,
+      limits: { maxMemberGridPoints: 2 },
+    }))).rejects.toThrow("exceeding maxMemberGridPoints=2");
+  });
+
+  it("aggregates structural profile diagnostics at one time and through a range", async () => {
+    const instantResult = await service().diagnose(diagnoseAtmosphereSchema.parse({
+      dataset: "aigefs",
+      geometry: { type: "point", ...point },
+      time: { at: instant },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [1000, 850],
+        diagnostics: ["freezing_level_crossings"],
+      },
+      ensemble: { ...ensemble, includeMembers: true },
+    })) as any;
+    expect(instantResult.summaries[0].membersWithAnyCrossing.fraction).toBe(0.5);
+    expect(instantResult.members).toHaveLength(2);
+
+    const range = await service().diagnose(diagnoseAtmosphereSchema.parse({
+      dataset: "aigefs",
+      geometry: { type: "point", ...point },
+      time: { from: instant, to: instant },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [1000, 850],
+        diagnostics: ["freezing_level_crossings"],
+      },
+      ensemble,
+    })) as any;
+    expect(range.series[0].summaries[0].membersWithAnyCrossing.fraction).toBe(0.5);
+  });
+
+  it("keeps direct service misuse and member guardrails explicit", async () => {
+    await expect(service().query({
+      dataset: "gfs",
+      geometry: { type: "point", ...point },
+      time: { at: instant },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    } as any)).rejects.toThrow("only accepts dataset=aigefs");
+
+    await expect(service().diagnose({
+      dataset: "gfs",
+      geometry: { type: "point", ...point },
+      time: { at: instant },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [1000, 850],
+        diagnostics: ["freezing_level_crossings"],
+      },
+    } as any)).rejects.toThrow("only accepts dataset=aigefs");
+
+    await expect(service().query({
+      dataset: "aigefs",
+      geometry: { type: "point", ...point },
+      time: { at: instant },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble: { members: ["c00"], quantiles: [0.5] },
+    } as any)).rejects.toThrow("at least two selected members");
+
+    expect(() => aigefsSourceMember("not-a-member" as any)).toThrow("Unknown AIGEFS member");
+  });
+});
