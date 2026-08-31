@@ -114,11 +114,6 @@ export function gefsVariablesForHgefs(
 ): GefsProfileVariableId[] {
   const ids = new Set<GefsProfileVariableId>();
   for (const dependency of expandAigfsRequestedVariables(requested)) {
-    if (!GEFS_PROFILE_VARIABLE_SET.has(dependency.id)) {
-      throw new Error(
-        `HGEFS GEFS constituent cannot provide raw dependency ${dependency.id}`,
-      );
-    }
     ids.add(dependency.id as GefsProfileVariableId);
   }
   return [...ids];
