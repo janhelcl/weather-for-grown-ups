@@ -3,9 +3,10 @@
 Weather for Grown Ups is primarily a **numerical-weather-model access and meteorology product**, not a forecast interpretation layer.
 
 ```text
-NOAA GFS / GEFS / ECMWF IFS / IFS ENS / NCEI historical GFS
+NOAA GFS / AIGFS / GEFS / AIGEFS / HGEFS
+ECMWF IFS / AIFS / IFS ENS / AIFS ENS / NCEI historical GFS
       ↓
-dataset-specific catalogs, time semantics and source adapters
+dataset-specific catalogs, model metadata, time semantics and source adapters
       ↓
 normalized atmospheric states and mixed-field bundles
       ↓
@@ -36,9 +37,9 @@ Nonlinear diagnostics are evaluated independently on every ensemble member befor
 
 The implementation is split by responsibility rather than by whichever dataset was added first:
 
-- `schema/` defines the public query vocabulary and result contracts.
+- `schema/` defines the public query vocabulary and result contracts. The shared `unified-api.ts` owns common grammar and cross-dataset modifiers; dataset-specific capability checks live in `dataset-capability-validation.ts` behind a validator registry so adding an AI/hybrid dataset does not add routing branches to the shared schema.
 - `core/query-adapters/`, `core/diagnostic-adapters/`, and `core/specialized-adapters/` translate the common vocabulary into dataset-native application services. Public unified services validate once, dispatch through an operation-specific adapter registry, and wrap the result; they do not contain model-specific routing branches. Run comparison, verification, and analog search use the same rule rather than being exceptions.
-- `core/comparison-strategies/` is the dedicated semantic boundary for cross-dataset comparison. Each registered strategy declares the supported dataset pair, deterministic/ensemble model classes, run and valid-time alignment, variable compatibility, comparison meaning, and provenance shape before delegating to pair-native comparison services. There is deliberately no universal fallback strategy.
+- `core/comparison-strategies/` is the dedicated semantic boundary for cross-dataset comparison. The registry is restrictive and the implementations are split by responsibility: pair-native strategies preserve established GFS/GEFS/IFS semantics, while normalized model-class strategies cover AI/hybrid families through one shared comparison service. `core/comparison-result-reader.ts` contains the heterogeneous unified-result normalization needed by those strategies so query orchestration does not accumulate dataset result-shape parsing. Every registered strategy declares the supported dataset pair, run and valid-time alignment, variable compatibility, comparison meaning, output shape and provenance shape. There is deliberately no universal fallback strategy.
 - `core/` owns meteorological/application composition: profiles, time series, spatial composition, diagnostic kernels, comparisons and archive services.
 - `sources/` owns provider/product semantics: URLs, object naming, upstream inventories, archive endpoints and ECMWF mirror selection.
 - `access/` owns transport policy: provider concurrency/pacing and retry/backoff. Cache code and meteorology code do not invent their own provider etiquette.
@@ -55,21 +56,18 @@ A practical rule for new datasets is: **add capabilities to the catalog and the 
 
 `src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `aigfs`, `aigefs`, `hgefs`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth.
 
-| Operation | GFS 0.25° / 0.5° forecast | GEFS forecast | IFS 0.25° forecast | IFS ENS 0.25° forecast | GFS Grid 4 0.5° analysis |
+| Dataset | Model class | Result kind | Shared query/diagnostic role | Run comparison | Registered dataset comparisons |
 | --- | --- | --- | --- | --- | --- |
-| profile | ✅ deterministic | ✅ member distributions | ✅ deterministic | ✅ member distributions | ✅ analyzed state |
-| timeseries | ✅ forecast evolution | ✅ ensemble evolution | ✅ native-cadence deterministic evolution | ✅ native-cadence ensemble evolution | ✅ selected analysis cycles |
-| layer diagnostics | ✅ | ✅ member-first | ✅ shared kernel | ✅ member-first | ✅ shared kernel |
-| profile diagnostics | ✅ | ✅ member-first | ✅ shared kernel | ✅ member-first | ✅ shared kernel |
-| parcel diagnostics | ✅ | ✅ member-first | ✅ shared kernel | ✅ member-first | ✅ shared kernel |
-| diagnostic time series | ✅ | ✅ compact ensemble summaries | ✅ | ✅ compact ensemble summaries | ✅ selected analysis cycles |
-| points | ✅ shared S3 slice | ✅ member slices reused | ✅ cached selected-message reuse | ✅ member-first | ✅ bounded serial NCSS points |
-| points time series | ✅ | ✅ | ✅ bounded point × native-time matrix | ✅ bounded point × native-time matrix | ✅ bounded cycle × point matrix |
-| transect | ✅ great-circle | ✅ member-first great-circle | ✅ great-circle | ✅ member-first great-circle | ✅ great-circle |
-| area summary | ✅ NOMADS bbox | ✅ member-first | ✅ scalar bbox | ✅ member-first scalar bbox | ✅ native NCEI NCSS bbox |
-| run comparison | ✅ | ✅ distribution shift | ✅ | ✅ distribution shift | — |
-| scalar ensemble distribution | — | ✅ | — | ✅ | — |
-| aligned model comparison | ✅ GFS↔GEFS / GFS↔IFS | ✅ GFS↔GEFS / GEFS↔IFS ENS | ✅ GFS↔IFS | ✅ GEFS↔IFS ENS | —; verification is separate |
+| GFS | physics | deterministic | Full deterministic atmospheric surface, including parcel diagnostics | ✅ | GEFS, IFS, AIGFS |
+| AIGFS | AI | deterministic | Shared deterministic query surface; layer/profile diagnostics where inventory supports them | — | GFS, AIFS |
+| GEFS | physics | ensemble | Member-first ensemble atmospheric surface and nonlinear diagnostics | ✅ distribution shift | GFS, IFS ENS, AIGEFS; HGEFS constituent view |
+| AIGEFS | AI | ensemble | Member-first AI ensemble surface; layer/profile diagnostics where inventory supports them | — | GEFS; HGEFS constituent view |
+| HGEFS | hybrid | ensemble | Application-level GEFS + AIGEFS member composition with constituent provenance | — | GEFS, AIGEFS |
+| IFS | physics | deterministic | Full deterministic ECMWF atmospheric surface, including parcel diagnostics | ✅ | GFS, IFS ENS, AIFS |
+| AIFS | AI | deterministic | Shared deterministic query surface; layer/profile diagnostics where inventory supports them | — | IFS, AIGFS |
+| IFS ENS | physics | ensemble | Member-first ECMWF ensemble surface and nonlinear diagnostics | ✅ distribution shift | GEFS, IFS, AIFS ENS |
+| AIFS ENS | AI | ensemble | Native 51-member AI ensemble surface; layer/profile diagnostics where inventory supports them | — | IFS ENS |
+| GFS analysis | physics | deterministic analysis | Shared historical analysis surface and diagnostics | — | Verification/analog workflows are separate |
 
 The capability registry describes the shared **core operation** behind the compact public vocabulary. Historical analog search and archived forecast verification remain specialized composition primitives, while index build/backfill is CLI-only administration rather than a normal atmospheric query.
 
@@ -204,7 +202,7 @@ GEFS uses control `c00` plus `p01`–`p30` on a native three-hour cadence throug
 
 Historical Grid 4 analysis has no forecast initialization/lead axis: its native time coordinate is the exact 00/06/12/18 UTC analysis cycle. Shared operation dispatch preserves that distinction instead of synthesizing run or forecast-hour fields.
 
-Aligned dataset comparisons resolve one initialization cycle that can satisfy both sides at the requested valid time. GFS↔GEFS preserves deterministic-vs-distribution semantics, GFS↔IFS compares deterministic normalized states, and GEFS↔IFS ENS compares independently summarized ensemble distributions without pairing member labels across centers.
+Aligned dataset comparisons resolve one initialization cycle that can satisfy both sides at the requested valid time. The restrictive strategy registry now covers deterministic↔deterministic, deterministic↔ensemble, ensemble↔ensemble and hybrid↔constituent families across physics and AI datasets. Independent ensemble comparisons summarize each population separately without member pairing; HGEFS constituent comparisons explicitly retain the overlap between the constituent and hybrid distributions rather than implying statistical independence.
 
 ## Data access and caching
 
