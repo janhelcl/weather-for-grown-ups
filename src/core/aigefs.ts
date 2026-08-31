@@ -310,6 +310,10 @@ function summarizePointsRange(
   selectedMembers: AigefsMember[],
   quantiles: number[],
 ) {
+  if (request.diagnostic.kind === "parcel") {
+    throw new Error("Internal AIGEFS diagnostic routing error: parcel diagnostics are unsupported");
+  }
+  const diagnostic = request.diagnostic;
   const first = members[0]!.result;
   assertSameSeriesLength(members);
   return {
@@ -517,8 +521,9 @@ function summarizeDiagnosticInstant(
   assertCommonPointGrid(members, (entry) => entry.result.gridPoint);
 
   if (request.diagnostic.kind === "layer") {
+    const diagnostic = request.diagnostic;
     const aggregate = summarizeEnsembleLayerDiagnostics(
-      request.diagnostic.diagnostics,
+      diagnostic.diagnostics,
       members.map(({ member, result }) => ({
         member,
         layer: result.layer,
@@ -538,7 +543,7 @@ function summarizeDiagnosticInstant(
         upperPressureHpa: request.diagnostic.upperPressureHpa,
       },
       selection: {
-        diagnostics: request.diagnostic.diagnostics,
+        diagnostics: diagnostic.diagnostics,
         members: selectedMembers,
         quantiles,
       },
@@ -558,6 +563,10 @@ function summarizeDiagnosticInstant(
     };
   }
 
+  if (request.diagnostic.kind !== "profile") {
+    throw new Error("Internal AIGEFS diagnostic routing error: parcel diagnostics are unsupported");
+  }
+
   const profileMembers = members.map(({ member, result }) => ({
     member,
     diagnostics: result.diagnostics as ProfileDiagnosticResult[],
@@ -571,12 +580,12 @@ function summarizeDiagnosticInstant(
     gridPoint: first.gridPoint,
     sampledPressureLevelsHpa: first.sampledPressureLevelsHpa,
     selection: {
-      diagnostics: request.diagnostic.diagnostics,
+      diagnostics: diagnostic.diagnostics,
       members: selectedMembers,
       quantiles,
     },
     summaries: summarizeEnsembleProfileDiagnostics(
-      request.diagnostic.diagnostics,
+      diagnostic.diagnostics,
       profileMembers,
       quantiles,
     ),
@@ -619,9 +628,9 @@ function summarizeDiagnosticRange(
         member,
         result: result.series[index],
       }));
-      if (request.diagnostic.kind === "layer") {
+      if (diagnostic.kind === "layer") {
         const aggregate = summarizeEnsembleLayerDiagnostics(
-          request.diagnostic.diagnostics,
+          diagnostic.diagnostics,
           memberSteps.map(({ member, result }) => ({
             member,
             layer: result.layer,
@@ -642,7 +651,7 @@ function summarizeDiagnosticRange(
         validTime: step.validTime,
         forecastHour: step.forecastHour,
         summaries: summarizeEnsembleProfileDiagnostics(
-          request.diagnostic.diagnostics,
+          diagnostic.diagnostics,
           memberSteps.map(({ member, result }) => ({
             member,
             diagnostics: result.diagnostics,
