@@ -17,7 +17,7 @@ npx weather-for-grown-ups catalog --search cloud --json
 npx weather-for-grown-ups query --dataset gfs --lat 50.08 --lon 14.43 --at 2026-08-24T12:00:00Z --vars temperature,wind --levels 850,700,500 --json
 ```
 
-The npm package includes its GRIB2 decoder, so `wgrib2` does **not** need to be installed on the host.
+The npm package includes its GRIB2 decoder for the normal dataset set, so `wgrib2` does **not** need to be installed on the host. **ICON-D2-EPS is the current exception:** DWD exposes that ensemble only on its provider-native triangular grid, which requires native `wgrib2` for decoding. Use the Docker image for a zero-setup ICON-D2-EPS path, or install `wgrib2` and optionally set `WGRIB2_PATH`.
 
 ### stdio MCP with npx
 
@@ -80,7 +80,7 @@ wfg-mcp
 wfg-mcp-http
 ```
 
-The package's default GRIB2 engine is bundled through npm. Native `wgrib2` remains an opt-in compatibility/debug path: set `WGRIB2_PATH=/path/to/wgrib2`, or set `WFG_DECODER=wgrib2` to use `wgrib2` from `PATH`.
+The package's default GRIB2 engine is bundled through npm. Native `wgrib2` remains an opt-in compatibility/debug path for the regular datasets, and is currently required for `dataset: "icon-d2-eps"` because DWD publishes that ensemble on its native triangular grid. Set `WGRIB2_PATH=/path/to/wgrib2`, or ensure `wgrib2` is on `PATH`.
 
 WFG currently targets Node.js 20 or newer.
 
