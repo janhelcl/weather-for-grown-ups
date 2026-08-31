@@ -784,3 +784,83 @@ describe("HGEFS area integrity guards", () => {
     }))).rejects.toThrow("HGEFS extrema for aigefs:c00");
   });
 });
+
+
+describe("HGEFS constituent integrity failures", () => {
+  it("rejects a constituent result that omits a selected member", async () => {
+    const aigefsQuery = vi.fn(async () => ({
+      model: "aigefs_0p25",
+      run,
+      validTime,
+      forecastHour: 6,
+      gridPoint: aigefsGrid,
+      members: [{
+        member: "c00",
+        cacheHit: true,
+        levels: [{ pressureHpa: 850, temperatureC: 10 }],
+      }],
+      source: { allCacheHit: true },
+    }));
+
+    const service = new HgefsForecastService({
+      aigefs: { query: aigefsQuery, diagnose: vi.fn() } as any,
+      gefsQuery: { query: vi.fn() },
+      gefsDiagnostics: { diagnose: vi.fn() },
+    });
+
+    await expect(service.query(queryAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: point,
+      time: { at: validTime },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      forecast: { run },
+      ensemble: { members: ["aigefs:c00", "aigefs:p01"] },
+    }))).rejects.toThrow("AIGEFS constituent result is missing member p01");
+  });
+
+  it("rejects inconsistent native grid points within one constituent population", async () => {
+    const points = [{ latitude: 50.08, longitude: 14.43 }];
+    const aigefsQuery = vi.fn(async () => ({
+      model: "aigefs_0p25",
+      run,
+      validTime,
+      forecastHour: 6,
+      members: [
+        {
+          member: "c00",
+          cacheHit: true,
+          points: [{
+            requestedPoint: points[0],
+            gridPoint: { latitude: 50, longitude: 14.5 },
+            levels: [{ pressureHpa: 850, temperatureC: 10 }],
+          }],
+        },
+        {
+          member: "p01",
+          cacheHit: true,
+          points: [{
+            requestedPoint: points[0],
+            gridPoint: { latitude: 50.25, longitude: 14.5 },
+            levels: [{ pressureHpa: 850, temperatureC: 11 }],
+          }],
+        },
+      ],
+      source: { allCacheHit: true },
+    }));
+
+    const service = new HgefsForecastService({
+      aigefs: { query: aigefsQuery, diagnose: vi.fn() } as any,
+      gefsQuery: { query: vi.fn() },
+      gefsDiagnostics: { diagnose: vi.fn() },
+    });
+
+    await expect(service.query(queryAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: { type: "points", points },
+      time: { at: validTime },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      forecast: { run },
+      ensemble: { members: ["aigefs:c00", "aigefs:p01"] },
+    }))).rejects.toThrow("inconsistent native grid points");
+  });
+});
