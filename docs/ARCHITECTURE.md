@@ -3,7 +3,7 @@
 Weather for Grown Ups is primarily a **numerical-weather-model access and meteorology product**, not a forecast interpretation layer.
 
 ```text
-NOAA GFS / GEFS / ECMWF IFS / IFS ENS / NCEI historical GFS
+NOAA GFS / AIGFS / AIGEFS / HGEFS / GEFS / ECMWF IFS / AIFS / AIFS ENS / IFS ENS / NCEI historical GFS
       ↓
 dataset-specific catalogs, time semantics and source adapters
       ↓
@@ -26,11 +26,11 @@ The core is the product. CLI and MCP are adapters over it, not independent imple
 
 > **Unify operations and physics; preserve model semantics.**
 
-A common operation does not imply a common source inventory or a flattened result shape. Deterministic GFS and IFS forecasts return deterministic forecast states. Historical Grid 4 returns deterministic analyzed states. GEFS and IFS ENS return member-derived forecast distributions and structural ensemble summaries.
+A common operation does not imply a common source inventory or a flattened result shape. Deterministic GFS and IFS forecasts return deterministic forecast states. Historical Grid 4 returns deterministic analyzed states. AIGEFS, GEFS, AIFS ENS and IFS ENS return member-derived forecast distributions and structural ensemble summaries. HGEFS returns a hybrid member-derived distribution while retaining the GEFS physics vs AIGEFS AI population boundary.
 
 The engine is organized around **operation × dataset** internally, while the public contract is intentionally organized around one query language: `dataset × geometry × time × selection`. Dataset-specific schemas, source adapters and services are implementation details behind that boundary; adding a model must extend the shared vocabulary and capability registry rather than create another public query namespace.
 
-Nonlinear diagnostics are evaluated independently on every GEFS or IFS ENS member before aggregation. WFG does not calculate CAPE, lapse rate, inversion structure or another nonlinear quantity from an ensemble-mean profile and pretend it represents the members.
+Nonlinear diagnostics are evaluated independently on every AIGEFS, HGEFS, GEFS, AIFS ENS or IFS ENS member before aggregation. WFG does not calculate CAPE, lapse rate, inversion structure or another nonlinear quantity from an ensemble-mean profile and pretend it represents the members.
 
 ## Layer boundaries
 
@@ -52,7 +52,7 @@ A practical rule for new datasets is: **add capabilities to the catalog and the 
 
 ## Atmospheric dataset capability boundary
 
-`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `gefs`, `ifs`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth.
+`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `aigfs`, `aigefs`, `hgefs`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth.
 
 | Operation | GFS 0.25° / 0.5° forecast | GEFS forecast | IFS 0.25° forecast | IFS ENS 0.25° forecast | GFS Grid 4 0.5° analysis |
 | --- | --- | --- | --- | --- | --- |
@@ -163,6 +163,12 @@ GEFS composition is **member-first**.
 
 This preserves separate **space**, **time**, and **ensemble-member** axes instead of flattening them into one sample.
 
+### HGEFS
+
+HGEFS is a composition dataset rather than a homogeneous source adapter. The public 62-member population is namespaced as `gefs:*` and `aigefs:*`; the hybrid service pins both constituents to one run, retains both native sampled grid points and source provenance, and aggregates only after member-level normalization or nonlinear diagnostics. Its public 0.25° metadata describes the operational HGEFS product, while constituent provenance truthfully reports the actual grid used for each member source. Because pressure-level GEFS members and AIGEFS members need not share one native grid, multi-point, transect and area operations are intentionally not advertised yet.
+
+Point ranges follow HGEFS's 6-hour cadence through f240: the AIGEFS valid times define the hybrid steps and the corresponding GEFS 3-hourly stream is joined only at matching valid times. Instant layer/profile diagnostics remain member-first across both populations. Parcel diagnostics are unavailable because the AIGEFS constituent lacks WFG's required parcel-initialization state.
+
 ### IFS
 
 Deterministic IFS uses the same public geometry/time vocabulary while preserving ECMWF-native cadence, fixed 0.25° model semantics and selected-message cache reuse. Multi-time operations pin one initialization capable of satisfying the complete range; point, multi-point, transect, area, diagnostics and run comparison all stay deterministic.
@@ -239,7 +245,7 @@ The public contract mirrors the core architecture instead of the order in which 
 
 > **One query language for atmospheric state; datasets preserve their semantics.**
 
-Normal access is `dataset × geometry × time × selection`. Public dataset IDs are `gfs`, `gefs`, `ifs`, `ifs-ens`, and `gfs-analysis`; they map to the explicit internal dataset registry. Dataset-native result semantics remain unchanged.
+Normal access is `dataset × geometry × time × selection`. Public dataset IDs are `gfs`, `aigfs`, `aigefs`, `hgefs`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`; they map to the explicit internal dataset registry. Dataset-native result semantics remain unchanged.
 
 ### CLI
 
