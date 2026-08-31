@@ -316,8 +316,8 @@ describe("HGEFS member-first constituent composition", () => {
       summary.field === "temperatureLapseRateCPerKm",
     ).distribution.mean).toBe(7);
     expect(result.members.map((member: any) => member.member)).toEqual([
-      "aigefs:c00",
       "gefs:p01",
+      "aigefs:c00",
     ]);
   });
 
