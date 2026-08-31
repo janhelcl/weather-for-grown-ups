@@ -599,7 +599,7 @@ describe("AIFS ENS composition coverage", () => {
       geometry: { type: "point", ...point },
       time: { at: instant },
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
-    } as any)).rejects.toThrow("only accepts dataset=aigefs");
+    } as any)).rejects.toThrow("only accepts dataset=aifs-ens");
 
     await expect(service().diagnose({
       dataset: "gfs",
@@ -610,7 +610,7 @@ describe("AIFS ENS composition coverage", () => {
         pressureLevelsHpa: [1000, 850],
         diagnostics: ["freezing_level_crossings"],
       },
-    } as any)).rejects.toThrow("only accepts dataset=aigefs");
+    } as any)).rejects.toThrow("only accepts dataset=aifs-ens");
 
     await expect(service().query({
       dataset: "aifs-ens",
@@ -684,7 +684,7 @@ describe("AIFS ENS remaining guard branches", () => {
 
 
 describe("AIFS ENS default ensemble contract", () => {
-  it("uses the full 31-member population and standard quantiles when ensemble controls are omitted", async () => {
+  it("uses the full 51-member population and standard quantiles when ensemble controls are omitted", async () => {
     const service = new AifsEnsForecastService({
       memberServiceFactory: () => ({
         query: vi.fn(async () => ({
@@ -715,7 +715,7 @@ describe("AIFS ENS default ensemble contract", () => {
 
     expect(result.selection.members).toEqual([...AIFS ENS_MEMBERS]);
     expect(result.selection.quantiles).toEqual([0.1, 0.5, 0.9]);
-    expect(result.pressureSummaries[0].distribution.memberCount).toBe(31);
+    expect(result.pressureSummaries[0].distribution.memberCount).toBe(51);
   });
 });
 
