@@ -1,3 +1,5 @@
+import type { AigefsMember } from "../catalog/aigefs.js";
+import type { AifsEnsMember } from "../catalog/aifs-ens.js";
 import type { IfsEnsMember } from "../catalog/ifs-ens.js";
 import type { GefsMember } from "../catalog/gefs.js";
 import type { PointCoordinate } from "../schema/query.js";
@@ -17,6 +19,14 @@ export function collectPoint(value: string, previous: PointCoordinate[] | undefi
 
 export function parseGefsMembers(value: unknown): GefsMember[] {
   return String(value).split(",").map((member) => member.trim()).filter(Boolean) as GefsMember[];
+}
+
+export function parseAigefsMembers(value: unknown): AigefsMember[] {
+  return String(value).split(",").map((member) => member.trim()).filter(Boolean) as AigefsMember[];
+}
+
+export function parseAifsEnsMembers(value: unknown): AifsEnsMember[] {
+  return String(value).split(",").map((member) => member.trim()).filter(Boolean) as AifsEnsMember[];
 }
 
 export function parseIfsEnsMembers(value: unknown): IfsEnsMember[] {
