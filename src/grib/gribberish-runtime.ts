@@ -80,12 +80,13 @@ export function decodePointMessages(
     const sample = nearestPoint(message, longitude, latitude);
     const interval = forecastInterval(message);
     const semantics = interval === undefined ? "instantaneous" : statisticalSemantics(message.key);
+    const normalized = normalizeDecodedCodeValue(message.varAbbrev, sample.value);
     values.push({
-      code: message.varAbbrev,
+      code: normalized.code,
       ...vertical,
       ...(semantics === "accumulation" && interval !== undefined ? { accumulation: interval } : {}),
       ...(semantics === "average" && interval !== undefined ? { average: interval } : {}),
-      value: sample.value,
+      value: normalized.value,
       gridPoint: { latitude: sample.latitude, longitude: sample.longitude },
     });
   }
@@ -411,4 +412,13 @@ function wrappedLongitudeDelta(left: number, right: number): number {
 function toSignedLongitude(longitude: number): number {
   const normalized = ((longitude + 540) % 360) - 180;
   return Object.is(normalized, -0) ? 0 : normalized;
+}
+
+
+function normalizeDecodedCodeValue(code: string, value: number): { code: string; value: number } {
+  // DWD ICON pressure-level FI is GRIB geopotential (GP, m²/s²), while the
+  // normalized atmospheric vocabulary uses geopotential height (HGT, gpm).
+  return code === "GP"
+    ? { code: "HGT", value: value / 9.80665 }
+    : { code, value };
 }

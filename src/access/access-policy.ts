@@ -30,6 +30,7 @@ export const UPSTREAM_ACCESS_POLICIES = {
   nceiThredds: { id: "ncei-thredds", maxConcurrency: 2, minIntervalMs: 0 },
   gdex: { id: "gdex", maxConcurrency: 4, minIntervalMs: 0 },
   nceiIgra: { id: "ncei-igra", maxConcurrency: 4, minIntervalMs: 0 },
+  dwdOpenData: { id: "dwd-open-data", maxConcurrency: 4, minIntervalMs: 0 },
 } as const satisfies Record<string, UpstreamAccessPolicyDefinition>;
 
 interface State {
