@@ -1,14 +1,20 @@
 import { createHash, randomUUID } from "node:crypto";
-import { access, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { execa } from "execa";
 import {
   FileAccessPolicy,
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
 import { fetchWithRetry } from "../access/http-fetch.js";
+import {
+  iconD2EpsMemberOrdinal,
+  type IconD2EpsMember,
+} from "../catalog/icon-d2-eps.js";
 import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
 import type { RawVariableDefinition } from "../catalog/variables.js";
+import { buildIconD2EpsOpenDataUrl } from "../sources/icon-d2-eps.js";
 import {
   bunzip2,
   type IconD2AvailabilityRequirement,
@@ -17,7 +23,16 @@ import {
   type IconD2SourceFile,
   type IconD2SubsetCache,
 } from "./icon-d2-open-data-cache.js";
-import { buildIconD2EpsOpenDataUrl } from "../sources/icon-d2-eps.js";
+
+export type IconD2EpsWgrib2Runner = (
+  executable: string,
+  args: string[],
+) => Promise<{ stdout: string }>;
+
+const defaultWgrib2Runner: IconD2EpsWgrib2Runner = async (executable, args) => {
+  const { stdout } = await execa(executable, args);
+  return { stdout };
+};
 
 export class IconD2EpsOpenDataCache implements IconD2SubsetCache {
   private readonly inFlight = new Map<string, Promise<IconD2SourceFile>>();
@@ -138,6 +153,158 @@ export class IconD2EpsOpenDataCache implements IconD2SubsetCache {
   }
 }
 
+/**
+ * DWD packages all ICON-D2-EPS members in one native-grid GRIB object.
+ * This shared filter resolves the upstream ensemble labels once and materializes
+ * immutable member-only GRIB files for the existing deterministic ICON-D2 engine.
+ *
+ * Native wgrib2 is intentionally required here: the bundled decoder cannot read
+ * the provider-native triangular ICON-D2-EPS files reliably.
+ */
+export class IconD2EpsMemberFileFilter {
+  private readonly inventories = new Map<string, Promise<string>>();
+  private readonly inFlight = new Map<string, Promise<IconD2SourceFile>>();
+
+  constructor(
+    private readonly rootDir: string,
+    private readonly executable = process.env.WGRIB2_PATH ?? "wgrib2",
+    private readonly runner: IconD2EpsWgrib2Runner = defaultWgrib2Runner,
+  ) {}
+
+  async filter(path: string, member: IconD2EpsMember): Promise<IconD2SourceFile> {
+    await mkdir(this.rootDir, { recursive: true });
+    const key = createHash("sha256").update(`${path}\0${member}`).digest("hex");
+    const memberPath = join(this.rootDir, `${key}.grib2`);
+    if (await exists(memberPath)) return { path: memberPath, cacheHit: true };
+
+    const pending = this.inFlight.get(key);
+    if (pending) {
+      const result = await pending;
+      return { ...result, cacheHit: true };
+    }
+
+    const operation = this.materialize(path, member, memberPath)
+      .finally(() => this.inFlight.delete(key));
+    this.inFlight.set(key, operation);
+    return operation;
+  }
+
+  private async materialize(
+    sourcePath: string,
+    member: IconD2EpsMember,
+    memberPath: string,
+  ): Promise<IconD2SourceFile> {
+    const inventory = await this.inventory(sourcePath);
+    const ensembleTag = iconD2EpsWgrib2TagForMember(inventory, member);
+    const matchPattern = `:${escapeRegex(ensembleTag)}(?::|$)`;
+    const tempPath = `${memberPath}.${process.pid}.${randomUUID()}.tmp`;
+
+    try {
+      const { stdout } = await this.run([
+        sourcePath,
+        "-match",
+        matchPattern,
+        "-grib",
+        tempPath,
+      ]);
+      const details = await stat(tempPath);
+      if (details.size === 0) {
+        throw new Error(
+          `wgrib2 produced an empty ICON-D2-EPS member file for ${member}. Output: ${stdout.slice(0, 500)}`,
+        );
+      }
+      await rename(tempPath, memberPath);
+      return { path: memberPath, cacheHit: false };
+    } catch (error) {
+      await rm(tempPath, { force: true });
+      throw error;
+    }
+  }
+
+  private inventory(path: string): Promise<string> {
+    const cached = this.inventories.get(path);
+    if (cached !== undefined) return cached;
+    const pending = this.run([path, "-s"]).then(({ stdout }) => stdout);
+    this.inventories.set(path, pending);
+    void pending.catch(() => this.inventories.delete(path));
+    return pending;
+  }
+
+  private async run(args: string[]): Promise<{ stdout: string }> {
+    try {
+      return await this.runner(this.executable, args);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("ENOENT")) {
+        throw new Error(
+          "ICON-D2-EPS requires native wgrib2 for DWD's provider-native triangular GRIB files. "
+          + `Install wgrib2 or set WGRIB2_PATH. Original error: ${error.message}`,
+        );
+      }
+      throw error;
+    }
+  }
+}
+
+export class IconD2EpsMemberSubsetCache implements IconD2SubsetCache {
+  constructor(
+    private readonly source: IconD2EpsOpenDataCache,
+    private readonly member: IconD2EpsMember,
+    private readonly filter: IconD2EpsMemberFileFilter,
+  ) {}
+
+  async fetch(request: IconD2DataRequest): Promise<IconD2SourceFile> {
+    const sourceFile = await this.source.fetch(request);
+    const memberFile = await this.filter.filter(sourceFile.path, this.member);
+    return {
+      path: memberFile.path,
+      cacheHit: sourceFile.cacheHit && memberFile.cacheHit,
+    };
+  }
+
+  isForecastAvailable(
+    run: Date,
+    forecastHour: number,
+    requirement: IconD2AvailabilityRequirement,
+  ): Promise<boolean> {
+    return this.source.isForecastAvailable(run, forecastHour, requirement);
+  }
+}
+
+export function iconD2EpsWgrib2TagForMember(
+  inventory: string,
+  member: IconD2EpsMember,
+): string {
+  const tags = [...new Set(
+    inventory
+      .split(/\r?\n/)
+      .flatMap((line) => [...line.matchAll(/:((?:ENS|P-ENS|IC-ENS|MP-ENS|ICMP-ENS)=[^:]+)/g)])
+      .map((match) => match[1])
+      .filter((tag): tag is string => tag !== undefined),
+  )]
+    .map((tag) => ({ tag, order: ensembleTagOrder(tag) }))
+    .filter((entry): entry is { tag: string; order: number } => entry.order !== null)
+    .sort((left, right) => left.order - right.order);
+
+  if (tags.length !== 20) {
+    throw new Error(
+      `ICON-D2-EPS wgrib2 inventory exposed ${tags.length} distinct forecast-member tags; expected 20`,
+    );
+  }
+
+  const selected = tags[iconD2EpsMemberOrdinal(member) - 1];
+  if (selected === undefined) {
+    throw new Error(`ICON-D2-EPS inventory has no member mapping for ${member}`);
+  }
+  return selected.tag;
+}
+
+function ensembleTagOrder(tag: string): number | null {
+  const match = tag.match(/=(?:\+|-)?(\d+)$/);
+  if (match?.[1] === undefined) return null;
+  const value = Number(match[1]);
+  return Number.isInteger(value) ? value : null;
+}
+
 function selectedUrls(request: IconD2DataRequest): string[] {
   const urls: string[] = [];
 
@@ -200,6 +367,10 @@ function subsetKey(request: IconD2DataRequest): string {
     pressureLevelsHpa: [...new Set(request.pressureLevelsHpa)].sort((a, b) => b - a),
     fields: [...new Set(request.fields.map((field) => field.id))].sort(),
   })).digest("hex");
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^$\{\}()|[\]\\]/g, "\\$&");
 }
 
 async function exists(path: string): Promise<boolean> {
