@@ -1,5 +1,4 @@
 import type {
-  CompareAtmosphericDatasetsRequest,
   CompareAtmosphericRunsRequest,
   FindAtmosphericAnalogsRequest,
   VerifyAtmosphericForecastRequest,
@@ -49,8 +48,3 @@ export type AtmosphericAnalogAdapterRegistry = Record<
   AtmosphericAnalogAdapter
 >;
 
-export function atmosphericDatasetComparisonKey(
-  request: CompareAtmosphericDatasetsRequest,
-): AtmosphericDatasetComparisonKey {
-  return `${request.datasets[0]}:${request.datasets[1]}` as AtmosphericDatasetComparisonKey;
-}

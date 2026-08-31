@@ -2,9 +2,9 @@ import { readFile, readdir } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { createAtmosphericDiagnosticAdapterRegistry } from "../src/core/diagnostic-adapters/registry.js";
 import { createAtmosphericQueryAdapterRegistry } from "../src/core/query-adapters/registry.js";
+import { createAtmosphericDatasetComparisonStrategyRegistry } from "../src/core/comparison-strategies/registry.js";
 import {
   createAtmosphericAnalogAdapterRegistry,
-  createAtmosphericDatasetComparisonAdapterRegistry,
   createAtmosphericRunComparisonAdapterRegistry,
   createAtmosphericVerificationAdapterRegistry,
 } from "../src/core/specialized-adapters/registry.js";
@@ -21,7 +21,7 @@ describe("architecture boundaries", () => {
     expect(Object.keys(createAtmosphericRunComparisonAdapterRegistry()).sort()).toEqual(
       ["gefs", "gfs", "ifs", "ifs-ens"],
     );
-    expect(Object.keys(createAtmosphericDatasetComparisonAdapterRegistry()).sort()).toEqual(
+    expect(Object.keys(createAtmosphericDatasetComparisonStrategyRegistry()).sort()).toEqual(
       ["gefs:ifs-ens", "gfs:gefs", "gfs:ifs", "ifs:ifs-ens"],
     );
     expect(Object.keys(createAtmosphericVerificationAdapterRegistry()).sort()).toEqual(
@@ -65,7 +65,9 @@ describe("architecture boundaries", () => {
   it("keeps dataset-native routing out of the public specialized services", async () => {
     const service = await readFile("src/core/unified-specialized-api.ts", "utf8");
     expect(service).toContain("specialized-adapters/registry.js");
+    expect(service).toContain("comparison-strategies/registry.js");
     expect(service).toContain("adapters?: Partial<AtmosphericRunComparisonAdapterRegistry>");
+    expect(service).toContain("strategies?: Partial<AtmosphericDatasetComparisonStrategyRegistry>");
     expect(service).not.toMatch(
       /from ["']\.\/(?:gfs|gefs|ifs|history|igra|run-comparison)[^"']*\.js/,
     );
@@ -77,6 +79,7 @@ describe("architecture boundaries", () => {
       ...await tsFiles("src/core/query-adapters"),
       ...await tsFiles("src/core/diagnostic-adapters"),
       ...await tsFiles("src/core/specialized-adapters"),
+      ...await tsFiles("src/core/comparison-strategies"),
     ];
     for (const path of files) {
       const source = await readFile(path, "utf8");

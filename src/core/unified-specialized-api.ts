@@ -10,16 +10,18 @@ import {
   type UnifiedSpecializedResult,
   type VerifyAtmosphericForecastInput,
 } from "../schema/unified-specialized.js";
+import { createAtmosphericDatasetComparisonStrategyRegistry } from "./comparison-strategies/registry.js";
+import {
+  atmosphericDatasetComparisonKey,
+  type AtmosphericDatasetComparisonStrategyRegistry,
+} from "./comparison-strategies/types.js";
 import {
   createAtmosphericAnalogAdapterRegistry,
-  createAtmosphericDatasetComparisonAdapterRegistry,
   createAtmosphericRunComparisonAdapterRegistry,
   createAtmosphericVerificationAdapterRegistry,
 } from "./specialized-adapters/registry.js";
 import {
-  atmosphericDatasetComparisonKey,
   type AtmosphericAnalogAdapterRegistry,
-  type AtmosphericDatasetComparisonAdapterRegistry,
   type AtmosphericRunComparisonAdapterRegistry,
   type AtmosphericVerificationAdapterRegistry,
 } from "./specialized-adapters/types.js";
@@ -43,19 +45,19 @@ export class UnifiedRunComparisonService {
 }
 
 export interface UnifiedDatasetComparisonServiceOptions {
-  adapters?: Partial<AtmosphericDatasetComparisonAdapterRegistry>;
+  strategies?: Partial<AtmosphericDatasetComparisonStrategyRegistry>;
 }
 
 export class UnifiedDatasetComparisonService {
-  private readonly adapters: AtmosphericDatasetComparisonAdapterRegistry;
+  private readonly strategies: AtmosphericDatasetComparisonStrategyRegistry;
 
   constructor(options: UnifiedDatasetComparisonServiceOptions = {}) {
-    this.adapters = createAtmosphericDatasetComparisonAdapterRegistry(options.adapters);
+    this.strategies = createAtmosphericDatasetComparisonStrategyRegistry(options.strategies);
   }
 
   async compare(input: CompareAtmosphericDatasetsInput): Promise<UnifiedSpecializedResult> {
     const request = compareAtmosphericDatasetsSchema.parse(input);
-    const result = await this.adapters[atmosphericDatasetComparisonKey(request)].compare(request);
+    const result = await this.strategies[atmosphericDatasetComparisonKey(request)].compare(request);
     return wrap("compare_datasets", [...request.datasets], result);
   }
 }

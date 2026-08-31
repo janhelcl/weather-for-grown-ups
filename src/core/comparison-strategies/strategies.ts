@@ -7,9 +7,15 @@ import { GefsIfsEnsComparisonService } from "../gefs-ifs-ens-comparison.js";
 import { GfsGefsComparisonService } from "../gfs-gefs-comparison.js";
 import { GfsIfsComparisonService } from "../gfs-ifs-comparison.js";
 import { IfsIfsEnsComparisonService } from "../ifs-ifs-ens-comparison.js";
-import type { AtmosphericDatasetComparisonAdapter } from "./types.js";
+import { comparisonStrategyMetadata, type AtmosphericDatasetComparisonStrategy } from "./types.js";
 
-export class GfsGefsDatasetComparisonAdapter implements AtmosphericDatasetComparisonAdapter {
+export class GfsGefsComparisonStrategy implements AtmosphericDatasetComparisonStrategy {
+  readonly metadata = comparisonStrategyMetadata(
+    "gfs:gefs",
+    ["gfs", "gefs"],
+    "deterministic_ensemble_positioning",
+  );
+
   constructor(
     private readonly service: Pick<GfsGefsComparisonService, "compare"> =
       new GfsGefsComparisonService(),
@@ -33,7 +39,13 @@ export class GfsGefsDatasetComparisonAdapter implements AtmosphericDatasetCompar
   }
 }
 
-export class GfsIfsDatasetComparisonAdapter implements AtmosphericDatasetComparisonAdapter {
+export class GfsIfsComparisonStrategy implements AtmosphericDatasetComparisonStrategy {
+  readonly metadata = comparisonStrategyMetadata(
+    "gfs:ifs",
+    ["gfs", "ifs"],
+    "deterministic_delta",
+  );
+
   constructor(
     private readonly service: Pick<GfsIfsComparisonService, "compare"> =
       new GfsIfsComparisonService(),
@@ -55,7 +67,13 @@ export class GfsIfsDatasetComparisonAdapter implements AtmosphericDatasetCompari
   }
 }
 
-export class GefsIfsEnsDatasetComparisonAdapter implements AtmosphericDatasetComparisonAdapter {
+export class GefsIfsEnsComparisonStrategy implements AtmosphericDatasetComparisonStrategy {
+  readonly metadata = comparisonStrategyMetadata(
+    "gefs:ifs-ens",
+    ["gefs", "ifs-ens"],
+    "ensemble_distribution_shift",
+  );
+
   constructor(
     private readonly service: Pick<GefsIfsEnsComparisonService, "compare"> =
       new GefsIfsEnsComparisonService(),
@@ -86,7 +104,13 @@ export class GefsIfsEnsDatasetComparisonAdapter implements AtmosphericDatasetCom
   }
 }
 
-export class IfsIfsEnsDatasetComparisonAdapter implements AtmosphericDatasetComparisonAdapter {
+export class IfsIfsEnsComparisonStrategy implements AtmosphericDatasetComparisonStrategy {
+  readonly metadata = comparisonStrategyMetadata(
+    "ifs:ifs-ens",
+    ["ifs", "ifs-ens"],
+    "deterministic_ensemble_positioning",
+  );
+
   constructor(
     private readonly service: Pick<IfsIfsEnsComparisonService, "compare"> =
       new IfsIfsEnsComparisonService(),

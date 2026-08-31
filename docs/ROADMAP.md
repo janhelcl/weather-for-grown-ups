@@ -88,11 +88,13 @@ dataset × geometry × time × selection
 
 ## Comparison architecture
 
-The AI expansion must **not** continue the current pattern of accumulating one bespoke comparison module per dataset pair.
+**Strategy-registry foundation — implemented.** The existing public `compare_datasets` operation now dispatches through a restrictive comparison-strategy registry rather than treating cross-dataset comparison as a generic specialized adapter. The migrated strategies are GFS ↔ GEFS, GFS ↔ IFS, GEFS ↔ IFS ENS, and IFS ↔ IFS ENS.
 
-Introduce a comparison-strategy registry behind the existing public `compare_datasets` operation.
+The registry derives model class, result kind and provider from the dataset catalog, and every strategy explicitly declares run/valid-time alignment, variable compatibility, comparison semantics, output shape and provenance shape. There is no universal fallback strategy.
 
-A strategy declares, at minimum:
+The AI expansion must **not** continue the old pattern of accumulating unclassified pair routing.
+
+Each comparison strategy behind the existing public `compare_datasets` operation declares, at minimum:
 
 - which dataset/population pairs it supports;
 - compatible deterministic/ensemble/hybrid result kinds;
@@ -122,7 +124,7 @@ Likely comparison families include:
 - GEFS ↔ IFS ENS;
 - HGEFS ↔ its relevant constituent ensemble populations.
 
-Existing comparison semantics should migrate behind the same strategy boundary rather than remaining a parallel legacy design.
+Existing physics-model comparison semantics have migrated behind the same strategy boundary. The next comparison work is to add scientifically justified AI and hybrid families to this registry without weakening its restrictive compatibility rules.
 
 ## Target conceptual matrix
 

@@ -1,18 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
+import { createAtmosphericDatasetComparisonStrategyRegistry } from "../src/core/comparison-strategies/registry.js";
 import {
-  GefsIfsEnsDatasetComparisonAdapter,
-  GfsGefsDatasetComparisonAdapter,
-  GfsIfsDatasetComparisonAdapter,
-  IfsIfsEnsDatasetComparisonAdapter,
-} from "../src/core/specialized-adapters/dataset-comparison.js";
+  GefsIfsEnsComparisonStrategy,
+  GfsGefsComparisonStrategy,
+  GfsIfsComparisonStrategy,
+  IfsIfsEnsComparisonStrategy,
+} from "../src/core/comparison-strategies/strategies.js";
+import { UnifiedDatasetComparisonService } from "../src/core/unified-specialized-api.js";
+import { PUBLIC_DATASET_METADATA } from "../src/schema/unified-api.js";
 import { compareAtmosphericDatasetsSchema } from "../src/schema/unified-specialized.js";
 
 const point = { type: "point" as const, latitude: 50.08, longitude: 14.43 };
 
-describe("unified dataset-comparison adapters", () => {
+describe("unified dataset-comparison strategies", () => {
   it("maps GFS/GEFS into native aligned comparison semantics", async () => {
     const native = { compare: vi.fn(async (query) => ({ route: "gfs-gefs", query })) };
-    const adapter = new GfsGefsDatasetComparisonAdapter(native as any);
+    const strategy = new GfsGefsComparisonStrategy(native as any);
     const request = compareAtmosphericDatasetsSchema.parse({
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
@@ -21,7 +24,7 @@ describe("unified dataset-comparison adapters", () => {
       members: ["c00", "p01"],
       quantiles: [0.25, 0.75],
     });
-    const result = await adapter.compare(request);
+    const result = await strategy.compare(request);
     expect((result as any).route).toBe("gfs-gefs");
     expect(native.compare).toHaveBeenCalledWith(expect.objectContaining({
       validTime: "2026-08-28T12:00:00Z",
@@ -32,7 +35,7 @@ describe("unified dataset-comparison adapters", () => {
 
   it("maps GFS/IFS into deterministic comparison semantics", async () => {
     const native = { compare: vi.fn(async (query) => ({ route: "gfs-ifs", query })) };
-    const adapter = new GfsIfsDatasetComparisonAdapter(native as any);
+    const strategy = new GfsIfsComparisonStrategy(native as any);
     const request = compareAtmosphericDatasetsSchema.parse({
       datasets: ["gfs", "ifs"],
       geometry: point,
@@ -41,7 +44,7 @@ describe("unified dataset-comparison adapters", () => {
       pressureLevelHpa: 850,
       gfsGrid: "0p50",
     });
-    await adapter.compare(request);
+    await strategy.compare(request);
     expect(native.compare).toHaveBeenCalledWith(expect.objectContaining({
       variable: "wind",
       pressureLevelHpa: 850,
@@ -51,7 +54,7 @@ describe("unified dataset-comparison adapters", () => {
 
   it("maps GEFS/IFS ENS without inventing member trajectories", async () => {
     const native = { compare: vi.fn(async (query) => ({ route: "gefs-ifs-ens", query })) };
-    const adapter = new GefsIfsEnsDatasetComparisonAdapter(native as any);
+    const strategy = new GefsIfsEnsComparisonStrategy(native as any);
     const request = compareAtmosphericDatasetsSchema.parse({
       datasets: ["gefs", "ifs-ens"],
       geometry: point,
@@ -63,7 +66,7 @@ describe("unified dataset-comparison adapters", () => {
       quantiles: [0.1, 0.5, 0.9],
       thresholdGte: 0,
     });
-    await adapter.compare(request);
+    await strategy.compare(request);
     expect(native.compare).toHaveBeenCalledWith(expect.objectContaining({
       gefsMembers: ["c00", "p01"],
       ifsEnsMembers: ["p01", "p50"],
@@ -73,7 +76,7 @@ describe("unified dataset-comparison adapters", () => {
 
   it("maps deterministic IFS against the IFS ENS distribution", async () => {
     const native = { compare: vi.fn(async (query) => ({ route: "ifs-ifs-ens", query })) };
-    const adapter = new IfsIfsEnsDatasetComparisonAdapter(native as any);
+    const strategy = new IfsIfsEnsComparisonStrategy(native as any);
     const request = compareAtmosphericDatasetsSchema.parse({
       datasets: ["ifs", "ifs-ens"],
       geometry: point,
@@ -83,7 +86,7 @@ describe("unified dataset-comparison adapters", () => {
       ifsEnsMembers: ["p01", "p50"],
       quantiles: [0.1, 0.5, 0.9],
     });
-    await adapter.compare(request);
+    await strategy.compare(request);
     expect(native.compare).toHaveBeenCalledWith(expect.objectContaining({
       members: ["p01", "p50"],
       quantiles: [0.1, 0.5, 0.9],
@@ -93,7 +96,7 @@ describe("unified dataset-comparison adapters", () => {
   it("preserves omitted pair-specific controls", async () => {
     const native = { compare: vi.fn(async (query) => query) };
 
-    const gfsGefs = new GfsGefsDatasetComparisonAdapter(native as any);
+    const gfsGefs = new GfsGefsComparisonStrategy(native as any);
     await gfsGefs.compare(compareAtmosphericDatasetsSchema.parse({
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
@@ -107,7 +110,7 @@ describe("unified dataset-comparison adapters", () => {
       pressureLevelHpa: 850,
     });
 
-    const gfsIfs = new GfsIfsDatasetComparisonAdapter(native as any);
+    const gfsIfs = new GfsIfsComparisonStrategy(native as any);
     await gfsIfs.compare(compareAtmosphericDatasetsSchema.parse({
       datasets: ["gfs", "ifs"],
       geometry: point,
@@ -117,7 +120,7 @@ describe("unified dataset-comparison adapters", () => {
     }));
     expect(native.compare.mock.calls.at(-1)![0]).not.toHaveProperty("gfsGrid");
 
-    const gefsIfsEns = new GefsIfsEnsDatasetComparisonAdapter(native as any);
+    const gefsIfsEns = new GefsIfsEnsComparisonStrategy(native as any);
     await gefsIfsEns.compare(compareAtmosphericDatasetsSchema.parse({
       datasets: ["gefs", "ifs-ens"],
       geometry: point,
@@ -130,7 +133,7 @@ describe("unified dataset-comparison adapters", () => {
       pressureLevelHpa: 850,
     });
 
-    const ifsIfsEns = new IfsIfsEnsDatasetComparisonAdapter(native as any);
+    const ifsIfsEns = new IfsIfsEnsComparisonStrategy(native as any);
     await ifsIfsEns.compare(compareAtmosphericDatasetsSchema.parse({
       datasets: ["ifs", "ifs-ens"],
       geometry: point,
@@ -144,12 +147,12 @@ describe("unified dataset-comparison adapters", () => {
     });
   });
 
-  it("guards each adapter against the wrong comparison pair", async () => {
+  it("guards each strategy against the wrong comparison pair", async () => {
     const native = { compare: vi.fn(async () => undefined) };
-    const gfsGefs = new GfsGefsDatasetComparisonAdapter(native as any);
-    const gfsIfs = new GfsIfsDatasetComparisonAdapter(native as any);
-    const gefsIfsEns = new GefsIfsEnsDatasetComparisonAdapter(native as any);
-    const ifsIfsEns = new IfsIfsEnsDatasetComparisonAdapter(native as any);
+    const gfsGefs = new GfsGefsComparisonStrategy(native as any);
+    const gfsIfs = new GfsIfsComparisonStrategy(native as any);
+    const gefsIfsEns = new GefsIfsEnsComparisonStrategy(native as any);
+    const ifsIfsEns = new IfsIfsEnsComparisonStrategy(native as any);
     const request = compareAtmosphericDatasetsSchema.parse({
       datasets: ["gfs", "ifs"],
       geometry: point,
@@ -169,6 +172,77 @@ describe("unified dataset-comparison adapters", () => {
       pressureLevelHpa: 850,
     });
     expect(() => gfsIfs.compare(gfsGefsRequest)).toThrow("datasets=gfs,ifs");
+  });
+});
+
+
+describe("comparison strategy registry", () => {
+  it("declares restrictive scientific semantics from dataset metadata", () => {
+    const registry = createAtmosphericDatasetComparisonStrategyRegistry();
+    expect(Object.keys(registry).sort()).toEqual([
+      "gefs:ifs-ens",
+      "gfs:gefs",
+      "gfs:ifs",
+      "ifs:ifs-ens",
+    ]);
+
+    expect(registry["gfs:gefs"].metadata).toMatchObject({
+      datasets: ["gfs", "gefs"],
+      left: { resultKind: "deterministic", modelClass: "physics", provider: "noaa" },
+      right: { resultKind: "ensemble", modelClass: "physics", provider: "noaa" },
+      runAlignment: "shared_initialization_cycle",
+      validTimeAlignment: "exact",
+      variableCompatibility: "pair_specific_pressure_scalar_intersection",
+      comparisonSemantics: "deterministic_ensemble_positioning",
+      outputShape: "pair_native_result",
+      provenanceShape: "native_source_per_dataset",
+    });
+    expect(registry["gfs:ifs"].metadata.comparisonSemantics).toBe("deterministic_delta");
+    expect(registry["gefs:ifs-ens"].metadata.comparisonSemantics).toBe("ensemble_distribution_shift");
+
+    for (const strategy of Object.values(registry)) {
+      for (const side of [strategy.metadata.left, strategy.metadata.right]) {
+        const metadata = PUBLIC_DATASET_METADATA[side.dataset];
+        expect(side).toMatchObject({
+          resultKind: metadata.kind,
+          modelClass: metadata.modelClass,
+          provider: metadata.provider,
+        });
+      }
+    }
+  });
+
+  it("routes the public comparison service through the selected strategy", async () => {
+    const base = createAtmosphericDatasetComparisonStrategyRegistry()["gfs:ifs"];
+    const compare = vi.fn(async () => ({ route: "custom-strategy" }));
+    const service = new UnifiedDatasetComparisonService({
+      strategies: {
+        "gfs:ifs": { metadata: base.metadata, compare },
+      },
+    });
+    const result = await service.compare({
+      datasets: ["gfs", "ifs"],
+      geometry: point,
+      time: { at: "2026-08-28T12:00:00Z" },
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    });
+    expect(compare).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({
+      operation: "compare_datasets",
+      datasets: ["gfs", "ifs"],
+      result: { route: "custom-strategy" },
+    });
+  });
+
+  it("rejects strategy declarations that drift from their registry key", () => {
+    const base = createAtmosphericDatasetComparisonStrategyRegistry()["gfs:gefs"];
+    expect(() => createAtmosphericDatasetComparisonStrategyRegistry({
+      "gfs:gefs": {
+        metadata: { ...base.metadata, key: "gfs:ifs" },
+        compare: base.compare.bind(base),
+      } as any,
+    })).toThrow("registry key gfs:gefs");
   });
 });
 
