@@ -1,7 +1,14 @@
 import {
+  AigfsAifsComparisonStrategy,
+  GefsAigefsComparisonStrategy,
   GefsIfsEnsComparisonStrategy,
+  GfsAigfsComparisonStrategy,
   GfsGefsComparisonStrategy,
   GfsIfsComparisonStrategy,
+  HgefsAigefsComparisonStrategy,
+  HgefsGefsComparisonStrategy,
+  IfsAifsComparisonStrategy,
+  IfsEnsAifsEnsComparisonStrategy,
   IfsIfsEnsComparisonStrategy,
 } from "./strategies.js";
 import type {
@@ -17,6 +24,13 @@ export function createAtmosphericDatasetComparisonStrategyRegistry(
     "gfs:ifs": new GfsIfsComparisonStrategy(),
     "gefs:ifs-ens": new GefsIfsEnsComparisonStrategy(),
     "ifs:ifs-ens": new IfsIfsEnsComparisonStrategy(),
+    "gfs:aigfs": new GfsAigfsComparisonStrategy(),
+    "ifs:aifs": new IfsAifsComparisonStrategy(),
+    "aigfs:aifs": new AigfsAifsComparisonStrategy(),
+    "gefs:aigefs": new GefsAigefsComparisonStrategy(),
+    "ifs-ens:aifs-ens": new IfsEnsAifsEnsComparisonStrategy(),
+    "hgefs:gefs": new HgefsGefsComparisonStrategy(),
+    "hgefs:aigefs": new HgefsAigefsComparisonStrategy(),
     ...strategies,
   };
   validateComparisonStrategyRegistry(registry);
