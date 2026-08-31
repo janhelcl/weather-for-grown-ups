@@ -20,7 +20,7 @@ import {
   isIconD2RawAreaField,
   isIconD2RawAreaVariable,
 } from "../src/core/icon-d2.js";
-import { IconD2RunResolver } from "../src/core/icon-d2-run.js";
+import { IconD2RunResolver, resolveIconD2Run } from "../src/core/icon-d2-run.js";
 import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-api.js";
 import {
   publicDatasetCoversGeometry,
@@ -801,6 +801,113 @@ describe("ICON-D2 run resolution", () => {
       4,
       { pressure: true, surface: false },
     );
+  });
+
+  it("caches run resolutions, expires them, and keeps explicit selectors probe-free", async () => {
+    let now = new Date("2026-08-31T09:30:00Z").getTime();
+    const available = new Date("2026-08-31T06:00:00Z");
+    const probe = {
+      isForecastAvailable: vi.fn(async (candidate: Date, forecastHour: number) =>
+        candidate.getTime() === available.getTime() && forecastHour === 2),
+    };
+    const resolver = new IconD2RunResolver(probe, () => now, 60_000, 2);
+    const requirement = {
+      type: "valid_time" as const,
+      validTime: new Date("2026-08-31T08:00:00Z"),
+      products: { pressure: true, surface: false },
+    };
+
+    expect(await resolver.resolveLatestRun(requirement)).toEqual(available);
+    expect(await resolver.resolveLatestRun(requirement)).toEqual(available);
+    expect(probe.isForecastAvailable).toHaveBeenCalledTimes(1);
+
+    now += 60_001;
+    expect(await resolver.resolveLatestRun(requirement)).toEqual(available);
+    expect(probe.isForecastAvailable).toHaveBeenCalledTimes(2);
+
+    const provider = {
+      resolveLatestRun: vi.fn(async () => available),
+      resolveLatestCompleteRun: vi.fn(async () => available),
+    };
+    expect(resolveIconD2Run("2026-08-31T03:00:00Z", requirement, provider))
+      .toEqual(new Date("2026-08-31T03:00:00Z"));
+    expect(provider.resolveLatestRun).not.toHaveBeenCalled();
+    expect(await resolveIconD2Run("latest", requirement, provider)).toEqual(available);
+    expect(await resolveIconD2Run("latest_complete", requirement, provider)).toEqual(available);
+  });
+
+  it("covers single-step ranges and rejects invalid or over-horizon latest ranges", async () => {
+    const run = new Date("2026-08-31T06:00:00Z");
+    const singleProbe = {
+      isForecastAvailable: vi.fn(async (candidate: Date, forecastHour: number) =>
+        candidate.getTime() === run.getTime() && forecastHour === 2),
+    };
+    const single = new IconD2RunResolver(
+      singleProbe,
+      () => new Date("2026-08-31T09:30:00Z").getTime(),
+      60_000,
+      2,
+    );
+    expect(await single.resolveLatestRun({
+      type: "time_range",
+      startTime: new Date("2026-08-31T08:00:00Z"),
+      endTime: new Date("2026-08-31T08:00:00Z"),
+      products: { pressure: true, surface: false },
+    })).toEqual(run);
+    expect(singleProbe.isForecastAvailable).toHaveBeenCalledTimes(1);
+
+    const never = { isForecastAvailable: vi.fn(async () => false) };
+    const resolver = new IconD2RunResolver(
+      never,
+      () => new Date("2026-08-31T12:00:00Z").getTime(),
+      60_000,
+      2,
+    );
+    await expect(resolver.resolveLatestRun({
+      type: "time_range",
+      startTime: new Date("2026-08-31T12:00:00Z"),
+      endTime: new Date("2026-08-31T11:00:00Z"),
+      products: { pressure: true, surface: false },
+    })).rejects.toThrow("endTime must be at or after startTime");
+
+    await expect(resolver.resolveLatestRun({
+      type: "time_range",
+      startTime: new Date("2026-08-31T12:00:00Z"),
+      endTime: new Date("2026-09-02T13:00:00Z"),
+      products: { pressure: true, surface: false },
+    })).rejects.toThrow("extends beyond the 48-hour ICON-D2 horizon");
+    expect(never.isForecastAvailable).not.toHaveBeenCalled();
+  });
+
+  it("skips older candidates that cannot cover the requested valid time or range", async () => {
+    const validProbe = { isForecastAvailable: vi.fn(async () => false) };
+    const validResolver = new IconD2RunResolver(
+      validProbe,
+      () => new Date("2026-08-31T12:00:00Z").getTime(),
+      60_000,
+      18,
+    );
+    await expect(validResolver.resolveLatestRun({
+      type: "valid_time",
+      validTime: new Date("2026-08-31T12:00:00Z"),
+      products: { pressure: true, surface: false },
+    })).rejects.toThrow("Could not find an ICON-D2 run");
+    expect(validProbe.isForecastAvailable.mock.calls.length).toBeLessThan(18);
+
+    const rangeProbe = { isForecastAvailable: vi.fn(async () => false) };
+    const rangeResolver = new IconD2RunResolver(
+      rangeProbe,
+      () => new Date("2026-08-31T06:30:00Z").getTime(),
+      60_000,
+      2,
+    );
+    await expect(rangeResolver.resolveLatestRun({
+      type: "time_range",
+      startTime: new Date("2026-08-31T06:00:00Z"),
+      endTime: new Date("2026-09-02T06:00:00Z"),
+      products: { pressure: true, surface: false },
+    })).rejects.toThrow("Could not find an ICON-D2 run");
+    expect(rangeProbe.isForecastAvailable).toHaveBeenCalledTimes(1);
   });
 
   it("fails clearly when no eligible run is published", async () => {
