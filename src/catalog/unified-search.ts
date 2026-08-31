@@ -70,7 +70,8 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
       ? (query.forecastKind === "reforecast" ? gefsReforecastEntries() : gefsEntries())
       : []),
     ...(datasets.has("ifs") ? ifsEntries("ifs") : []),
-    ...(datasets.has("aifs") ? aifsEntries() : []),
+    ...(datasets.has("aifs") ? aifsEntries("aifs") : []),
+    ...(datasets.has("aifs-ens") ? aifsEntries("aifs-ens") : []),
     ...(datasets.has("ifs-ens") ? ifsEntries("ifs-ens") : []),
     ...(datasets.has("gfs-analysis") ? historyEntries() : []),
   ].filter((entry) => {
@@ -279,9 +280,8 @@ function gefsReforecastEntries(): CatalogEntry[] {
   ];
 }
 
-function aifsEntries(): CatalogEntry[] {
+function aifsEntries(dataset: "aifs" | "aifs-ens"): CatalogEntry[] {
   const catalog = getAifsCatalog();
-  const dataset = "aifs" as const;
   return [
     ...catalog.variables.map((definition) => ({
       dataset,
@@ -445,6 +445,7 @@ function preferredRepresentative(entries: CatalogEntry[]): CatalogEntry {
     ?? entries.find((entry) => entry.dataset === "gefs")
     ?? entries.find((entry) => entry.dataset === "ifs")
     ?? entries.find((entry) => entry.dataset === "aifs")
+    ?? entries.find((entry) => entry.dataset === "aifs-ens")
     ?? entries.find((entry) => entry.dataset === "ifs-ens")
     ?? entries[0]!;
 }
@@ -468,6 +469,8 @@ function supportSemantics(
       return "deterministic ECMWF IFS 0.25° operational forecast";
     case "aifs":
       return "ECMWF AIFS Single 0.25° deterministic AI forecast; four daily cycles with native 6-hour output through 360 hours";
+    case "aifs-ens":
+      return "ECMWF AIFS ENS 0.25° 51-member stochastic AI ensemble; dedicated control plus 50 perturbations, 6-hourly through 360 hours";
     case "ifs-ens":
       return "ECMWF IFS ENS 0.25° distribution across 50 perturbed members; deterministic IFS is the post-50r1 unperturbed control";
     case "gfs-analysis":
