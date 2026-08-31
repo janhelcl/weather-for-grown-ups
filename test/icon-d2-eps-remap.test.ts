@@ -129,7 +129,7 @@ describe("ICON-D2-EPS official DWD remapping assets", () => {
     const fetchFn = vi.fn(async () => {
       calls += 1;
       return calls === 1
-        ? new Response("retry", { status: 503 })
+        ? new Response("retry", { status: 404 })
         : new Response(tar, { status: 200 });
     });
     const cache = new IconD2EpsDwdRemapAssetCache(
@@ -138,7 +138,7 @@ describe("ICON-D2-EPS official DWD remapping assets", () => {
       { run: <T>(operation: () => Promise<T>) => operation() },
     );
 
-    await expect(cache.paths()).rejects.toThrow("HTTP 503");
+    await expect(cache.paths()).rejects.toThrow("HTTP 404");
     await expect(cache.paths()).resolves.toMatchObject({
       targetGridPath: expect.stringContaining("target_grid_icon_d2_002.txt"),
       weightsPath: expect.stringContaining("weights_icon_d2_002.nc"),
