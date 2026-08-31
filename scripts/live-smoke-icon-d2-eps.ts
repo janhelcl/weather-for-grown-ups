@@ -1,0 +1,59 @@
+import assert from "node:assert/strict";
+import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-api.js";
+import {
+  floorToIconD2EpsCycle,
+  iconD2EpsValidTime,
+} from "../src/sources/icon-d2-eps.js";
+
+const safelyPublishedRun = floorToIconD2EpsCycle(
+  new Date(Date.now() - 12 * 3_600_000),
+);
+const validTime = iconD2EpsValidTime(safelyPublishedRun, 6);
+
+const result = await new UnifiedAtmosphereQueryService().query({
+  dataset: "icon-d2-eps",
+  geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+  time: { at: validTime.toISOString() },
+  selection: {
+    variables: ["temperature"],
+    pressureLevelsHpa: [850],
+  },
+  forecast: { run: safelyPublishedRun.toISOString() },
+  ensemble: {
+    members: ["p01", "p02"],
+    quantiles: [0.5],
+  },
+});
+
+assert.equal(result.dataset, "icon-d2-eps");
+assert.equal(result.internalDatasetId, "icon_d2_eps_2p1km");
+assert.equal(result.kind, "ensemble");
+assert.equal(result.role, "forecast");
+
+const ensemble = result.result as any;
+assert.equal(ensemble.model, "icon_d2_eps_2p1km");
+assert.equal(ensemble.validTime, validTime.toISOString());
+assert.equal(ensemble.forecastHour, 6);
+assert.deepEqual(ensemble.selection.members, ["p01", "p02"]);
+const temperature = ensemble.pressureSummaries.find(
+  (summary: any) => summary.pressureLevelHpa === 850
+    && summary.field === "temperatureC",
+);
+assert(temperature, "missing ICON-D2-EPS temperature distribution");
+assert.equal(temperature.distribution.memberCount, 2);
+assert(Number.isFinite(temperature.distribution.mean));
+assert.equal(ensemble.source.provider, "DWD Open Data");
+assert.equal(ensemble.source.access, "dwd_open_data");
+assert.equal(ensemble.source.packaging, "all_members_grib2_bz2");
+assert.equal(ensemble.source.nativeGrid.type, "icosahedral");
+assert.equal(ensemble.source.memberCount, 2);
+
+console.log(JSON.stringify({
+  dataset: result.dataset,
+  internalDatasetId: result.internalDatasetId,
+  run: ensemble.run,
+  validTime: ensemble.validTime,
+  selection: ensemble.selection,
+  pressureSummaries: ensemble.pressureSummaries,
+  source: ensemble.source,
+}, null, 2));
