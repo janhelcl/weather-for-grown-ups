@@ -27,9 +27,9 @@ import {
   ifsPressureVariableSchema,
 } from "./ifs.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
-import { publicDatasetCapabilities } from "./unified-api.js";
+import { atmosphericRunSelectorSchema, publicDatasetCapabilities } from "./unified-api.js";
 
-const runSchema = z.union([z.literal("latest"), isoDateTimeSchema]).default("latest");
+const runSchema = atmosphericRunSelectorSchema;
 const quantilesSchema = z.array(z.number().min(0).max(1))
   .min(1)
   .max(9)
@@ -51,6 +51,14 @@ export const compareGfsAigfsDatasetsSchema = z.object({
   datasets: z.tuple([z.literal("gfs"), z.literal("aigfs")]),
   ...pointBase,
   gfsGrid: gfsGridSchema.optional(),
+  members: z.never().optional(),
+  gefsMembers: z.never().optional(),
+  aigefsMembers: z.never().optional(),
+  ifsEnsMembers: z.never().optional(),
+  aifsEnsMembers: z.never().optional(),
+  hgefsMembers: z.never().optional(),
+  quantiles: z.never().optional(),
+  thresholdGte: z.never().optional(),
 }).superRefine((request, context) => {
   validateRun(request.run, request.datasets, context);
   validateAigfsSelection(request.variable, request.pressureLevelHpa, context);
@@ -59,6 +67,15 @@ export const compareGfsAigfsDatasetsSchema = z.object({
 export const compareIfsAifsDatasetsSchema = z.object({
   datasets: z.tuple([z.literal("ifs"), z.literal("aifs")]),
   ...pointBase,
+  gfsGrid: z.never().optional(),
+  members: z.never().optional(),
+  gefsMembers: z.never().optional(),
+  aigefsMembers: z.never().optional(),
+  ifsEnsMembers: z.never().optional(),
+  aifsEnsMembers: z.never().optional(),
+  hgefsMembers: z.never().optional(),
+  quantiles: z.never().optional(),
+  thresholdGte: z.never().optional(),
 }).superRefine((request, context) => {
   validateRun(request.run, request.datasets, context);
   validateIfsSelection(request.variable, request.pressureLevelHpa, context);
@@ -68,6 +85,15 @@ export const compareIfsAifsDatasetsSchema = z.object({
 export const compareAigfsAifsDatasetsSchema = z.object({
   datasets: z.tuple([z.literal("aigfs"), z.literal("aifs")]),
   ...pointBase,
+  gfsGrid: z.never().optional(),
+  members: z.never().optional(),
+  gefsMembers: z.never().optional(),
+  aigefsMembers: z.never().optional(),
+  ifsEnsMembers: z.never().optional(),
+  aifsEnsMembers: z.never().optional(),
+  hgefsMembers: z.never().optional(),
+  quantiles: z.never().optional(),
+  thresholdGte: z.never().optional(),
 }).superRefine((request, context) => {
   validateRun(request.run, request.datasets, context);
   validateAigfsSelection(request.variable, request.pressureLevelHpa, context);
@@ -83,6 +109,11 @@ export const compareGefsAigefsDatasetsSchema = z.object({
     .default([...AIGEFS_MEMBERS]),
   quantiles: quantilesSchema,
   thresholdGte: z.number().optional(),
+  gfsGrid: z.never().optional(),
+  members: z.never().optional(),
+  ifsEnsMembers: z.never().optional(),
+  aifsEnsMembers: z.never().optional(),
+  hgefsMembers: z.never().optional(),
 }).superRefine((request, context) => {
   validateRun(request.run, request.datasets, context);
   validateAigfsSelection(request.variable, request.pressureLevelHpa, context);
@@ -107,6 +138,11 @@ export const compareIfsEnsAifsEnsDatasetsSchema = z.object({
     .default([...AIFS_ENS_MEMBERS]),
   quantiles: quantilesSchema,
   thresholdGte: z.number().optional(),
+  gfsGrid: z.never().optional(),
+  members: z.never().optional(),
+  gefsMembers: z.never().optional(),
+  aigefsMembers: z.never().optional(),
+  hgefsMembers: z.never().optional(),
 }).superRefine((request, context) => {
   validateRun(request.run, request.datasets, context);
   validateIfsSelection(request.variable, request.pressureLevelHpa, context);
@@ -121,6 +157,12 @@ export const compareIfsEnsAifsEnsDatasetsSchema = z.object({
 
 const hybridBase = {
   ...pointBase,
+  gfsGrid: z.never().optional(),
+  members: z.never().optional(),
+  gefsMembers: z.never().optional(),
+  aigefsMembers: z.never().optional(),
+  ifsEnsMembers: z.never().optional(),
+  aifsEnsMembers: z.never().optional(),
   hgefsMembers: z.array(hgefsMemberSchema).min(4).max(HGEFS_MEMBERS.length)
     .default([...HGEFS_MEMBERS]),
   quantiles: quantilesSchema,
@@ -161,7 +203,7 @@ function validateRun(
   datasets: readonly ("gfs" | "aigfs" | "aigefs" | "hgefs" | "gefs" | "ifs" | "aifs" | "aifs-ens" | "ifs-ens")[],
   context: z.RefinementCtx,
 ): void {
-  const selector = run === "latest" ? "latest" : "explicit";
+  const selector = run === "latest" || run === "latest_complete" ? run : "explicit";
   const unsupported = datasets.filter(
     (dataset) => !publicDatasetCapabilities(dataset).runSelectors.includes(selector),
   );
