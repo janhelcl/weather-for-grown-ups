@@ -163,13 +163,17 @@ describe("AIGEFS member-first aggregation", () => {
       min: 10,
       max: 12,
     });
-    expect(result.pressureSummaries.find((summary: any) =>
+    const direction = result.pressureSummaries.find((summary: any) =>
       summary.field === "windDirectionDeg",
-    )).toMatchObject({
+    );
+    expect(direction).toMatchObject({
       aggregation: "circular_direction",
       memberCount: 2,
-      meanDirectionDeg: 0,
     });
+    expect(Math.min(
+      Math.abs(direction.meanDirectionDeg),
+      Math.abs(direction.meanDirectionDeg - 360),
+    )).toBeLessThan(1e-10);
     expect(result.fieldSummaries[0].outputs[0].distribution.mean).toBe(13);
     expect(result.members).toHaveLength(2);
     expect(result.source).toMatchObject({
@@ -218,8 +222,7 @@ describe("AIGEFS member-first aggregation", () => {
           diagnostics: [{
             id: "temperature_lapse_rate",
             values: {
-              temperatureDifferenceC: member === "c00" ? 10 : 12,
-              lapseRateCPerKm: member === "c00" ? 6 : 8,
+              temperatureLapseRateCPerKm: member === "c00" ? 6 : 8,
             },
           }],
           source: {
@@ -247,7 +250,7 @@ describe("AIGEFS member-first aggregation", () => {
 
     expect(result.layerDepthGpm.mean).toBe(1600);
     expect(result.summaries.find((summary: any) =>
-      summary.field === "lapseRateCPerKm",
+      summary.field === "temperatureLapseRateCPerKm",
     ).distribution.mean).toBe(7);
   });
 });
