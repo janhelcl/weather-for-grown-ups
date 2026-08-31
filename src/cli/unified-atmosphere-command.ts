@@ -155,44 +155,71 @@ function registerCompareRunsCommand(program: Command): void {
 function registerCompareDatasetsCommand(program: Command): void {
   program
     .command("compare-datasets")
-    .description("Compare aligned deterministic or ensemble forecast datasets")
+    .description("Compare scientifically compatible aligned forecast datasets")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--at <iso>", "Forecast valid time")
-    .option("--dataset <gfs|gefs|ifs>", "Left-side dataset; omit to preserve legacy --against defaults")
-    .option("--against <gefs|ifs|ifs-ens>", "Right-side dataset: gefs, ifs, or ifs-ens", "gefs")
+    .option(
+      "--dataset <id>",
+      "Left-side dataset: gfs, aigfs, gefs, hgefs, ifs, or ifs-ens; omit to preserve legacy defaults",
+    )
+    .option(
+      "--against <id>",
+      "Right-side dataset: aigfs, aifs, aigefs, gefs, ifs, ifs-ens, or aifs-ens",
+      "gefs",
+    )
     .requiredOption("--var <id>", "Canonical pressure-level variable")
     .requiredOption("--level <hpa>", "Pressure level in hPa", Number)
     .option("--run <iso|latest>", "Shared aligned initialization", "latest")
     .option("--grid <0p25|0p50>", "GFS horizontal grid; GFS comparison branches only")
     .option("--members <list>", "GFS↔GEFS only: GEFS members (c00,p01..p30)")
-    .option("--gefs-members <list>", "GEFS↔IFS ENS only: GEFS members (c00,p01..p30)")
-    .option("--ifs-ens-members <list>", "IFS ENS perturbations (p01..p50) for GEFS↔IFS ENS or IFS↔IFS ENS")
+    .option("--gefs-members <list>", "GEFS members for cross-ensemble comparisons")
+    .option("--aigefs-members <list>", "AIGEFS members (c00,p01..p30)")
+    .option("--ifs-ens-members <list>", "IFS ENS perturbations (p01..p50)")
+    .option("--aifs-ens-members <list>", "AIFS ENS members (c00,p01..p50)")
+    .option(
+      "--hgefs-members <list>",
+      "HGEFS population-qualified members (gefs:c00..p30,aigefs:c00..p30)",
+    )
     .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
-    .option("--gte <number>", "GEFS↔IFS ENS only: compare raw member fractions at or above this threshold", Number)
+    .option("--gte <number>", "Compare raw ensemble member fractions at or above this threshold", Number)
     .option("--json", "Output JSON")
     .action(async (options) => {
       const against = String(options.against).trim().toLowerCase();
-      if (against !== "gefs" && against !== "ifs" && against !== "ifs-ens") {
-        throw new Error(`Expected --against gefs|ifs|ifs-ens, received: ${options.against}`);
+      const rightDatasets = new Set([
+        "aigfs", "aifs", "aigefs", "gefs", "ifs", "ifs-ens", "aifs-ens",
+      ]);
+      if (!rightDatasets.has(against)) {
+        throw new Error(
+          `Expected --against aigfs|aifs|aigefs|gefs|ifs|ifs-ens|aifs-ens, received: ${options.against}`,
+        );
       }
+
       const requestedLeft = options.dataset === undefined
         ? undefined
         : String(options.dataset).trim().toLowerCase();
-      if (
-        requestedLeft !== undefined
-        && requestedLeft !== "gfs"
-        && requestedLeft !== "gefs"
-        && requestedLeft !== "ifs"
-      ) {
-        throw new Error(`Expected --dataset gfs|gefs|ifs, received: ${options.dataset}`);
+      const leftDatasets = new Set(["gfs", "aigfs", "gefs", "hgefs", "ifs", "ifs-ens"]);
+      if (requestedLeft !== undefined && !leftDatasets.has(requestedLeft)) {
+        throw new Error(
+          `Expected --dataset gfs|aigfs|gefs|hgefs|ifs|ifs-ens, received: ${options.dataset}`,
+        );
       }
       const left = requestedLeft ?? (against === "ifs-ens" ? "gefs" : "gfs");
-      const supportedPair =
-        (left === "gfs" && (against === "gefs" || against === "ifs"))
-        || (left === "gefs" && against === "ifs-ens")
-        || (left === "ifs" && against === "ifs-ens");
-      if (!supportedPair) {
+      const pair = `${left}:${against}`;
+      const supportedPairs = new Set([
+        "gfs:gefs",
+        "gfs:ifs",
+        "gefs:ifs-ens",
+        "ifs:ifs-ens",
+        "gfs:aigfs",
+        "ifs:aifs",
+        "aigfs:aifs",
+        "gefs:aigefs",
+        "ifs-ens:aifs-ens",
+        "hgefs:gefs",
+        "hgefs:aigefs",
+      ]);
+      if (!supportedPairs.has(pair)) {
         throw new Error(`Unsupported comparison pair: ${left}↔${against}`);
       }
 
@@ -203,44 +230,120 @@ function registerCompareDatasetsCommand(program: Command): void {
         pressureLevelHpa: options.level,
         run: options.run,
       };
+      const quantiles = options.quantiles === undefined
+        ? {}
+        : { quantiles: parseNumbers(options.quantiles) };
+      const threshold = options.gte === undefined ? {} : { thresholdGte: options.gte };
 
       let request: CompareAtmosphericDatasetsInput;
-      if (left === "ifs") {
-        request = {
-          ...base,
-          datasets: ["ifs", "ifs-ens"],
-          ...(options.ifsEnsMembers === undefined
-            ? {}
-            : { ifsEnsMembers: parseIfsEnsMembers(options.ifsEnsMembers) }),
-          ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
-        };
-      } else if (left === "gefs") {
-        request = {
-          ...base,
-          datasets: ["gefs", "ifs-ens"],
-          ...(options.gefsMembers === undefined
-            ? {}
-            : { gefsMembers: parseGefsMembers(options.gefsMembers) }),
-          ...(options.ifsEnsMembers === undefined
-            ? {}
-            : { ifsEnsMembers: parseIfsEnsMembers(options.ifsEnsMembers) }),
-          ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
-          ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
-        };
-      } else if (against === "ifs") {
-        request = {
-          ...base,
-          datasets: ["gfs", "ifs"],
-          ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
-        };
-      } else {
-        request = {
-          ...base,
-          datasets: ["gfs", "gefs"],
-          ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
-          ...(options.members === undefined ? {} : { members: parseGefsMembers(options.members) }),
-          ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
-        };
+      switch (pair) {
+        case "gfs:gefs":
+          request = {
+            ...base,
+            datasets: ["gfs", "gefs"],
+            ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
+            ...(options.members === undefined
+              ? {}
+              : { members: parseGefsMembers(options.members) }),
+            ...quantiles,
+          };
+          break;
+        case "gfs:ifs":
+          request = {
+            ...base,
+            datasets: ["gfs", "ifs"],
+            ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
+          };
+          break;
+        case "gefs:ifs-ens":
+          request = {
+            ...base,
+            datasets: ["gefs", "ifs-ens"],
+            ...(options.gefsMembers === undefined
+              ? {}
+              : { gefsMembers: parseGefsMembers(options.gefsMembers) }),
+            ...(options.ifsEnsMembers === undefined
+              ? {}
+              : { ifsEnsMembers: parseIfsEnsMembers(options.ifsEnsMembers) }),
+            ...quantiles,
+            ...threshold,
+          };
+          break;
+        case "ifs:ifs-ens":
+          request = {
+            ...base,
+            datasets: ["ifs", "ifs-ens"],
+            ...(options.ifsEnsMembers === undefined
+              ? {}
+              : { ifsEnsMembers: parseIfsEnsMembers(options.ifsEnsMembers) }),
+            ...quantiles,
+          };
+          break;
+        case "gfs:aigfs":
+          request = {
+            ...base,
+            datasets: ["gfs", "aigfs"],
+            ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
+          };
+          break;
+        case "ifs:aifs":
+          request = { ...base, datasets: ["ifs", "aifs"] };
+          break;
+        case "aigfs:aifs":
+          request = { ...base, datasets: ["aigfs", "aifs"] };
+          break;
+        case "gefs:aigefs":
+          request = {
+            ...base,
+            datasets: ["gefs", "aigefs"],
+            ...(options.gefsMembers === undefined
+              ? {}
+              : { gefsMembers: parseGefsMembers(options.gefsMembers) }),
+            ...(options.aigefsMembers === undefined
+              ? {}
+              : { aigefsMembers: parseStrings(options.aigefsMembers) }),
+            ...quantiles,
+            ...threshold,
+          };
+          break;
+        case "ifs-ens:aifs-ens":
+          request = {
+            ...base,
+            datasets: ["ifs-ens", "aifs-ens"],
+            ...(options.ifsEnsMembers === undefined
+              ? {}
+              : { ifsEnsMembers: parseIfsEnsMembers(options.ifsEnsMembers) }),
+            ...(options.aifsEnsMembers === undefined
+              ? {}
+              : { aifsEnsMembers: parseStrings(options.aifsEnsMembers) }),
+            ...quantiles,
+            ...threshold,
+          };
+          break;
+        case "hgefs:gefs":
+          request = {
+            ...base,
+            datasets: ["hgefs", "gefs"],
+            ...(options.hgefsMembers === undefined
+              ? {}
+              : { hgefsMembers: parseStrings(options.hgefsMembers) }),
+            ...quantiles,
+            ...threshold,
+          };
+          break;
+        case "hgefs:aigefs":
+          request = {
+            ...base,
+            datasets: ["hgefs", "aigefs"],
+            ...(options.hgefsMembers === undefined
+              ? {}
+              : { hgefsMembers: parseStrings(options.hgefsMembers) }),
+            ...quantiles,
+            ...threshold,
+          };
+          break;
+        default:
+          throw new Error(`Unsupported comparison pair: ${left}↔${against}`);
       }
 
       const result = await new UnifiedDatasetComparisonService().compare(request);
