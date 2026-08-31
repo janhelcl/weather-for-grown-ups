@@ -19,6 +19,36 @@ export const UNIFIED_CATALOG_SECTIONS = [
 
 export const unifiedCatalogSectionSchema = z.enum(UNIFIED_CATALOG_SECTIONS);
 
+export const catalogCoverageGeometrySchema = z.union([
+  z.object({
+    type: z.literal("point"),
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+  }),
+  z.object({
+    type: z.literal("area"),
+    westLongitude: z.number().min(-180).max(180),
+    eastLongitude: z.number().min(-180).max(180),
+    southLatitude: z.number().min(-90).max(90),
+    northLatitude: z.number().min(-90).max(90),
+  }).superRefine((area, context) => {
+    if (area.eastLongitude <= area.westLongitude) {
+      context.addIssue({
+        code: "custom",
+        path: ["eastLongitude"],
+        message: "eastLongitude must be greater than westLongitude",
+      });
+    }
+    if (area.northLatitude <= area.southLatitude) {
+      context.addIssue({
+        code: "custom",
+        path: ["northLatitude"],
+        message: "northLatitude must be greater than southLatitude",
+      });
+    }
+  }),
+]);
+
 export const searchAtmosphereCatalogSchema = z.object({
   search: z.string().min(1).optional(),
   datasets: z.array(publicAtmosphericDatasetSchema).min(1).max(PUBLIC_ATMOSPHERIC_DATASET_IDS.length)
@@ -27,6 +57,12 @@ export const searchAtmosphereCatalogSchema = z.object({
     .optional(),
   classification: z.enum(["raw", "derived"]).optional(),
   temporalSemantics: z.enum(["instantaneous", "accumulation", "average"]).optional(),
+  spatialScope: z.enum(["global", "limited_area"]).optional().describe(
+    "Dataset spatial-domain filter. limited_area selects regional/convection-permitting datasets.",
+  ),
+  coverage: catalogCoverageGeometrySchema.optional().describe(
+    "Return only datasets whose declared spatial domain fully covers this point or bounded area.",
+  ),
   forecastKind: z.enum(["operational", "reforecast"]).optional().describe(
     "Forecast population filter. Currently supported only with datasets=[gefs]; reforecast selects the GEFSv12 retrospective capability subset.",
   ),
@@ -75,10 +111,40 @@ export const unifiedDatasetCapabilitiesSchema = z.object({
   role: z.enum(["forecast", "analysis"]),
   kind: z.enum(["deterministic", "ensemble"]),
   modelClass: z.enum(["physics", "ai", "hybrid"]),
-  provider: z.enum(["noaa", "ecmwf"]),
-  horizontalGridDegrees: z.number().positive(),
+  provider: z.enum(["noaa", "ecmwf", "dwd", "meteo_france"]),
+  spatialDomain: z.union([
+    z.object({ scope: z.literal("global") }),
+    z.object({
+      scope: z.literal("limited_area"),
+      name: z.string().min(1),
+      bounds: z.object({
+        westLongitude: z.number(),
+        eastLongitude: z.number(),
+        southLatitude: z.number(),
+        northLatitude: z.number(),
+      }),
+    }),
+  ]),
+  nativeGrid: z.object({
+    type: z.enum(["regular_latlon", "rotated_latlon", "icosahedral", "lambert_conformal", "mixed"]),
+    nominalResolution: z.object({
+      value: z.number().positive(),
+      unit: z.enum(["degrees", "km"]),
+    }).optional(),
+    components: z.array(z.object({
+      dataset: z.enum(ATMOSPHERIC_DATASET_IDS),
+      type: z.enum(["regular_latlon", "rotated_latlon", "icosahedral", "lambert_conformal"]),
+      nominalResolution: z.object({
+        value: z.number().positive(),
+        unit: z.enum(["degrees", "km"]),
+      }),
+    })).optional(),
+  }),
+  horizontalGridDegrees: z.number().positive().optional(),
   maxForecastHour: z.number().int().nonnegative().optional(),
+  nativeTimeCadenceHours: z.array(z.number().positive()).min(1),
   nativeForecastIntervalHours: z.number().positive().optional(),
+  members: z.number().int().positive().optional(),
   constituents: z.array(z.object({
     dataset: z.enum(ATMOSPHERIC_DATASET_IDS),
     modelClass: z.enum(["physics", "ai", "hybrid"]),
@@ -91,7 +157,7 @@ export const unifiedDatasetCapabilitiesSchema = z.object({
 
 export const unifiedCatalogResultSchema = z.object({
   query: searchAtmosphereCatalogSchema,
-  datasetCapabilities: z.array(unifiedDatasetCapabilitiesSchema).min(1),
+  datasetCapabilities: z.array(unifiedDatasetCapabilitiesSchema),
   totalMatches: z.number().int().nonnegative(),
   truncated: z.boolean(),
   matches: z.array(unifiedCatalogMatchSchema),
