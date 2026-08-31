@@ -92,7 +92,13 @@ Out-of-domain queries must fail truthfully and distinctly from unsupported-varia
 
 Do not add model-specific public geometry types or namespaces.
 
-## 2. ICON-D2
+## 2. ICON-D2 ✅
+
+**Implemented as the first regional deterministic forecast dataset.**
+
+DWD ICON-D2 now sits behind the same public atmospheric query and diagnostic language as the global datasets. The integration preserves the limited-area domain, 3-hourly run schedule, hourly forecast cadence and 48-hour horizon, while keeping the model's native ~2.1 km icosahedral grid distinct from the DWD Open Data 0.02° regular-lat/lon access product.
+
+The initial capability deliberately exposes a coherent pressure/field subset rather than claiming GFS/IFS inventory parity. Point, time-range, multi-point, multi-point-range, transect and bounded-area operations are covered, together with shared layer/profile diagnostics. DWD URL construction, compression, run probing, access policy and caching remain below the unified adapter boundary, and out-of-domain queries are rejected before source access. A dedicated live CI smoke exercises the real DWD transport and GRIB decode path.
 
 Add DWD ICON-D2 as the first regional deterministic forecast dataset.
 
