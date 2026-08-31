@@ -9,6 +9,15 @@ import {
 } from "./variables.js";
 import type { VariableId } from "../schema/query.js";
 
+export const AIGEFS_MEMBERS = [
+  "000", "001", "002", "003", "004", "005", "006", "007", "008", "009",
+  "010", "011", "012", "013", "014", "015", "016", "017", "018", "019",
+  "020", "021", "022", "023", "024", "025", "026", "027", "028", "029",
+  "030",
+] as const;
+
+export type AigefsMember = (typeof AIGEFS_MEMBERS)[number];
+
 export const AIGFS_PRESSURE_LEVELS_HPA = [
   50,
   100,
