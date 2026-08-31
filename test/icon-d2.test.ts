@@ -403,7 +403,7 @@ describe("ICON-D2 deterministic service operations", () => {
       "wind_10m",
       "mean_sea_level_pressure",
     ]);
-    expect(point.fields.find((field: any) => field.id === "wind_10m")?.windSpeedMs).toBe(5);
+    expect(point.fields.find((field: any) => field.id === "wind_10m")?.values.windSpeedMs).toBe(5);
 
     const range = await service().query(queryAtmosphereSchema.parse({
       dataset: "icon-d2",
@@ -479,7 +479,7 @@ describe("ICON-D2 deterministic service operations", () => {
       },
       forecast: { run: run.toISOString() },
     } as any) as any;
-    expect(profile.kind).toBe("profile");
+    expect(profile.sampledPressureLevelsHpa).toEqual([1000, 925, 850, 700, 500]);
     expect(profile.diagnostics).toHaveLength(2);
 
     const range = await service().diagnose({
