@@ -23,7 +23,7 @@ export function buildAifsOpenDataForecastUrl(
 export function buildAifsOpenDataForecastIndexUrl(
   run: Date,
   forecastHour: number,
-  baseUrl = IFS_OPEN_DATA_MIRRORS[0].baseUrl,
+  baseUrl: string = IFS_OPEN_DATA_MIRRORS[0].baseUrl,
 ): string {
   return buildAifsOpenDataForecastUrl(run, forecastHour, baseUrl).replace(/\.grib2$/, ".index");
 }
