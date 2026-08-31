@@ -24,6 +24,8 @@ import type { AtmosphericStepProgress } from "../core/progress.js";
 import {
   DEFAULT_LEVELS,
   collectPoint,
+  parseAigefsMembers,
+  parseAifsEnsMembers,
   parseGefsMembers,
   parseIfsEnsMembers,
   parseLevels,
@@ -311,7 +313,7 @@ export function buildUnifiedDatasetComparison(
               : { gefsMembers: parseGefsMembers(options.gefsMembers) }),
             ...(options.aigefsMembers === undefined
               ? {}
-              : { aigefsMembers: parseStrings(options.aigefsMembers) }),
+              : { aigefsMembers: parseAigefsMembers(options.aigefsMembers) }),
             ...quantiles,
             ...threshold,
           };
@@ -325,7 +327,7 @@ export function buildUnifiedDatasetComparison(
               : { ifsEnsMembers: parseIfsEnsMembers(options.ifsEnsMembers) }),
             ...(options.aifsEnsMembers === undefined
               ? {}
-              : { aifsEnsMembers: parseStrings(options.aifsEnsMembers) }),
+              : { aifsEnsMembers: parseAifsEnsMembers(options.aifsEnsMembers) }),
             ...quantiles,
             ...threshold,
           };
