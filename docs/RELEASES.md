@@ -1,5 +1,69 @@
 # Releases
 
+## v0.4.0 — 2026-08-31
+
+v0.4.0 completes WFG's first full physics/AI/hybrid model matrix while preserving the same public atmospheric query language.
+
+### AI and hybrid forecast families
+
+WFG now exposes five additional first-class forecast populations added after v0.3.0:
+
+- NOAA `aigfs` — deterministic AIGFS;
+- NOAA `aigefs` — 31-member AI ensemble with member-first diagnostics;
+- ECMWF `aifs` — deterministic AIFS Single;
+- ECMWF `aifs-ens` — native 51-member stochastic AIFS ensemble;
+- NOAA `hgefs` — a 62-member hybrid distribution composed from 31 GEFS physics members and 31 AIGEFS AI members.
+
+Each dataset remains behind the existing `dataset × geometry × time × selection` contract. Native grids, run cadence, horizons, member identities, source products and provenance stay explicit, and unsupported combinations fail at the capability boundary rather than being silently approximated.
+
+### Model-class and capability architecture
+
+Dataset metadata now treats provider, model class and result kind as first-class descriptive properties. Capability validation is centralized outside the dataset-agnostic public schema, so adding an AI or hybrid model does not create another public API family.
+
+The completed model matrix is:
+
+```text
+                         deterministic        ensemble
+NOAA physics             GFS                  GEFS
+NOAA AI                  AIGFS                AIGEFS
+ECMWF physics            IFS                  IFS ENS
+ECMWF AI                 AIFS                 AIFS ENS
+NOAA hybrid                                   HGEFS
+```
+
+### Restrictive cross-model comparisons
+
+`compare_datasets` now dispatches through a restrictive strategy registry with no generic fallback.
+
+The supported comparison families now include:
+
+- deterministic deltas: GFS ↔ IFS, GFS ↔ AIGFS, IFS ↔ AIFS and AIGFS ↔ AIFS;
+- deterministic-to-ensemble positioning: GFS ↔ GEFS and IFS ↔ IFS ENS;
+- ensemble distribution shifts: GEFS ↔ IFS ENS, GEFS ↔ AIGEFS and IFS ENS ↔ AIFS ENS;
+- hybrid-to-constituent distribution shifts: HGEFS ↔ GEFS and HGEFS ↔ AIGEFS.
+
+Ensemble comparisons summarize native populations independently rather than inventing cross-model member pairing. HGEFS comparisons also make the overlapping constituent population explicit rather than implying statistical independence.
+
+### Architecture cleanup
+
+The post-roadmap cleanup sharpens the same architectural invariant used throughout v0.3:
+
+> **One query language over weather datasets; native semantics stay explicit.**
+
+- pair-native and normalized comparison strategies are separated behind one registry;
+- comparison result normalization is isolated from orchestration;
+- dataset capability modifiers are centralized behind a dedicated validation boundary;
+- the unified public schema remains dataset-agnostic;
+- architecture tests lock these layer boundaries and CLI/MCP equivalence.
+
+### Release validation
+
+The normal release candidate remains covered by Node.js 20/24 typecheck, tests, build and smoke checks, coverage, packed-package installation, and Docker validation.
+
+The aggregate live suite now explicitly includes HGEFS alongside AIGFS, AIGEFS, AIFS/AIFS ENS, GFS/GEFS, ECMWF IFS, archive parity and verification checks.
+
+No existing public operation name or dataset ID is removed in this release.
+
 ## v0.3.0 — 2026-08-30
 
 v0.3.0 expands WFG's unified weather engine with a new retrospective ensemble forecast population and sharper model-comparison semantics, while keeping the core public query language stable.
