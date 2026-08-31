@@ -55,7 +55,7 @@ describe("CLI public surface", () => {
     const query = program.commands.find((command) => command.name() === "query");
 
     expect(catalog?.options.find((option) => option.long === "--dataset")?.flags)
-      .toContain("gfs|aigfs|aigefs|gefs|ifs|aifs|aifs-ens|ifs-ens|gfs-analysis|all");
+      .toContain("gfs|aigfs|aigefs|hgefs|gefs|ifs|aifs|aifs-ens|ifs-ens|gfs-analysis|all");
     expect(query?.options.find((option) => option.long === "--source")?.flags)
       .toContain("nomads|s3|archive");
   });
