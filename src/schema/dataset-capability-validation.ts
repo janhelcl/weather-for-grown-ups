@@ -28,6 +28,7 @@ import {
   ICON_D2_PRESSURE_VARIABLE_IDS,
 } from "../catalog/icon-d2.js";
 import { AIFS_ENS_MEMBERS } from "../catalog/aifs-ens.js";
+import { ICON_D2_EPS_MEMBERS } from "../catalog/icon-d2-eps.js";
 import {
   AIFS_AREA_FIELD_IDS,
   AIFS_FIELD_IDS,
@@ -58,6 +59,7 @@ const DATASET_CAPABILITY_VALIDATORS: Readonly<Record<string, readonly DatasetCap
   aigefs: [validateAigfsModifiers, validateAigefsMembers],
   hgefs: [validateAigfsModifiers, validateHgefsModifiers, validateHgefsMembers],
   "icon-d2": [validateIconD2Modifiers],
+  "icon-d2-eps": [validateIconD2Modifiers, validateIconD2EpsMembers],
   aifs: [validateAifsModifiers],
   "aifs-ens": [validateAifsModifiers, validateAifsEnsMembers],
 };
@@ -123,7 +125,7 @@ function validateSharedDatasetModifiers(
     context.addIssue({
       code: "custom",
       path: ["ensemble"],
-      message: "ensemble controls are only valid for ensemble datasets: aigefs, hgefs, gefs, aifs-ens, or ifs-ens",
+      message: "ensemble controls are only valid for ensemble datasets: aigefs, hgefs, icon-d2-eps, gefs, aifs-ens, or ifs-ens",
     });
   }
   if (request.dataset !== "gfs" && request.source !== undefined) {
@@ -263,6 +265,15 @@ function runSelectorCapability(value: string): AtmosphericRunSelectorId {
 
 function runSelectorLabel(value: AtmosphericRunSelectorId): string {
   return value === "explicit" ? "explicit ISO cycle" : value;
+}
+
+function validateIconD2EpsMembers(request: any, context: z.RefinementCtx): void {
+  validateMemberSelection(
+    request,
+    context,
+    ICON_D2_EPS_MEMBERS,
+    "ICON-D2-EPS members are p01..p20",
+  );
 }
 
 function validateAifsEnsMembers(request: any, context: z.RefinementCtx): void {
