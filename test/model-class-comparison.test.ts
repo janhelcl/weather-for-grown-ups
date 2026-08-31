@@ -558,7 +558,7 @@ describe("model-class comparison mechanics", () => {
           10,
           "NOAA",
         );
-        result.forecastHour = Number.NaN;
+        delete result.forecastHour;
         return wrapped(input.dataset, result);
       }),
     });
