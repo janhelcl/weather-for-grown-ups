@@ -713,7 +713,7 @@ describe("AIFS ENS default ensemble contract", () => {
       selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
     })) as any;
 
-    expect(result.selection.members).toEqual([...AIFS ENS_MEMBERS]);
+    expect(result.selection.members).toEqual([...AIFS_ENS_MEMBERS]);
     expect(result.selection.quantiles).toEqual([0.1, 0.5, 0.9]);
     expect(result.pressureSummaries[0].distribution.memberCount).toBe(51);
   });
