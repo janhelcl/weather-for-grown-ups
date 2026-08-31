@@ -448,6 +448,132 @@ describe("model-class comparison mechanics", () => {
     })).rejects.toThrow("inconsistent valid-time semantics");
   });
 
+
+  it("resolves canonical GEFS/AIGEFS defaults and rejects ensemble use on deterministic datasets", async () => {
+    const calls: QueryAtmosphereInput[] = [];
+    const service = new ModelClassComparisonService({
+      query: vi.fn(async (input: QueryAtmosphereInput) => {
+        calls.push(input);
+        const members = input.ensemble?.members ?? [];
+        const values = members.map((_, index) => 10 + index / 10);
+        return wrapped(
+          input.dataset,
+          input.dataset === "gefs"
+            ? gefsEnsembleResult(values, members)
+            : aiEnsembleResult("aigefs_0p25", values, members, "NOAA"),
+        );
+      }),
+    });
+
+    const result: any = await service.compareEnsembles({
+      datasets: ["gefs", "aigefs"],
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      quantiles: [0.5],
+    });
+    expect(calls.find((call) => call.dataset === "gefs")!.ensemble!.members).toHaveLength(31);
+    expect(calls.find((call) => call.dataset === "aigefs")!.ensemble!.members).toHaveLength(31);
+    expect(result.left.memberCount).toBe(31);
+    expect(result.right.memberCount).toBe(31);
+
+    await expect(service.compareEnsembles({
+      datasets: ["gfs", "aigefs"],
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      quantiles: [0.5],
+    })).rejects.toThrow("does not have an ensemble comparison population");
+  });
+
+  it("fails clearly when a requested ensemble quantile is absent", async () => {
+    const service = new ModelClassComparisonService({
+      query: vi.fn(async (input: QueryAtmosphereInput) => {
+        const members = input.ensemble?.members ?? ["c00", "p01"];
+        const result = input.dataset === "gefs"
+          ? gefsEnsembleResult([10, 12], members)
+          : aiEnsembleResult("aigefs_0p25", [11, 13], members, "NOAA");
+        result.pressureSummaries[0]!.distribution.quantiles = [{ quantile: 0.5, value: 11 }];
+        return wrapped(input.dataset, result);
+      }),
+    });
+
+    await expect(service.compareEnsembles({
+      datasets: ["gefs", "aigefs"],
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      leftMembers: ["c00", "p01"],
+      rightMembers: ["c00", "p01"],
+      quantiles: [0.9],
+    })).rejects.toThrow("missing quantile 0.9");
+  });
+
+  it("allows missing hybrid constituent provenance without fabricating a source", async () => {
+    const service = new ModelClassComparisonService({
+      query: vi.fn(async () => wrapped("hgefs", {
+        model: "hgefs_0p25",
+        run,
+        validTime,
+        forecastHour: 6,
+        members: [
+          { member: "gefs:c00", population: "gefs", levels: [{ pressureHpa: 850, temperatureC: 10 }] },
+          { member: "gefs:p01", population: "gefs", levels: [{ pressureHpa: 850, temperatureC: 12 }] },
+          { member: "aigefs:c00", population: "aigefs", levels: [{ pressureHpa: 850, temperatureC: 14 }] },
+          { member: "aigefs:p01", population: "aigefs", levels: [{ pressureHpa: 850, temperatureC: 16 }] },
+        ],
+        source: { provider: "NOAA" },
+      })),
+    });
+
+    const result: any = await service.compareHybridConstituent({
+      constituent: "aigefs",
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+      members: ["gefs:c00", "gefs:p01", "aigefs:c00", "aigefs:p01"],
+      quantiles: [0.5],
+    });
+    expect(result.constituent.source).toBeUndefined();
+  });
+
+  it("guards required numeric comparison metadata", async () => {
+    const service = new ModelClassComparisonService({
+      query: vi.fn(async (input: QueryAtmosphereInput) => {
+        const result: any = deterministicResult(
+          input.dataset === "gfs" ? "gfs_0p25" : "aigfs_0p25",
+          run,
+          10,
+          "NOAA",
+        );
+        result.forecastHour = Number.NaN;
+        return wrapped(input.dataset, result);
+      }),
+    });
+
+    await expect(service.compareDeterministic({
+      datasets: ["gfs", "aigfs"],
+      latitude: 50,
+      longitude: 14,
+      validTime,
+      run,
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    })).rejects.toThrow("missing numeric comparison forecastHour");
+  });
+
   it("handles zero-spread reference ensembles and rejects non-scalar ensemble variables", async () => {
     const service = new ModelClassComparisonService({
       query: vi.fn(async (input: QueryAtmosphereInput) => {
