@@ -407,7 +407,18 @@ describe("AIFS unified capability", () => {
       time: { at: "2026-08-31T06:00:00Z" },
       forecast: { run: "latest" },
       selection: {
-        variables: ["temperature", "wind", "specific_humidity"],
+        variables: [
+          "temperature",
+          "wind",
+          "specific_humidity",
+          "vertical_velocity",
+          "potential_temperature",
+          "mixing_ratio",
+          "virtual_temperature",
+          "air_density",
+          "wet_bulb_temperature",
+          "equivalent_potential_temperature",
+        ],
         pressureLevelsHpa: [850],
         fields: [
           "temperature_2m",
@@ -420,6 +431,14 @@ describe("AIFS unified capability", () => {
       },
     } as any);
     expect(latestRunProvider.resolveLatestRun).toHaveBeenCalled();
+    expect(point.levels[0].verticalVelocityPaS).toBeCloseTo(0.1);
+    expect(point.levels[0].potentialTemperatureK).toBeGreaterThan(278);
+    expect(point.levels[0].mixingRatioKgKg).toBeGreaterThan(0);
+    expect(point.levels[0].virtualTemperatureC).toBeGreaterThan(point.levels[0].temperatureC);
+    expect(point.levels[0].airDensityKgM3).toBeGreaterThan(0);
+    expect(point.levels[0].wetBulbTemperatureC).toBeLessThan(point.levels[0].temperatureC);
+    expect(point.levels[0].equivalentPotentialTemperatureK)
+      .toBeGreaterThan(point.levels[0].potentialTemperatureK);
     expect(point.fields.find((field: any) => field.id === "specific_humidity_2m")
       .values.specificHumidityKgKg).toBeGreaterThan(0);
     expect(point.fields.find((field: any) => field.id === "surface_geopotential_height")
