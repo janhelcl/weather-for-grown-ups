@@ -686,6 +686,9 @@ function summarizePointInstant(
   quantiles: number[],
   constituents: ConstituentQueryResults,
 ) {
+  if (request.geometry.type !== "point") {
+    throw new Error("Internal HGEFS routing error: expected point geometry");
+  }
   const snapshots = pointSnapshots(request, constituents);
   return {
     model: MODEL,
