@@ -449,3 +449,340 @@ describe("HGEFS member-first composition", () => {
     expect(result.members.map((member: any) => member.member)).toEqual(selectedMembers);
   });
 });
+
+
+describe("HGEFS field and invariant coverage", () => {
+  it("aggregates common scalar and circular fields without returning members by default", async () => {
+    const temporal = { type: "instantaneous" as const };
+    const aigefs = {
+      query: vi.fn(async () => ({
+        model: "aigefs_0p25",
+        run,
+        validTime,
+        forecastHour: 6,
+        requestedPoint,
+        gridPoint: aiGridPoint,
+        members: [
+          {
+            member: "c00",
+            cacheHit: false,
+            levels: [],
+            fields: [{
+              id: "wind_10m",
+              temporal,
+              values: { windSpeedMs: 4, windDirectionDeg: 350 },
+            }],
+          },
+          {
+            member: "p01",
+            cacheHit: true,
+            levels: [],
+            fields: [{
+              id: "wind_10m",
+              temporal,
+              values: { windSpeedMs: 6, windDirectionDeg: 10 },
+            }],
+          },
+        ],
+        source: { horizontalGridDegrees: 0.25, allCacheHit: false },
+      })),
+      diagnose: vi.fn(),
+    };
+    const gefsBundle = {
+      getBundle: vi.fn(async () => ({
+        model: "gefs_0p50",
+        run,
+        validTime,
+        forecastHour: 6,
+        requestedPoint,
+        gridPoint: physicsGridPoint,
+        members: [
+          {
+            member: "c00",
+            cacheHit: true,
+            pressureValues: [],
+            fields: [{
+              field: "wind_10m",
+              temporal,
+              values: { windSpeedMs: 8, windDirectionDeg: 0 },
+            }],
+          },
+          {
+            member: "p01",
+            cacheHit: true,
+            pressureValues: [],
+            fields: [{
+              field: "wind_10m",
+              temporal,
+              values: { windSpeedMs: 10, windDirectionDeg: 20 },
+            }],
+          },
+        ],
+        source: {
+          horizontalGridDegrees: 0.25,
+          allCacheHit: true,
+        },
+      })),
+    };
+    const service = new HgefsForecastService({
+      aigefs: aigefs as any,
+      gefsBundle: gefsBundle as any,
+    });
+
+    const result = await service.query(queryAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: { type: "point", ...requestedPoint },
+      time: { at: validTime },
+      selection: { fields: ["wind_10m"] },
+      forecast: { run },
+      ensemble: {
+        members: selectedMembers,
+        quantiles: [0.25, 0.5, 0.75],
+        maxMemberSamples: 100,
+      },
+    })) as any;
+
+    expect(result.pressureSummaries).toEqual([]);
+    expect(result.members).toBeUndefined();
+    expect(result.fieldSummaries[0].outputs).toEqual([
+      expect.objectContaining({
+        field: "windSpeedMs",
+        aggregation: "numeric_distribution",
+        distribution: expect.objectContaining({ memberCount: 4, mean: 7 }),
+      }),
+      expect.objectContaining({
+        field: "windDirectionDeg",
+        aggregation: "circular_direction",
+        memberCount: 4,
+      }),
+    ]);
+    expect(result.source.allCacheHit).toBe(false);
+    expect(aigefs.query).toHaveBeenCalledWith(expect.objectContaining({
+      forecast: expect.objectContaining({ run }),
+      ensemble: expect.objectContaining({ maxMemberSamples: 100 }),
+    }));
+  });
+
+  it("rejects constituent temporal disagreement instead of averaging unlike field intervals", async () => {
+    const aigefs = {
+      query: vi.fn(async () => ({
+        run,
+        validTime,
+        forecastHour: 6,
+        requestedPoint,
+        gridPoint: aiGridPoint,
+        members: [
+          {
+            member: "c00",
+            levels: [],
+            fields: [{
+              id: "total_precipitation",
+              temporal: { type: "accumulation", startForecastHour: 0, endForecastHour: 6, startTime: run, endTime: validTime },
+              values: { totalPrecipitationMm: 1 },
+            }],
+          },
+          {
+            member: "p01",
+            levels: [],
+            fields: [{
+              id: "total_precipitation",
+              temporal: { type: "accumulation", startForecastHour: 0, endForecastHour: 6, startTime: run, endTime: validTime },
+              values: { totalPrecipitationMm: 2 },
+            }],
+          },
+        ],
+        source: { allCacheHit: true },
+      })),
+      diagnose: vi.fn(),
+    };
+    const gefsBundle = {
+      getBundle: vi.fn(async () => ({
+        run,
+        validTime,
+        forecastHour: 6,
+        requestedPoint,
+        gridPoint: physicsGridPoint,
+        members: [
+          {
+            member: "c00",
+            pressureValues: [],
+            fields: [{
+              field: "total_precipitation",
+              temporal: { type: "accumulation", startForecastHour: 3, endForecastHour: 6, startTime: "2026-08-31T03:00:00.000Z", endTime: validTime },
+              values: { totalPrecipitationMm: 3 },
+            }],
+          },
+          {
+            member: "p01",
+            pressureValues: [],
+            fields: [{
+              field: "total_precipitation",
+              temporal: { type: "accumulation", startForecastHour: 3, endForecastHour: 6, startTime: "2026-08-31T03:00:00.000Z", endTime: validTime },
+              values: { totalPrecipitationMm: 4 },
+            }],
+          },
+        ],
+        source: { allCacheHit: true },
+      })),
+    };
+    const service = new HgefsForecastService({
+      aigefs: aigefs as any,
+      gefsBundle: gefsBundle as any,
+    });
+
+    await expect(service.query(queryAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: { type: "point", ...requestedPoint },
+      time: { at: validTime },
+      selection: { fields: ["total_precipitation"] },
+      ensemble: { members: selectedMembers },
+    }))).rejects.toThrow("temporal semantics disagree");
+  });
+
+  it("combines profile diagnostic structures member-first", async () => {
+    const diag = (height: number | undefined) => ({
+      id: "freezing_level_crossings",
+      crossings: height === undefined
+        ? []
+        : [{ geopotentialHeightGpm: height, pressureHpa: 900 }],
+    });
+    const aigefs = {
+      query: vi.fn(),
+      diagnose: vi.fn(async () => ({
+        run,
+        validTime,
+        forecastHour: 6,
+        requestedPoint,
+        gridPoint: aiGridPoint,
+        sampledPressureLevelsHpa: [1000, 850],
+        members: [
+          { member: "c00", cacheHit: true, levels: [], diagnostics: [diag(1000)] },
+          { member: "p01", cacheHit: true, levels: [], diagnostics: [diag(undefined)] },
+        ],
+        source: { horizontalGridDegrees: 0.25, allCacheHit: true },
+      })),
+    };
+    const gefsProfileDiagnostics = {
+      getProfileDiagnostics: vi.fn(async () => ({
+        run,
+        validTime,
+        forecastHour: 6,
+        requestedPoint,
+        gridPoint: physicsGridPoint,
+        sampledPressureLevelsHpa: [1000, 850],
+        members: [
+          { member: "c00", cacheHit: true, levels: [], diagnostics: [diag(1200)] },
+          { member: "p01", cacheHit: true, levels: [], diagnostics: [diag(1400)] },
+        ],
+        source: { allCacheHit: true },
+      })),
+    };
+    const service = new HgefsForecastService({
+      aigefs: aigefs as any,
+      gefsProfileDiagnostics: gefsProfileDiagnostics as any,
+    });
+
+    const result = await service.diagnose(diagnoseAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: { type: "point", ...requestedPoint },
+      time: { at: validTime },
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [1000, 850],
+        diagnostics: ["freezing_level_crossings"],
+      },
+      ensemble: {
+        members: selectedMembers,
+        quantiles: [0.5],
+      },
+    })) as any;
+
+    expect(result.members).toBeUndefined();
+    expect(result.summaries[0].membersWithAnyCrossing).toEqual({
+      count: 3,
+      memberCount: 4,
+      fraction: 0.75,
+      interpretation: "raw_member_fraction_not_calibrated_probability",
+    });
+    expect(result.summaries[0].crossingCount.mean).toBe(0.75);
+    expect(result.summaries[0].lowestCrossing.contributingMemberCount).toBe(3);
+  });
+
+  it("enforces the f240 horizon and constituent alignment in the service boundary", async () => {
+    const lateAigefs = {
+      query: vi.fn(async () => ({
+        run,
+        validTime: "2026-09-10T06:00:00.000Z",
+        forecastHour: 246,
+      })),
+      diagnose: vi.fn(),
+    };
+    const lateService = new HgefsForecastService({ aigefs: lateAigefs as any });
+    await expect(lateService.query({
+      dataset: "hgefs",
+      geometry: { type: "point", ...requestedPoint },
+      time: { at: "2026-09-10T06:00:00.000Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble: { members: [...selectedMembers] },
+    } as any)).rejects.toThrow("f000 through f240");
+
+    const alignedAigefs = {
+      query: vi.fn(async () => ({
+        run,
+        validTime,
+        forecastHour: 6,
+        requestedPoint,
+        gridPoint: aiGridPoint,
+        members: [
+          { member: "c00", levels: [{ pressureHpa: 850, temperatureC: 10 }] },
+          { member: "p01", levels: [{ pressureHpa: 850, temperatureC: 12 }] },
+        ],
+        source: { allCacheHit: true },
+      })),
+      diagnose: vi.fn(),
+    };
+    const wrongRunGefs = {
+      getBundle: vi.fn(async () => ({
+        run: "2026-08-30T18:00:00.000Z",
+        validTime,
+        forecastHour: 12,
+        requestedPoint,
+        gridPoint: physicsGridPoint,
+        members: [],
+        source: { allCacheHit: true },
+      })),
+    };
+    const alignmentService = new HgefsForecastService({
+      aigefs: alignedAigefs as any,
+      gefsBundle: wrongRunGefs as any,
+    });
+    await expect(alignmentService.query(queryAtmosphereSchema.parse({
+      dataset: "hgefs",
+      geometry: { type: "point", ...requestedPoint },
+      time: { at: validTime },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      ensemble: { members: selectedMembers },
+    }))).rejects.toThrow("different runs");
+  });
+
+  it("keeps service-level dataset and diagnostic boundaries explicit even for prevalidated callers", async () => {
+    const service = new HgefsForecastService();
+    await expect(service.query({ dataset: "gefs" } as any))
+      .rejects.toThrow("only accepts dataset=hgefs");
+    await expect(service.query({
+      dataset: "hgefs",
+      geometry: { type: "area" },
+    } as any)).rejects.toThrow("point and point time-range queries only");
+    await expect(service.diagnose({ dataset: "gefs" } as any))
+      .rejects.toThrow("only accepts dataset=hgefs");
+    await expect(service.diagnose({
+      dataset: "hgefs",
+      time: { from: validTime, to: validTime },
+    } as any)).rejects.toThrow("diagnostic time series are not exposed");
+    await expect(service.diagnose({
+      dataset: "hgefs",
+      time: { at: validTime },
+      diagnostic: { kind: "parcel" },
+    } as any)).rejects.toThrow("parcel diagnostics");
+  });
+});
