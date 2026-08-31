@@ -25,6 +25,7 @@ test:live:aigefs
 test:live:hgefs
 test:live:icon-d2
 test:live:icon-d2-eps
+test:live:arome
 test:live:history
 test:live:gefs
 test:live:gefs-runs
@@ -66,6 +67,10 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 `npm run test:live:icon-d2` checks the deterministic DWD regional transport, bzip2 decode path, pressure/surface normalization and the distinction between the model's native ~2.1 km icosahedral mesh and the 0.02° regular-lat/lon Open Data access product.
 
 `npm run test:live:icon-d2-eps` makes one bounded two-member query through public `dataset: "icon-d2-eps"`. It deliberately exercises the Docker image's native CDO + `wgrib2` path because DWD publishes this ensemble on its provider-native triangular grid. WFG downloads DWD's official `target_grid_icon_d2_002.txt` and `weights_icon_d2_002.nc`, remaps each selected all-member object once to 0.02° regular lat/lon, then selects requested members from the `ENS=...` inventory. The smoke checks that transport/remap/member-extraction chain, one pressure distribution, the 20-member population contract and member-first aggregation. The `p01,p02` selection is deliberately a source-compatibility smoke rather than a representative probabilistic sample.
+
+### Météo-France AROME
+
+`npm run test:live:arome` makes one bounded field-only point query through public `dataset: "arome"`. It verifies the current Météo-France object-store path, CCSDS-packed GRIB2 decoding through the bundled decoder, 2 m temperature/RH plus derived 10 m wind, the ~1.3 km native model identity, and the separate 0.01° EURW1S100 public delivery grid. The smoke deliberately uses a safely published cycle rather than racing the newest run.
 
 ### Historical GFS analysis and forecast skill
 
