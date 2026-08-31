@@ -9,12 +9,16 @@ import { PROFILE_DIAGNOSTIC_IDS } from "../catalog/profile-diagnostics.js";
 import {
   ATMOSPHERIC_DATASET_CATALOG,
   ATMOSPHERIC_DATASET_IDS,
+  datasetCoversGeometry,
+  type AtmosphericCoverageGeometry,
   type AtmosphericDatasetId,
   type AtmosphericDatasetKind,
   type AtmosphericDatasetRole,
   type AtmosphericModelClass,
+  type AtmosphericNativeGrid,
   type AtmosphericProvider,
   type AtmosphericRunSelectorId,
+  type AtmosphericSpatialDomain,
 } from "../catalog/models.js";
 import { areaThresholdSchema } from "./area-summary.js";
 import { validateDatasetCapabilityModifiers } from "./dataset-capability-validation.js";
@@ -309,6 +313,16 @@ export function publicDatasetMetadata(dataset: PublicAtmosphericDataset) {
   return PUBLIC_DATASET_METADATA[dataset];
 }
 
+export function publicDatasetCoversGeometry(
+  dataset: PublicAtmosphericDataset,
+  geometry: AtmosphericCoverageGeometry,
+): boolean {
+  return datasetCoversGeometry(
+    PUBLIC_DATASET_METADATA[dataset].internalDatasetId,
+    geometry,
+  );
+}
+
 export type PublicForecastKind = "operational" | "reforecast";
 
 export interface PublicAtmosphericDatasetCapabilities {
@@ -317,9 +331,13 @@ export interface PublicAtmosphericDatasetCapabilities {
   kind: AtmosphericDatasetKind;
   modelClass: AtmosphericModelClass;
   provider: AtmosphericProvider;
-  horizontalGridDegrees: number;
+  spatialDomain: AtmosphericSpatialDomain;
+  nativeGrid: AtmosphericNativeGrid;
+  horizontalGridDegrees?: number;
   maxForecastHour?: number;
+  nativeTimeCadenceHours: readonly number[];
   nativeForecastIntervalHours?: number;
+  members?: number;
   constituents?: readonly {
     dataset: AtmosphericDatasetId;
     modelClass: AtmosphericModelClass;
@@ -355,9 +373,26 @@ export function publicDatasetCapabilities(
     kind: metadata.kind,
     modelClass: definition.modelClass,
     provider: definition.provider,
-    horizontalGridDegrees: definition.horizontalGridDegrees,
+    spatialDomain: definition.spatialDomain.scope === "global"
+      ? { scope: "global" }
+      : { scope: "limited_area", name: definition.spatialDomain.name, bounds: { ...definition.spatialDomain.bounds } },
+    nativeGrid: {
+      type: definition.nativeGrid.type,
+      ...(definition.nativeGrid.nominalResolution === undefined
+        ? {}
+        : { nominalResolution: { ...definition.nativeGrid.nominalResolution } }),
+      ...(definition.nativeGrid.components === undefined
+        ? {}
+        : { components: definition.nativeGrid.components.map((component) => ({
+            ...component,
+            nominalResolution: { ...component.nominalResolution },
+          })) }),
+    },
+    ...(definition.horizontalGridDegrees === undefined ? {} : { horizontalGridDegrees: definition.horizontalGridDegrees }),
     ...(definition.maxForecastHour === undefined ? {} : { maxForecastHour: definition.maxForecastHour }),
+    nativeTimeCadenceHours: [...definition.nativeTimeCadenceHours],
     ...(definition.nativeForecastIntervalHours === undefined ? {} : { nativeForecastIntervalHours: definition.nativeForecastIntervalHours }),
+    ...(definition.members === undefined ? {} : { members: definition.members }),
     ...(definition.constituents === undefined ? {} : { constituents: definition.constituents.map((constituent) => ({ ...constituent })) }),
     forecastKinds,
     runSelectors,

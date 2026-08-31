@@ -73,6 +73,21 @@ The capability registry describes the shared **core operation** behind the compa
 
 It also prevents two failure modes: mechanically copying deterministic behavior into an ensemble namespace, and claiming a model supports an operation whose required source fields or semantics are not actually implemented.
 
+### Spatial domain and native-grid capability
+
+Regional NWP uses the same dataset capability boundary rather than adding a regional query namespace. Every atmospheric dataset declares:
+
+- a `spatialDomain`: global or a named limited-area domain with conservative geographic bounds;
+- a `nativeGrid`: grid type plus nominal resolution, with `mixed` available when one logical dataset genuinely combines different constituent grids;
+- its forecast horizon where applicable;
+- the set of native output cadences callers can encounter.
+
+`horizontalGridDegrees` remains compatibility metadata for regular latitude/longitude products; it is deliberately optional so future rotated, icosahedral or Lambert-conformal regional grids are not forced into a degree-grid fiction. HGEFS already exercises the truthful mixed-grid representation by retaining its GEFS 0.5° and AIGEFS 0.25° constituent grids separately.
+
+Catalog discovery consumes this registry directly. Callers can filter by global versus limited-area scope or ask which datasets fully cover a point or bounded area, while normal field/diagnostic filters continue to use the same canonical catalog. Discovery is local and does not probe upstream weather services.
+
+Execution uses the same declaration before operation adapters run. Query and diagnostic services reject geometry outside a dataset's declared domain with `AtmosphericOutOfDomainError` and stable code `OUT_OF_DOMAIN`. This keeps spatial-coverage failure distinct from unsupported selections, unavailable runs, and source-access failures, while provider-specific source details stay below the public schema.
+
 ## Normalized atmospheric boundary
 
 Pressure-profile meteorology consumes normalized typed states rather than GRIB records directly.

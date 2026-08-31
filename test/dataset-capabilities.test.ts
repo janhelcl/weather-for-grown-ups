@@ -6,6 +6,7 @@ import {
 import {
   PUBLIC_ATMOSPHERIC_DATASET_IDS,
   PUBLIC_DATASET_METADATA,
+  publicDatasetCapabilities,
 } from "../src/schema/unified-api.js";
 
 describe("unified dataset capability registry", () => {
@@ -18,6 +19,43 @@ describe("unified dataset capability registry", () => {
         kind: metadata.kind,
       });
     }
+  });
+
+  it("declares domain, native grid, and cadence for every current dataset", () => {
+    for (const dataset of ATMOSPHERIC_DATASET_IDS) {
+      const definition = ATMOSPHERIC_DATASET_CATALOG[dataset];
+      expect(definition.spatialDomain).toEqual({ scope: "global" });
+      expect(definition.nativeTimeCadenceHours.length).toBeGreaterThan(0);
+      expect(definition.nativeGrid.type).toMatch(
+        /regular_latlon|rotated_latlon|icosahedral|lambert_conformal|mixed/,
+      );
+    }
+
+    expect(ATMOSPHERIC_DATASET_CATALOG.hgefs_0p25.nativeGrid).toEqual({
+      type: "mixed",
+      components: [
+        {
+          dataset: "gefs_0p50",
+          type: "regular_latlon",
+          nominalResolution: { value: 0.5, unit: "degrees" },
+        },
+        {
+          dataset: "aigefs_0p25",
+          type: "regular_latlon",
+          nominalResolution: { value: 0.25, unit: "degrees" },
+        },
+      ],
+    });
+
+    expect(publicDatasetCapabilities("ifs")).toMatchObject({
+      spatialDomain: { scope: "global" },
+      nativeGrid: {
+        type: "regular_latlon",
+        nominalResolution: { value: 0.25, unit: "degrees" },
+      },
+      maxForecastHour: 240,
+      nativeTimeCadenceHours: [3, 6],
+    });
   });
 
   it("keeps deterministic IFS and IFS ENS horizons and semantics distinct", () => {
