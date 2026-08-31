@@ -6,6 +6,10 @@ import { AigefsDiagnosticAdapter, type AigefsDiagnosticAdapterOptions } from "./
 import { GefsDiagnosticAdapter, type GefsDiagnosticAdapterOptions } from "./gefs.js";
 import { HgefsDiagnosticAdapter, type HgefsDiagnosticAdapterOptions } from "./hgefs.js";
 import {
+  IconD2DiagnosticAdapter,
+  type IconD2DiagnosticAdapterOptions,
+} from "./icon-d2.js";
+import {
   GfsAnalysisDiagnosticAdapter,
   type GfsAnalysisDiagnosticAdapterOptions,
 } from "./gfs-analysis.js";
@@ -28,6 +32,7 @@ export type DefaultAtmosphericDiagnosticAdapterOptions =
   & GfsDiagnosticAdapterOptions
   & GefsDiagnosticAdapterOptions
   & HgefsDiagnosticAdapterOptions
+  & IconD2DiagnosticAdapterOptions
   & IfsDiagnosticAdapterOptions
   & IfsEnsDiagnosticAdapterOptions
   & GfsAnalysisDiagnosticAdapterOptions;
@@ -48,6 +53,7 @@ export function createAtmosphericDiagnosticAdapterRegistry(
     gfs: new GfsDiagnosticAdapter(options),
     gefs: new GefsDiagnosticAdapter(options),
     hgefs: new HgefsDiagnosticAdapter(options),
+    "icon-d2": new IconD2DiagnosticAdapter(options),
     ifs: new IfsDiagnosticAdapter(options),
     "ifs-ens": new IfsEnsDiagnosticAdapter(options),
     "gfs-analysis": new GfsAnalysisDiagnosticAdapter(options),

@@ -9,6 +9,7 @@ const GEFS_RAW_FIELDS = Object.values(GEFS_PGRB2A_FIELD_CATALOG).filter((definit
 const ALL_SUPPORTED_CODES = [...new Set([
   ...ALL_SUPPORTED_GFS_CODES,
   ...GEFS_RAW_FIELDS.map((definition) => definition.gfsCode),
+  "GP",
 ])];
 const SUPPORTED_CODE_SET = new Set<string>(ALL_SUPPORTED_CODES);
 const CODE_PATTERN = new RegExp(`:(${ALL_SUPPORTED_CODES.join("|")}):`);
@@ -86,8 +87,9 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
     return null;
   }
 
-  const code = codeMatch[1];
-  if (!code || !SUPPORTED_CODE_SET.has(code)) return null;
+  const rawCode = codeMatch[1];
+  if (!rawCode || !SUPPORTED_CODE_SET.has(rawCode)) return null;
+  const code = rawCode === "GP" ? "HGT" : rawCode;
 
   const accumulationMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour acc(?: fcst)?:/i);
   const averageMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour ave(?: fcst)?:/i);
@@ -118,7 +120,7 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
           },
         }
       : {}),
-    value: Number(valueMatch[1]),
+    value: rawCode === "GP" ? Number(valueMatch[1]) / 9.80665 : Number(valueMatch[1]),
     gridPoint: {
       longitude: toSignedLongitude(Number(pointMatch[1])),
       latitude: Number(pointMatch[2]),

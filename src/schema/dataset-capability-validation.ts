@@ -20,6 +20,13 @@ import {
   AIGFS_RAW_PRESSURE_VARIABLE_IDS,
 } from "../catalog/aigfs.js";
 import { AIGEFS_MEMBERS } from "../catalog/aigefs.js";
+import {
+  ICON_D2_AREA_FIELD_IDS,
+  ICON_D2_AREA_PRESSURE_VARIABLE_IDS,
+  ICON_D2_FIELD_IDS,
+  ICON_D2_PRESSURE_LEVELS_HPA,
+  ICON_D2_PRESSURE_VARIABLE_IDS,
+} from "../catalog/icon-d2.js";
 import { AIFS_ENS_MEMBERS } from "../catalog/aifs-ens.js";
 import {
   AIFS_AREA_FIELD_IDS,
@@ -50,6 +57,7 @@ const DATASET_CAPABILITY_VALIDATORS: Readonly<Record<string, readonly DatasetCap
   aigfs: [validateAigfsModifiers],
   aigefs: [validateAigfsModifiers, validateAigefsMembers],
   hgefs: [validateAigfsModifiers, validateHgefsModifiers, validateHgefsMembers],
+  "icon-d2": [validateIconD2Modifiers],
   aifs: [validateAifsModifiers],
   "aifs-ens": [validateAifsModifiers, validateAifsEnsMembers],
 };
@@ -396,6 +404,102 @@ function validateAigfsModifiers(
         code: "custom",
         path: ["diagnostic"],
         message: `${label} diagnostic pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
+      });
+    }
+  }
+}
+
+
+function validateIconD2Modifiers(
+  request: any,
+  context: z.RefinementCtx,
+): void {
+  const variableSet = new Set<string>(ICON_D2_PRESSURE_VARIABLE_IDS);
+  const pressureLevelSet = new Set<number>(ICON_D2_PRESSURE_LEVELS_HPA);
+  const fieldSet = new Set<string>(ICON_D2_FIELD_IDS);
+  const areaVariableSet = new Set<string>(ICON_D2_AREA_PRESSURE_VARIABLE_IDS);
+  const areaFieldSet = new Set<string>(ICON_D2_AREA_FIELD_IDS);
+
+  if (request.selection !== undefined) {
+    const variables = request.selection.variables ?? [];
+    const pressureLevelsHpa = request.selection.pressureLevelsHpa ?? [];
+    const fields = request.selection.fields ?? [];
+
+    const unsupportedVariables = variables.filter(
+      (variable: string) => !variableSet.has(variable),
+    );
+    if (unsupportedVariables.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "variables"],
+        message: `ICON-D2 pressure variables not supported: ${unsupportedVariables.join(", ")}`,
+      });
+    }
+
+    const unsupportedLevels = pressureLevelsHpa.filter(
+      (level: number) => !pressureLevelSet.has(level),
+    );
+    if (unsupportedLevels.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "pressureLevelsHpa"],
+        message: `ICON-D2 pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
+      });
+    }
+
+    const unsupportedFields = fields.filter((field: string) => !fieldSet.has(field));
+    if (unsupportedFields.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "fields"],
+        message: `ICON-D2 fields not supported: ${unsupportedFields.join(", ")}`,
+      });
+    }
+
+    if (request.geometry?.type === "area") {
+      const unsupportedAreaVariables = variables.filter(
+        (variable: string) => !areaVariableSet.has(variable),
+      );
+      if (unsupportedAreaVariables.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["selection", "variables"],
+          message: `ICON-D2 area summaries require a native scalar pressure variable; unsupported: ${unsupportedAreaVariables.join(", ")}`,
+        });
+      }
+      const unsupportedAreaFields = fields.filter(
+        (field: string) => !areaFieldSet.has(field),
+      );
+      if (unsupportedAreaFields.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["selection", "fields"],
+          message: `ICON-D2 area summaries require a native scalar field; unsupported: ${unsupportedAreaFields.join(", ")}`,
+        });
+      }
+    }
+  }
+
+  if (request.diagnostic !== undefined) {
+    if (request.diagnostic.kind === "parcel") {
+      context.addIssue({
+        code: "custom",
+        path: ["diagnostic"],
+        message: "ICON-D2 parcel diagnostics are not exposed by the current Open Data subset",
+      });
+      return;
+    }
+    const levels = request.diagnostic.kind === "layer"
+      ? [request.diagnostic.lowerPressureHpa, request.diagnostic.upperPressureHpa]
+      : request.diagnostic.pressureLevelsHpa;
+    const unsupportedLevels = levels.filter(
+      (level: number) => !pressureLevelSet.has(level),
+    );
+    if (unsupportedLevels.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["diagnostic"],
+        message: `ICON-D2 diagnostic pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
       });
     }
   }

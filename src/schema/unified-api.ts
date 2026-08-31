@@ -25,7 +25,7 @@ import { validateDatasetCapabilityModifiers } from "./dataset-capability-validat
 import { gfsGridSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 
-export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "aigfs", "aigefs", "hgefs", "gefs", "ifs", "aifs", "aifs-ens", "ifs-ens", "gfs-analysis"] as const;
+export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "aigfs", "aigefs", "hgefs", "icon-d2", "gefs", "ifs", "aifs", "aifs-ens", "ifs-ens", "gfs-analysis"] as const;
 export const publicAtmosphericDatasetSchema = z.enum(PUBLIC_ATMOSPHERIC_DATASET_IDS);
 export type PublicAtmosphericDataset = z.infer<typeof publicAtmosphericDatasetSchema>;
 
@@ -51,6 +51,7 @@ export const PUBLIC_DATASET_METADATA = {
   aigfs: datasetMetadata("aigfs_0p25"),
   aigefs: datasetMetadata("aigefs_0p25"),
   hgefs: datasetMetadata("hgefs_0p25"),
+  "icon-d2": datasetMetadata("icon_d2_0p02"),
   gefs: datasetMetadata("gefs_0p50"),
   ifs: datasetMetadata("ifs_0p25"),
   aifs: datasetMetadata("aifs_0p25"),

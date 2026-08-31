@@ -24,7 +24,19 @@ describe("unified dataset capability registry", () => {
   it("declares domain, native grid, and cadence for every current dataset", () => {
     for (const dataset of ATMOSPHERIC_DATASET_IDS) {
       const definition = ATMOSPHERIC_DATASET_CATALOG[dataset];
-      expect(definition.spatialDomain).toEqual({ scope: "global" });
+      if (dataset === "icon_d2_0p02") {
+        expect(definition.spatialDomain).toMatchObject({
+          scope: "limited_area",
+          bounds: {
+            westLongitude: -0.25,
+            eastLongitude: 17.54,
+            southLatitude: 43.42,
+            northLatitude: 57.31,
+          },
+        });
+      } else {
+        expect(definition.spatialDomain).toEqual({ scope: "global" });
+      }
       expect(definition.nativeTimeCadenceHours.length).toBeGreaterThan(0);
       expect(definition.nativeGrid.type).toMatch(
         /regular_latlon|rotated_latlon|icosahedral|lambert_conformal|mixed/,
@@ -45,6 +57,19 @@ describe("unified dataset capability registry", () => {
           nominalResolution: { value: 0.25, unit: "degrees" },
         },
       ],
+    });
+
+    expect(publicDatasetCapabilities("icon-d2")).toMatchObject({
+      provider: "dwd",
+      spatialDomain: { scope: "limited_area" },
+      horizontalGridDegrees: 0.02,
+      nativeGrid: {
+        type: "icosahedral",
+        nominalResolution: { value: 2.1, unit: "km" },
+      },
+      maxForecastHour: 48,
+      nativeTimeCadenceHours: [1],
+      nativeForecastIntervalHours: 1,
     });
 
     expect(publicDatasetCapabilities("ifs")).toMatchObject({

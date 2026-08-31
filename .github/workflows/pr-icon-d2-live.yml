@@ -1,0 +1,29 @@
+name: PR DWD ICON-D2 live
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**/icon-d2*.ts"
+      - "src/catalog/models.ts"
+      - "src/schema/unified-api.ts"
+      - "src/grib/**"
+      - "scripts/live-smoke-icon-d2.ts"
+      - ".github/workflows/pr-icon-d2-live.yml"
+      - "package.json"
+      - "package-lock.json"
+
+concurrency:
+  group: pr-icon-d2-live-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned live-test environment
+        run: docker build --target live-test -t weather-for-grown-ups:live-test .
+      - name: Query live DWD ICON-D2
+        run: docker run --rm weather-for-grown-ups:live-test npm run test:live:icon-d2

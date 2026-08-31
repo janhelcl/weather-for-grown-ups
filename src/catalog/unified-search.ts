@@ -4,6 +4,10 @@ import {
   AIGFS_PRESSURE_VARIABLE_IDS,
 } from "./aigfs.js";
 import {
+  ICON_D2_FIELD_IDS,
+  ICON_D2_PRESSURE_VARIABLE_IDS,
+} from "./icon-d2.js";
+import {
   GEFS_REFORECAST_FIELD_IDS,
   GEFS_REFORECAST_PRESSURE_VARIABLE_IDS,
 } from "./gefs-reforecast.js";
@@ -84,6 +88,7 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
     ...(datasets.has("aigfs") ? aigfsEntries("aigfs") : []),
     ...(datasets.has("aigefs") ? aigfsEntries("aigefs") : []),
     ...(datasets.has("hgefs") ? aigfsEntries("hgefs") : []),
+    ...(datasets.has("icon-d2") ? iconD2Entries() : []),
     ...(datasets.has("gefs")
       ? (query.forecastKind === "reforecast" ? gefsReforecastEntries() : gefsEntries())
       : []),
@@ -153,6 +158,42 @@ function aigfsEntries(dataset: "aigfs" | "aigefs" | "hgefs"): CatalogEntry[] {
   const fields = AIGFS_FIELD_IDS.map((id) => NON_ISOBARIC_FIELD_CATALOG[id]);
   return [
     ...AIGFS_PRESSURE_VARIABLE_IDS.map((id) => {
+      const definition = VARIABLE_CATALOG[id];
+      return {
+        dataset,
+        section: "variables" as const,
+        id,
+        classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
+        kind: definition.kind,
+        description: definition.description,
+        verticalSemantics: definition.levelType,
+        outputs: definition.outputs.map((output) => ({ ...output })),
+      };
+    }),
+    ...fields.map((definition) => ({
+      dataset,
+      section: "fields" as const,
+      id: definition.id,
+      classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
+      kind: definition.kind,
+      description: definition.description,
+      verticalSemantics: definition.level.gribLevel,
+      temporalSemantics: definition.temporalSemantics,
+      outputs: definition.outputs.map((output) => ({ ...output })),
+    })),
+    ...Object.values(LAYER_DIAGNOSTIC_CATALOG).map((definition) =>
+      diagnosticEntry(dataset, "layer_diagnostics", definition)),
+    ...Object.values(PROFILE_DIAGNOSTIC_CATALOG).map((definition) =>
+      diagnosticEntry(dataset, "profile_diagnostics", definition)),
+  ];
+}
+
+
+function iconD2Entries(): CatalogEntry[] {
+  const dataset = "icon-d2" as const;
+  const fields = ICON_D2_FIELD_IDS.map((id) => NON_ISOBARIC_FIELD_CATALOG[id]);
+  return [
+    ...ICON_D2_PRESSURE_VARIABLE_IDS.map((id) => {
       const definition = VARIABLE_CATALOG[id];
       return {
         dataset,
@@ -461,6 +502,7 @@ function preferredRepresentative(entries: CatalogEntry[]): CatalogEntry {
     ?? entries.find((entry) => entry.dataset === "aigfs")
     ?? entries.find((entry) => entry.dataset === "aigefs")
     ?? entries.find((entry) => entry.dataset === "hgefs")
+    ?? entries.find((entry) => entry.dataset === "icon-d2")
     ?? entries.find((entry) => entry.dataset === "gefs")
     ?? entries.find((entry) => entry.dataset === "ifs")
     ?? entries.find((entry) => entry.dataset === "aifs")
@@ -482,6 +524,8 @@ function supportSemantics(
       return "NOAA AIGEFS 0.25° 31-member AI ensemble; native 6-hour output cadence through 384 hours with member-first aggregation";
     case "hgefs":
       return "NOAA HGEFS 62-member hybrid ensemble composed from 31 GEFS physics members and 31 AIGEFS AI members; 6-hourly through 240 hours with constituent identity and native-grid provenance preserved";
+    case "icon-d2":
+      return "DWD ICON-D2 limited-area deterministic convection-permitting forecast; 3-hourly cycles, hourly output through 48 hours, with provider-native domain/grid semantics preserved";
     case "gefs":
       return forecastKind === "reforecast"
         ? "GEFSv12 retrospective ensemble forecast; 2000-2019 point and multi-point field, pressure, or mixed selections plus native layer/profile diagnostics; ranges preserve native cadence and per-step grid provenance"
