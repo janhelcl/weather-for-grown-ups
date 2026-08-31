@@ -382,6 +382,7 @@ describe("unified catalog", () => {
     expect(temperature?.support.map((support) => support.dataset)).toEqual([
       "gfs",
       "aigfs",
+      "aigefs",
       "gefs",
       "ifs",
       "ifs-ens",
