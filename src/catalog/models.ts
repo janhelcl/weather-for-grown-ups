@@ -3,6 +3,7 @@ export const ATMOSPHERIC_DATASET_IDS = [
   "gfs_0p50",
   "aigfs_0p25",
   "aigefs_0p25",
+  "hgefs_0p25",
   "aifs_0p25",
   "aifs_ens_0p25",
   "gefs_0p50",
@@ -40,7 +41,7 @@ export type AtmosphericOperationId = (typeof ATMOSPHERIC_OPERATION_IDS)[number];
 
 export interface AtmosphericDatasetDefinition {
   id: AtmosphericDatasetId;
-  family: "gfs" | "gefs" | "ifs" | "aigfs" | "aigefs" | "aifs";
+  family: "gfs" | "gefs" | "ifs" | "aigfs" | "aigefs" | "hgefs" | "aifs";
   provider: AtmosphericProvider;
   modelClass: AtmosphericModelClass;
   kind: AtmosphericDatasetKind;
@@ -49,6 +50,11 @@ export interface AtmosphericDatasetDefinition {
   maxForecastHour?: number;
   nativeForecastIntervalHours?: number;
   members?: number;
+  constituents?: readonly {
+    dataset: AtmosphericDatasetId;
+    modelClass: AtmosphericModelClass;
+    members: number;
+  }[];
   runSelectors: readonly AtmosphericRunSelectorId[];
   operations: readonly AtmosphericOperationId[];
 }
@@ -139,6 +145,35 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
     nativeForecastIntervalHours: 6,
     members: 31,
     runSelectors: ["latest", "latest_complete", "explicit"],
+    operations: [
+      "profile",
+      "timeseries",
+      "layer_diagnostics",
+      "profile_diagnostics",
+      "diagnostic_timeseries",
+      "points",
+      "points_timeseries",
+      "transect",
+      "area_summary",
+      "ensemble_distribution",
+    ],
+  },
+  hgefs_0p25: {
+    id: "hgefs_0p25",
+    family: "hgefs",
+    provider: "noaa",
+    modelClass: "hybrid",
+    kind: "ensemble",
+    role: "forecast",
+    horizontalGridDegrees: 0.25,
+    maxForecastHour: 240,
+    nativeForecastIntervalHours: 6,
+    members: 62,
+    constituents: [
+      { dataset: "gefs_0p50", modelClass: "physics", members: 31 },
+      { dataset: "aigefs_0p25", modelClass: "ai", members: 31 },
+    ],
+    runSelectors: ["latest", "explicit"],
     operations: [
       "profile",
       "timeseries",
@@ -326,6 +361,7 @@ export const ATMOSPHERIC_MODEL_IDS = [
   "gfs_0p50",
   "aigfs_0p25",
   "aigefs_0p25",
+  "hgefs_0p25",
   "aifs_0p25",
   "aifs_ens_0p25",
   "gefs_0p50",
@@ -340,6 +376,7 @@ export const ATMOSPHERIC_MODEL_CATALOG: Record<AtmosphericModelId, AtmosphericDa
   gfs_0p50: ATMOSPHERIC_DATASET_CATALOG.gfs_0p50,
   aigfs_0p25: ATMOSPHERIC_DATASET_CATALOG.aigfs_0p25,
   aigefs_0p25: ATMOSPHERIC_DATASET_CATALOG.aigefs_0p25,
+  hgefs_0p25: ATMOSPHERIC_DATASET_CATALOG.hgefs_0p25,
   aifs_0p25: ATMOSPHERIC_DATASET_CATALOG.aifs_0p25,
   aifs_ens_0p25: ATMOSPHERIC_DATASET_CATALOG.aifs_ens_0p25,
   gefs_0p50: ATMOSPHERIC_DATASET_CATALOG.gefs_0p50,

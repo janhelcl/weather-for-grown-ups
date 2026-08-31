@@ -26,11 +26,11 @@ The core is the product. CLI and MCP are adapters over it, not independent imple
 
 > **Unify operations and physics; preserve model semantics.**
 
-A common operation does not imply a common source inventory or a flattened result shape. Deterministic GFS and IFS forecasts return deterministic forecast states. Historical Grid 4 returns deterministic analyzed states. GEFS and IFS ENS return member-derived forecast distributions and structural ensemble summaries.
+A common operation does not imply a common source inventory or a flattened result shape. GFS, AIGFS, IFS and AIFS return deterministic forecast states. Historical Grid 4 returns deterministic analyzed states. GEFS, AIGEFS, IFS ENS and AIFS ENS return member-derived forecast distributions. HGEFS is explicitly hybrid: it pools GEFS physics members with AIGEFS AI members while retaining constituent identity and provenance.
 
 The engine is organized around **operation × dataset** internally, while the public contract is intentionally organized around one query language: `dataset × geometry × time × selection`. Dataset-specific schemas, source adapters and services are implementation details behind that boundary; adding a model must extend the shared vocabulary and capability registry rather than create another public query namespace.
 
-Nonlinear diagnostics are evaluated independently on every GEFS or IFS ENS member before aggregation. WFG does not calculate CAPE, lapse rate, inversion structure or another nonlinear quantity from an ensemble-mean profile and pretend it represents the members.
+Nonlinear diagnostics are evaluated independently on every ensemble member before aggregation, including both constituent populations inside HGEFS. WFG does not calculate CAPE, lapse rate, inversion structure or another nonlinear quantity from an ensemble-mean profile and pretend it represents the members.
 
 ## Layer boundaries
 
@@ -52,7 +52,7 @@ A practical rule for new datasets is: **add capabilities to the catalog and the 
 
 ## Atmospheric dataset capability boundary
 
-`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `gefs`, `ifs`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth.
+`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `aigfs`, `aigefs`, `hgefs`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth.
 
 | Operation | GFS 0.25° / 0.5° forecast | GEFS forecast | IFS 0.25° forecast | IFS ENS 0.25° forecast | GFS Grid 4 0.5° analysis |
 | --- | --- | --- | --- | --- | --- |
@@ -109,9 +109,9 @@ The shared core owns model-independent calculations including:
 - pseudo-adiabatic parcel paths;
 - virtual-temperature buoyancy, CAPE and CIN.
 
-GFS and deterministic IFS evaluate these once on their deterministic state. GEFS and IFS ENS evaluate them independently for each member and summarize only after those calculations are complete.
+Deterministic datasets evaluate these once on their normalized state. Ensemble datasets evaluate supported kernels independently for each member and summarize only after those calculations are complete. HGEFS follows the same rule independently across its GEFS and AIGEFS populations before pooling the hybrid distribution.
 
-Parcel definitions remain explicit: `surface_2m`, `mixed_layer_100hpa`, and `most_unstable_300hpa`. Both ensemble datasets keep parcel diagnostics member-first.
+Parcel definitions remain explicit: `surface_2m`, `mixed_layer_100hpa`, and `most_unstable_300hpa`. Datasets advertise parcel diagnostics only when their native inventory can initialize the shared parcel kernel; AIGFS, AIGEFS, AIFS, AIFS ENS and HGEFS currently keep that boundary explicit rather than synthesizing missing state.
 
 ## Ensemble statistics
 
@@ -163,6 +163,10 @@ GEFS composition is **member-first**.
 
 This preserves separate **space**, **time**, and **ensemble-member** axes instead of flattening them into one sample.
 
+### HGEFS
+
+HGEFS is an application-level **hybrid composition**, not another download stack. The canonical member population is `gefs:c00..p30` plus `aigefs:c00..p30`. The service pins one common cycle, executes each constituent through its existing member-first implementation, then pools only meteorologically compatible normalized outputs. Constituent-native grids remain visible: pressure-level GEFS member access can be 0.5° while AIGEFS is 0.25°, so HGEFS never fabricates one common sampled grid point.
+
 ### IFS
 
 Deterministic IFS uses the same public geometry/time vocabulary while preserving ECMWF-native cadence, fixed 0.25° model semantics and selected-message cache reuse. Multi-time operations pin one initialization capable of satisfying the complete range; point, multi-point, transect, area, diagnostics and run comparison all stay deterministic.
@@ -173,7 +177,7 @@ IFS ENS composition is **member-first** across the 50 perturbed members `p01`–
 
 ## Catalogs and source contracts
 
-GFS, GEFS, deterministic IFS, IFS ENS and historical GFS analysis keep dataset-specific source inventories because their upstream products are not identical. Canonical field IDs and shared physical derivations converge where the quantity is genuinely comparable; unavailable fields remain explicit capability differences rather than being fabricated for symmetry.
+GFS, AIGFS, AIGEFS, GEFS, IFS, AIFS, AIFS ENS, IFS ENS and historical GFS analysis keep dataset-specific source inventories because their upstream products are not identical. HGEFS deliberately has no duplicate member-source stack: it composes the GEFS and AIGEFS source-backed member services. Canonical field IDs and shared physical derivations converge where the quantity is genuinely comparable; unavailable fields remain explicit capability differences rather than being fabricated for symmetry.
 
 Catalogs define:
 
@@ -191,7 +195,7 @@ The unified catalog is searchable locally from CLI and MCP and reports dataset s
 
 Run selection is query-aware.
 
-GFS, GEFS, deterministic IFS and IFS ENS use explicit 00/06/12/18Z initialization cycles. Multi-time operations resolve one cycle capable of satisfying the complete requested range and then keep that cycle fixed. GFS grid selection is orthogonal to run selection: `0p25` is the default and `0p50` is explicit. An old explicit run keeps the public `gfs` identity and routes to the matching historical forecast archive rather than changing datasets.
+GFS, AIGFS, AIGEFS, HGEFS, GEFS, deterministic IFS and IFS ENS use explicit 00/06/12/18Z initialization cycles. Multi-time operations resolve one cycle capable of satisfying the complete requested range and then keep that cycle fixed. GFS grid selection is orthogonal to run selection: `0p25` is the default and `0p50` is explicit. An old explicit run keeps the public `gfs` identity and routes to the matching historical forecast archive rather than changing datasets.
 
 ECMWF Open Data preserves different deterministic and ensemble horizons. Deterministic `ifs` uses `oper/fc`: 00/12Z runs publish 3-hourly through `f144`, then 6-hourly through `f240`; 06/18Z runs publish 3-hourly through `f90`. `ifs-ens` uses perturbed `enfo/ef`: 00/12Z runs publish 3-hourly through `f144`, then 6-hourly through `f360`; 06/18Z runs publish 3-hourly through `f144`. `latest` is resolved against the requested field inventory so partially published cycles are not mistaken for selection-capable runs.
 
@@ -239,7 +243,7 @@ The public contract mirrors the core architecture instead of the order in which 
 
 > **One query language for atmospheric state; datasets preserve their semantics.**
 
-Normal access is `dataset × geometry × time × selection`. Public dataset IDs are `gfs`, `gefs`, `ifs`, `ifs-ens`, and `gfs-analysis`; they map to the explicit internal dataset registry. Dataset-native result semantics remain unchanged.
+Normal access is `dataset × geometry × time × selection`. Public dataset IDs are `gfs`, `aigfs`, `aigefs`, `hgefs`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`; they map to the explicit internal dataset registry. Dataset-native result semantics remain unchanged.
 
 ### CLI
 

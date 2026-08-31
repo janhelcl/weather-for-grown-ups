@@ -22,6 +22,7 @@ test:live:bundled
 test:live:s3
 test:live:aigfs
 test:live:aigefs
+test:live:hgefs
 test:live:history
 test:live:gefs
 test:live:gefs-runs
@@ -53,6 +54,10 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 ### AIGEFS
 
 `npm run test:live:aigefs` makes one bounded two-member query through public `dataset: "aigefs"`. It checks the NOAA EAGLE member directory/index contract, indexed AWS byte ranges, the 0.25° AI ensemble identity, one pressure distribution and one surface-field distribution. The small `c00,p01` selection is a compatibility smoke, not a forecast-quality sample.
+
+### HGEFS
+
+`npm run test:live:hgefs` makes one bounded hybrid query through public `dataset: "hgefs"`, selecting one GEFS and one AIGEFS member. The composition service pads each constituent internally only as required by the existing constituent primitives, discards those padding members from the hybrid result, and verifies population-qualified IDs, common-cycle alignment, separate constituent grid provenance and a finite pooled pressure distribution. This is a source/composition compatibility smoke, not a representative 62-member forecast sample.
 
 ### Historical GFS analysis and forecast skill
 
@@ -124,14 +129,14 @@ Live tests should assert contracts and invariants rather than pinning today's we
 
 - current NOAA paths and inventory formats;
 - historical NCEI archive paths and NCSS response formats;
-- selected GRIB byte-range access, including AIGFS `.idx` + raw NOMADS HTTP Range reads, AIGEFS member-specific EAGLE AWS byte ranges, and AIFS ENS member-filtered ECMWF Open Data ranges;
+- selected GRIB byte-range access, including AIGFS `.idx` + raw NOMADS HTTP Range reads, AIGEFS member-specific EAGLE AWS byte ranges, HGEFS composition over GEFS/AIGEFS constituent feeds, and AIFS ENS member-filtered ECMWF Open Data ranges;
 - decoder compatibility with real GFS/GEFS messages;
 - requested grid/sample consistency;
 - finite normalized physical values;
 - fixed-cycle semantics across time;
 - upstream slice reuse across coordinates;
 - explicit temporal semantics for accumulation/average fields;
-- member-first AIGEFS/AIFS ENS/GEFS computation and raw-member interpretation labels.
+- member-first AIGEFS/HGEFS/AIFS ENS/GEFS computation and raw-member interpretation labels.
 
 ## Failure triage
 

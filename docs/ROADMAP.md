@@ -58,13 +58,15 @@ Add the corresponding ensemble/hybrid products:
 
 - NOAA AIGEFS — **implemented**;
 - ECMWF AIFS ENS — **implemented**;
-- NOAA HGEFS hybrid ensemble — planned.
+- NOAA HGEFS hybrid ensemble — **implemented**.
 
 Ensemble meteorology remains **member first**. Nonlinear diagnostics are evaluated within each member before aggregation.
 
 AIFS ENS now exposes its native 51-member stochastic population (`c00,p01..p50`) over ECMWF Open Data. Its dedicated control remains distinct from AIFS Single, and control/perturbed `cf`/`pf` packaging is hidden behind the same public ensemble query language without erasing provenance.
 
-Hybrid semantics must be explicit. HGEFS must not be treated as an ordinary homogeneous ensemble if its member population contains materially different model classes. Results and provenance should retain enough information to distinguish physics, AI and hybrid composition where that distinction matters.
+Hybrid semantics are explicit. HGEFS is implemented as a 62-member composition of 31 GEFS physics members and 31 AIGEFS AI members. Public member IDs are population-qualified (`gefs:...`, `aigefs:...`), nonlinear diagnostics remain member first, and results preserve constituent-native grid/source provenance rather than inventing one homogeneous member population.
+
+The dedicated upstream HGEFS statistics feed is not treated as a second source of individual members. WFG composes the existing GEFS/AIGEFS member implementations and restricts selections to their scientifically compatible inventory intersection.
 
 ## Model-class metadata
 

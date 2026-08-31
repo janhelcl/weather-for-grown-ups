@@ -4,6 +4,7 @@ import { AifsQueryAdapter, type AifsQueryAdapterOptions } from "./aifs.js";
 import { AifsEnsQueryAdapter, type AifsEnsQueryAdapterOptions } from "./aifs-ens.js";
 import { AigefsQueryAdapter, type AigefsQueryAdapterOptions } from "./aigefs.js";
 import { GefsQueryAdapter, type GefsQueryAdapterOptions } from "./gefs.js";
+import { HgefsQueryAdapter, type HgefsQueryAdapterOptions } from "./hgefs.js";
 import {
   GfsAnalysisQueryAdapter,
   type GfsAnalysisQueryAdapterOptions,
@@ -23,6 +24,7 @@ export type DefaultAtmosphericQueryAdapterOptions =
   & AigefsQueryAdapterOptions
   & GfsQueryAdapterOptions
   & GefsQueryAdapterOptions
+  & HgefsQueryAdapterOptions
   & IfsQueryAdapterOptions
   & IfsEnsQueryAdapterOptions
   & GfsAnalysisQueryAdapterOptions;
@@ -41,6 +43,7 @@ export function createAtmosphericQueryAdapterRegistry(
     aigefs: new AigefsQueryAdapter(options),
     gfs: new GfsQueryAdapter(options),
     gefs: new GefsQueryAdapter(options),
+    hgefs: new HgefsQueryAdapter(options),
     ifs: new IfsQueryAdapter(options),
     "ifs-ens": new IfsEnsQueryAdapter(options),
     "gfs-analysis": new GfsAnalysisQueryAdapter(options),

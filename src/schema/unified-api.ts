@@ -15,7 +15,10 @@ import {
   AIFS_RAW_PRESSURE_VARIABLE_IDS,
   isSupportedAifsPressureSelection,
 } from "../catalog/aifs.js";
-import { LAYER_DIAGNOSTIC_IDS } from "../catalog/layer-diagnostics.js";
+import {
+  LAYER_DIAGNOSTIC_IDS,
+  expandLayerDiagnosticVariables,
+} from "../catalog/layer-diagnostics.js";
 import {
   GEFS_REFORECAST_EXTENDED_MEMBERS,
   GEFS_REFORECAST_FIELD_IDS,
@@ -25,7 +28,15 @@ import {
   isSupportedGefsReforecastPressureSelection,
 } from "../catalog/gefs-reforecast.js";
 import { PARCEL_DEFINITION_IDS } from "../catalog/parcel-diagnostics.js";
-import { PROFILE_DIAGNOSTIC_IDS } from "../catalog/profile-diagnostics.js";
+import {
+  PROFILE_DIAGNOSTIC_IDS,
+  expandProfileDiagnosticVariables,
+} from "../catalog/profile-diagnostics.js";
+import {
+  HGEFS_AREA_PRESSURE_VARIABLE_IDS,
+  HGEFS_MEMBERS,
+  isSupportedHgefsPressureSelection,
+} from "../catalog/hgefs.js";
 import {
   ATMOSPHERIC_DATASET_CATALOG,
   ATMOSPHERIC_DATASET_IDS,
@@ -41,7 +52,7 @@ import { areaThresholdSchema } from "./area-summary.js";
 import { gfsGridSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 
-export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "aigfs", "aigefs", "gefs", "ifs", "aifs", "aifs-ens", "ifs-ens", "gfs-analysis"] as const;
+export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "aigfs", "aigefs", "hgefs", "gefs", "ifs", "aifs", "aifs-ens", "ifs-ens", "gfs-analysis"] as const;
 export const publicAtmosphericDatasetSchema = z.enum(PUBLIC_ATMOSPHERIC_DATASET_IDS);
 export type PublicAtmosphericDataset = z.infer<typeof publicAtmosphericDatasetSchema>;
 
@@ -66,6 +77,7 @@ export const PUBLIC_DATASET_METADATA = {
   gfs: datasetMetadata("gfs_0p25"),
   aigfs: datasetMetadata("aigfs_0p25"),
   aigefs: datasetMetadata("aigefs_0p25"),
+  hgefs: datasetMetadata("hgefs_0p25"),
   gefs: datasetMetadata("gefs_0p50"),
   ifs: datasetMetadata("ifs_0p25"),
   aifs: datasetMetadata("aifs_0p25"),
@@ -223,7 +235,7 @@ export const atmosphericForecastOptionsSchema = z.object({
 });
 
 export const atmosphericEnsembleOptionsSchema = z.object({
-  members: z.array(z.string().min(1)).min(2).max(51).optional(),
+  members: z.array(z.string().min(1)).min(2).max(62).optional(),
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
   includeMembers: z.boolean().optional(),
   maxMemberSamples: z.number().int().min(1).max(20_000).optional(),
@@ -339,6 +351,11 @@ export interface PublicAtmosphericDatasetCapabilities {
   horizontalGridDegrees: number;
   maxForecastHour?: number;
   nativeForecastIntervalHours?: number;
+  constituents?: readonly {
+    dataset: AtmosphericDatasetId;
+    modelClass: AtmosphericModelClass;
+    members: number;
+  }[];
   forecastKinds: readonly PublicForecastKind[];
   runSelectors: readonly AtmosphericRunSelectorId[];
   operations: readonly string[];
@@ -372,6 +389,7 @@ export function publicDatasetCapabilities(
     horizontalGridDegrees: definition.horizontalGridDegrees,
     ...(definition.maxForecastHour === undefined ? {} : { maxForecastHour: definition.maxForecastHour }),
     ...(definition.nativeForecastIntervalHours === undefined ? {} : { nativeForecastIntervalHours: definition.nativeForecastIntervalHours }),
+    ...(definition.constituents === undefined ? {} : { constituents: definition.constituents.map((constituent) => ({ ...constituent })) }),
     forecastKinds,
     runSelectors,
     operations,
@@ -539,8 +557,12 @@ function validateDatasetModifiers(
     }
   }
 
-  if (request.dataset === "aigfs" || request.dataset === "aigefs") {
+  if (request.dataset === "aigfs" || request.dataset === "aigefs" || request.dataset === "hgefs") {
     validateAigfsModifiers(request, context);
+  }
+
+  if (request.dataset === "hgefs") {
+    validateHgefsModifiers(request, context);
   }
 
   if (request.dataset === "aifs" || request.dataset === "aifs-ens") {
@@ -565,6 +587,20 @@ function validateDatasetModifiers(
         code: "custom",
         path: ["ensemble", "members"],
         message: `AIGEFS members are c00,p01..p30; unsupported: ${unsupported.join(", ")}`,
+      });
+    }
+  }
+
+  if (request.dataset === "hgefs" && request.ensemble?.members !== undefined) {
+    const supportedMembers = new Set<string>(HGEFS_MEMBERS);
+    const unsupported = request.ensemble.members.filter(
+      (member: string) => !supportedMembers.has(member),
+    );
+    if (unsupported.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["ensemble", "members"],
+        message: `HGEFS members use population-qualified IDs gefs:c00..p30 or aigefs:c00..p30; unsupported: ${unsupported.join(", ")}`,
       });
     }
   }
@@ -609,7 +645,7 @@ function validateDatasetModifiers(
     context.addIssue({
       code: "custom",
       path: ["ensemble"],
-      message: "ensemble controls are only valid for ensemble datasets: aigefs, gefs, aifs-ens, or ifs-ens",
+      message: "ensemble controls are only valid for ensemble datasets: aigefs, hgefs, gefs, aifs-ens, or ifs-ens",
     });
   }
   if (request.dataset !== "gfs" && request.source !== undefined) {
@@ -626,7 +662,11 @@ function validateAigfsModifiers(
   request: any,
   context: z.RefinementCtx,
 ): void {
-  const label = request.dataset === "aigefs" ? "AIGEFS" : "AIGFS";
+  const label = request.dataset === "aigefs"
+    ? "AIGEFS"
+    : request.dataset === "hgefs"
+      ? "HGEFS"
+      : "AIGFS";
   const variableSet = new Set<string>(AIGFS_PRESSURE_VARIABLE_IDS);
   const rawVariableSet = new Set<string>(AIGFS_RAW_PRESSURE_VARIABLE_IDS);
   const pressureLevelSet = new Set<number>(AIGFS_PRESSURE_LEVELS_HPA);
@@ -710,6 +750,81 @@ function validateAigfsModifiers(
         code: "custom",
         path: ["diagnostic"],
         message: `${label} diagnostic pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
+      });
+    }
+  }
+}
+
+function validateHgefsModifiers(
+  request: any,
+  context: z.RefinementCtx,
+): void {
+  if (request.geometry?.type === "points" && request.geometry.points.length > 20) {
+    context.addIssue({
+      code: "custom",
+      path: ["geometry", "points"],
+      message: "HGEFS multi-point queries currently support at most 20 points because the GEFS constituent reuses one member file across the point batch",
+    });
+  }
+  if (
+    request.geometry?.type === "transect"
+    && (request.geometry.samples ?? 20) > 20
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["geometry", "samples"],
+      message: "HGEFS transects currently support at most 20 samples because the GEFS constituent reuses the native ensemble transect primitive",
+    });
+  }
+  if (request.selection !== undefined) {
+    const variables = request.selection.variables ?? [];
+    const pressureLevelsHpa = request.selection.pressureLevelsHpa ?? [];
+
+    const unsupportedSelections = variables.flatMap((variable: string) =>
+      pressureLevelsHpa
+        .filter((level: number) =>
+          !isSupportedHgefsPressureSelection(variable, level))
+        .map((level: number) => `${variable}@${level}hPa`));
+    if (unsupportedSelections.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "pressureLevelsHpa"],
+        message: `HGEFS constituent member intersection cannot satisfy: ${unsupportedSelections.join(", ")}`,
+      });
+    }
+
+    if (request.geometry?.type === "area" && variables.length > 0) {
+      const areaVariables = new Set<string>(HGEFS_AREA_PRESSURE_VARIABLE_IDS);
+      const unsupportedAreaVariables = variables.filter(
+        (variable: string) => !areaVariables.has(variable),
+      );
+      if (unsupportedAreaVariables.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["selection", "variables"],
+          message: `HGEFS area pressure summaries require variables available as native scalar fields in both constituent ensembles; unsupported: ${unsupportedAreaVariables.join(", ")}`,
+        });
+      }
+    }
+  }
+
+  if (request.diagnostic !== undefined && request.diagnostic.kind !== "parcel") {
+    const levels = request.diagnostic.kind === "layer"
+      ? [request.diagnostic.lowerPressureHpa, request.diagnostic.upperPressureHpa]
+      : request.diagnostic.pressureLevelsHpa;
+    const variables = request.diagnostic.kind === "layer"
+      ? expandLayerDiagnosticVariables(request.diagnostic.diagnostics)
+      : expandProfileDiagnosticVariables(request.diagnostic.diagnostics);
+    const unsupportedSelections = variables.flatMap((variable: string) =>
+      levels
+        .filter((level: number) =>
+          !isSupportedHgefsPressureSelection(variable, level))
+        .map((level: number) => `${variable}@${level}hPa`));
+    if (unsupportedSelections.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["diagnostic"],
+        message: `HGEFS constituent member intersection cannot satisfy diagnostic inputs: ${unsupportedSelections.join(", ")}`,
       });
     }
   }
