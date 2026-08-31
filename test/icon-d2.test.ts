@@ -15,7 +15,11 @@ import {
 } from "../src/catalog/icon-d2.js";
 import { VARIABLE_CATALOG, type RawVariableDefinition } from "../src/catalog/variables.js";
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
-import { IconD2ForecastService } from "../src/core/icon-d2.js";
+import {
+  IconD2ForecastService,
+  isIconD2RawAreaField,
+  isIconD2RawAreaVariable,
+} from "../src/core/icon-d2.js";
 import { IconD2RunResolver } from "../src/core/icon-d2-run.js";
 import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-api.js";
 import {
@@ -791,6 +795,15 @@ describe("ICON-D2 run resolution", () => {
 
 
 describe("ICON-D2 guard and inventory branches", () => {
+  it("keeps raw-area capability predicates truthful", () => {
+    expect(isIconD2RawAreaVariable("temperature")).toBe(true);
+    expect(isIconD2RawAreaVariable("wind")).toBe(false);
+    expect(isIconD2RawAreaVariable("not-a-variable")).toBe(false);
+    expect(isIconD2RawAreaField("temperature_2m")).toBe(true);
+    expect(isIconD2RawAreaField("wind_10m")).toBe(false);
+    expect(isIconD2RawAreaField("not-a-field")).toBe(false);
+  });
+
   it("rejects malformed cycles, impossible leads, and empty ranges", () => {
     const run = new Date("2026-08-31T00:00:00Z");
     expect(() => parseIconD2Run("not-a-date")).toThrow("Invalid ICON-D2 run");
