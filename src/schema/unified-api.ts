@@ -12,6 +12,7 @@ import {
   AIFS_PRESSURE_LEVELS_HPA,
   AIFS_PRESSURE_VARIABLE_IDS,
   AIFS_RAW_PRESSURE_VARIABLE_IDS,
+  isSupportedAifsPressureSelection,
 } from "../catalog/aifs.js";
 import { LAYER_DIAGNOSTIC_IDS } from "../catalog/layer-diagnostics.js";
 import {
@@ -734,6 +735,21 @@ function validateAifsModifiers(
         code: "custom",
         path: ["selection", "pressureLevelsHpa"],
         message: `AIFS pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
+      });
+    }
+
+    const unsupportedSelections = variables.flatMap((variable: string) =>
+      pressureLevelsHpa
+        .filter((level: number) =>
+          variableSet.has(variable)
+          && pressureLevelSet.has(level)
+          && !isSupportedAifsPressureSelection(variable as any, level))
+        .map((level: number) => `${variable}@${level}hPa`));
+    if (unsupportedSelections.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection"],
+        message: `AIFS pressure variable/level selections not supported: ${unsupportedSelections.join(", ")}`,
       });
     }
 
