@@ -55,7 +55,7 @@ const defaultCdoRunner: IconD2EpsCdoRunner = async (executable, args) => {
  * data shared by every ICON-D2-EPS request.
  */
 export class IconD2EpsDwdRemapAssetCache implements IconD2EpsRemapAssetProvider {
-  private ready?: Promise<IconD2EpsRemapAssets>;
+  private ready: Promise<IconD2EpsRemapAssets> | undefined;
 
   constructor(
     private readonly rootDir: string,
