@@ -1,5 +1,4 @@
 import type {
-  CompareAtmosphericDatasetsRequest,
   CompareAtmosphericRunsRequest,
   FindAtmosphericAnalogsRequest,
   VerifyAtmosphericForecastRequest,
@@ -12,23 +11,6 @@ export interface AtmosphericRunComparisonAdapter {
 export type AtmosphericRunComparisonAdapterRegistry = Record<
   CompareAtmosphericRunsRequest["dataset"],
   AtmosphericRunComparisonAdapter
->;
-
-export interface AtmosphericDatasetComparisonAdapter {
-  compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown>;
-}
-
-type DatasetComparisonKey<Request> =
-  Request extends { datasets: [infer Left extends string, infer Right extends string] }
-    ? `${Left}:${Right}`
-    : never;
-
-export type AtmosphericDatasetComparisonKey =
-  DatasetComparisonKey<CompareAtmosphericDatasetsRequest>;
-
-export type AtmosphericDatasetComparisonAdapterRegistry = Record<
-  AtmosphericDatasetComparisonKey,
-  AtmosphericDatasetComparisonAdapter
 >;
 
 export interface AtmosphericVerificationAdapter {
@@ -49,8 +31,3 @@ export type AtmosphericAnalogAdapterRegistry = Record<
   AtmosphericAnalogAdapter
 >;
 
-export function atmosphericDatasetComparisonKey(
-  request: CompareAtmosphericDatasetsRequest,
-): AtmosphericDatasetComparisonKey {
-  return `${request.datasets[0]}:${request.datasets[1]}` as AtmosphericDatasetComparisonKey;
-}

@@ -37,7 +37,8 @@ Nonlinear diagnostics are evaluated independently on every ensemble member befor
 The implementation is split by responsibility rather than by whichever dataset was added first:
 
 - `schema/` defines the public query vocabulary and result contracts.
-- `core/query-adapters/`, `core/diagnostic-adapters/`, and `core/specialized-adapters/` translate the common vocabulary into dataset-native application services. Public unified services validate once, dispatch through an operation-specific adapter registry, and wrap the result; they do not contain model-specific routing branches. Specialized operations such as run comparison, cross-dataset comparison, verification, and analog search use the same rule rather than being exceptions.
+- `core/query-adapters/`, `core/diagnostic-adapters/`, and `core/specialized-adapters/` translate the common vocabulary into dataset-native application services. Public unified services validate once, dispatch through an operation-specific adapter registry, and wrap the result; they do not contain model-specific routing branches. Run comparison, verification, and analog search use the same rule rather than being exceptions.
+- `core/comparison-strategies/` is the dedicated semantic boundary for cross-dataset comparison. Each registered strategy declares the supported dataset pair, deterministic/ensemble model classes, run and valid-time alignment, variable compatibility, comparison meaning, and provenance shape before delegating to pair-native comparison services. There is deliberately no universal fallback strategy.
 - `core/` owns meteorological/application composition: profiles, time series, spatial composition, diagnostic kernels, comparisons and archive services.
 - `sources/` owns provider/product semantics: URLs, object naming, upstream inventories, archive endpoints and ECMWF mirror selection.
 - `access/` owns transport policy: provider concurrency/pacing and retry/backoff. Cache code and meteorology code do not invent their own provider etiquette.
@@ -46,9 +47,9 @@ The implementation is split by responsibility rather than by whichever dataset w
 - `derived/` owns model-independent physical transformations.
 - `cli/` and MCP are presentation/transport adapters over the same schemas and application services.
 
-The dependency direction is intentionally inward: public surfaces depend on the single `core/unified-atmosphere-api.ts` composition entry; unified services depend on operation-specific adapter registries; adapters depend on dataset-native core services; core services depend on source/cache/decoder abstractions. Provider policy does not depend on meteorology, and meteorological kernels do not depend on provider transport.
+The dependency direction is intentionally inward: public surfaces depend on the single `core/unified-atmosphere-api.ts` composition entry; unified services depend on operation-specific adapter or comparison-strategy registries; adapters/strategies depend on dataset-native core services; core services depend on source/cache/decoder abstractions. Provider policy does not depend on meteorology, and meteorological kernels do not depend on provider transport.
 
-A practical rule for new datasets is: **add capabilities to the catalog and the relevant operation adapters; do not add a new public namespace or dataset branch to a unified dispatcher.** A practical rule for new upstream backends is: **add or change a source/access implementation; do not change the public query language.**
+A practical rule for new datasets is: **add capabilities to the catalog and the relevant operation adapters; do not add a new public namespace or dataset branch to a unified dispatcher.** A practical rule for new comparisons is: **register an explicit scientifically meaningful strategy; never fall back to generic subtraction just because two datasets share field names.** A practical rule for new upstream backends is: **add or change a source/access implementation; do not change the public query language.**
 
 ## Atmospheric dataset capability boundary
 

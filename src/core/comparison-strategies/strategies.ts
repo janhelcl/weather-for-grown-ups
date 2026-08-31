@@ -7,9 +7,15 @@ import { GefsIfsEnsComparisonService } from "../gefs-ifs-ens-comparison.js";
 import { GfsGefsComparisonService } from "../gfs-gefs-comparison.js";
 import { GfsIfsComparisonService } from "../gfs-ifs-comparison.js";
 import { IfsIfsEnsComparisonService } from "../ifs-ifs-ens-comparison.js";
-import type { AtmosphericDatasetComparisonAdapter } from "./types.js";
+import { comparisonStrategyMetadata, type AtmosphericDatasetComparisonStrategy } from "./types.js";
 
-export class GfsGefsDatasetComparisonAdapter implements AtmosphericDatasetComparisonAdapter {
+export class GfsGefsComparisonStrategy implements AtmosphericDatasetComparisonStrategy {
+  readonly metadata = comparisonStrategyMetadata(
+    "gfs:gefs",
+    ["gfs", "gefs"],
+    "deterministic_ensemble_positioning",
+  );
+
   constructor(
     private readonly service: Pick<GfsGefsComparisonService, "compare"> =
       new GfsGefsComparisonService(),
@@ -17,7 +23,7 @@ export class GfsGefsDatasetComparisonAdapter implements AtmosphericDatasetCompar
 
   compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown> {
     if (request.datasets[0] !== "gfs" || request.datasets[1] !== "gefs") {
-      throw new Error("GFS/GEFS comparison adapter requires datasets=gfs,gefs");
+      throw new Error("GFS/GEFS comparison strategy requires datasets=gfs,gefs");
     }
     return this.service.compare(gfsGefsComparisonQuerySchema.parse({
       latitude: request.geometry.latitude,
@@ -33,7 +39,13 @@ export class GfsGefsDatasetComparisonAdapter implements AtmosphericDatasetCompar
   }
 }
 
-export class GfsIfsDatasetComparisonAdapter implements AtmosphericDatasetComparisonAdapter {
+export class GfsIfsComparisonStrategy implements AtmosphericDatasetComparisonStrategy {
+  readonly metadata = comparisonStrategyMetadata(
+    "gfs:ifs",
+    ["gfs", "ifs"],
+    "deterministic_delta",
+  );
+
   constructor(
     private readonly service: Pick<GfsIfsComparisonService, "compare"> =
       new GfsIfsComparisonService(),
@@ -41,7 +53,7 @@ export class GfsIfsDatasetComparisonAdapter implements AtmosphericDatasetCompari
 
   compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown> {
     if (request.datasets[0] !== "gfs" || request.datasets[1] !== "ifs") {
-      throw new Error("GFS/IFS comparison adapter requires datasets=gfs,ifs");
+      throw new Error("GFS/IFS comparison strategy requires datasets=gfs,ifs");
     }
     return this.service.compare(gfsIfsComparisonQuerySchema.parse({
       latitude: request.geometry.latitude,
@@ -55,7 +67,13 @@ export class GfsIfsDatasetComparisonAdapter implements AtmosphericDatasetCompari
   }
 }
 
-export class GefsIfsEnsDatasetComparisonAdapter implements AtmosphericDatasetComparisonAdapter {
+export class GefsIfsEnsComparisonStrategy implements AtmosphericDatasetComparisonStrategy {
+  readonly metadata = comparisonStrategyMetadata(
+    "gefs:ifs-ens",
+    ["gefs", "ifs-ens"],
+    "ensemble_distribution_shift",
+  );
+
   constructor(
     private readonly service: Pick<GefsIfsEnsComparisonService, "compare"> =
       new GefsIfsEnsComparisonService(),
@@ -63,7 +81,7 @@ export class GefsIfsEnsDatasetComparisonAdapter implements AtmosphericDatasetCom
 
   compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown> {
     if (request.datasets[0] !== "gefs" || request.datasets[1] !== "ifs-ens") {
-      throw new Error("GEFS/IFS ENS comparison adapter requires datasets=gefs,ifs-ens");
+      throw new Error("GEFS/IFS ENS comparison strategy requires datasets=gefs,ifs-ens");
     }
     const query = request as Extract<
       CompareAtmosphericDatasetsRequest,
@@ -86,7 +104,13 @@ export class GefsIfsEnsDatasetComparisonAdapter implements AtmosphericDatasetCom
   }
 }
 
-export class IfsIfsEnsDatasetComparisonAdapter implements AtmosphericDatasetComparisonAdapter {
+export class IfsIfsEnsComparisonStrategy implements AtmosphericDatasetComparisonStrategy {
+  readonly metadata = comparisonStrategyMetadata(
+    "ifs:ifs-ens",
+    ["ifs", "ifs-ens"],
+    "deterministic_ensemble_positioning",
+  );
+
   constructor(
     private readonly service: Pick<IfsIfsEnsComparisonService, "compare"> =
       new IfsIfsEnsComparisonService(),
@@ -94,7 +118,7 @@ export class IfsIfsEnsDatasetComparisonAdapter implements AtmosphericDatasetComp
 
   compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown> {
     if (request.datasets[0] !== "ifs" || request.datasets[1] !== "ifs-ens") {
-      throw new Error("IFS/IFS ENS comparison adapter requires datasets=ifs,ifs-ens");
+      throw new Error("IFS/IFS ENS comparison strategy requires datasets=ifs,ifs-ens");
     }
     const query = request as Extract<
       CompareAtmosphericDatasetsRequest,
