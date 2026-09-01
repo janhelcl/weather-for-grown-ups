@@ -157,7 +157,15 @@ The purpose of this milestone is architectural as much as meteorological:
 
 Where AROME exposes multiple public grids or resolutions, WFG must represent them truthfully rather than silently substituting one product for another.
 
-## 5. PE-AROME
+## 5. PE-AROME ✅
+
+**Implemented as the second regional ensemble family.**
+
+Météo-France PE-AROME now sits behind the same public atmospheric query language as the other forecast datasets while preserving its native 25-member control/perturbed population (`c00,p01..p24`), limited metropolitan domain, 0.025° WCS delivery grid, 6-hourly production cycles and hourly output through f51.
+
+The current implementation deliberately exposes only the near-surface WCS coverage identities we can substantiate from Météo-France's published service nomenclature: 2 m temperature and relative humidity. Point, range, multi-point, multi-point-range, transect and scalar bounded-area ensemble summaries are supported. One resolved initialization is pinned across selected members, ensemble aggregation remains member-first, and raw member output stays optional. Wind and pressure-level capabilities stay unadvertised until their PE-AROME coverage identities are confirmed against the subscribed service rather than inferred from another Météo-France product.
+
+Unlike anonymous deterministic AROME packages, PE-AROME uses Météo-France's authenticated targeted WCS API. Bearer credentials, subscription-specific member endpoints, one-member/one-field request packaging, geographic subsetting, retry/concurrency policy and immutable caching remain isolated below the unified adapter boundary. A credential-gated live smoke is available for repositories/deployments that configure the subscribed API endpoint and token.
 
 Add PE-AROME as the second regional ensemble family.
 
@@ -168,7 +176,7 @@ Goals:
 - reuse the same regional-domain and capability architecture;
 - validate that provider-specific ensemble packaging does not leak into the public schema.
 
-At this point WFG should have two independent deterministic/ensemble regional families behind one atmospheric query language.
+At this point WFG has two independent deterministic/ensemble regional families behind one atmospheric query language.
 
 ## 6. Cross-scale comparison architecture
 

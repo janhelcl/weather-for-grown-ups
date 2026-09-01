@@ -22,6 +22,11 @@ import {
 import { AIGEFS_MEMBERS } from "../catalog/aigefs.js";
 import { AROME_0P01_AREA_FIELD_IDS, AROME_0P01_FIELD_IDS } from "../catalog/arome.js";
 import {
+  PE_AROME_AREA_FIELD_IDS,
+  PE_AROME_FIELD_IDS,
+  PE_AROME_MEMBERS,
+} from "../catalog/pe-arome.js";
+import {
   ICON_D2_AREA_FIELD_IDS,
   ICON_D2_AREA_PRESSURE_VARIABLE_IDS,
   ICON_D2_FIELD_IDS,
@@ -62,6 +67,7 @@ const DATASET_CAPABILITY_VALIDATORS: Readonly<Record<string, readonly DatasetCap
   "icon-d2": [validateIconD2Modifiers],
   "icon-d2-eps": [validateIconD2Modifiers, validateIconD2EpsMembers],
   arome: [validateAromeModifiers],
+  "pe-arome": [validatePeAromeModifiers, validatePeAromeMembers],
   aifs: [validateAifsModifiers],
   "aifs-ens": [validateAifsModifiers, validateAifsEnsMembers],
 };
@@ -127,7 +133,7 @@ function validateSharedDatasetModifiers(
     context.addIssue({
       code: "custom",
       path: ["ensemble"],
-      message: "ensemble controls are only valid for ensemble datasets: aigefs, hgefs, icon-d2-eps, gefs, aifs-ens, or ifs-ens",
+      message: "ensemble controls are only valid for ensemble datasets: aigefs, hgefs, icon-d2-eps, pe-arome, gefs, aifs-ens, or ifs-ens",
     });
   }
   if (request.dataset !== "gfs" && request.source !== undefined) {
@@ -275,6 +281,15 @@ function validateIconD2EpsMembers(request: any, context: z.RefinementCtx): void 
     context,
     ICON_D2_EPS_MEMBERS,
     "ICON-D2-EPS members are p01..p20",
+  );
+}
+
+function validatePeAromeMembers(request: any, context: z.RefinementCtx): void {
+  validateMemberSelection(
+    request,
+    context,
+    PE_AROME_MEMBERS,
+    "PE-AROME members are c00,p01..p24",
   );
 }
 
@@ -468,6 +483,55 @@ function validateAromeModifiers(
       code: "custom",
       path: ["diagnostic"],
       message: "AROME 0.01° EURW1S100 currently exposes field-only queries; pressure-based diagnostics are not available from this product",
+    });
+  }
+}
+
+function validatePeAromeModifiers(
+  request: any,
+  context: z.RefinementCtx,
+): void {
+  if (request.selection !== undefined) {
+    const variables = request.selection.variables ?? [];
+    const pressureLevelsHpa = request.selection.pressureLevelsHpa ?? [];
+    const fields = request.selection.fields ?? [];
+
+    if (variables.length > 0 || pressureLevelsHpa.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "variables"],
+        message: "PE-AROME currently exposes the explicitly mapped near-surface WCS field slice; pressure-level variables are not advertised until their provider coverage identities are verified",
+      });
+    }
+
+    const supportedFields = new Set<string>(PE_AROME_FIELD_IDS);
+    const unsupportedFields = fields.filter((field: string) => !supportedFields.has(field));
+    if (unsupportedFields.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "fields"],
+        message: `PE-AROME fields not supported: ${unsupportedFields.join(", ")}`,
+      });
+    }
+
+    if (request.geometry?.type === "area") {
+      const areaFields = new Set<string>(PE_AROME_AREA_FIELD_IDS);
+      const unsupportedAreaFields = fields.filter((field: string) => !areaFields.has(field));
+      if (unsupportedAreaFields.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["selection", "fields"],
+          message: `PE-AROME area summaries require a native scalar field; unsupported: ${unsupportedAreaFields.join(", ")}`,
+        });
+      }
+    }
+  }
+
+  if (request.diagnostic !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["diagnostic"],
+      message: "PE-AROME pressure-based diagnostics are not exposed by the current explicitly mapped WCS capability slice",
     });
   }
 }

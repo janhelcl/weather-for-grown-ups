@@ -78,6 +78,20 @@ describe("atmospheric dataset capability catalog", () => {
         nominalResolution: { value: 2.1, unit: "km" },
       },
     });
+    expect(ATMOSPHERIC_DATASET_CATALOG.pe_arome_0p025).toMatchObject({
+      family: "pe-arome",
+      provider: "meteo_france",
+      modelClass: "physics",
+      kind: "ensemble",
+      role: "forecast",
+      horizontalGridDegrees: 0.025,
+      maxForecastHour: 51,
+      nativeForecastIntervalHours: 1,
+      members: 25,
+      nativeGrid: {
+        type: "lambert_conformal",
+      },
+    });
     expect(ATMOSPHERIC_DATASET_CATALOG.aifs_0p25).toMatchObject({
       family: "aifs",
       provider: "ecmwf",
@@ -162,6 +176,10 @@ describe("atmospheric dataset capability catalog", () => {
     expect(datasetSupportsOperation("arome_0p01", "timeseries")).toBe(true);
     expect(datasetSupportsOperation("arome_0p01", "area_summary")).toBe(true);
     expect(datasetSupportsOperation("arome_0p01", "layer_diagnostics")).toBe(false);
+    expect(datasetSupportsOperation("pe_arome_0p025", "profile")).toBe(true);
+    expect(datasetSupportsOperation("pe_arome_0p025", "ensemble_distribution")).toBe(true);
+    expect(datasetSupportsOperation("pe_arome_0p025", "layer_diagnostics")).toBe(false);
+    expect(datasetSupportsOperation("pe_arome_0p025", "aligned_model_comparison")).toBe(false);
     expect(datasetSupportsOperation("aifs_0p25", "profile")).toBe(true);
     expect(datasetSupportsOperation("aifs_0p25", "layer_diagnostics")).toBe(true);
     expect(datasetSupportsOperation("aifs_0p25", "parcel_diagnostics")).toBe(false);
@@ -208,6 +226,7 @@ describe("atmospheric dataset capability catalog", () => {
       "icon_d2_0p02",
       "icon_d2_eps_2p1km",
       "arome_0p01",
+      "pe_arome_0p025",
       "aifs_0p25",
       "aifs_ens_0p25",
       "gefs_0p50",
@@ -233,6 +252,8 @@ describe("atmospheric dataset capability catalog", () => {
     expect(modelSupportsOperation("icon_d2_eps_2p1km", "aligned_model_comparison")).toBe(false);
     expect(modelSupportsOperation("arome_0p01", "profile")).toBe(true);
     expect(modelSupportsOperation("arome_0p01", "layer_diagnostics")).toBe(false);
+    expect(modelSupportsOperation("pe_arome_0p025", "ensemble_distribution")).toBe(true);
+    expect(modelSupportsOperation("pe_arome_0p025", "layer_diagnostics")).toBe(false);
     expect(modelSupportsOperation("aifs_0p25", "profile")).toBe(true);
     expect(modelSupportsOperation("aifs_0p25", "aligned_model_comparison")).toBe(true);
     expect(modelSupportsOperation("aifs_0p25", "parcel_diagnostics")).toBe(false);

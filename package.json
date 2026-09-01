@@ -26,6 +26,7 @@
     "icon-d2",
     "icon-d2-eps",
     "arome",
+    "pe-arome",
     "meteo-france",
     "noaa",
     "weather",
@@ -86,7 +87,8 @@
     "test:live:aifs-ens": "tsx scripts/live-smoke-aifs-ens.ts",
     "test:live:icon-d2": "tsx scripts/live-smoke-icon-d2.ts",
     "test:live:icon-d2-eps": "tsx scripts/live-smoke-icon-d2-eps.ts",
-    "test:live:arome": "tsx scripts/live-smoke-arome.ts"
+    "test:live:arome": "tsx scripts/live-smoke-arome.ts",
+    "test:live:pe-arome": "tsx scripts/live-smoke-pe-arome.ts"
   },
   "dependencies": {
     "@mattnucc/gribberish": "^1.6.0",

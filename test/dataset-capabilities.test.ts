@@ -34,7 +34,7 @@ describe("unified dataset capability registry", () => {
             northLatitude: 57.31,
           },
         });
-      } else if (dataset === "arome_0p01") {
+      } else if (dataset === "arome_0p01" || dataset === "pe_arome_0p025") {
         expect(definition.spatialDomain).toMatchObject({
           scope: "limited_area",
           bounds: {
@@ -108,6 +108,20 @@ describe("unified dataset capability registry", () => {
       maxForecastHour: 51,
       nativeTimeCadenceHours: [1],
       nativeForecastIntervalHours: 1,
+    });
+
+    expect(publicDatasetCapabilities("pe-arome")).toMatchObject({
+      provider: "meteo_france",
+      kind: "ensemble",
+      spatialDomain: { scope: "limited_area" },
+      horizontalGridDegrees: 0.025,
+      nativeGrid: {
+        type: "lambert_conformal",
+      },
+      maxForecastHour: 51,
+      nativeTimeCadenceHours: [1],
+      nativeForecastIntervalHours: 1,
+      members: 25,
     });
 
     expect(publicDatasetCapabilities("ifs")).toMatchObject({

@@ -313,7 +313,7 @@ export class AromeForecastService {
       products: aromePackagesForFields(selection.fields),
     });
     const forecastHour = aromeForecastHour(run, validTime);
-    const cached = await this.cache.fetch(dataRequest(run, forecastHour, selection));
+    const cached = await this.cache.fetch(dataRequest(run, forecastHour, selection, box));
     const field = selection.fields[0]!;
     const selector = fieldSelector(field);
     const distributionRequested = wantsDistribution(request);
@@ -363,7 +363,9 @@ export class AromeForecastService {
     selection: ExpandedSelection,
   ): Promise<unknown> {
     const forecastHour = aromeForecastHour(run, validTime);
-    const cached = await this.cache.fetch(dataRequest(run, forecastHour, selection));
+    const cached = await this.cache.fetch(
+      dataRequest(run, forecastHour, selection, subsetForPoints(points)),
+    );
     const results: AromePointResult[] = [];
     for (const point of points) {
       results.push(await this.decodePoint(cached, run, validTime, point, selection));
@@ -390,7 +392,9 @@ export class AromeForecastService {
     selection: ExpandedSelection,
   ): Promise<AromePointResult> {
     const forecastHour = aromeForecastHour(run, validTime);
-    const cached = await this.cache.fetch(dataRequest(run, forecastHour, selection));
+    const cached = await this.cache.fetch(
+      dataRequest(run, forecastHour, selection, subsetForPoints([point])),
+    );
     return this.decodePoint(cached, run, validTime, point, selection);
   }
 
@@ -441,8 +445,27 @@ function dataRequest(
   run: Date,
   forecastHour: number,
   selection: ExpandedSelection,
+  subset?: AromeDataRequest["subset"],
 ): AromeDataRequest {
-  return { run, forecastHour, fields: selection.fields };
+  return {
+    run,
+    forecastHour,
+    fields: selection.fields,
+    ...(subset === undefined ? {} : { subset }),
+  };
+}
+
+function subsetForPoints(points: readonly PointCoordinate[]): NonNullable<AromeDataRequest["subset"]> {
+  if (points.length === 0) throw new Error("AROME source subset requires at least one point");
+  const padding = 0.05;
+  const longitudes = points.map((point) => point.longitude);
+  const latitudes = points.map((point) => point.latitude);
+  return {
+    westLongitude: Math.max(-180, Math.min(...longitudes) - padding),
+    eastLongitude: Math.min(180, Math.max(...longitudes) + padding),
+    southLatitude: Math.max(-90, Math.min(...latitudes) - padding),
+    northLatitude: Math.min(90, Math.max(...latitudes) + padding),
+  };
 }
 
 function boundedForecastHours(

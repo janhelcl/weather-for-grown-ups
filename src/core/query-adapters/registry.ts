@@ -4,6 +4,7 @@ import { AifsQueryAdapter, type AifsQueryAdapterOptions } from "./aifs.js";
 import { AifsEnsQueryAdapter, type AifsEnsQueryAdapterOptions } from "./aifs-ens.js";
 import { AigefsQueryAdapter, type AigefsQueryAdapterOptions } from "./aigefs.js";
 import { AromeQueryAdapter, type AromeQueryAdapterOptions } from "./arome.js";
+import { PeAromeQueryAdapter, type PeAromeQueryAdapterOptions } from "./pe-arome.js";
 import { GefsQueryAdapter, type GefsQueryAdapterOptions } from "./gefs.js";
 import { HgefsQueryAdapter, type HgefsQueryAdapterOptions } from "./hgefs.js";
 import { IconD2QueryAdapter, type IconD2QueryAdapterOptions } from "./icon-d2.js";
@@ -23,6 +24,7 @@ import type {
 export type DefaultAtmosphericQueryAdapterOptions =
   AigfsQueryAdapterOptions
   & AromeQueryAdapterOptions
+  & PeAromeQueryAdapterOptions
   & AifsQueryAdapterOptions
   & AifsEnsQueryAdapterOptions
   & AigefsQueryAdapterOptions
@@ -48,6 +50,7 @@ export function createAtmosphericQueryAdapterRegistry(
     "aifs-ens": new AifsEnsQueryAdapter(options),
     aigefs: new AigefsQueryAdapter(options),
     arome: new AromeQueryAdapter(options),
+    "pe-arome": new PeAromeQueryAdapter(options),
     gfs: new GfsQueryAdapter(options),
     gefs: new GefsQueryAdapter(options),
     hgefs: new HgefsQueryAdapter(options),

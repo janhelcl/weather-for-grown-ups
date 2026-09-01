@@ -2,7 +2,7 @@
 
 **Weather is the hello-world of agent tools. This is the version for when “temperature tomorrow” stops being enough.**
 
-Weather for Grown Ups (WFG) gives agents direct, structured access to numerical weather prediction: NOAA **GFS**, **AIGFS**, **AIGEFS**, **HGEFS**, **GEFS** and historical GFS data, DWD **ICON-D2** and **ICON-D2-EPS**, Météo-France **AROME**, plus ECMWF **IFS**, **AIFS**, **AIFS ENS** and **IFS ENS**.
+Weather for Grown Ups (WFG) gives agents direct, structured access to numerical weather prediction: NOAA **GFS**, **AIGFS**, **AIGEFS**, **HGEFS**, **GEFS** and historical GFS data, DWD **ICON-D2** and **ICON-D2-EPS**, Météo-France **AROME** and **PE-AROME**, plus ECMWF **IFS**, **AIFS**, **AIFS ENS** and **IFS ENS**.
 
 The central idea is deliberately simple:
 
@@ -10,7 +10,7 @@ The central idea is deliberately simple:
 
 Ask for a point, a time range, several locations, a transect, an area, a pressure profile or a meteorological diagnostic. Change the dataset without learning another API. WFG handles source selection, GRIB message access, decoding, caching and shared physics; the result keeps the model's real cadence, grid, run, member and provenance semantics.
 
-No weather API key. No model-specific public namespaces. No need to teach the agent GRIB first.
+No API key is needed for the normal anonymous Open Data datasets; authenticated `pe-arome` access uses a Météo-France API bearer token. No model-specific public namespaces. No need to teach the agent GRIB first.
 
 ## 30-second start
 
@@ -108,6 +108,7 @@ Old GFS initializations stay `dataset: "gfs"` and route to the matching archive.
 | `icon-d2` | DWD ICON-D2 | limited-area convection-permitting deterministic forecast; native ~2.1 km icosahedral model grid; 3-hourly cycles; hourly output through f48 |
 | `icon-d2-eps` | DWD ICON-D2-EPS | 20-member convection-permitting regional ensemble; native ~2.1 km icosahedral grid; member-first aggregation; hourly output through f48; native CDO + `wgrib2` required for official DWD remapping/member extraction |
 | `arome` | Météo-France AROME | limited-area ~1.3 km deterministic model; current WFG slice uses the 0.01° EURW1S100 hourly public product through f51 and exposes near-surface/height fields without silently mixing in the separate 0.025° pressure-level product |
+| `pe-arome` | Météo-France PE-AROME | 25-member regional ensemble (`c00,p01..p24`); 0.025° WCS delivery grid; hourly through f51; member-first near-surface field distributions; authenticated Météo-France API access |
 | `gefs` | NOAA GEFS | member-first operational ensemble; explicit `forecast.kind: "reforecast"` selects the GEFSv12 retrospective population |
 | `ifs` | ECMWF deterministic IFS | 0.25° Open Data forecast with native ECMWF run/cadence semantics |
 | `aifs` | ECMWF AIFS Single | deterministic AI forecast; 0.25°; four daily cycles; native 6-hour output through f360; AIFS-native field inventory |
@@ -157,7 +158,7 @@ Not every dataset implements every line. `catalog` / `search_catalog` is the sou
 
 WFG is opinionated about a few things that are easy to get subtly wrong:
 
-- **Ensemble physics is member-first.** Nonlinear diagnostics are computed inside each AIGEFS/HGEFS/AIFS ENS/ICON-D2-EPS/GEFS/IFS ENS member before aggregation.
+- **Ensemble physics is member-first.** Nonlinear diagnostics are computed inside each AIGEFS/HGEFS/AIFS ENS/ICON-D2-EPS/PE-AROME/GEFS/IFS ENS member before aggregation.
 - **Spread is not calibrated uncertainty.** Member fractions and ensemble spread are reported as raw model evidence unless a dedicated calibrated layer says otherwise.
 - **History is not relabeled as “current”.** Archived GFS forecasts retain their old initialization and lead; GFS analysis retains analysis-time semantics; GEFSv12 reforecasts are explicitly retrospective forecasts, not archived operational GEFS.
 - **Provenance stays visible.** Results keep run, valid time, sampled grid, source product and archive/backend information.
@@ -169,7 +170,7 @@ The deeper reasoning is documented in [Architecture](docs/ARCHITECTURE.md).
 
 WFG selects only the upstream messages needed for a request, caches immutable slices and decodes locally.
 
-DWD ICON-D2 uses selected regular-lat/lon Open Data objects, while ICON-D2-EPS preserves DWD's native all-member icosahedral GRIB packaging. Météo-France AROME uses the openly downloadable 0.01° EURW1S100 SP1/HP1 GRIB packages and keeps their delivery grid distinct from the model's ~1.3 km native mesh. Operational GFS point/profile access favors indexed byte-range reads from NOAA AWS Open Data; ECMWF IFS, AIFS and AIFS ENS sources use Open Data access. AIGFS uses NOMADS raw products with cached `.idx` inventories and partial HTTP byte ranges. AIGEFS reads member-specific indexed GRIB2 slices from NOAA EAGLE on AWS Open Data. HGEFS composes those AIGEFS members with GEFS member feeds rather than duplicating a third member-access stack. Bounded GFS areas use NOMADS geographic subsetting where that is materially better. Historical products route to NCEI or NCAR/GDEX as appropriate.
+DWD ICON-D2 uses selected regular-lat/lon Open Data objects, while ICON-D2-EPS preserves DWD's native all-member icosahedral GRIB packaging. Météo-France AROME uses the openly downloadable 0.01° EURW1S100 SP1/HP1 GRIB packages and keeps their delivery grid distinct from the model's ~1.3 km native mesh. PE-AROME uses the authenticated targeted ensemble WCS API; one member/field request is subset server-side, cached below the public API, and then fed through the same shared normalization/aggregation layers. Operational GFS point/profile access favors indexed byte-range reads from NOAA AWS Open Data; ECMWF IFS, AIFS and AIFS ENS sources use Open Data access. AIGFS uses NOMADS raw products with cached `.idx` inventories and partial HTTP byte ranges. AIGEFS reads member-specific indexed GRIB2 slices from NOAA EAGLE on AWS Open Data. HGEFS composes those AIGEFS members with GEFS member feeds rather than duplicating a third member-access stack. Bounded GFS areas use NOMADS geographic subsetting where that is materially better. Historical products route to NCEI or NCAR/GDEX as appropriate.
 
 Provider etiquette is also source-specific: NOMADS retains its courtesy pacing, while AWS, ECMWF, NCEI, GDEX and IGRA use independent bounded-concurrency policies with transient retry/backoff. A slow provider does not impose its policy on unrelated sources.
 
@@ -187,6 +188,7 @@ Start here:
 - [NOAA AIGFS semantics](docs/AIGFS.md)
 - [NOAA AIGEFS semantics](docs/AIGEFS.md)
 - [NOAA HGEFS hybrid semantics](docs/HGEFS.md)
+- [Météo-France PE-AROME semantics](docs/PE_AROME.md)
 - [Regional/convection-permitting roadmap](docs/ROADMAP.md)
 - [ECMWF AIFS ENS semantics](docs/AIFS_ENS.md)
 - [GEFS and GEFSv12 reforecast semantics](docs/GEFS_ENSEMBLE.md)

@@ -1,0 +1,54 @@
+name: PR Météo-France PE-AROME live
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**/pe-arome*.ts"
+      - "src/core/arome.ts"
+      - "src/cache/arome-open-data-cache.ts"
+      - "src/access/access-policy.ts"
+      - "src/catalog/models.ts"
+      - "src/schema/unified-api.ts"
+      - "src/schema/dataset-capability-validation.ts"
+      - "src/grib/**"
+      - "scripts/live-smoke-pe-arome.ts"
+      - ".github/workflows/pr-pe-arome-live.yml"
+      - "package.json"
+      - "package-lock.json"
+
+concurrency:
+  group: pr-pe-arome-live-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WFG_METEO_FRANCE_TOKEN: ${{ secrets.WFG_METEO_FRANCE_TOKEN }}
+      WFG_PEAROME_WCS_URL_TEMPLATE: ${{ secrets.WFG_PEAROME_WCS_URL_TEMPLATE }}
+      WFG_PEAROME_WCS_ENDPOINTS: ${{ secrets.WFG_PEAROME_WCS_ENDPOINTS }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check PE-AROME live credentials
+        id: credentials
+        shell: bash
+        run: |
+          if [[ -n "$WFG_METEO_FRANCE_TOKEN" && ( -n "$WFG_PEAROME_WCS_URL_TEMPLATE" || -n "$WFG_PEAROME_WCS_ENDPOINTS" ) ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::PE-AROME live smoke skipped: configure WFG_METEO_FRANCE_TOKEN and a PE-AROME WCS endpoint secret to enable it."
+          fi
+      - name: Build pinned live-test environment
+        if: steps.credentials.outputs.available == 'true'
+        run: docker build --target live-test -t weather-for-grown-ups:live-test .
+      - name: Query live Météo-France PE-AROME
+        if: steps.credentials.outputs.available == 'true'
+        run: |
+          docker run --rm \
+            -e WFG_METEO_FRANCE_TOKEN \
+            -e WFG_PEAROME_WCS_URL_TEMPLATE \
+            -e WFG_PEAROME_WCS_ENDPOINTS \
+            weather-for-grown-ups:live-test npm run test:live:pe-arome
