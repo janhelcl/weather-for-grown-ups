@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   access,
   mkdir,
+  readFile,
   rename,
   rm,
   stat,
@@ -15,6 +16,10 @@ import {
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
 import { fetchWithRetry } from "../access/http-fetch.js";
+import {
+  prepareDwdLocalParametersForGenericProcessing,
+  restoreDwdLocalParametersAfterGenericProcessing,
+} from "../grib/dwd-local-parameters.js";
 import {
   bunzip2,
   type IconD2AvailabilityRequirement,
@@ -137,7 +142,7 @@ export class IconD2EpsCdoRemapper {
   async remap(path: string): Promise<IconD2SourceFile> {
     await mkdir(this.rootDir, { recursive: true });
     const key = createHash("sha256")
-      .update(`dwd-icon-d2-002-nearest-neighbour\0${path}`)
+      .update(`dwd-icon-d2-002-nearest-neighbour-v2-local-parameters\0${path}`)
       .digest("hex");
     const outputPath = join(this.rootDir, `${key}.grib2`);
     if (await exists(outputPath)) return { path: outputPath, cacheHit: true };
@@ -160,23 +165,40 @@ export class IconD2EpsCdoRemapper {
   ): Promise<IconD2SourceFile> {
     const { targetGridPath, weightsPath } = await this.assets.paths();
     const tempPath = `${outputPath}.${process.pid}.${randomUUID()}.tmp`;
+    const preparedInputPath = `${outputPath}.${process.pid}.${randomUUID()}.prepared-input.tmp`;
+    const sourceBytes = await readFile(inputPath);
+    const prepared = prepareDwdLocalParametersForGenericProcessing(sourceBytes);
+    const cdoInputPath = prepared.rewrites.length === 0 ? inputPath : preparedInputPath;
     try {
+      if (prepared.rewrites.length > 0) {
+        await writeFile(preparedInputPath, prepared.bytes);
+      }
       await this.run([
         "-f",
         "grb2",
         `remap,${targetGridPath},${weightsPath}`,
-        inputPath,
+        cdoInputPath,
         tempPath,
       ]);
       const details = await stat(tempPath);
       if (details.size === 0) {
         throw new Error("CDO produced an empty ICON-D2-EPS remapped GRIB");
       }
+      if (prepared.rewrites.length > 0) {
+        const remappedBytes = await readFile(tempPath);
+        const restored = restoreDwdLocalParametersAfterGenericProcessing(
+          remappedBytes,
+          prepared.rewrites,
+        );
+        await writeFile(tempPath, restored);
+      }
       await rename(tempPath, outputPath);
       return { path: outputPath, cacheHit: false };
     } catch (error) {
       await rm(tempPath, { force: true });
       throw error;
+    } finally {
+      await rm(preparedInputPath, { force: true });
     }
   }
 
