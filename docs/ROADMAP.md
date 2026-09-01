@@ -138,7 +138,13 @@ Goals:
 
 This is the key test that WFG's ensemble architecture survives a radically different spatial scale.
 
-## 4. AROME
+## 4. AROME ✅
+
+**Implemented as the second-provider regional deterministic dataset.**
+
+Météo-France AROME now sits behind the same public atmospheric query language as the existing NOAA, ECMWF and DWD datasets. WFG exposes the current 0.01° EURW1S100 public product with its limited-area domain, 3-hourly initialization schedule, hourly output through f51, and near-surface/height field inventory across point, range, multi-point, multi-point-range, transect and bounded-area operations.
+
+The integration keeps AROME's nominal ~1.3 km native model mesh distinct from the 0.01° regular-lat/lon delivery grid, isolates Météo-France object naming/access/caching/run resolution below the unified adapter boundary, and deliberately does not mix pressure levels from the separate 0.025° product. A dedicated live smoke proves the real Open Data transport and bundled CCSDS GRIB2 decode path.
 
 Add Météo-France AROME as the second-provider regional deterministic dataset.
 
