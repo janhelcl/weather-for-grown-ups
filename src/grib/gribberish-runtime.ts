@@ -64,9 +64,178 @@ const NAMED_VERTICAL_ALIASES: ReadonlyArray<readonly [string, string]> = [
 
 export async function readGribMessages(path: string): Promise<GribMessage[]> {
   const bytes = await readFile(path);
-  const messages = parseMessagesFromBuffer(bytes);
+  const messages = parseMessagesWithKnownLocalAliases(bytes);
   if (messages.length === 0) throw new Error(`Bundled GRIB2 decoder found no readable messages in ${path}`);
   return messages;
+}
+
+interface Grib2Chunk {
+  start: number;
+  end: number;
+  categoryOffset?: number;
+  parameterOffset?: number;
+  alias?: "RAIN_CON" | "SNOW_CON";
+  surrogate?: readonly [category: number, parameter: number];
+}
+
+/**
+ * gribberish intentionally follows the WMO parameter tables and currently
+ * drops DWD-local precipitation parameters before exposing a GribMessage.
+ * Rewrite only the parameter metadata of those messages to parseable
+ * surrogates, then restore the provider code at the WFG normalization
+ * boundary. Grid values, level metadata, reference time, and accumulation
+ * intervals remain byte-for-byte unchanged.
+ */
+function parseMessagesWithKnownLocalAliases(bytes: Uint8Array): GribMessage[] {
+  const chunks = scanGrib2Chunks(bytes);
+  if (!chunks.some((chunk) => chunk.alias !== undefined)) {
+    return parseMessagesFromBuffer(bytes);
+  }
+
+  const messages: GribMessage[] = [];
+  for (const chunk of chunks) {
+    const chunkBytes = bytes.slice(chunk.start, chunk.end);
+    if (
+      chunk.alias !== undefined
+      && chunk.surrogate !== undefined
+      && chunk.categoryOffset !== undefined
+      && chunk.parameterOffset !== undefined
+    ) {
+      chunkBytes[chunk.categoryOffset - chunk.start] = chunk.surrogate[0];
+      chunkBytes[chunk.parameterOffset - chunk.start] = chunk.surrogate[1];
+    }
+
+    const parsed = parseMessagesFromBuffer(chunkBytes);
+    if (chunk.alias !== undefined && parsed.length === 0) {
+      throw new Error(
+        `Bundled GRIB2 decoder could not normalize DWD local parameter ${chunk.alias}`,
+      );
+    }
+    messages.push(...parsed.map((message) =>
+      chunk.alias === undefined ? message : withGribCodeAlias(message, chunk.alias)));
+  }
+  return messages;
+}
+
+function scanGrib2Chunks(bytes: Uint8Array): Grib2Chunk[] {
+  const chunks: Grib2Chunk[] = [];
+  let cursor = 0;
+
+  while (cursor + 16 <= bytes.length) {
+    if (!hasGribMagic(bytes, cursor) || bytes[cursor + 7] !== 2) {
+      cursor += 1;
+      continue;
+    }
+
+    const length = readUint64Be(bytes, cursor + 8);
+    if (length < 20 || cursor + length > bytes.length) {
+      cursor += 1;
+      continue;
+    }
+
+    const end = cursor + length;
+    const discipline = bytes[cursor + 6]!;
+    let center: number | undefined;
+    let category: number | undefined;
+    let parameter: number | undefined;
+    let categoryOffset: number | undefined;
+    let parameterOffset: number | undefined;
+    let sectionCursor = cursor + 16;
+
+    while (sectionCursor + 5 <= end - 4) {
+      if (has7777(bytes, sectionCursor)) break;
+      const sectionLength = readUint32Be(bytes, sectionCursor);
+      if (sectionLength < 5 || sectionCursor + sectionLength > end) break;
+      const sectionNumber = bytes[sectionCursor + 4];
+
+      if (sectionNumber === 1 && sectionLength >= 11) {
+        center = readUint16Be(bytes, sectionCursor + 5);
+      } else if (sectionNumber === 4 && sectionLength >= 11) {
+        categoryOffset = sectionCursor + 9;
+        parameterOffset = sectionCursor + 10;
+        category = bytes[categoryOffset];
+        parameter = bytes[parameterOffset];
+        break;
+      }
+      sectionCursor += sectionLength;
+    }
+
+    const local = knownDwdLocalParameter(discipline, center, category, parameter);
+    chunks.push({
+      start: cursor,
+      end,
+      ...(categoryOffset === undefined ? {} : { categoryOffset }),
+      ...(parameterOffset === undefined ? {} : { parameterOffset }),
+      ...(local === undefined ? {} : local),
+    });
+    cursor = end;
+  }
+
+  return chunks;
+}
+
+export function knownDwdLocalParameter(
+  discipline: number,
+  center: number | undefined,
+  category: number | undefined,
+  parameter: number | undefined,
+): Pick<Grib2Chunk, "alias" | "surrogate"> | undefined {
+  if (discipline !== 0 || center !== 78 || category !== 1) return undefined;
+  // Surrogates are only decoder metadata: ACPCP and SF are WMO entries that
+  // gribberish understands. The original DWD code is restored immediately.
+  if (parameter === 76) return { alias: "RAIN_CON", surrogate: [1, 10] };
+  if (parameter === 55) return { alias: "SNOW_CON", surrogate: [1, 53] };
+  return undefined;
+}
+
+function withGribCodeAlias(message: GribMessage, alias: string): GribMessage {
+  return new Proxy(message, {
+    get(target, property) {
+      if (property === "varAbbrev") return alias;
+      if (property === "key") {
+        const key = Reflect.get(target, property, target) as string;
+        const separator = key.indexOf(":");
+        return separator < 0 ? alias : `${alias}${key.slice(separator)}`;
+      }
+      const value = Reflect.get(target, property, target) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+function hasGribMagic(bytes: Uint8Array, offset: number): boolean {
+  return bytes[offset] === 0x47
+    && bytes[offset + 1] === 0x52
+    && bytes[offset + 2] === 0x49
+    && bytes[offset + 3] === 0x42;
+}
+
+function has7777(bytes: Uint8Array, offset: number): boolean {
+  return bytes[offset] === 0x37
+    && bytes[offset + 1] === 0x37
+    && bytes[offset + 2] === 0x37
+    && bytes[offset + 3] === 0x37;
+}
+
+function readUint16Be(bytes: Uint8Array, offset: number): number {
+  return (bytes[offset]! << 8) | bytes[offset + 1]!;
+}
+
+function readUint32Be(bytes: Uint8Array, offset: number): number {
+  return (
+    bytes[offset]! * 0x1000000
+    + bytes[offset + 1]! * 0x10000
+    + bytes[offset + 2]! * 0x100
+    + bytes[offset + 3]!
+  );
+}
+
+function readUint64Be(bytes: Uint8Array, offset: number): number {
+  let value = 0n;
+  for (let index = 0; index < 8; index += 1) {
+    value = (value << 8n) | BigInt(bytes[offset + index] ?? 0);
+  }
+  return value > BigInt(Number.MAX_SAFE_INTEGER) ? 0 : Number(value);
 }
 
 export function messagesAtForecastHour(
