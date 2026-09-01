@@ -85,13 +85,23 @@ describe("Wgrib2Decoder native compatibility path", () => {
     expect(wgrib2NamesArgs("DWD")).toEqual(["-names", "DWD"]);
   });
 
-  it("uses DWD naming before native point extraction when configured", async () => {
+  it("uses DWD naming and normalizes ICON codes before native point extraction", async () => {
     execaMock.mockResolvedValue({
-      stdout: "1:1:d=2026081906:RAIN_CON:surface:0-6 hour acc fcst:lon=14.5,lat=50,val=1.25",
+      stdout: [
+        "1:1:d=2026081906:T:850 mb:6 hour fcst:lon=14.5,lat=50,val=282",
+        "2:2:d=2026081906:PRR_CON:surface:0-6 hour acc fcst:lon=14.5,lat=50,val=1.25",
+        "3:3:d=2026081906:PRS_CON:surface:0-6 hour acc fcst:lon=14.5,lat=50,val=0.4",
+        "4:4:d=2026081906:DBZ:atmos col:6 hour fcst:lon=14.5,lat=50,val=-16",
+      ].join("\n"),
     } as never);
-    await expect(
-      new Wgrib2Decoder("/opt/wgrib2", "DWD").extractPoint("/tmp/test.grib2", 14.5, 50),
-    ).resolves.toMatchObject([{ code: "RAIN_CON" }]);
+    const values = await new Wgrib2Decoder("/opt/wgrib2", "DWD")
+      .extractPoint("/tmp/test.grib2", 14.5, 50);
+    expect(values.map((value) => value.code)).toEqual([
+      "TMP",
+      "RAIN_CON",
+      "SNOW_CON",
+      "BREF",
+    ]);
     expect(execaMock).toHaveBeenCalledWith("/opt/wgrib2", [
       "/tmp/test.grib2",
       "-names",
@@ -101,6 +111,15 @@ describe("Wgrib2Decoder native compatibility path", () => {
       "14.5",
       "50",
     ]);
+  });
+
+  it("converts DWD FI geopotential to canonical HGT", async () => {
+    execaMock.mockResolvedValue({
+      stdout: "1:1:d=2026081906:FI:850 mb:6 hour fcst:lon=14.5,lat=50,val=9806.65",
+    } as never);
+    const [value] = await new Wgrib2Decoder("/opt/wgrib2", "DWD")
+      .extractPoint("/tmp/test.grib2", 14.5, 50);
+    expect(value).toMatchObject({ code: "HGT", value: 1000 });
   });
 
   it("invokes wgrib2 with -s -lon and converts negative longitude to 0-360", async () => {
