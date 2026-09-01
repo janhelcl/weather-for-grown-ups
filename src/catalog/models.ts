@@ -312,7 +312,8 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points",
       "points_timeseries",
       "transect",
-      "area_summary",      "aligned_model_comparison",
+      "area_summary",
+      "aligned_model_comparison",
     ],
   },
   icon_d2_eps_2p1km: {
