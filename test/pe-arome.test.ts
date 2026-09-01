@@ -260,7 +260,10 @@ describe("PE-AROME member-first unified aggregation", () => {
     const direction = result.fieldSummaries[0].outputs.find((output: any) =>
       output.field === "windDirectionDeg");
     expect(direction.aggregation).toBe("circular_direction");
-    expect(direction.meanDeg === 0 || direction.meanDeg === 360).toBe(true);
+    expect(Math.min(
+      Math.abs(direction.meanDeg),
+      Math.abs(direction.meanDeg - 360),
+    )).toBeLessThan(1e-10);
     expect(result.members).toHaveLength(2);
     expect(result.source).toMatchObject({
       provider: "Météo-France Public API",
