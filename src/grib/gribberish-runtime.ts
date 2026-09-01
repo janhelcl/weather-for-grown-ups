@@ -56,6 +56,8 @@ const NAMED_VERTICAL_ALIASES: ReadonlyArray<readonly [string, string]> = [
   ["convective cloud layer", "convective cloud layer"],
   ["boundary layer cloud layer", "boundary layer cloud layer"],
   ["cloud ceiling", "cloud ceiling"],
+  ["cloud base above mean sea level", "cloud ceiling"],
+  ["cloud base mean sea level", "cloud ceiling"],
   ["convective cloud bottom level", "convective cloud bottom level"],
   ["low cloud bottom level", "low cloud bottom level"],
   ["middle cloud bottom level", "middle cloud bottom level"],
