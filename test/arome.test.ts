@@ -228,6 +228,22 @@ describe("AROME run resolution", () => {
       .toBe("2026-08-31T15:00:00.000Z");
     expect(probe.isForecastAvailable.mock.calls.map(([, hour]) => hour))
       .toEqual([51, 51]);
+
+    expect((await resolver.resolveLatestCompleteRun(products)).toISOString())
+      .toBe("2026-08-31T15:00:00.000Z");
+    expect(probe.isForecastAvailable).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails clearly when no complete run is published in the lookback window", async () => {
+    const resolver = new AromeRunResolver(
+      { isForecastAvailable: vi.fn(async () => false) },
+      () => new Date("2026-08-31T20:00:00Z").getTime(),
+      60_000,
+      2,
+    );
+
+    await expect(resolver.resolveLatestCompleteRun(products))
+      .rejects.toThrow("Could not find a complete AROME run");
   });
 
   it("checks both ends of a requested time range and rejects ranges beyond f51", async () => {
