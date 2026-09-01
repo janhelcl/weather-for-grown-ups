@@ -1,3 +1,15 @@
+import {
+  GFS_ICON_D2_FIELDS,
+  GFS_ICON_D2_PRESSURE_LEVELS_HPA,
+  GFS_ICON_D2_PRESSURE_VARIABLES,
+  IFS_AROME_FIELDS,
+  IFS_ENS_ICON_D2_EPS_FIELDS,
+  IFS_ENS_ICON_D2_EPS_PRESSURE_VARIABLES,
+  IFS_ENS_PE_AROME_FIELDS,
+  IFS_ICON_D2_FIELDS,
+  IFS_ICON_D2_PRESSURE_LEVELS_HPA,
+  IFS_ICON_D2_PRESSURE_VARIABLES,
+} from "../../schema/cross-scale-comparison.js";
 import type { CompareAtmosphericDatasetsRequest } from "../../schema/unified-specialized.js";
 import {
   CrossScaleComparisonService,
@@ -5,6 +17,7 @@ import {
 } from "../cross-scale-comparison.js";
 import {
   comparisonStrategyMetadata,
+  type AtmosphericCrossScaleComparisonDeclaration,
   type AtmosphericDatasetComparisonStrategy,
   type AtmosphericDatasetComparisonStrategyMetadata,
 } from "./types.js";
@@ -24,6 +37,7 @@ abstract class CrossScaleComparisonStrategyBase {
 const crossScaleMetadata = (
   variableCompatibility:
     AtmosphericDatasetComparisonStrategyMetadata["variableCompatibility"],
+  crossScale: AtmosphericCrossScaleComparisonDeclaration,
 ) => ({
   outputShape: "normalized_pair_result" as const,
   provenanceShape: "native_source_per_side" as const,
@@ -31,11 +45,52 @@ const crossScaleMetadata = (
   variableCompatibility,
   spatialOverlapRequirement: "requested_point_within_both_declared_domains" as const,
   pointSamplingSemantics:
-    "independent_native_grid_points_at_same_requested_coordinate" as const,
+    "independent_dataset_sampling_at_same_requested_coordinate" as const,
   spatialAlignment: "point_only_no_cross_dataset_regridding" as const,
   nativeResolutionRepresentation:
     "preserve_per_side_native_grid_and_sampling_provenance" as const,
+  crossScale,
 });
+
+function crossScaleContract(options: {
+  validTimeCadenceHours: number;
+  maxLeadHours: number;
+  pressureVariables?: readonly string[];
+  pressureLevelsHpa?: readonly number[];
+  fields?: readonly string[];
+  scalarOnly: boolean;
+  ensemble: boolean;
+}): AtmosphericCrossScaleComparisonDeclaration {
+  return {
+    initializationHoursUtc: [0, 6, 12, 18],
+    validTimeCadenceHours: options.validTimeCadenceHours,
+    maxLeadHours: options.maxLeadHours,
+    ...(options.pressureVariables === undefined
+      ? {}
+      : {
+          pressure: {
+            variables: options.pressureVariables,
+            pressureLevelsHpa: options.pressureLevelsHpa ?? [],
+            scalarOnly: options.scalarOnly,
+          },
+        }),
+    ...(options.fields === undefined
+      ? {}
+      : {
+          fields: {
+            ids: options.fields,
+            temporalSemantics: "instantaneous" as const,
+            scalarOnly: options.scalarOnly,
+          },
+        }),
+    diagnostics: [],
+    comparisonLayerInterpolation: "none",
+    comparisonLayerRegridding: "none",
+    aggregation: options.ensemble
+      ? "independent_ensemble_distributions_no_member_pairing"
+      : "none_deterministic",
+  };
+}
 
 export class IfsIconD2ComparisonStrategy
   extends CrossScaleComparisonStrategyBase
@@ -44,7 +99,18 @@ export class IfsIconD2ComparisonStrategy
     "ifs:icon-d2",
     ["ifs", "icon-d2"],
     "deterministic_delta",
-    crossScaleMetadata("pair_specific_pressure_or_field_intersection"),
+    crossScaleMetadata(
+      "pair_specific_pressure_or_field_intersection",
+      crossScaleContract({
+        validTimeCadenceHours: 3,
+        maxLeadHours: 48,
+        pressureVariables: IFS_ICON_D2_PRESSURE_VARIABLES,
+        pressureLevelsHpa: IFS_ICON_D2_PRESSURE_LEVELS_HPA,
+        fields: IFS_ICON_D2_FIELDS,
+        scalarOnly: false,
+        ensemble: false,
+      }),
+    ),
   );
 
   compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown> {
@@ -73,7 +139,16 @@ export class IfsAromeComparisonStrategy
     "ifs:arome",
     ["ifs", "arome"],
     "deterministic_delta",
-    crossScaleMetadata("pair_specific_field_intersection"),
+    crossScaleMetadata(
+      "pair_specific_field_intersection",
+      crossScaleContract({
+        validTimeCadenceHours: 3,
+        maxLeadHours: 51,
+        fields: IFS_AROME_FIELDS,
+        scalarOnly: false,
+        ensemble: false,
+      }),
+    ),
   );
 
   compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown> {
@@ -102,7 +177,18 @@ export class GfsIconD2ComparisonStrategy
     "gfs:icon-d2",
     ["gfs", "icon-d2"],
     "deterministic_delta",
-    crossScaleMetadata("pair_specific_pressure_or_field_intersection"),
+    crossScaleMetadata(
+      "pair_specific_pressure_or_field_intersection",
+      crossScaleContract({
+        validTimeCadenceHours: 1,
+        maxLeadHours: 48,
+        pressureVariables: GFS_ICON_D2_PRESSURE_VARIABLES,
+        pressureLevelsHpa: GFS_ICON_D2_PRESSURE_LEVELS_HPA,
+        fields: GFS_ICON_D2_FIELDS,
+        scalarOnly: false,
+        ensemble: false,
+      }),
+    ),
   );
 
   compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown> {
@@ -132,7 +218,18 @@ export class IfsEnsIconD2EpsComparisonStrategy
     "ifs-ens:icon-d2-eps",
     ["ifs-ens", "icon-d2-eps"],
     "ensemble_distribution_shift",
-    crossScaleMetadata("pair_specific_scalar_pressure_or_field_intersection"),
+    crossScaleMetadata(
+      "pair_specific_scalar_pressure_or_field_intersection",
+      crossScaleContract({
+        validTimeCadenceHours: 3,
+        maxLeadHours: 48,
+        pressureVariables: IFS_ENS_ICON_D2_EPS_PRESSURE_VARIABLES,
+        pressureLevelsHpa: IFS_ICON_D2_PRESSURE_LEVELS_HPA,
+        fields: IFS_ENS_ICON_D2_EPS_FIELDS,
+        scalarOnly: true,
+        ensemble: true,
+      }),
+    ),
   );
 
   compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown> {
@@ -174,7 +271,16 @@ export class IfsEnsPeAromeComparisonStrategy
     "ifs-ens:pe-arome",
     ["ifs-ens", "pe-arome"],
     "ensemble_distribution_shift",
-    crossScaleMetadata("pair_specific_scalar_field_intersection"),
+    crossScaleMetadata(
+      "pair_specific_scalar_field_intersection",
+      crossScaleContract({
+        validTimeCadenceHours: 3,
+        maxLeadHours: 51,
+        fields: IFS_ENS_PE_AROME_FIELDS,
+        scalarOnly: true,
+        ensemble: true,
+      }),
+    ),
   );
 
   compare(request: CompareAtmosphericDatasetsRequest): Promise<unknown> {
