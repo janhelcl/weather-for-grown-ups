@@ -50,7 +50,7 @@ assert(reflectivity, "missing ICON-D2-EPS reflectivity distribution");
 assert.deepEqual(reflectivity.level, { type: "named_layer", id: "entire_atmosphere" });
 assert.deepEqual(reflectivity.temporal, { type: "instantaneous" });
 const reflectivityOutput = reflectivity.outputs.find(
-  (output: any) => output.field === "columnMaximumReflectivityDbz",
+  (output: any) => output.field === "columnMaximumReflectivityFactorMm6M3",
 );
 assert(reflectivityOutput, "missing ICON-D2-EPS reflectivity output");
 assert.equal(reflectivityOutput.distribution.memberCount, 2);

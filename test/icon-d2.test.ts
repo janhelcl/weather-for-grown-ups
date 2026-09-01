@@ -589,7 +589,7 @@ describe("ICON-D2 deterministic service operations", () => {
       .toMatchObject({
         level: { type: "named_layer", id: "entire_atmosphere" },
         temporal: { type: "instantaneous" },
-        values: { columnMaximumReflectivityDbz: 42 },
+        values: { columnMaximumReflectivityFactorMm6M3: 1000 },
       });
     expect(point.fields.find((field: any) => field.id === "wind_gust")).toMatchObject({
       level: { type: "height_above_ground_m", heightM: 10 },
@@ -1019,7 +1019,7 @@ function fakeDecodedValues(longitude: number, latitude: number) {
       gridPoint,
     },
     { code: "PRMSL", namedVertical: "mean sea level", value: 101_325, gridPoint },
-    { code: "BREF", namedVertical: "entire atmosphere", value: 42, gridPoint },
+    { code: "BREF", namedVertical: "entire atmosphere", value: 30, gridPoint },
     {
       code: "APCP",
       surface: true,

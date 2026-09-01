@@ -61,7 +61,7 @@ assert.equal(gust.temporal.endForecastHour, 6);
 const reflectivity = point.fields.find(
   (item: any) => item.id === "column_maximum_reflectivity",
 );
-assert(Number.isFinite(reflectivity.values.columnMaximumReflectivityDbz));
+assert(Number.isFinite(reflectivity.values.columnMaximumReflectivityFactorMm6M3));
 assert.deepEqual(reflectivity.level, { type: "named_layer", id: "entire_atmosphere" });
 assert.deepEqual(reflectivity.temporal, { type: "instantaneous" });
 assert.equal(point.source.provider, "Météo-France Open Data");

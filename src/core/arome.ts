@@ -458,14 +458,14 @@ export function withAromeColumnMaximumReflectivity(
   values: readonly DecodedValue[],
 ): DecodedValue[] {
   const candidates = values.filter((value) =>
-    (value.code === "REFD" || value.code === "AROME_RFLCMAX_DBZ")
+    (value.code === "missing" || value.code === "AROME_RFLCTVT_MAX")
     && value.surface === true
     && value.accumulation === undefined
     && value.average === undefined
     && value.maximum === undefined);
   if (candidates.length !== 1) {
     throw new Error(
-      `AROME SP2 reflectivity expected one instantaneous dBZ parameter 0/16/195 at surface, found ${candidates.length}`,
+      `AROME SP2 reflectivity expected one instantaneous linear parameter 0/16/193 at surface, found ${candidates.length}`,
     );
   }
   const source = candidates[0]!;

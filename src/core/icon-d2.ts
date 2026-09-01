@@ -632,12 +632,15 @@ export class IconD2ForecastService {
     selection: ExpandedSelection,
   ): Promise<IconD2ProfileResult> {
     const forecastHour = iconD2ForecastHour(run, validTime);
-    const decoded = await this.decoder.extractPoint(
+    const rawDecoded = await this.decoder.extractPoint(
       cached.path,
       point.longitude,
       point.latitude,
       forecastHour,
     );
+    const decoded = selection.fieldIds.includes("column_maximum_reflectivity")
+      ? withIconD2ColumnMaximumReflectivity(rawDecoded)
+      : rawDecoded;
     const firstValue = decoded[0];
     if (firstValue === undefined) throw new Error("ICON-D2 decoder returned no grid point");
 
@@ -690,6 +693,27 @@ export class IconD2ForecastService {
   ): Promise<Date> {
     return Promise.resolve(resolveIconD2Run(selector, requirement, this.runProvider));
   }
+}
+
+export function withIconD2ColumnMaximumReflectivity(
+  values: readonly DecodedValue[],
+): DecodedValue[] {
+  const candidates = values.filter((value) =>
+    value.code === "BREF"
+    && value.namedVertical === "entire atmosphere"
+    && value.accumulation === undefined
+    && value.average === undefined
+    && value.maximum === undefined);
+  if (candidates.length !== 1) {
+    throw new Error(
+      `ICON-D2 DBZ_CMAX expected one instantaneous column reflectivity message, found ${candidates.length}`,
+    );
+  }
+  const source = candidates[0]!;
+  return values.map((value) =>
+    value === source
+      ? { ...value, value: 10 ** (value.value / 10) }
+      : value);
 }
 
 function expandedSelection(request: QueryAtmosphereRequest): ExpandedSelection {

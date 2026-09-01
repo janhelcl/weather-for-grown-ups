@@ -147,11 +147,11 @@ describe("non-isobaric wgrib2 decoding", () => {
     });
   });
 
-  it("recognizes the Météo-France dBZ column-reflectivity tuple", () => {
+  it("recognizes the current Météo-France linear column-reflectivity tuple", () => {
     expect(parseWgrib2PointLine(
-      "2:3763607:d=2026083118:var discipline=0 center=85 local_table=0 parmcat=16 parm=195:surface:6 hour fcst:lon=2.35,lat=48.86,val=32",
+      "2:3763607:d=2026083118:var discipline=0 center=85 local_table=0 parmcat=16 parm=193:surface:6 hour fcst:lon=2.35,lat=48.86,val=32",
     )).toEqual({
-      code: "AROME_RFLCMAX_DBZ",
+      code: "AROME_RFLCTVT_MAX",
       surface: true,
       value: 32,
       gridPoint: { longitude: 2.35, latitude: 48.86 },

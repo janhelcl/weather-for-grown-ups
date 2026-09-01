@@ -15,7 +15,6 @@ const ALL_SUPPORTED_CODES = [...new Set([
   ...ALL_SUPPORTED_GFS_CODES,
   ...GEFS_RAW_FIELDS.map((definition) => definition.gfsCode),
   "BREF",
-  "REFD",
   "GP",
   "VMAX_10M",
   "U_RAF",
@@ -114,8 +113,8 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
   const parts = line.split(":");
   const gribLevel = parts[4] ?? "";
   const codeMatch = line.match(CODE_PATTERN);
-  const aromeDbzReflectivityMatch = line.match(
-    /:var discipline=0 center=85 local_table=0 parmcat=16 parm=195:/i,
+  const aromeReflectivityMatch = line.match(
+    /:var discipline=0 center=85 local_table=0 parmcat=16 parm=193:/i,
   );
   const pressureMatch = gribLevel.match(/^(\d+(?:\.\d+)?) mb$/);
   const surfaceMatch = gribLevel === "surface";
@@ -129,7 +128,7 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
   const valueMatch = line.match(/val=([-+\d.eE]+)/);
 
   if (
-    (!codeMatch && !aromeDbzReflectivityMatch)
+    (!codeMatch && !aromeReflectivityMatch)
     || (!pressureMatch && !surfaceMatch && !heightMatch && !modelNamedVertical)
     || !pointMatch
     || !valueMatch
@@ -137,9 +136,9 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
     return null;
   }
 
-  const rawCode = codeMatch?.[1] ?? "AROME_RFLCMAX_DBZ";
-  if (!aromeDbzReflectivityMatch && !SUPPORTED_CODE_SET.has(rawCode.toUpperCase())) return null;
-  const code = aromeDbzReflectivityMatch ? "AROME_RFLCMAX_DBZ" : canonicalGribCode(rawCode);
+  const rawCode = codeMatch?.[1] ?? "AROME_RFLCTVT_MAX";
+  if (!aromeReflectivityMatch && !SUPPORTED_CODE_SET.has(rawCode.toUpperCase())) return null;
+  const code = aromeReflectivityMatch ? "AROME_RFLCTVT_MAX" : canonicalGribCode(rawCode);
 
   const accumulationMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour acc(?: fcst)?:/i);
   const averageMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour ave(?: fcst)?:/i);

@@ -633,7 +633,7 @@ describe("AROME deterministic field operations", () => {
     )).toMatchObject({
       level: { type: "named_layer", id: "entire_atmosphere" },
       temporal: { type: "instantaneous" },
-      values: { columnMaximumReflectivityDbz: 35 },
+      values: { columnMaximumReflectivityFactorMm6M3: 35 },
     });
     expect(point.fields.find((field: any) => field.id === "wind_gust")).toMatchObject({
       level: { type: "height_above_ground_m", heightM: 10 },
@@ -664,9 +664,9 @@ describe("AROME deterministic field operations", () => {
   it("normalizes the unique instantaneous local SP2 reflectivity field", () => {
     const gridPoint = { longitude: 2.35, latitude: 48.86 };
     expect(withAromeColumnMaximumReflectivity([
-      { code: "REFD", surface: true, value: 35, gridPoint },
+      { code: "missing", surface: true, value: 35, gridPoint },
       {
-        code: "REFD",
+        code: "missing",
         surface: true,
         accumulation: { startForecastHour: 0, endForecastHour: 6 },
         value: 1,
@@ -681,7 +681,7 @@ describe("AROME deterministic field operations", () => {
 
     expect(() => withAromeColumnMaximumReflectivity([
       { code: "TMP", surface: true, value: 280, gridPoint },
-    ])).toThrow("expected one instantaneous dBZ parameter 0/16/195");
+    ])).toThrow("expected one instantaneous linear parameter 0/16/193");
   });
 
   it("derives gust magnitude only from aligned native AROME gust components", () => {
@@ -935,7 +935,7 @@ function fakeDecodedValues(longitude: number, latitude: number) {
     { code: "RH", heightAboveGroundM: 2, value: 70, gridPoint },
     { code: "UGRD", heightAboveGroundM: 10, value: 3, gridPoint },
     { code: "VGRD", heightAboveGroundM: 10, value: 4, gridPoint },
-    { code: "REFD", surface: true, value: 35, gridPoint },
+    { code: "missing", surface: true, value: 35, gridPoint },
     {
       code: "U_RAF",
       heightAboveGroundM: 10,

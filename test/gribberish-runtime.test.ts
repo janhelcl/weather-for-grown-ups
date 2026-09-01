@@ -99,20 +99,6 @@ describe("bundled GRIB2 point decoding", () => {
     });
   });
 
-  it("keeps standard dBZ reflectivity distinct for provider-level normalization", () => {
-    const [decoded] = decodePointMessages([
-      fakeMessage({
-        key: "REFD:202608240600: in surface:Forecast",
-        code: "REFD",
-      }),
-    ], 14, 50);
-
-    expect(decoded).toMatchObject({
-      code: "REFD",
-      surface: true,
-    });
-  });
-
   it("preserves accumulation rather than tagging every interval as both statistics", () => {
     const [decoded] = decodePointMessages([
       fakeMessage({
