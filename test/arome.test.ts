@@ -603,7 +603,7 @@ describe("AROME deterministic field operations", () => {
         to: "2026-08-31T19:00:00Z",
       },
       selection: { fields: ["temperature_2m"] },
-      limits: { maxPointSteps: 4 },
+      limits: { maxSamples: 4 },
       forecast: { run: run.toISOString() },
     })) as any;
 
@@ -725,6 +725,26 @@ describe("AROME deterministic field operations", () => {
     expect(compact.statistics.mean).toBeCloseTo(6.85, 8);
     expect(areaDecoder.summarizeSelectedMessage).toHaveBeenCalledOnce();
     expect(areaGridDecoder.extractSelectedMessage).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    const windComponent = await service().query(queryAtmosphereSchema.parse({
+      dataset: "arome",
+      geometry: {
+        type: "area",
+        westLongitude: 2,
+        eastLongitude: 2.2,
+        southLatitude: 48,
+        northLatitude: 48.2,
+      },
+      time: { at: "2026-08-31T18:00:00Z" },
+      selection: { fields: ["u_wind_10m"] },
+      forecast: { run: run.toISOString() },
+    })) as any;
+    expect(windComponent.field).toMatchObject({
+      id: "u_wind_10m",
+      level: { type: "height_above_ground_m", heightM: 10 },
+    });
+    expect(windComponent.statistics.mean).toBe(4);
   });
 });
 
