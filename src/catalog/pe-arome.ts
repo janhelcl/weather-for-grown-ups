@@ -17,16 +17,11 @@ export type PeAromeMember = (typeof PE_AROME_MEMBERS)[number];
 export const PE_AROME_FIELD_IDS = [
   "temperature_2m",
   "relative_humidity_2m",
-  "u_wind_10m",
-  "v_wind_10m",
-  "wind_10m",
 ] as const satisfies readonly NonIsobaricFieldId[];
 
 export const PE_AROME_AREA_FIELD_IDS = [
   "temperature_2m",
   "relative_humidity_2m",
-  "u_wind_10m",
-  "v_wind_10m",
 ] as const satisfies readonly NonIsobaricFieldId[];
 
 const memberSet = new Set<string>(PE_AROME_MEMBERS);
