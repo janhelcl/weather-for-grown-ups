@@ -90,7 +90,7 @@ export class Wgrib2Decoder {
     const decoded = stdout
       .split(/\r?\n/)
       .filter((line) => forecastHour === undefined || wgrib2LineForecastHour(line) === forecastHour)
-      .map((line) => parseWgrib2PointLine(line))
+      .map((line) => parseWgrib2PointLine(line, this.names))
       .filter((value): value is DecodedValue => value !== null);
 
     if (decoded.length === 0) {
@@ -117,10 +117,17 @@ export function wgrib2LineForecastHour(line: string): number | undefined {
   return undefined;
 }
 
-export function parseWgrib2PointLine(line: string): DecodedValue | null {
+export function parseWgrib2PointLine(
+  line: string,
+  names?: Wgrib2NameConvention,
+): DecodedValue | null {
   const parts = line.split(":");
+  const inventoryCode = parts[3] ?? "";
   const gribLevel = parts[4] ?? "";
   const codeMatch = line.match(CODE_PATTERN);
+  const conventionCode = names === "DWD"
+    ? canonicalDwdIconCode(inventoryCode)
+    : undefined;
   const aromeReflectivityMatch = line.match(
     /:var discipline=0 center=85 local_table=0 parmcat=16 parm=193:/i,
   );
@@ -139,7 +146,10 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
   const valueMatch = line.match(/val=([-+\d.eE]+)/);
 
   if (
-    (!codeMatch && !aromeReflectivityMatch && !dwdConvectivePrecipitationMatch)
+    (!codeMatch
+      && conventionCode === undefined
+      && !aromeReflectivityMatch
+      && !dwdConvectivePrecipitationMatch)
     || (!pressureMatch && !surfaceMatch && !heightMatch && !modelNamedVertical)
     || !pointMatch
     || !valueMatch
@@ -149,19 +159,19 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
 
   const dwdRawParameter = dwdConvectivePrecipitationMatch?.[1];
   const rawCode = codeMatch?.[1]
+    ?? conventionCode
     ?? (dwdRawParameter === "76"
       ? "RAIN_CON"
       : dwdRawParameter === "55"
         ? "SNOW_CON"
         : "AROME_RFLCTVT_MAX");
-  if (
-    !aromeReflectivityMatch
-    && !dwdConvectivePrecipitationMatch
-    && !SUPPORTED_CODE_SET.has(rawCode.toUpperCase())
-  ) return null;
   const code = aromeReflectivityMatch
     ? "AROME_RFLCTVT_MAX"
-    : canonicalGribCode(rawCode);
+    : canonicalWgrib2Code(rawCode, names);
+  if (
+    !aromeReflectivityMatch
+    && !SUPPORTED_CODE_SET.has(code.toUpperCase())
+  ) return null;
 
   const accumulationMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour acc(?: fcst)?:/i);
   const averageMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour ave(?: fcst)?:/i);
@@ -201,12 +211,57 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
           },
         }
       : {}),
-    value: rawCode === "GP" ? Number(valueMatch[1]) / 9.80665 : Number(valueMatch[1]),
+    value: normalizeWgrib2Value(rawCode, Number(valueMatch[1]), names),
     gridPoint: {
       longitude: toSignedLongitude(Number(pointMatch[1])),
       latitude: Number(pointMatch[2]),
     },
   };
+}
+
+export function canonicalWgrib2Code(
+  code: string,
+  names?: Wgrib2NameConvention,
+): string {
+  if (names === "DWD") {
+    return canonicalDwdIconCode(code) ?? canonicalGribCode(code);
+  }
+  return canonicalGribCode(code);
+}
+
+export function canonicalDwdIconCode(code: string): string | undefined {
+  switch (code.toUpperCase()) {
+    case "T": return "TMP";
+    case "RELHUM": return "RH";
+    case "U": return "UGRD";
+    case "V": return "VGRD";
+    case "FI": return "HGT";
+    case "OMEGA": return "VVEL";
+    case "T_2M": return "TMP";
+    case "U_10M": return "UGRD";
+    case "V_10M": return "VGRD";
+    case "VMAX_10M": return "GUST";
+    case "PMSL": return "PRMSL";
+    case "TOT_PREC": return "APCP";
+    case "PRR_CON": return "RAIN_CON";
+    case "PRS_CON": return "SNOW_CON";
+    case "DBZ": return "BREF";
+    default: return undefined;
+  }
+}
+
+function normalizeWgrib2Value(
+  rawCode: string,
+  value: number,
+  names?: Wgrib2NameConvention,
+): number {
+  if (
+    rawCode.toUpperCase() === "GP"
+    || (names === "DWD" && rawCode.toUpperCase() === "FI")
+  ) {
+    return value / 9.80665;
+  }
+  return value;
 }
 
 export function wgrib2NamesArgs(
