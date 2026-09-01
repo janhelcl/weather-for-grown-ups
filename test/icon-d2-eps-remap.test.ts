@@ -13,6 +13,7 @@ import type {
   IconD2SubsetCache,
 } from "../src/cache/icon-d2-open-data-cache.js";
 import { VARIABLE_CATALOG } from "../src/catalog/variables.js";
+import { scanGrib2Messages } from "../src/grib/dwd-local-parameters.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -219,6 +220,42 @@ describe("ICON-D2-EPS CDO remap cache", () => {
   });
 
 
+  it("round-trips DWD local precipitation metadata around CDO", async () => {
+    const sourcePath = join(rootDir, "native-rain-con.grib2");
+    const targetGridPath = join(rootDir, "target-local.txt");
+    const weightsPath = join(rootDir, "weights-local.nc");
+    await Promise.all([
+      writeFile(sourcePath, minimalDwdLocalGrib2(76)),
+      writeFile(targetGridPath, "grid"),
+      writeFile(weightsPath, "weights"),
+    ]);
+    const runner = vi.fn(async (_executable: string, args: string[]) => {
+      const preparedPath = args.at(-2)!;
+      expect(preparedPath).not.toBe(sourcePath);
+      const prepared = await readFile(preparedPath);
+      expect(scanGrib2Messages(prepared)[0]).toMatchObject({
+        center: 78,
+        category: 1,
+        parameter: 10,
+      });
+      await writeFile(args.at(-1)!, prepared);
+      return { stdout: "processed local parameter" };
+    });
+    const remapper = new IconD2EpsCdoRemapper(
+      join(rootDir, "remapped-local"),
+      { paths: async () => ({ targetGridPath, weightsPath }) },
+      "cdo-test",
+      runner,
+    );
+
+    const result = await remapper.remap(sourcePath);
+    expect(scanGrib2Messages(await readFile(result.path))[0]).toMatchObject({
+      center: 78,
+      category: 1,
+      parameter: 76,
+    });
+  });
+
   it("deduplicates concurrent remaps and reports the waiter as a cache hit", async () => {
     const sourcePath = join(rootDir, "native-concurrent.grib2");
     const targetGridPath = join(rootDir, "target-concurrent.txt");
@@ -380,4 +417,51 @@ function writeAscii(
   value: string,
 ): void {
   target.set(encoder.encode(value).subarray(0, width), offset);
+}
+
+function minimalDwdLocalGrib2(parameter: number): Uint8Array {
+  const section1 = new Uint8Array(21);
+  writeUint32Be(section1, 0, section1.length);
+  section1[4] = 1;
+  writeUint16Be(section1, 5, 78);
+  writeUint16Be(section1, 7, 0);
+  section1[9] = 34;
+  section1[10] = 1;
+
+  const section4 = new Uint8Array(11);
+  writeUint32Be(section4, 0, section4.length);
+  section4[4] = 4;
+  section4[9] = 1;
+  section4[10] = parameter;
+
+  const totalLength = 16 + section1.length + section4.length + 4;
+  const message = new Uint8Array(totalLength);
+  message.set(encoder.encode("GRIB"), 0);
+  message[6] = 0;
+  message[7] = 2;
+  writeUint64Be(message, 8, totalLength);
+  message.set(section1, 16);
+  message.set(section4, 16 + section1.length);
+  message.set(encoder.encode("7777"), totalLength - 4);
+  return message;
+}
+
+function writeUint16Be(bytes: Uint8Array, offset: number, value: number): void {
+  bytes[offset] = (value >>> 8) & 0xff;
+  bytes[offset + 1] = value & 0xff;
+}
+
+function writeUint32Be(bytes: Uint8Array, offset: number, value: number): void {
+  bytes[offset] = (value >>> 24) & 0xff;
+  bytes[offset + 1] = (value >>> 16) & 0xff;
+  bytes[offset + 2] = (value >>> 8) & 0xff;
+  bytes[offset + 3] = value & 0xff;
+}
+
+function writeUint64Be(bytes: Uint8Array, offset: number, value: number): void {
+  let remaining = BigInt(value);
+  for (let index = 7; index >= 0; index -= 1) {
+    bytes[offset + index] = Number(remaining & 0xffn);
+    remaining >>= 8n;
+  }
 }
