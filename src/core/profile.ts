@@ -312,7 +312,9 @@ function temporalResult(
 
   const interval = definition.temporalSemantics === "accumulation"
     ? value.accumulation
-    : value.average;
+    : definition.temporalSemantics === "average"
+      ? value.average
+      : value.maximum;
   if (!interval) {
     throw new Error(`Decoded ${definition.id} is missing its ${definition.temporalSemantics} interval`);
   }
@@ -320,7 +322,7 @@ function temporalResult(
 }
 
 function intervalResult(
-  type: "accumulation" | "average",
+  type: "accumulation" | "average" | "maximum",
   interval: ForecastInterval,
   run: Date,
 ): Exclude<FieldTemporalResult, { type: "instantaneous" }> {
@@ -349,9 +351,13 @@ function matchesRawField(definition: RawNonIsobaricFieldDefinition, value: Decod
   if (!levelMatches) return false;
 
   switch (definition.temporalSemantics) {
-    case "instantaneous": return value.accumulation === undefined && value.average === undefined;
+    case "instantaneous":
+      return value.accumulation === undefined
+        && value.average === undefined
+        && value.maximum === undefined;
     case "accumulation": return value.accumulation !== undefined;
     case "average": return value.average !== undefined;
+    case "maximum": return value.maximum !== undefined;
   }
 }
 

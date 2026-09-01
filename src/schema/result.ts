@@ -62,6 +62,7 @@ export const fieldTemporalResultSchema = z.union([
   z.object({ type: z.literal("instantaneous") }),
   z.object({ type: z.literal("accumulation"), ...intervalTemporalResultShape }),
   z.object({ type: z.literal("average"), ...intervalTemporalResultShape }),
+  z.object({ type: z.literal("maximum"), ...intervalTemporalResultShape }),
 ]);
 
 export const nonIsobaricFieldResultSchema = z.object({

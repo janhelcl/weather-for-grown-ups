@@ -30,6 +30,7 @@ export interface DecodedValue {
   namedVertical?: string;
   accumulation?: ForecastInterval;
   average?: ForecastInterval;
+  maximum?: ForecastInterval;
   value: number;
   gridPoint: GridPoint;
 }
@@ -71,6 +72,13 @@ export type FieldTemporalResult =
     }
   | {
       type: "average";
+      startForecastHour: number;
+      endForecastHour: number;
+      startTime: string;
+      endTime: string;
+    }
+  | {
+      type: "maximum";
       startForecastHour: number;
       endForecastHour: number;
       startTime: string;

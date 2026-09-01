@@ -190,7 +190,8 @@ function matchesTemporalSemantics(
   const descriptor = forecastDescriptor(record);
   if (semantics === "accumulation") return /\bacc\b/i.test(descriptor);
   if (semantics === "average") return /\bave\b/i.test(descriptor);
-  return !/\b(?:acc|ave)\b/i.test(descriptor);
+  if (semantics === "maximum") return /\bmax\b/i.test(descriptor);
+  return !/\b(?:acc|ave|max)\b/i.test(descriptor);
 }
 
 function forecastDescriptor(record: GribIndexRecord): string {
