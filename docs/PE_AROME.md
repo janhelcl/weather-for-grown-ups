@@ -19,14 +19,11 @@ Member IDs are deliberately not rewritten to resemble ICON-D2-EPS, GEFS or IFS E
 Météo-France's targeted ensemble API is dynamic and exposes one model/member/run/lead/level/meteorological field per request. WFG therefore advertises only the near-surface coverage identities that the integration currently maps explicitly:
 
 - `temperature_2m`;
-- `relative_humidity_2m`;
-- `u_wind_10m`;
-- `v_wind_10m`;
-- derived `wind_10m`.
+- `relative_humidity_2m`.
 
-Pressure-level variables and pressure-derived diagnostics are intentionally not advertised yet. Adding them should start from the live PE-AROME `GetCapabilities`/`DescribeCoverage` inventory rather than assuming that deterministic AROME coverage names can be copied blindly.
+Wind, pressure-level variables and pressure-derived diagnostics are intentionally not advertised yet. Temperature and relative-humidity coverage nomenclature is corroborated by Météo-France's published WCS/WMS service vocabulary; the PE-specific subscribed service itself is credential-gated. Expanding the field set should therefore start from that service's live `GetCapabilities`/`DescribeCoverage` inventory rather than assuming that deterministic AROME coverage names can be copied blindly.
 
-For area summaries, WFG currently accepts the native scalar fields above. Derived `wind_10m` is available for point, point-range, multi-point and transect queries, where U/V are derived inside each member before the ensemble distribution is built.
+For area summaries, WFG currently accepts the two native scalar fields above.
 
 ## Member-first semantics
 
@@ -34,10 +31,10 @@ PE-AROME follows WFG's standing ensemble rule:
 
 1. resolve one forecast initialization;
 2. fetch the selected member fields;
-3. normalize and derive each member independently;
+3. normalize each member independently;
 4. aggregate member distributions only after those per-member calculations.
 
-This matters for derived wind direction and for any future nonlinear diagnostic capability. WFG does not derive from an ensemble-mean state.
+The same boundary is retained for future derived/nonlinear capabilities: they must be evaluated inside each member before ensemble aggregation rather than derived from an ensemble-mean state.
 
 The first selected member resolves `latest` / `latest_complete`. That resolved initialization is then pinned for the remaining members, preventing mixed-cycle ensemble results while publication is in progress.
 
@@ -99,7 +96,7 @@ The token and endpoint configuration are source-layer concerns. They are never p
     "at": "2026-09-01T12:00:00Z"
   },
   "selection": {
-    "fields": ["temperature_2m", "wind_10m"]
+    "fields": ["temperature_2m", "relative_humidity_2m"]
   },
   "ensemble": {
     "members": ["c00", "p01", "p02", "p03"],
