@@ -94,7 +94,7 @@ function parseMessagesWithKnownLocalAliases(bytes: Uint8Array): GribMessage[] {
 
   const messages: GribMessage[] = [];
   for (const chunk of chunks) {
-    const chunkBytes = bytes.slice(chunk.start, chunk.end);
+    const chunkBytes = Uint8Array.from(bytes.subarray(chunk.start, chunk.end));
     if (
       chunk.alias !== undefined
       && chunk.surrogate !== undefined
