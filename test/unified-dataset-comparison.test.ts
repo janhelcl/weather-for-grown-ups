@@ -188,6 +188,11 @@ describe("comparison strategy registry", () => {
       "gfs:ifs",
       "hgefs:aigefs",
       "hgefs:gefs",
+      "gfs:icon-d2",
+      "ifs:arome",
+      "ifs:icon-d2",
+      "ifs-ens:icon-d2-eps",
+      "ifs-ens:pe-arome",
       "ifs:aifs",
       "ifs:ifs-ens",
       "ifs-ens:aifs-ens",
@@ -206,6 +211,38 @@ describe("comparison strategy registry", () => {
     });
     expect(registry["gfs:ifs"].metadata.comparisonSemantics).toBe("deterministic_delta");
     expect(registry["gefs:ifs-ens"].metadata.comparisonSemantics).toBe("ensemble_distribution_shift");
+    expect(registry["ifs:icon-d2"].metadata).toMatchObject({
+      runAlignment: "shared_explicit_initialization_cycle",
+      variableCompatibility: "pair_specific_pressure_or_field_intersection",
+      spatialOverlapRequirement: "requested_point_within_both_declared_domains",
+      pointSamplingSemantics: "independent_dataset_sampling_at_same_requested_coordinate",
+      spatialAlignment: "point_only_no_cross_dataset_regridding",
+      nativeResolutionRepresentation: "preserve_per_side_native_grid_and_sampling_provenance",
+      crossScale: {
+        initializationHoursUtc: [0, 6, 12, 18],
+        validTimeCadenceHours: 3,
+        maxLeadHours: 48,
+        pressure: {
+          variables: expect.arrayContaining(["temperature", "vertical_velocity"]),
+          pressureLevelsHpa: [300, 400, 500, 600, 700, 850, 925, 1000],
+          scalarOnly: false,
+        },
+        fields: {
+          ids: ["temperature_2m", "u_wind_10m", "v_wind_10m", "wind_10m"],
+          temporalSemantics: "instantaneous",
+          scalarOnly: false,
+        },
+        diagnostics: [],
+        comparisonLayerInterpolation: "none",
+        comparisonLayerRegridding: "none",
+        aggregation: "none_deterministic",
+      },
+      left: { spatialDomain: { scope: "global" } },
+      right: {
+        spatialDomain: { scope: "limited_area" },
+        nativeGrid: { type: "icosahedral" },
+      },
+    });
 
     for (const strategy of Object.values(registry)) {
       for (const side of [strategy.metadata.left, strategy.metadata.right]) {

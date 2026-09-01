@@ -29,6 +29,13 @@ import {
   compareIfsAifsDatasetsSchema,
   compareIfsEnsAifsEnsDatasetsSchema,
 } from "./model-class-comparison.js";
+import {
+  compareGfsIconD2DatasetsSchema,
+  compareIfsAromeDatasetsSchema,
+  compareIfsEnsIconD2EpsDatasetsSchema,
+  compareIfsEnsPeAromeDatasetsSchema,
+  compareIfsIconD2DatasetsSchema,
+} from "./cross-scale-comparison.js";
 import { ifsPressureLevelSchema, ifsPressureVariableSchema } from "./ifs.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 import {
@@ -222,6 +229,11 @@ export const compareAtmosphericDatasetsSchema = z.union([
   compareIfsEnsAifsEnsDatasetsSchema,
   compareHgefsGefsDatasetsSchema,
   compareHgefsAigefsDatasetsSchema,
+  compareIfsIconD2DatasetsSchema,
+  compareIfsAromeDatasetsSchema,
+  compareGfsIconD2DatasetsSchema,
+  compareIfsEnsIconD2EpsDatasetsSchema,
+  compareIfsEnsPeAromeDatasetsSchema,
 ]);
 
 const verifyAtmosphericForecastCaseSchema = z.object({

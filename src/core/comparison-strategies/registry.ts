@@ -8,6 +8,11 @@ import {
   GfsIfsComparisonStrategy,
   HgefsAigefsComparisonStrategy,
   HgefsGefsComparisonStrategy,
+  GfsIconD2ComparisonStrategy,
+  IfsAromeComparisonStrategy,
+  IfsEnsIconD2EpsComparisonStrategy,
+  IfsEnsPeAromeComparisonStrategy,
+  IfsIconD2ComparisonStrategy,
   IfsAifsComparisonStrategy,
   IfsEnsAifsEnsComparisonStrategy,
   IfsIfsEnsComparisonStrategy,
@@ -33,6 +38,11 @@ export function createAtmosphericDatasetComparisonStrategyRegistry(
     "ifs-ens:aifs-ens": new IfsEnsAifsEnsComparisonStrategy(modelClassComparison),
     "hgefs:gefs": new HgefsGefsComparisonStrategy(modelClassComparison),
     "hgefs:aigefs": new HgefsAigefsComparisonStrategy(modelClassComparison),
+    "ifs:icon-d2": new IfsIconD2ComparisonStrategy(),
+    "ifs:arome": new IfsAromeComparisonStrategy(),
+    "gfs:icon-d2": new GfsIconD2ComparisonStrategy(),
+    "ifs-ens:icon-d2-eps": new IfsEnsIconD2EpsComparisonStrategy(),
+    "ifs-ens:pe-arome": new IfsEnsPeAromeComparisonStrategy(),
     ...strategies,
   };
   validateComparisonStrategyRegistry(registry);

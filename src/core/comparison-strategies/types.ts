@@ -1,10 +1,13 @@
 import type {
   AtmosphericDatasetKind,
   AtmosphericModelClass,
+  AtmosphericNativeGrid,
   AtmosphericProvider,
+  AtmosphericSpatialDomain,
 } from "../../catalog/models.js";
 import {
   PUBLIC_DATASET_METADATA,
+  publicDatasetCapabilities,
   type PublicAtmosphericDataset,
 } from "../../schema/unified-api.js";
 import type { CompareAtmosphericDatasetsRequest } from "../../schema/unified-specialized.js";
@@ -33,11 +36,38 @@ export type AtmosphericComparisonProvenanceShape =
   | "native_source_per_side"
   | "hybrid_constituent_sources";
 
+export interface AtmosphericCrossScaleComparisonDeclaration {
+  initializationHoursUtc: readonly number[];
+  validTimeCadenceHours: number;
+  maxLeadHours: number;
+  pressure?: {
+    variables: readonly string[];
+    pressureLevelsHpa: readonly number[];
+    scalarOnly: boolean;
+  };
+  fields?: {
+    ids: readonly string[];
+    temporalSemantics: "instantaneous";
+    scalarOnly: boolean;
+  };
+  diagnostics: readonly string[];
+  comparisonLayerInterpolation: "none";
+  comparisonLayerRegridding: "none";
+  aggregation:
+    | "none_deterministic"
+    | "independent_ensemble_distributions_no_member_pairing";
+}
+
 export interface AtmosphericComparisonDatasetDescriptor {
   dataset: PublicAtmosphericDataset;
   resultKind: AtmosphericDatasetKind;
   modelClass: AtmosphericModelClass;
   provider: AtmosphericProvider;
+  spatialDomain: AtmosphericSpatialDomain;
+  nativeGrid: AtmosphericNativeGrid;
+  horizontalGridDegrees?: number;
+  maxForecastHour?: number;
+  nativeTimeCadenceHours: readonly number[];
 }
 
 export interface AtmosphericDatasetComparisonStrategyMetadata {
@@ -45,9 +75,26 @@ export interface AtmosphericDatasetComparisonStrategyMetadata {
   datasets: readonly [PublicAtmosphericDataset, PublicAtmosphericDataset];
   left: AtmosphericComparisonDatasetDescriptor;
   right: AtmosphericComparisonDatasetDescriptor;
-  runAlignment: "shared_initialization_cycle";
+  runAlignment: "shared_initialization_cycle" | "shared_explicit_initialization_cycle";
   validTimeAlignment: "exact";
-  variableCompatibility: "pair_specific_pressure_scalar_intersection";
+  variableCompatibility:
+    | "pair_specific_pressure_scalar_intersection"
+    | "pair_specific_pressure_or_field_intersection"
+    | "pair_specific_field_intersection"
+    | "pair_specific_scalar_pressure_or_field_intersection"
+    | "pair_specific_scalar_field_intersection";
+  spatialOverlapRequirement:
+    | "requested_point_covered_by_both_datasets"
+    | "requested_point_within_both_declared_domains";
+  pointSamplingSemantics:
+    | "independent_dataset_point_sampling"
+    | "independent_dataset_sampling_at_same_requested_coordinate";
+  spatialAlignment:
+    | "point_only_no_cross_dataset_regridding";
+  nativeResolutionRepresentation:
+    | "per_dataset_native_grid_and_source_provenance"
+    | "preserve_per_side_native_grid_and_sampling_provenance";
+  crossScale?: AtmosphericCrossScaleComparisonDeclaration;
   comparisonSemantics: AtmosphericComparisonSemantics;
   outputShape: AtmosphericComparisonOutputShape;
   provenanceShape: AtmosphericComparisonProvenanceShape;
@@ -73,9 +120,16 @@ export function comparisonStrategyMetadata(
   key: AtmosphericDatasetComparisonKey,
   datasets: readonly [PublicAtmosphericDataset, PublicAtmosphericDataset],
   comparisonSemantics: AtmosphericComparisonSemantics,
-  shapes: {
+  options: {
     outputShape?: AtmosphericComparisonOutputShape;
     provenanceShape?: AtmosphericComparisonProvenanceShape;
+    runAlignment?: AtmosphericDatasetComparisonStrategyMetadata["runAlignment"];
+    variableCompatibility?: AtmosphericDatasetComparisonStrategyMetadata["variableCompatibility"];
+    spatialOverlapRequirement?: AtmosphericDatasetComparisonStrategyMetadata["spatialOverlapRequirement"];
+    pointSamplingSemantics?: AtmosphericDatasetComparisonStrategyMetadata["pointSamplingSemantics"];
+    spatialAlignment?: AtmosphericDatasetComparisonStrategyMetadata["spatialAlignment"];
+    nativeResolutionRepresentation?: AtmosphericDatasetComparisonStrategyMetadata["nativeResolutionRepresentation"];
+    crossScale?: AtmosphericCrossScaleComparisonDeclaration;
   } = {},
 ): AtmosphericDatasetComparisonStrategyMetadata {
   const declaredKey = `${datasets[0]}:${datasets[1]}`;
@@ -87,12 +141,21 @@ export function comparisonStrategyMetadata(
     datasets,
     left: comparisonDatasetDescriptor(datasets[0]),
     right: comparisonDatasetDescriptor(datasets[1]),
-    runAlignment: "shared_initialization_cycle",
+    runAlignment: options.runAlignment ?? "shared_initialization_cycle",
     validTimeAlignment: "exact",
-    variableCompatibility: "pair_specific_pressure_scalar_intersection",
+    variableCompatibility:
+      options.variableCompatibility ?? "pair_specific_pressure_scalar_intersection",
+    spatialOverlapRequirement:
+      options.spatialOverlapRequirement ?? "requested_point_covered_by_both_datasets",
+    pointSamplingSemantics:
+      options.pointSamplingSemantics ?? "independent_dataset_point_sampling",
+    spatialAlignment: options.spatialAlignment ?? "point_only_no_cross_dataset_regridding",
+    nativeResolutionRepresentation:
+      options.nativeResolutionRepresentation ?? "per_dataset_native_grid_and_source_provenance",
+    ...(options.crossScale === undefined ? {} : { crossScale: options.crossScale }),
     comparisonSemantics,
-    outputShape: shapes.outputShape ?? "pair_native_result",
-    provenanceShape: shapes.provenanceShape ?? "native_source_per_dataset",
+    outputShape: options.outputShape ?? "pair_native_result",
+    provenanceShape: options.provenanceShape ?? "native_source_per_dataset",
   };
 }
 
@@ -100,10 +163,20 @@ function comparisonDatasetDescriptor(
   dataset: PublicAtmosphericDataset,
 ): AtmosphericComparisonDatasetDescriptor {
   const metadata = PUBLIC_DATASET_METADATA[dataset];
+  const capabilities = publicDatasetCapabilities(dataset);
   return {
     dataset,
     resultKind: metadata.kind,
     modelClass: metadata.modelClass,
     provider: metadata.provider,
+    spatialDomain: capabilities.spatialDomain,
+    nativeGrid: capabilities.nativeGrid,
+    ...(capabilities.horizontalGridDegrees === undefined
+      ? {}
+      : { horizontalGridDegrees: capabilities.horizontalGridDegrees }),
+    ...(capabilities.maxForecastHour === undefined
+      ? {}
+      : { maxForecastHour: capabilities.maxForecastHour }),
+    nativeTimeCadenceHours: capabilities.nativeTimeCadenceHours,
   };
 }

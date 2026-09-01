@@ -13,3 +13,11 @@ export {
   IfsAifsComparisonStrategy,
   IfsEnsAifsEnsComparisonStrategy,
 } from "./model-class-strategies.js";
+
+export {
+  GfsIconD2ComparisonStrategy,
+  IfsAromeComparisonStrategy,
+  IfsEnsIconD2EpsComparisonStrategy,
+  IfsEnsPeAromeComparisonStrategy,
+  IfsIconD2ComparisonStrategy,
+} from "./cross-scale-strategies.js";

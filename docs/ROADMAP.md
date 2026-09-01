@@ -178,7 +178,13 @@ Goals:
 
 At this point WFG has two independent deterministic/ensemble regional families behind one atmospheric query language.
 
-## 6. Cross-scale comparison architecture
+## 6. Cross-scale comparison architecture ✅
+
+**Implemented as a restrictive point-comparison layer across the global/regional scale boundary.**
+
+The comparison registry now contains explicit strategies for IFS↔ICON-D2, IFS↔AROME, GFS↔ICON-D2, IFS ENS↔ICON-D2-EPS and IFS ENS↔PE-AROME. Each strategy declares its domain requirement, shared initialization/valid-time rule, compatible pressure/field intersection, independent point-sampling semantics, no-regridding rule, native-resolution representation, output shape and provenance shape.
+
+Cross-scale comparisons require an explicit shared 00/06/12/18Z initialization rather than resolving each provider's latest cycle independently. Deterministic pairs compare only substantiated pressure-level or instantaneous near-surface intersections; ensemble pairs compare scalar member distributions without cross-model member pairing. Both sides retain their own sampled grid point, native-grid metadata and source provenance. Spatial/area subtraction remains deliberately unsupported: there is still no universal global-to-regional comparison fallback.
 
 Extend the restrictive comparison-strategy registry to scientifically meaningful **global ↔ regional** pairs.
 
