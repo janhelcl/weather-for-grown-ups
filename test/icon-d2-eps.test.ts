@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   IconD2EpsMemberFileFilter,
   IconD2EpsOpenDataCache,
+  iconD2EpsExactMemberMatchPattern,
   iconD2EpsWgrib2TagForMember,
 } from "../src/cache/icon-d2-eps-open-data-cache.js";
 import {
@@ -392,12 +393,22 @@ describe("ICON-D2-EPS native member filtering", () => {
 
     expect(iconD2EpsWgrib2TagForMember(inventory, "p01")).toBe("ENS=? table4.6=192 pert=1");
     expect(iconD2EpsWgrib2TagForMember(inventory, "p20")).toBe("ENS=? table4.6=192 pert=20");
+    const p01Pattern = iconD2EpsExactMemberMatchPattern(
+      iconD2EpsWgrib2TagForMember(inventory, "p01"),
+    );
+    expect(p01Pattern).toBe(":ENS=\\? table4\\.6=192 pert=1:");
+    const p01Regex = new RegExp(p01Pattern);
+    expect(p01Regex.test(":ENS=? table4.6=192 pert=1:vt=2026083106:")).toBe(true);
+    expect(p01Regex.test(":ENS=? table4.6=192 pert=10:vt=2026083106:")).toBe(false);
 
     const first = await filter.filter(sourcePath, "p02");
     expect(first.cacheHit).toBe(false);
     expect(new TextDecoder().decode(await readFile(first.path))).toBe("GRIB-MEMBER");
     expect(runner).toHaveBeenCalledTimes(2);
-    expect(runner.mock.calls[1]![1]).toEqual(expect.arrayContaining(["-match_fs", ":ENS=? table4.6=192 pert=2"]));
+    expect(runner.mock.calls[1]![1]).toEqual(expect.arrayContaining([
+      "-match",
+      ":ENS=\\? table4\\.6=192 pert=2:",
+    ]));
 
     const second = await filter.filter(sourcePath, "p02");
     expect(second).toMatchObject({ path: first.path, cacheHit: true });
