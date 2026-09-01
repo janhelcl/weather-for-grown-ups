@@ -12,7 +12,13 @@ const result = await new UnifiedAtmosphereQueryService().query({
   geometry: { type: "point", latitude: 48.8566, longitude: 2.3522 },
   time: { at: validTime.toISOString() },
   selection: {
-    fields: ["temperature_2m", "relative_humidity_2m", "wind_10m", "wind_gust"],
+    fields: [
+      "temperature_2m",
+      "relative_humidity_2m",
+      "wind_10m",
+      "wind_gust",
+      "column_maximum_reflectivity",
+    ],
   },
   forecast: { run: safelyPublishedRun.toISOString() },
 });
@@ -27,7 +33,13 @@ assert.equal(point.model, "arome_0p01");
 assert.equal(point.validTime, validTime.toISOString());
 assert.equal(point.forecastHour, 6);
 assert.deepEqual(point.levels, []);
-for (const field of ["temperature_2m", "relative_humidity_2m", "wind_10m", "wind_gust"]) {
+for (const field of [
+  "temperature_2m",
+  "relative_humidity_2m",
+  "wind_10m",
+  "wind_gust",
+  "column_maximum_reflectivity",
+]) {
   assert(point.fields.some((item: any) => item.id === field), `missing AROME field ${field}`);
 }
 assert(Number.isFinite(
@@ -46,6 +58,12 @@ assert.equal(gust.level.heightM, 10);
 assert.equal(gust.temporal.type, "maximum");
 assert.equal(gust.temporal.startForecastHour, 5);
 assert.equal(gust.temporal.endForecastHour, 6);
+const reflectivity = point.fields.find(
+  (item: any) => item.id === "column_maximum_reflectivity",
+);
+assert(Number.isFinite(reflectivity.values.columnMaximumReflectivityDbz));
+assert.deepEqual(reflectivity.level, { type: "named_layer", id: "entire_atmosphere" });
+assert.deepEqual(reflectivity.temporal, { type: "instantaneous" });
 assert.equal(point.source.provider, "Météo-France Open Data");
 assert.equal(point.source.access, "meteo_france_open_data");
 assert.equal(point.source.nativeGrid.type, "lambert_conformal");

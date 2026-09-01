@@ -38,6 +38,7 @@ export interface AromeSourceFile {
 export interface AromeAvailabilityRequirement {
   sp1: boolean;
   hp1: boolean;
+  sp2?: boolean;
 }
 
 export interface AromeAvailabilityProbe {
@@ -93,6 +94,7 @@ export class AromeOpenDataCache implements AromeSubsetCache {
     const packages: Arome0p01Package[] = [
       ...(requirement.sp1 ? ["SP1" as const] : []),
       ...(requirement.hp1 ? ["HP1" as const] : []),
+      ...(requirement.sp2 ? ["SP2" as const] : []),
     ];
     if (packages.length === 0) return false;
 
@@ -171,6 +173,7 @@ export function aromePackagesForFields(
   return {
     sp1: packages.has("SP1"),
     hp1: packages.has("HP1"),
+    sp2: packages.has("SP2"),
   };
 }
 
@@ -188,6 +191,8 @@ function fieldPackage(field: RawNonIsobaricFieldDefinition): Arome0p01Package {
     case "v_wind_10m":
     case "wind_gust":
       return "SP1";
+    case "column_maximum_reflectivity":
+      return "SP2";
     case "u_wind_20m":
     case "v_wind_20m":
     case "u_wind_50m":

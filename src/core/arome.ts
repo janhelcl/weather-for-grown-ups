@@ -60,7 +60,12 @@ const MAX_NATIVE_STEPS = 52;
 
 export interface AromePointDecoder {
   readonly engine?: GribDecoderName;
-  extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]>;
+  extractPoint(
+    path: string,
+    longitude: number,
+    latitude: number,
+    forecastHour?: number,
+  ): Promise<DecodedValue[]>;
 }
 
 export interface AromeForecastServiceOptions {
@@ -408,12 +413,22 @@ export class AromeForecastService {
     point: PointCoordinate,
     selection: ExpandedSelection,
   ): Promise<AromePointResult> {
-    const rawDecoded = await this.decoder.extractPoint(cached.path, point.longitude, point.latitude);
+    const forecastHour = aromeForecastHour(run, validTime);
+    const rawDecoded = await this.decoder.extractPoint(
+      cached.path,
+      point.longitude,
+      point.latitude,
+      forecastHour,
+    );
     const firstValue = rawDecoded[0];
     if (firstValue === undefined) throw new Error("AROME decoder returned no grid point");
-    const decoded = selection.fieldIds.includes("wind_gust")
-      ? withAromeWindGust(rawDecoded)
-      : rawDecoded;
+    let decoded = rawDecoded;
+    if (selection.fieldIds.includes("wind_gust")) {
+      decoded = withAromeWindGust(decoded);
+    }
+    if (selection.fieldIds.includes("column_maximum_reflectivity")) {
+      decoded = withAromeColumnMaximumReflectivity(decoded);
+    }
     assertFieldsComplete(decoded, selection.fields);
     const fields = selection.fieldIds.map((id) =>
       buildFieldResult(aromeFieldDefinition(id), decoded, run));
@@ -437,6 +452,32 @@ export class AromeForecastService {
   ): Promise<Date> {
     return Promise.resolve(resolveAromeRun(selector, requirement, this.runProvider));
   }
+}
+
+export function withAromeColumnMaximumReflectivity(
+  values: readonly DecodedValue[],
+): DecodedValue[] {
+  const candidates = values.filter((value) =>
+    (value.code === "missing" || value.code === "AROME_RFLCTVT_MAX")
+    && value.surface === true
+    && value.accumulation === undefined
+    && value.average === undefined
+    && value.maximum === undefined);
+  if (candidates.length !== 1) {
+    throw new Error(
+      `AROME SP2 reflectivity expected one instantaneous local parameter 0/16/193 at surface, found ${candidates.length}`,
+    );
+  }
+  const source = candidates[0]!;
+  return [
+    ...values,
+    {
+      code: "BREF",
+      namedVertical: "entire atmosphere",
+      value: source.value,
+      gridPoint: { ...source.gridPoint },
+    },
+  ];
 }
 
 export function withAromeWindGust(values: readonly DecodedValue[]): DecodedValue[] {

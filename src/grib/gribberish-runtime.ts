@@ -69,6 +69,16 @@ export async function readGribMessages(path: string): Promise<GribMessage[]> {
   return messages;
 }
 
+export function messagesAtForecastHour(
+  messages: readonly GribMessage[],
+  forecastHour: number,
+): GribMessage[] {
+  return messages.filter((message) => {
+    const target = message.forecastEndDate ?? message.forecastDate;
+    return roundedHours(target.getTime() - message.referenceDate.getTime()) === forecastHour;
+  });
+}
+
 export function decodePointMessages(
   messages: readonly GribMessage[],
   longitude: number,
@@ -323,6 +333,9 @@ function verticalFromKey(key: string): Omit<DecodedValue, "code" | "value" | "gr
   }
   const heightMatch = key.match(/:([-+]?\d+(?:\.\d+)?) in above ground(?=:|$)/i);
   if (heightMatch?.[1] !== undefined) return { heightAboveGroundM: Number(heightMatch[1]) };
+  if (/:\s*(?:0\s+)?in surface:0 in top of atmosphere(?=:|$)/i.test(key)) {
+    return { namedVertical: "entire atmosphere" };
+  }
   if (/:\s*(?:0\s+)?in surface(?=:|$)/i.test(key)) return { surface: true };
 
   const pressureDifferenceMatch = key.match(

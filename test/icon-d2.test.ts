@@ -235,6 +235,20 @@ describe("ICON-D2 unified capabilities", () => {
       temporalSemantics: "maximum",
       support: [{ dataset: "icon-d2" }],
     });
+
+    const reflectivity = searchAtmosphereCatalog({
+      datasets: ["icon-d2"],
+      search: "reflectivity",
+      sections: ["fields"],
+    });
+    expect(reflectivity.matches.find(
+      (match) => match.id === "column_maximum_reflectivity",
+    )).toMatchObject({
+      id: "column_maximum_reflectivity",
+      verticalSemantics: "entire atmosphere",
+      temporalSemantics: "instantaneous",
+      support: [{ dataset: "icon-d2" }],
+    });
   });
 
   it("rejects out-of-domain queries before touching the ICON-D2 adapter", async () => {
@@ -553,7 +567,13 @@ describe("ICON-D2 deterministic service operations", () => {
       selection: {
         variables: ["temperature"],
         pressureLevelsHpa: [850],
-        fields: ["temperature_2m", "wind_10m", "wind_gust", "mean_sea_level_pressure"],
+        fields: [
+          "temperature_2m",
+          "wind_10m",
+          "wind_gust",
+          "mean_sea_level_pressure",
+          "column_maximum_reflectivity",
+        ],
       },
       forecast: { run: run.toISOString() },
     })) as any;
@@ -562,8 +582,15 @@ describe("ICON-D2 deterministic service operations", () => {
       "wind_10m",
       "wind_gust",
       "mean_sea_level_pressure",
+      "column_maximum_reflectivity",
     ]);
     expect(point.fields.find((field: any) => field.id === "wind_10m")?.values.windSpeedMs).toBe(5);
+    expect(point.fields.find((field: any) => field.id === "column_maximum_reflectivity"))
+      .toMatchObject({
+        level: { type: "named_layer", id: "entire_atmosphere" },
+        temporal: { type: "instantaneous" },
+        values: { columnMaximumReflectivityDbz: 42 },
+      });
     expect(point.fields.find((field: any) => field.id === "wind_gust")).toMatchObject({
       level: { type: "height_above_ground_m", heightM: 10 },
       temporal: {
@@ -860,6 +887,7 @@ describe("ICON-D2 guard and inventory branches", () => {
     expect(isIconD2RawAreaVariable("not-a-variable")).toBe(false);
     expect(isIconD2RawAreaField("temperature_2m")).toBe(true);
     expect(isIconD2RawAreaField("wind_10m")).toBe(false);
+    expect(isIconD2RawAreaField("column_maximum_reflectivity")).toBe(false);
     expect(isIconD2RawAreaField("not-a-field")).toBe(false);
   });
 
@@ -894,6 +922,7 @@ describe("ICON-D2 guard and inventory branches", () => {
     expect(isIconD2PressureVariable("specific_humidity")).toBe(false);
     expect(isIconD2Field("wind_10m")).toBe(true);
     expect(isIconD2Field("wind_gust")).toBe(true);
+    expect(isIconD2Field("column_maximum_reflectivity")).toBe(true);
     expect(isIconD2Field("dew_point_2m")).toBe(false);
     expect(() => expandIconD2RequestedVariables(["specific_humidity"]))
       .toThrow("ICON-D2 pressure variables not supported");
@@ -990,6 +1019,7 @@ function fakeDecodedValues(longitude: number, latitude: number) {
       gridPoint,
     },
     { code: "PRMSL", namedVertical: "mean sea level", value: 101_325, gridPoint },
+    { code: "BREF", namedVertical: "entire atmosphere", value: 42, gridPoint },
     {
       code: "APCP",
       surface: true,

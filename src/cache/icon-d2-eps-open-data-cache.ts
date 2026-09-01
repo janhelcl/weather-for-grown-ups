@@ -351,6 +351,7 @@ function fieldParameter(field: RawNonIsobaricFieldDefinition): string {
     case "wind_gust": return "vmax_10m";
     case "mean_sea_level_pressure": return "pmsl";
     case "total_precipitation": return "tot_prec";
+    case "column_maximum_reflectivity": return "dbz_cmax";
     default:
       throw new Error(
         `ICON-D2-EPS Open Data has no single-level file mapping for field=${field.id}`,

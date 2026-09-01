@@ -1,5 +1,8 @@
 import { LAYER_DIAGNOSTIC_CATALOG } from "./layer-diagnostics.js";
-import { NON_ISOBARIC_FIELD_CATALOG } from "./non-isobaric-fields.js";
+import {
+  GFS_NON_ISOBARIC_FIELD_IDS,
+  NON_ISOBARIC_FIELD_CATALOG,
+} from "./non-isobaric-fields.js";
 import { PARCEL_DIAGNOSTIC_CATALOG } from "./parcel-diagnostics.js";
 import { PROFILE_DIAGNOSTIC_CATALOG } from "./profile-diagnostics.js";
 import { VARIABLE_CATALOG } from "./variables.js";
@@ -94,7 +97,9 @@ function buildSearchEntries(): SearchableCatalogEntry[] {
       : [...definition.dependencies],
   }));
 
-  const fields: SearchableCatalogEntry[] = Object.values(NON_ISOBARIC_FIELD_CATALOG).map((definition) => ({
+  const fields: SearchableCatalogEntry[] = GFS_NON_ISOBARIC_FIELD_IDS
+    .map((id) => NON_ISOBARIC_FIELD_CATALOG[id])
+    .map((definition) => ({
     section: "fields",
     id: definition.id,
     classification: definition.kind === "raw" ? "raw" : "derived",

@@ -2,14 +2,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   IconD2EpsMemberFileFilter,
-  IconD2EpsMemberSubsetCache,
   IconD2EpsOpenDataCache,
 } from "../cache/icon-d2-eps-open-data-cache.js";
 import {
   IconD2EpsCdoRemapper,
   IconD2EpsDwdRemapAssetCache,
-  IconD2EpsRemappedSubsetCache,
 } from "../cache/icon-d2-eps-remap-cache.js";
+import { IconD2EpsAdaptiveMemberSubsetCache } from "../cache/icon-d2-eps-member-cache.js";
 import {
   ICON_D2_EPS_MEMBERS,
   sortIconD2EpsMembers,
@@ -80,17 +79,17 @@ export class IconD2EpsForecastService {
       join(cacheDir, "icon-d2-eps-remapped"),
       remapAssets,
     );
-    const remappedCache = new IconD2EpsRemappedSubsetCache(cache, remapper);
     const wgrib2 = process.env.WGRIB2_PATH ?? "wgrib2";
     const memberFilter = new IconD2EpsMemberFileFilter(
       join(cacheDir, "icon-d2-eps-members"),
       wgrib2,
     );
     this.memberServiceFactory = options.memberServiceFactory ?? ((member) => {
-      const memberCache = new IconD2EpsMemberSubsetCache(
-        remappedCache,
-        member,
+      const memberCache = new IconD2EpsAdaptiveMemberSubsetCache(
+        cache,
+        remapper,
         memberFilter,
+        member,
       );
       return new IconD2ForecastService({
         cache: memberCache,

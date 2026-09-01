@@ -57,6 +57,7 @@ export const ICON_D2_FIELD_IDS = [
   "wind_gust",
   "mean_sea_level_pressure",
   "total_precipitation",
+  "column_maximum_reflectivity",
 ] as const satisfies readonly NonIsobaricFieldId[];
 
 export const ICON_D2_AREA_PRESSURE_VARIABLE_IDS = [

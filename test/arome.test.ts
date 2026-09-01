@@ -11,6 +11,7 @@ import {
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
 import {
   AromeForecastService,
+  withAromeColumnMaximumReflectivity,
   withAromeWindGust,
 } from "../src/core/arome.js";
 import { AromeRunResolver, resolveAromeRun } from "../src/core/arome-run.js";
@@ -147,6 +148,25 @@ describe("AROME selected-package cache", () => {
 
     expect(fetchFn).toHaveBeenCalledOnce();
     expect(String(fetchFn.mock.calls[0]?.[0])).toContain("/SP1/");
+  });
+
+  it("routes column reflectivity through the native SP2 package", async () => {
+    const fetchFn = vi.fn(async () =>
+      new Response(new TextEncoder().encode("GRIB-SP2"), { status: 200 }));
+    const cache = new AromeOpenDataCache(
+      rootDir,
+      fetchFn as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+    );
+
+    await cache.fetch({
+      run: new Date("2026-08-31T12:00:00Z"),
+      forecastHour: 6,
+      fields: expandArome0p01RequestedFields(["column_maximum_reflectivity"]),
+    });
+
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(String(fetchFn.mock.calls[0]?.[0])).toContain("/SP2/");
   });
 
   it("rejects empty selections and non-GRIB upstream payloads", async () => {
@@ -473,6 +493,20 @@ describe("AROME unified capabilities", () => {
       temporalSemantics: "maximum",
       support: [{ dataset: "arome" }],
     });
+
+    const reflectivity = searchAtmosphereCatalog({
+      datasets: ["arome"],
+      search: "reflectivity",
+      sections: ["fields"],
+    });
+    expect(reflectivity.matches.find(
+      (match) => match.id === "column_maximum_reflectivity",
+    )).toMatchObject({
+      id: "column_maximum_reflectivity",
+      verticalSemantics: "entire atmosphere",
+      temporalSemantics: "instantaneous",
+      support: [{ dataset: "arome" }],
+    });
     expect(searchAtmosphereCatalog({
       datasets: ["arome"],
       sections: ["variables", "layer_diagnostics", "profile_diagnostics"],
@@ -566,7 +600,15 @@ describe("AROME deterministic field operations", () => {
       dataset: "arome",
       geometry: { type: "point", latitude: 48.86, longitude: 2.35 },
       time: { at: "2026-08-31T18:00:00Z" },
-      selection: { fields: ["temperature_2m", "relative_humidity_2m", "wind_10m", "wind_gust"] },
+      selection: {
+        fields: [
+          "temperature_2m",
+          "relative_humidity_2m",
+          "wind_10m",
+          "wind_gust",
+          "column_maximum_reflectivity",
+        ],
+      },
       forecast: { run: run.toISOString() },
     })) as any;
     expect(point).toMatchObject({
@@ -586,6 +628,13 @@ describe("AROME deterministic field operations", () => {
       .toBe(70);
     expect(point.fields.find((field: any) => field.id === "wind_10m").values.windSpeedMs)
       .toBe(5);
+    expect(point.fields.find(
+      (field: any) => field.id === "column_maximum_reflectivity",
+    )).toMatchObject({
+      level: { type: "named_layer", id: "entire_atmosphere" },
+      temporal: { type: "instantaneous" },
+      values: { columnMaximumReflectivityDbz: 35 },
+    });
     expect(point.fields.find((field: any) => field.id === "wind_gust")).toMatchObject({
       level: { type: "height_above_ground_m", heightM: 10 },
       temporal: {
@@ -610,6 +659,29 @@ describe("AROME deterministic field operations", () => {
     })) as any;
     expect(range.series.map((step: any) => step.forecastHour)).toEqual([6, 7, 8]);
     expect(range.series.every((step: any) => step.levels.length === 0)).toBe(true);
+  });
+
+  it("normalizes the unique instantaneous local SP2 reflectivity field", () => {
+    const gridPoint = { longitude: 2.35, latitude: 48.86 };
+    expect(withAromeColumnMaximumReflectivity([
+      { code: "missing", surface: true, value: 35, gridPoint },
+      {
+        code: "missing",
+        surface: true,
+        accumulation: { startForecastHour: 0, endForecastHour: 6 },
+        value: 1,
+        gridPoint,
+      },
+    ])).toContainEqual({
+      code: "BREF",
+      namedVertical: "entire atmosphere",
+      value: 35,
+      gridPoint,
+    });
+
+    expect(() => withAromeColumnMaximumReflectivity([
+      { code: "TMP", surface: true, value: 280, gridPoint },
+    ])).toThrow("expected one instantaneous local parameter");
   });
 
   it("derives gust magnitude only from aligned native AROME gust components", () => {
@@ -863,6 +935,7 @@ function fakeDecodedValues(longitude: number, latitude: number) {
     { code: "RH", heightAboveGroundM: 2, value: 70, gridPoint },
     { code: "UGRD", heightAboveGroundM: 10, value: 3, gridPoint },
     { code: "VGRD", heightAboveGroundM: 10, value: 4, gridPoint },
+    { code: "missing", surface: true, value: 35, gridPoint },
     {
       code: "U_RAF",
       heightAboveGroundM: 10,

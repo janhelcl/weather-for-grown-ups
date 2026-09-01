@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { expandRequestedFields } from "../src/catalog/non-isobaric-fields.js";
 import { parseGribIndex, selectNonIsobaricByteRanges } from "../src/grib/index.js";
-import { parseWgrib2PointLine } from "../src/grib/wgrib2.js";
+import {
+  parseWgrib2PointLine,
+  wgrib2LineForecastHour,
+} from "../src/grib/wgrib2.js";
 import { buildNomadsPointUrl } from "../src/sources/nomads.js";
 
 const indexText = [
@@ -103,6 +106,54 @@ describe("non-isobaric wgrib2 decoding", () => {
       heightAboveGroundM: 10,
       maximum: { startForecastHour: 5, endForecastHour: 6 },
       value: 6,
+      gridPoint: { longitude: 2.35, latitude: 48.86 },
+    });
+  });
+
+  it("parses exact sub-hourly forecast leads for native wgrib2 filtering", () => {
+    expect(wgrib2LineForecastHour(
+      "1:0:d=2026082400:BREF:surface:anl:lon=14,lat=50,val=20",
+    )).toBe(0);
+    expect(wgrib2LineForecastHour(
+      "1:0:d=2026082400:BREF:surface:6 hour fcst:lon=14,lat=50,val=20",
+    )).toBe(6);
+    expect(wgrib2LineForecastHour(
+      "1:0:d=2026082400:BREF:surface:6 hour 15 min fcst:lon=14,lat=50,val=20",
+    )).toBe(6.25);
+    expect(wgrib2LineForecastHour(
+      "1:0:d=2026082400:BREF:surface:375 min fcst:lon=14,lat=50,val=20",
+    )).toBe(6.25);
+    expect(wgrib2LineForecastHour(
+      "1:0:d=2026082400:APCP:surface:0-6 hour acc fcst:lon=14,lat=50,val=2",
+    )).toBe(6);
+  });
+
+  it("normalizes native surface-to-top column layers", () => {
+    expect(parseWgrib2PointLine(
+      "10:72:d=2026081906:BREF:surface - top of atmosphere:6 hour fcst:lon=14.5,lat=50,val=32",
+    )).toEqual({
+      code: "BREF",
+      namedVertical: "entire atmosphere",
+      value: 32,
+      gridPoint: { longitude: 14.5, latitude: 50 },
+    });
+    expect(parseWgrib2PointLine(
+      "1:0:d=2026083118:BREF:atmos col:360 min fcst:lon=14.5,lat=50,val=31",
+    )).toEqual({
+      code: "BREF",
+      namedVertical: "entire atmosphere",
+      value: 31,
+      gridPoint: { longitude: 14.5, latitude: 50 },
+    });
+  });
+
+  it("recognizes the current Météo-France local reflectivity tuple", () => {
+    expect(parseWgrib2PointLine(
+      "2:3763607:d=2026083118:var discipline=0 center=85 local_table=0 parmcat=16 parm=193:surface:6 hour fcst:lon=2.35,lat=48.86,val=32",
+    )).toEqual({
+      code: "AROME_RFLCTVT_MAX",
+      surface: true,
+      value: 32,
       gridPoint: { longitude: 2.35, latitude: 48.86 },
     });
   });

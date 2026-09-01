@@ -39,6 +39,7 @@ export const NON_ISOBARIC_FIELD_IDS = [
   "v_wind_100m",
   "wind_100m",
   "total_precipitation",
+  "column_maximum_reflectivity",
   "precipitable_water",
   "total_column_cloud_water",
   "column_relative_humidity",
@@ -112,11 +113,12 @@ export type NamedNonIsobaricLevel = Extract<
 >;
 
 export type FieldTemporalSemantics = "instantaneous" | "accumulation" | "average" | "maximum";
+export type NonIsobaricGribCode = GfsCode | "BREF";
 
 export interface RawNonIsobaricFieldDefinition {
   id: RawNonIsobaricFieldId;
   kind: "raw";
-  gfsCode: GfsCode;
+  gfsCode: NonIsobaricGribCode;
   level: NonIsobaricLevel;
   temporalSemantics: FieldTemporalSemantics;
   sourceUnit: string;
@@ -213,7 +215,7 @@ export function findNamedNonIsobaricLevel(gribLevel: string): NamedNonIsobaricLe
 
 function raw(
   id: RawNonIsobaricFieldId,
-  gfsCode: GfsCode,
+  gfsCode: NonIsobaricGribCode,
   level: NonIsobaricLevel,
   sourceUnit: string,
   description: string,
@@ -286,6 +288,16 @@ const definitions: NonIsobaricFieldDefinition[] = [
   wind(100),
 
   raw("total_precipitation", "APCP", surface(), "kg/m^2", "Total precipitation accumulated over the GFS message interval", "totalPrecipitationMm", "mm", "Liquid-water-equivalent precipitation depth", "accumulation"),
+  raw(
+    "column_maximum_reflectivity",
+    "BREF",
+    namedLevels.entireAtmosphere,
+    "dBZ",
+    "Maximum simulated radar reflectivity anywhere in the atmospheric column",
+    "columnMaximumReflectivityDbz",
+    "dBZ",
+    "Column-maximum simulated radar reflectivity",
+  ),
 
   raw("precipitable_water", "PWAT", namedLevels.entireAtmosphereSingleLayer, "kg/m^2", "Precipitable water for the entire atmospheric column", "precipitableWaterKgM2", "kg/m^2", "Precipitable water"),
   raw("total_column_cloud_water", "CWAT", namedLevels.entireAtmosphereSingleLayer, "kg/m^2", "Cloud water integrated over the atmospheric column", "cloudWaterKgM2", "kg/m^2", "Total column cloud water"),
@@ -321,6 +333,20 @@ const definitions: NonIsobaricFieldDefinition[] = [
 export const NON_ISOBARIC_FIELD_CATALOG = Object.fromEntries(
   definitions.map((definition) => [definition.id, definition]),
 ) as Record<NonIsobaricFieldId, NonIsobaricFieldDefinition>;
+
+export const REGIONAL_ONLY_NON_ISOBARIC_FIELD_IDS = [
+  "column_maximum_reflectivity",
+] as const satisfies readonly NonIsobaricFieldId[];
+
+const regionalOnlyFieldSet = new Set<string>(REGIONAL_ONLY_NON_ISOBARIC_FIELD_IDS);
+
+export function isGfsNonIsobaricField(id: string): id is NonIsobaricFieldId {
+  return !regionalOnlyFieldSet.has(id) && id in NON_ISOBARIC_FIELD_CATALOG;
+}
+
+export const GFS_NON_ISOBARIC_FIELD_IDS = NON_ISOBARIC_FIELD_IDS.filter(
+  (id) => isGfsNonIsobaricField(id),
+);
 
 export function expandRequestedFields(ids: readonly NonIsobaricFieldId[]): RawNonIsobaricFieldDefinition[] {
   const rawIds = new Set<RawNonIsobaricFieldId>();

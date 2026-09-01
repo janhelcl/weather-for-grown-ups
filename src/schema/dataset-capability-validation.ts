@@ -13,6 +13,7 @@ import {
   type AtmosphericDatasetRole,
   type AtmosphericRunSelectorId,
 } from "../catalog/models.js";
+import { isGfsNonIsobaricField } from "../catalog/non-isobaric-fields.js";
 import {
   AIGFS_AREA_FIELD_IDS,
   AIGFS_PRESSURE_LEVELS_HPA,
@@ -146,6 +147,16 @@ function validateSharedDatasetModifiers(
 }
 
 function validateGfsModifiers(request: any, context: z.RefinementCtx): void {
+  const fields = request.selection?.fields ?? [];
+  const unsupportedFields = fields.filter((field: string) => !isGfsNonIsobaricField(field));
+  if (unsupportedFields.length > 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["selection", "fields"],
+      message: `GFS fields not supported: ${unsupportedFields.join(", ")}`,
+    });
+  }
+
   if (request.source === undefined || request.source === "archive") return;
   if (request.geometry?.type === "area" && request.source !== "nomads") {
     context.addIssue({

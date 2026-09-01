@@ -6,6 +6,7 @@ import { Wgrib2Decoder } from "../src/grib/wgrib2.js";
 import {
   decodePointMessages,
   gridPointsInBox,
+  messagesAtForecastHour,
   selectMessage,
   summarizeMessageInBox,
   temporalForSelector,
@@ -69,6 +70,33 @@ describe("bundled GRIB2 point decoding", () => {
   ])("maps decoder vertical key %s to WFG semantics", (key, expectedVertical) => {
     const [decoded] = decodePointMessages([fakeMessage({ key, code: key.split(":")[0] })], 14, 50);
     expect(decoded).toMatchObject(expectedVertical);
+  });
+
+  it("selects the exact requested lead from sub-hourly messages in one provider object", () => {
+    const messages = [
+      fakeMessage({
+        key: "BREF:202608240600:0 in surface:0 in top of atmosphere:forecast",
+        code: "BREF",
+        forecast: "2026-08-24T06:00:00Z",
+      }),
+      fakeMessage({
+        key: "BREF:202608240615:0 in surface:0 in top of atmosphere:forecast",
+        code: "BREF",
+        forecast: "2026-08-24T06:15:00Z",
+      }),
+      fakeMessage({
+        key: "BREF:202608240630:0 in surface:0 in top of atmosphere:forecast",
+        code: "BREF",
+        forecast: "2026-08-24T06:30:00Z",
+      }),
+    ];
+    const selected = messagesAtForecastHour(messages, 6);
+    expect(selected).toHaveLength(1);
+    const [decoded] = decodePointMessages(selected, 14, 50);
+    expect(decoded).toMatchObject({
+      code: "BREF",
+      namedVertical: "entire atmosphere",
+    });
   });
 
   it("preserves accumulation rather than tagging every interval as both statistics", () => {

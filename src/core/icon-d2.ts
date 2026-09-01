@@ -7,6 +7,7 @@ import {
   type IconD2SubsetCache,
 } from "../cache/icon-d2-open-data-cache.js";
 import {
+  ICON_D2_AREA_FIELD_IDS,
   ICON_D2_RAW_PRESSURE_VARIABLE_IDS,
   expandIconD2RequestedFields,
   expandIconD2RequestedVariables,
@@ -81,7 +82,12 @@ const MAX_NATIVE_STEPS = 49;
 
 export interface IconD2PointDecoder {
   readonly engine?: GribDecoderName;
-  extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]>;
+  extractPoint(
+    path: string,
+    longitude: number,
+    latitude: number,
+    forecastHour?: number,
+  ): Promise<DecodedValue[]>;
 }
 
 export interface IconD2ForecastServiceOptions {
@@ -625,7 +631,13 @@ export class IconD2ForecastService {
     point: PointCoordinate,
     selection: ExpandedSelection,
   ): Promise<IconD2ProfileResult> {
-    const decoded = await this.decoder.extractPoint(cached.path, point.longitude, point.latitude);
+    const forecastHour = iconD2ForecastHour(run, validTime);
+    const decoded = await this.decoder.extractPoint(
+      cached.path,
+      point.longitude,
+      point.latitude,
+      forecastHour,
+    );
     const firstValue = decoded[0];
     if (firstValue === undefined) throw new Error("ICON-D2 decoder returned no grid point");
 
@@ -866,6 +878,7 @@ function areaSource(cacheHit: boolean, decoder: GribDecoderName | undefined) {
 }
 
 const ICON_D2_RAW_VARIABLE_SET = new Set<string>(ICON_D2_RAW_PRESSURE_VARIABLE_IDS);
+const ICON_D2_RAW_AREA_FIELD_SET = new Set<string>(ICON_D2_AREA_FIELD_IDS);
 
 export function isIconD2RawAreaVariable(id: string): boolean {
   return ICON_D2_RAW_VARIABLE_SET.has(id)
@@ -873,7 +886,8 @@ export function isIconD2RawAreaVariable(id: string): boolean {
 }
 
 export function isIconD2RawAreaField(id: string): boolean {
-  return NON_ISOBARIC_FIELD_CATALOG[id as NonIsobaricFieldId]?.kind === "raw";
+  return ICON_D2_RAW_AREA_FIELD_SET.has(id)
+    && NON_ISOBARIC_FIELD_CATALOG[id as NonIsobaricFieldId]?.kind === "raw";
 }
 
 function iconD2ProductGrid() {

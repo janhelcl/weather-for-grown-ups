@@ -4,7 +4,7 @@ export const AROME_0P01_NATIVE_FORECAST_HOURS = Object.freeze(
   Array.from({ length: AROME_0P01_MAX_FORECAST_HOUR + 1 }, (_, index) => index),
 );
 
-export type Arome0p01Package = "SP1" | "HP1";
+export type Arome0p01Package = "SP1" | "HP1" | "SP2";
 
 export function buildArome0p01OpenDataUrl(
   run: Date,
