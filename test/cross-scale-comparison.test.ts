@@ -151,21 +151,21 @@ describe("cross-scale comparison strategies", () => {
       field: "temperature_2m",
     });
 
-    await expect(
-      new IfsIconD2ComparisonStrategy(mechanics as any).compare(ifsArome),
-    ).rejects.toThrow("requires datasets=ifs,icon-d2");
-    await expect(
-      new IfsAromeComparisonStrategy(mechanics as any).compare(ifsIcon),
-    ).rejects.toThrow("requires datasets=ifs,arome");
-    await expect(
-      new GfsIconD2ComparisonStrategy(mechanics as any).compare(ifsIcon),
-    ).rejects.toThrow("requires datasets=gfs,icon-d2");
-    await expect(
-      new IfsEnsIconD2EpsComparisonStrategy(mechanics as any).compare(ifsIcon),
-    ).rejects.toThrow("requires datasets=ifs-ens,icon-d2-eps");
-    await expect(
-      new IfsEnsPeAromeComparisonStrategy(mechanics as any).compare(ifsIcon),
-    ).rejects.toThrow("requires datasets=ifs-ens,pe-arome");
+    expect(() =>
+      new IfsIconD2ComparisonStrategy(mechanics as any).compare(ifsArome)
+    ).toThrow("requires datasets=ifs,icon-d2");
+    expect(() =>
+      new IfsAromeComparisonStrategy(mechanics as any).compare(ifsIcon)
+    ).toThrow("requires datasets=ifs,arome");
+    expect(() =>
+      new GfsIconD2ComparisonStrategy(mechanics as any).compare(ifsIcon)
+    ).toThrow("requires datasets=gfs,icon-d2");
+    expect(() =>
+      new IfsEnsIconD2EpsComparisonStrategy(mechanics as any).compare(ifsIcon)
+    ).toThrow("requires datasets=ifs-ens,icon-d2-eps");
+    expect(() =>
+      new IfsEnsPeAromeComparisonStrategy(mechanics as any).compare(ifsIcon)
+    ).toThrow("requires datasets=ifs-ens,pe-arome");
 
     expect(mechanics.compareDeterministic).not.toHaveBeenCalled();
     expect(mechanics.compareEnsembles).not.toHaveBeenCalled();
@@ -180,9 +180,9 @@ describe("cross-scale comparison strategies", () => {
       run,
     } as any;
 
-    await expect(
-      new IfsIconD2ComparisonStrategy(mechanics as any).compare(malformed),
-    ).rejects.toThrow("missing its declared selection");
+    expect(() =>
+      new IfsIconD2ComparisonStrategy(mechanics as any).compare(malformed)
+    ).toThrow("missing its declared selection");
     expect(mechanics.compareDeterministic).not.toHaveBeenCalled();
   });
 
