@@ -74,7 +74,7 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 
 ### Météo-France PE-AROME
 
-`npm run test:live:pe-arome` makes one bounded two-member point query through public `dataset: "pe-arome"`. It checks authenticated WCS transport, member-specific source routing, server-side geographic subsetting, separate raw-field requests, local GRIB bundle caching/decoding, run pinning and member-first 2 m temperature / derived 10 m wind distributions on the 0.025° delivery grid.
+`npm run test:live:pe-arome` makes one bounded two-member point query through public `dataset: "pe-arome"`. It checks authenticated WCS transport, member-specific source routing, server-side geographic subsetting, separate raw-field requests, local GRIB bundle caching/decoding, run pinning and member-first 2 m temperature / relative-humidity distributions on the 0.025° delivery grid.
 
 This smoke requires `WFG_METEO_FRANCE_TOKEN` plus either `WFG_PEAROME_WCS_URL_TEMPLATE` or `WFG_PEAROME_WCS_ENDPOINTS`. The PR live workflow reports a notice and skips the network call when repository credentials are not configured; normal offline CI remains authoritative.
 
