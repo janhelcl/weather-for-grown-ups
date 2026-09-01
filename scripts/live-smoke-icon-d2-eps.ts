@@ -17,7 +17,13 @@ const result = await new UnifiedAtmosphereQueryService().query({
   selection: {
     variables: ["temperature"],
     pressureLevelsHpa: [850],
-    fields: ["convective_rain", "convective_snow", "column_maximum_reflectivity"],
+    fields: [
+      "convective_rain",
+      "convective_snow",
+      "visibility",
+      "cloud_ceiling_height_msl",
+      "column_maximum_reflectivity",
+    ],
   },
   forecast: { run: safelyPublishedRun.toISOString() },
   ensemble: {
@@ -55,6 +61,26 @@ const reflectivityOutput = reflectivity.outputs.find(
 assert(reflectivityOutput, "missing ICON-D2-EPS reflectivity output");
 assert.equal(reflectivityOutput.distribution.memberCount, 2);
 assert(Number.isFinite(reflectivityOutput.distribution.mean));
+
+for (const [id, output, level] of [
+  ["visibility", "visibilityM", { type: "surface" }],
+  [
+    "cloud_ceiling_height_msl",
+    "cloudCeilingHeightMslM",
+    { type: "named_level", id: "cloud_ceiling" },
+  ],
+] as const) {
+  const aviation = ensemble.fieldSummaries.find(
+    (summary: any) => summary.field === id,
+  );
+  assert(aviation, `missing ICON-D2-EPS ${id} distribution`);
+  assert.deepEqual(aviation.level, level);
+  assert.deepEqual(aviation.temporal, { type: "instantaneous" });
+  const outputSummary = aviation.outputs.find((item: any) => item.field === output);
+  assert(outputSummary, `missing ICON-D2-EPS ${id} output`);
+  assert.equal(outputSummary.distribution.memberCount, 2);
+  assert(Number.isFinite(outputSummary.distribution.mean));
+}
 
 for (const [id, output] of [
   ["convective_rain", "convectiveRainMm"],
