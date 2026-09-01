@@ -6,6 +6,7 @@ import { Wgrib2Decoder } from "../src/grib/wgrib2.js";
 import {
   decodePointMessages,
   gridPointsInBox,
+  knownDwdLocalParameter,
   messagesAtForecastHour,
   selectMessage,
   summarizeMessageInBox,
@@ -44,6 +45,21 @@ function fakeMessage(options: FakeMessageOptions): GribMessage {
 }
 
 describe("bundled GRIB2 point decoding", () => {
+  it("maps only exact DWD local convective precipitation parameters", () => {
+    expect(knownDwdLocalParameter(0, 78, 1, 76)).toEqual({
+      alias: "RAIN_CON",
+      surrogate: [1, 10],
+    });
+    expect(knownDwdLocalParameter(0, 78, 1, 55)).toEqual({
+      alias: "SNOW_CON",
+      surrogate: [1, 53],
+    });
+    expect(knownDwdLocalParameter(0, 7, 1, 76)).toBeUndefined();
+    expect(knownDwdLocalParameter(0, 78, 2, 76)).toBeUndefined();
+    expect(knownDwdLocalParameter(1, 78, 1, 76)).toBeUndefined();
+    expect(knownDwdLocalParameter(0, 78, 1, 99)).toBeUndefined();
+  });
+
   it("decodes pressure levels and samples the nearest grid point", () => {
     const result = decodePointMessages([
       fakeMessage({ key: "TMP:202608240600:850 in mb:Forecast" }),
