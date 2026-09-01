@@ -48,6 +48,16 @@ describe("parseSelectedAreaInventoryLine", () => {
     });
   });
 
+  it("normalizes DWD VMAX_10M and preserves hourly maximum semantics", () => {
+    expect(parseSelectedAreaInventoryLine(
+      "52:9000:d=2026081912:VMAX_10M:10 m above ground:5-6 hour max fcst:",
+      { code: "GUST", gribLevel: "10 m above ground", temporalSemantics: "maximum" },
+    )).toEqual({
+      record: 52,
+      temporal: { type: "maximum", startForecastHour: 5, endForecastHour: 6 },
+    });
+  });
+
   it("parses accumulation intervals and rejects wrong vertical semantics", () => {
     expect(parseSelectedAreaInventoryLine(
       "41:5000:d=2026081912:APCP:surface:0-6 hour acc fcst:",

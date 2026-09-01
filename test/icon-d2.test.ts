@@ -223,6 +223,18 @@ describe("ICON-D2 unified capabilities", () => {
     expect(result.matches.some((match) =>
       match.id === "temperature"
       && match.support.some((support) => support.dataset === "icon-d2"))).toBe(true);
+
+    const gust = searchAtmosphereCatalog({
+      datasets: ["icon-d2"],
+      search: "gust",
+      sections: ["fields"],
+    });
+    expect(gust.matches.find((match) => match.id === "wind_gust")).toMatchObject({
+      id: "wind_gust",
+      verticalSemantics: "10 m above ground",
+      temporalSemantics: "maximum",
+      support: [{ dataset: "icon-d2" }],
+    });
   });
 
   it("rejects out-of-domain queries before touching the ICON-D2 adapter", async () => {
@@ -276,7 +288,9 @@ describe("ICON-D2 deterministic service operations", () => {
       max: selector.code === "TMP" ? 282 : 101_700,
       temporal: selector.temporalSemantics === "accumulation"
         ? { type: "accumulation" as const, startForecastHour: 0, endForecastHour: 6 }
-        : { type: "instantaneous" as const },
+        : selector.temporalSemantics === "maximum"
+          ? { type: "maximum" as const, startForecastHour: 5, endForecastHour: 6 }
+          : { type: "instantaneous" as const },
     })),
   };
   const areaGridDecoder = {
@@ -294,7 +308,9 @@ describe("ICON-D2 deterministic service operations", () => {
       ],
       temporal: selector.temporalSemantics === "accumulation"
         ? { type: "accumulation" as const, startForecastHour: 0, endForecastHour: 6 }
-        : { type: "instantaneous" as const },
+        : selector.temporalSemantics === "maximum"
+          ? { type: "maximum" as const, startForecastHour: 5, endForecastHour: 6 }
+          : { type: "instantaneous" as const },
     })),
   };
   const service = () => new IconD2ForecastService({
@@ -537,16 +553,28 @@ describe("ICON-D2 deterministic service operations", () => {
       selection: {
         variables: ["temperature"],
         pressureLevelsHpa: [850],
-        fields: ["temperature_2m", "wind_10m", "mean_sea_level_pressure"],
+        fields: ["temperature_2m", "wind_10m", "wind_gust", "mean_sea_level_pressure"],
       },
       forecast: { run: run.toISOString() },
     })) as any;
     expect(point.fields.map((field: any) => field.id)).toEqual([
       "temperature_2m",
       "wind_10m",
+      "wind_gust",
       "mean_sea_level_pressure",
     ]);
     expect(point.fields.find((field: any) => field.id === "wind_10m")?.values.windSpeedMs).toBe(5);
+    expect(point.fields.find((field: any) => field.id === "wind_gust")).toMatchObject({
+      level: { type: "height_above_ground_m", heightM: 10 },
+      temporal: {
+        type: "maximum",
+        startForecastHour: 5,
+        endForecastHour: 6,
+        startTime: "2026-08-31T05:00:00.000Z",
+        endTime: "2026-08-31T06:00:00.000Z",
+      },
+      values: { windGustMs: 18 },
+    });
 
     const range = await service().query(queryAtmosphereSchema.parse({
       dataset: "icon-d2",
@@ -865,6 +893,7 @@ describe("ICON-D2 guard and inventory branches", () => {
     expect(isIconD2PressureVariable("wind")).toBe(true);
     expect(isIconD2PressureVariable("specific_humidity")).toBe(false);
     expect(isIconD2Field("wind_10m")).toBe(true);
+    expect(isIconD2Field("wind_gust")).toBe(true);
     expect(isIconD2Field("dew_point_2m")).toBe(false);
     expect(() => expandIconD2RequestedVariables(["specific_humidity"]))
       .toThrow("ICON-D2 pressure variables not supported");
@@ -953,6 +982,13 @@ function fakeDecodedValues(longitude: number, latitude: number) {
     { code: "TMP", heightAboveGroundM: 2, value: 290, gridPoint },
     { code: "UGRD", heightAboveGroundM: 10, value: 3, gridPoint },
     { code: "VGRD", heightAboveGroundM: 10, value: 4, gridPoint },
+    {
+      code: "GUST",
+      heightAboveGroundM: 10,
+      maximum: { startForecastHour: 5, endForecastHour: 6 },
+      value: 18,
+      gridPoint,
+    },
     { code: "PRMSL", namedVertical: "mean sea level", value: 101_325, gridPoint },
     {
       code: "APCP",
