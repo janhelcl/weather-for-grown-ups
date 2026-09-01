@@ -51,8 +51,7 @@ export class PeAromeForecastService {
       ?? process.env.WFG_CACHE_DIR
       ?? join(homedir(), ".cache", "wfg");
     this.concurrency = options.concurrency ?? DEFAULT_PE_AROME_MEMBER_CONCURRENCY;
-    const wgrib2 = process.env.WGRIB2_PATH ?? "wgrib2";
-    this.memberServiceFactory = options.memberServiceFactory ?? ((member) => {
+     this.memberServiceFactory = options.memberServiceFactory ?? ((member) => {
       const cache = new PeAromeWcsCache(
         join(cacheDir, "pe-arome-wcs", member),
         member,
@@ -60,9 +59,9 @@ export class PeAromeForecastService {
       return new AromeForecastService({
         cache,
         runProvider: new PeAromeRunResolver(cache),
-        decoder: new Wgrib2Decoder(wgrib2),
-        areaDecoder: new Wgrib2StatsDecoder(wgrib2),
-        areaGridDecoder: new Wgrib2GridDecoder(wgrib2),
+        decoder: new Wgrib2Decoder(),
+        areaDecoder: new Wgrib2StatsDecoder(),
+        areaGridDecoder: new Wgrib2GridDecoder(),
       });
     });
   }
