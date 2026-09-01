@@ -500,7 +500,7 @@ function validatePeAromeModifiers(
       context.addIssue({
         code: "custom",
         path: ["selection", "variables"],
-        message: "PE-AROME currently exposes the verified near-surface WCS field slice; pressure-level variables are not advertised until their provider coverage identities are verified",
+        message: "PE-AROME currently exposes the explicitly mapped near-surface WCS field slice; pressure-level variables are not advertised until their provider coverage identities are verified",
       });
     }
 
@@ -531,7 +531,7 @@ function validatePeAromeModifiers(
     context.addIssue({
       code: "custom",
       path: ["diagnostic"],
-      message: "PE-AROME pressure-based diagnostics are not exposed by the current verified WCS capability slice",
+      message: "PE-AROME pressure-based diagnostics are not exposed by the current explicitly mapped WCS capability slice",
     });
   }
 }
