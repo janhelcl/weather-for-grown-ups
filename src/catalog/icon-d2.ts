@@ -1,5 +1,7 @@
 import {
   expandRequestedFields,
+  NON_ISOBARIC_FIELD_CATALOG,
+  type NonIsobaricFieldDefinition,
   type NonIsobaricFieldId,
   type RawNonIsobaricFieldDefinition,
 } from "./non-isobaric-fields.js";
@@ -52,6 +54,7 @@ export const ICON_D2_FIELD_IDS = [
   "u_wind_10m",
   "v_wind_10m",
   "wind_10m",
+  "wind_gust",
   "mean_sea_level_pressure",
   "total_precipitation",
 ] as const satisfies readonly NonIsobaricFieldId[];
@@ -68,9 +71,28 @@ export const ICON_D2_AREA_FIELD_IDS = [
   "temperature_2m",
   "u_wind_10m",
   "v_wind_10m",
+  "wind_gust",
   "mean_sea_level_pressure",
   "total_precipitation",
 ] as const satisfies readonly NonIsobaricFieldId[];
+
+export const ICON_D2_WIND_GUST_FIELD: RawNonIsobaricFieldDefinition = {
+  ...(NON_ISOBARIC_FIELD_CATALOG.wind_gust as RawNonIsobaricFieldDefinition),
+  level: {
+    type: "height_above_ground_m",
+    heightM: 10,
+    gribLevel: "10 m above ground",
+    nomadsLevel: "10_m_above_ground",
+  },
+  temporalSemantics: "maximum",
+  description: "Maximum 10 m wind gust over the native one-hour ICON-D2 interval",
+};
+
+export function iconD2FieldDefinition(id: NonIsobaricFieldId): NonIsobaricFieldDefinition {
+  return id === "wind_gust"
+    ? ICON_D2_WIND_GUST_FIELD
+    : NON_ISOBARIC_FIELD_CATALOG[id];
+}
 
 const pressureLevelSet = new Set<number>(ICON_D2_PRESSURE_LEVELS_HPA);
 const pressureVariableSet = new Set<string>(ICON_D2_PRESSURE_VARIABLE_IDS);
@@ -109,5 +131,6 @@ export function expandIconD2RequestedFields(
   if (unsupported.length > 0) {
     throw new Error(`ICON-D2 fields not supported: ${unsupported.join(", ")}`);
   }
-  return expandRequestedFields([...ids]);
+  return expandRequestedFields([...ids]).map((field) =>
+    field.id === "wind_gust" ? ICON_D2_WIND_GUST_FIELD : field);
 }

@@ -10,6 +10,7 @@ import {
   ICON_D2_RAW_PRESSURE_VARIABLE_IDS,
   expandIconD2RequestedFields,
   expandIconD2RequestedVariables,
+  iconD2FieldDefinition,
 } from "../catalog/icon-d2.js";
 import {
   NON_ISOBARIC_FIELD_CATALOG,
@@ -649,7 +650,7 @@ export class IconD2ForecastService {
     }
     const levels = [...levelMap.values()].sort((a, b) => b.pressureHpa - a.pressureHpa);
     const fields = selection.fieldIds.map((id) =>
-      buildFieldResult(NON_ISOBARIC_FIELD_CATALOG[id], decoded, run));
+      buildFieldResult(iconD2FieldDefinition(id), decoded, run));
 
     const gridPoint = firstValue.gridPoint;
     return {

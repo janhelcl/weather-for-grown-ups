@@ -56,7 +56,7 @@ export const searchAtmosphereCatalogSchema = z.object({
   sections: z.array(unifiedCatalogSectionSchema).min(1).max(UNIFIED_CATALOG_SECTIONS.length)
     .optional(),
   classification: z.enum(["raw", "derived"]).optional(),
-  temporalSemantics: z.enum(["instantaneous", "accumulation", "average"]).optional(),
+  temporalSemantics: z.enum(["instantaneous", "accumulation", "average", "maximum"]).optional(),
   spatialScope: z.enum(["global", "limited_area"]).optional().describe(
     "Dataset spatial-domain filter. limited_area selects regional/convection-permitting datasets.",
   ),
@@ -93,7 +93,7 @@ export const unifiedCatalogMatchSchema = z.object({
   kind: z.string().min(1),
   description: z.string().min(1),
   verticalSemantics: z.string().min(1),
-  temporalSemantics: z.enum(["instantaneous", "accumulation", "average"]).optional(),
+  temporalSemantics: z.enum(["instantaneous", "accumulation", "average", "maximum"]).optional(),
   outputs: z.array(z.object({
     field: z.string().min(1),
     unit: z.string().min(1),
