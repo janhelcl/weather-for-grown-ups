@@ -588,6 +588,23 @@ describe("AROME deterministic field operations", () => {
     expect(decoder.extractPoint).toHaveBeenCalledTimes(3);
   });
 
+  it("uses the shared 21-sample transect default when samples is omitted", async () => {
+    const transect = await service().query(queryAtmosphereSchema.parse({
+      dataset: "arome",
+      geometry: {
+        type: "transect",
+        start: { latitude: 48.5, longitude: 2 },
+        end: { latitude: 49, longitude: 3 },
+      },
+      time: { at: "2026-08-31T18:00:00Z" },
+      selection: { fields: ["temperature_2m"] },
+      forecast: { run: run.toISOString() },
+    })) as any;
+
+    expect(transect.samples).toHaveLength(21);
+    expect(decoder.extractPoint).toHaveBeenCalledTimes(21);
+  });
+
   it("supports bounded multi-point time ranges with one package fetch per lead", async () => {
     const result = await service().query(queryAtmosphereSchema.parse({
       dataset: "arome",
