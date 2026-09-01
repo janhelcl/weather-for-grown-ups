@@ -361,6 +361,8 @@ function fieldParameter(field: RawNonIsobaricFieldDefinition): string {
     case "total_precipitation": return "tot_prec";
     case "convective_rain": return "rain_con";
     case "convective_snow": return "snow_con";
+    case "visibility": return "vis";
+    case "cloud_ceiling_height_msl": return "ceiling";
     case "column_maximum_reflectivity": return "dbz_cmax";
     default:
       throw new Error(
