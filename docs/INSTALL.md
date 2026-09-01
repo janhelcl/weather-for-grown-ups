@@ -84,6 +84,30 @@ The package's default GRIB2 engine is bundled through npm. Native tooling remain
 
 WFG currently targets Node.js 20 or newer.
 
+### PE-AROME credentials
+
+Most WFG datasets use anonymous Open Data access. `dataset: "pe-arome"` is different: Météo-France's targeted ensemble WCS requires a bearer token and the member-specific endpoint(s) supplied by the API portal subscription.
+
+Set a current token:
+
+```bash
+export WFG_METEO_FRANCE_TOKEN='...'
+```
+
+Then configure either a member endpoint template:
+
+```bash
+export WFG_PEAROME_WCS_URL_TEMPLATE='https://.../{member_number_2}/.../wcs'
+```
+
+or an explicit JSON object keyed by `c00,p01..p24`:
+
+```bash
+export WFG_PEAROME_WCS_ENDPOINTS='{"c00":"https://...","p01":"https://..."}'
+```
+
+WFG intentionally does not embed or guess the subscription-specific PE-AROME endpoint. These variables are only source configuration; the public CLI/MCP query remains `dataset × geometry × time × selection`. See [PE_AROME.md](PE_AROME.md).
+
 ## Docker
 
 Docker remains useful for pinned/reproducible deployments. The image contains Node.js 24, CDO and native `wgrib2 3.8.0` from conda-forge.
