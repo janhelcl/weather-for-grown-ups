@@ -227,7 +227,11 @@ export const compareIfsEnsPeAromeDatasetsSchema = z.object({
 });
 
 function validateCrossScaleSelection(
-  request: { variable?: string; pressureLevelHpa?: number; field?: string },
+  request: {
+    variable?: string | undefined;
+    pressureLevelHpa?: number | undefined;
+    field?: string | undefined;
+  },
   context: z.RefinementCtx,
 ): void {
   const pressureRequested = request.variable !== undefined || request.pressureLevelHpa !== undefined;
