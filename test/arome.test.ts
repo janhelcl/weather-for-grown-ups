@@ -664,9 +664,9 @@ describe("AROME deterministic field operations", () => {
   it("normalizes the unique instantaneous local SP2 reflectivity field", () => {
     const gridPoint = { longitude: 2.35, latitude: 48.86 };
     expect(withAromeColumnMaximumReflectivity([
-      { code: "missing", surface: true, value: 35, gridPoint },
+      { code: "REFD", surface: true, value: 35, gridPoint },
       {
-        code: "missing",
+        code: "REFD",
         surface: true,
         accumulation: { startForecastHour: 0, endForecastHour: 6 },
         value: 1,
@@ -935,7 +935,7 @@ function fakeDecodedValues(longitude: number, latitude: number) {
     { code: "RH", heightAboveGroundM: 2, value: 70, gridPoint },
     { code: "UGRD", heightAboveGroundM: 10, value: 3, gridPoint },
     { code: "VGRD", heightAboveGroundM: 10, value: 4, gridPoint },
-    { code: "missing", surface: true, value: 35, gridPoint },
+    { code: "REFD", surface: true, value: 35, gridPoint },
     {
       code: "U_RAF",
       heightAboveGroundM: 10,
