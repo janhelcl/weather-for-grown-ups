@@ -36,6 +36,28 @@ export type AtmosphericComparisonProvenanceShape =
   | "native_source_per_side"
   | "hybrid_constituent_sources";
 
+export interface AtmosphericCrossScaleComparisonDeclaration {
+  initializationHoursUtc: readonly number[];
+  validTimeCadenceHours: number;
+  maxLeadHours: number;
+  pressure?: {
+    variables: readonly string[];
+    pressureLevelsHpa: readonly number[];
+    scalarOnly: boolean;
+  };
+  fields?: {
+    ids: readonly string[];
+    temporalSemantics: "instantaneous";
+    scalarOnly: boolean;
+  };
+  diagnostics: readonly string[];
+  comparisonLayerInterpolation: "none";
+  comparisonLayerRegridding: "none";
+  aggregation:
+    | "none_deterministic"
+    | "independent_ensemble_distributions_no_member_pairing";
+}
+
 export interface AtmosphericComparisonDatasetDescriptor {
   dataset: PublicAtmosphericDataset;
   resultKind: AtmosphericDatasetKind;
@@ -66,12 +88,13 @@ export interface AtmosphericDatasetComparisonStrategyMetadata {
     | "requested_point_within_both_declared_domains";
   pointSamplingSemantics:
     | "independent_dataset_point_sampling"
-    | "independent_native_grid_points_at_same_requested_coordinate";
+    | "independent_dataset_sampling_at_same_requested_coordinate";
   spatialAlignment:
     | "point_only_no_cross_dataset_regridding";
   nativeResolutionRepresentation:
     | "per_dataset_native_grid_and_source_provenance"
     | "preserve_per_side_native_grid_and_sampling_provenance";
+  crossScale?: AtmosphericCrossScaleComparisonDeclaration;
   comparisonSemantics: AtmosphericComparisonSemantics;
   outputShape: AtmosphericComparisonOutputShape;
   provenanceShape: AtmosphericComparisonProvenanceShape;
@@ -106,6 +129,7 @@ export function comparisonStrategyMetadata(
     pointSamplingSemantics?: AtmosphericDatasetComparisonStrategyMetadata["pointSamplingSemantics"];
     spatialAlignment?: AtmosphericDatasetComparisonStrategyMetadata["spatialAlignment"];
     nativeResolutionRepresentation?: AtmosphericDatasetComparisonStrategyMetadata["nativeResolutionRepresentation"];
+    crossScale?: AtmosphericCrossScaleComparisonDeclaration;
   } = {},
 ): AtmosphericDatasetComparisonStrategyMetadata {
   const declaredKey = `${datasets[0]}:${datasets[1]}`;
@@ -128,6 +152,7 @@ export function comparisonStrategyMetadata(
     spatialAlignment: options.spatialAlignment ?? "point_only_no_cross_dataset_regridding",
     nativeResolutionRepresentation:
       options.nativeResolutionRepresentation ?? "per_dataset_native_grid_and_source_provenance",
+    ...(options.crossScale === undefined ? {} : { crossScale: options.crossScale }),
     comparisonSemantics,
     outputShape: options.outputShape ?? "pair_native_result",
     provenanceShape: options.provenanceShape ?? "native_source_per_dataset",
