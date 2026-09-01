@@ -17,6 +17,8 @@ const ALL_SUPPORTED_CODES = [...new Set([
   "BREF",
   "RAIN_CON",
   "SNOW_CON",
+  "VIS",
+  "CEILING",
   "GP",
   "VMAX_10M",
   "U_RAF",
@@ -138,10 +140,15 @@ export function parseWgrib2PointLine(
   const surfaceMatch = gribLevel === "surface";
   const heightMatch = gribLevel.match(/^(\d+(?:\.\d+)?) m above ground$/);
   const gfsNamedLevel = findNamedNonIsobaricLevel(gribLevel);
+  const dwdCeilingLevel = names === "DWD"
+    && canonicalDwdIconCode(inventoryCode) === "CEILING"
+    && /cloud\s*(?:base|ceiling).*?(?:mean\s*sea\s*level|msl)/i.test(gribLevel);
   const modelNamedVertical = /^(?:atmos col|surface\s*-\s*top of atmosphere)$/i.test(gribLevel)
     ? "entire atmosphere"
-    : gfsNamedLevel?.gribLevel
-      ?? (GEFS_NAMED_VERTICALS.has(gribLevel) ? gribLevel : undefined);
+    : dwdCeilingLevel
+      ? "cloud ceiling"
+      : gfsNamedLevel?.gribLevel
+        ?? (GEFS_NAMED_VERTICALS.has(gribLevel) ? gribLevel : undefined);
   const pointMatch = line.match(/lon=([-+\d.eE]+),lat=([-+\d.eE]+)/);
   const valueMatch = line.match(/val=([-+\d.eE]+)/);
 
@@ -249,6 +256,8 @@ export function canonicalDwdIconCode(code: string): string | undefined {
     case "TOT_PREC": return "APCP";
     case "PRR_CON": return "RAIN_CON";
     case "PRS_CON": return "SNOW_CON";
+    case "VIS": return "VIS";
+    case "CEILING": return "CEILING";
     case "DBZ": return "BREF";
     default: return undefined;
   }
