@@ -9,7 +9,6 @@ import {
   scanGrib2Messages,
 } from "./dwd-local-parameters.js";
 
-export { knownDwdLocalParameter } from "./dwd-local-parameters.js";
 
 export interface GribBox {
   westLongitude: number;
