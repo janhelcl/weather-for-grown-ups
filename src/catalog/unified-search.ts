@@ -545,6 +545,7 @@ function preferredRepresentative(entries: CatalogEntry[]): CatalogEntry {
     ?? entries.find((entry) => entry.dataset === "icon-d2")
     ?? entries.find((entry) => entry.dataset === "icon-d2-eps")
     ?? entries.find((entry) => entry.dataset === "arome")
+    ?? entries.find((entry) => entry.dataset === "pe-arome")
     ?? entries.find((entry) => entry.dataset === "gefs")
     ?? entries.find((entry) => entry.dataset === "ifs")
     ?? entries.find((entry) => entry.dataset === "aifs")
@@ -572,6 +573,8 @@ function supportSemantics(
       return "DWD ICON-D2-EPS 20-member limited-area convection-permitting ensemble; 3-hourly cycles, hourly output through 48 hours with member-first aggregation on the native icosahedral grid";
     case "arome":
       return "Météo-France AROME limited-area deterministic forecast; ~1.3 km native model mesh with the 0.01° EURW1S100 public delivery product, hourly output through 51 hours";
+    case "pe-arome":
+      return "Météo-France PE-AROME 25-member limited-area ensemble; 0.025° WCS delivery grid, hourly output through 51 hours, with member-first aggregation";
     case "gefs":
       return forecastKind === "reforecast"
         ? "GEFSv12 retrospective ensemble forecast; 2000-2019 point and multi-point field, pressure, or mixed selections plus native layer/profile diagnostics; ranges preserve native cadence and per-step grid provenance"
