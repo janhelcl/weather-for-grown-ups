@@ -7,7 +7,6 @@ import {
   type Wgrib2NameConvention,
 } from "./wgrib2.js";
 import {
-  canonicalGribCode,
   readGribMessages,
   selectMessage,
   summarizeMessageInBox,
