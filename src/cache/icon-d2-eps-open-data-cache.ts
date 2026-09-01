@@ -302,7 +302,9 @@ export function iconD2EpsWgrib2TagForMember(
 }
 
 function escapePosixExtendedRegex(value: string): string {
-  return value.replace(/[.[\\*^$()+?{|]/g, "\\function ensembleTagOrder(tag: string): number | null {");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function ensembleTagOrder(tag: string): number | null {");
 }
 
 function ensembleTagOrder(tag: string): number | null {
