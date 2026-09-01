@@ -155,19 +155,22 @@ export function decodePointMessages(
 ): DecodedValue[] {
   const values: DecodedValue[] = [];
   for (const message of messages) {
-    const vertical = verticalFromKey(message.key);
+    const normalized = normalizeDecodedCodeValue(message.varAbbrev, 0);
+    const vertical = normalized.code === "CEILING"
+      ? { namedVertical: "cloud ceiling" as const }
+      : verticalFromKey(message.key);
     if (vertical === null) continue;
     const sample = nearestPoint(message, longitude, latitude);
     const interval = forecastInterval(message);
     const semantics = interval === undefined ? "instantaneous" : statisticalSemantics(message.key);
-    const normalized = normalizeDecodedCodeValue(message.varAbbrev, sample.value);
+    const normalizedValue = normalizeDecodedCodeValue(message.varAbbrev, sample.value);
     values.push({
-      code: normalized.code,
+      code: normalizedValue.code,
       ...vertical,
       ...(semantics === "accumulation" && interval !== undefined ? { accumulation: interval } : {}),
       ...(semantics === "average" && interval !== undefined ? { average: interval } : {}),
       ...(semantics === "maximum" && interval !== undefined ? { maximum: interval } : {}),
-      value: normalized.value,
+      value: normalizedValue.value,
       gridPoint: { latitude: sample.latitude, longitude: sample.longitude },
     });
   }
@@ -504,6 +507,7 @@ export function canonicalGribCode(code: string): string {
   const normalized = code.toUpperCase();
   if (normalized === "GP") return "HGT";
   if (normalized === "VMAX_10M") return "GUST";
+  if (normalized === "CEIL") return "CEILING";
   if (normalized === "U_RAF" || normalized === "UGUST" || normalized === "EFG10") return "U_RAF";
   if (normalized === "V_RAF" || normalized === "VGUST" || normalized === "NFG10") return "V_RAF";
   return code;
