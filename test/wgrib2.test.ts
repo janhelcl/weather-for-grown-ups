@@ -16,6 +16,20 @@ describe("parseWgrib2PointLine", () => {
     });
   });
 
+  it("parses regional convective precipitation accumulations", () => {
+    for (const code of ["RAIN_CON", "SNOW_CON"] as const) {
+      expect(parseWgrib2PointLine(
+        `1:1:d=2026081906:${code}:surface:0-6 hour acc fcst:lon=14.5,lat=50,val=1.25`,
+      )).toEqual({
+        code,
+        surface: true,
+        accumulation: { startForecastHour: 0, endForecastHour: 6 },
+        value: 1.25,
+        gridPoint: { longitude: 14.5, latitude: 50 },
+      });
+    }
+  });
+
   it("parses scientific notation and a published fractional pressure level", () => {
     const line = "1:1:d=2026081906:O3MR:0.1 mb:6 hour fcst:lon=359.75,lat=-12.5,val=-1.2e-06";
     expect(parseWgrib2PointLine(line)).toEqual({
