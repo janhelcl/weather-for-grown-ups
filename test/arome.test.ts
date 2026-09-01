@@ -10,7 +10,7 @@ import {
 } from "../src/catalog/arome.js";
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
 import { AromeForecastService } from "../src/core/arome.js";
-import { AromeRunResolver } from "../src/core/arome-run.js";
+import { AromeRunResolver, resolveAromeRun } from "../src/core/arome-run.js";
 import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-api.js";
 import {
   publicDatasetCoversGeometry,
@@ -258,6 +258,66 @@ describe("AROME run resolution", () => {
     })).rejects.toThrow("beyond the 51-hour AROME horizon");
   });
 
+  it("dispatches latest/latest-complete selectors and preserves explicit runs", async () => {
+    const provider = {
+      resolveLatestRun: vi.fn(async () => new Date("2026-08-31T15:00:00Z")),
+      resolveLatestCompleteRun: vi.fn(async () => new Date("2026-08-31T12:00:00Z")),
+    };
+    const requirement = {
+      type: "valid_time" as const,
+      validTime: new Date("2026-08-31T18:00:00Z"),
+      products,
+    };
+
+    expect((await resolveAromeRun("latest", requirement, provider)).toISOString())
+      .toBe("2026-08-31T15:00:00.000Z");
+    expect((await resolveAromeRun("latest_complete", requirement, provider)).toISOString())
+      .toBe("2026-08-31T12:00:00.000Z");
+    expect((await resolveAromeRun("2026-08-31T09:00:00Z", requirement, provider)).toISOString())
+      .toBe("2026-08-31T09:00:00.000Z");
+    expect(provider.resolveLatestRun).toHaveBeenCalledOnce();
+    expect(provider.resolveLatestCompleteRun).toHaveBeenCalledOnce();
+  });
+
+  it("expires cached run resolutions instead of returning stale cycles", async () => {
+    let now = new Date("2026-08-31T20:00:00Z").getTime();
+    const probe = { isForecastAvailable: vi.fn(async () => true) };
+    const resolver = new AromeRunResolver(probe, () => now, 1_000, 2);
+    const requirement = {
+      type: "valid_time" as const,
+      validTime: new Date("2026-08-31T18:00:00Z"),
+      products,
+    };
+
+    await resolver.resolveLatestRun(requirement);
+    expect(probe.isForecastAvailable).toHaveBeenCalledTimes(1);
+
+    now += 2_000;
+    await resolver.resolveLatestRun(requirement);
+    expect(probe.isForecastAvailable).toHaveBeenCalledTimes(2);
+  });
+
+  it("can use the current cycle when it precedes the requested valid time", async () => {
+    const probe = { isForecastAvailable: vi.fn(async () => true) };
+    const resolver = new AromeRunResolver(
+      probe,
+      () => new Date("2026-08-31T15:30:00Z").getTime(),
+      60_000,
+      2,
+    );
+
+    expect((await resolver.resolveLatestRun({
+      type: "valid_time",
+      validTime: new Date("2026-08-31T18:00:00Z"),
+      products,
+    })).toISOString()).toBe("2026-08-31T15:00:00.000Z");
+    expect(probe.isForecastAvailable).toHaveBeenCalledWith(
+      new Date("2026-08-31T15:00:00Z"),
+      3,
+      products,
+    );
+  });
+
   it("fails clearly when no recent published cycle satisfies the request", async () => {
     const resolver = new AromeRunResolver(
       { isForecastAvailable: vi.fn(async () => false) },
@@ -428,6 +488,28 @@ describe("AROME deterministic field operations", () => {
   });
 
   beforeEach(() => vi.clearAllMocks());
+
+  it("falls back to bundled-decoder provenance when a decoder omits its engine label", async () => {
+    const unlabeledDecoder = {
+      extractPoint: vi.fn(async (_path: string, longitude: number, latitude: number) =>
+        fakeDecodedValues(longitude, latitude)),
+    };
+    const unlabeledService = new AromeForecastService({
+      cache,
+      decoder: unlabeledDecoder,
+      areaDecoder: areaDecoder as any,
+      areaGridDecoder: areaGridDecoder as any,
+    });
+    const point = await unlabeledService.query(queryAtmosphereSchema.parse({
+      dataset: "arome",
+      geometry: { type: "point", latitude: 48.86, longitude: 2.35 },
+      time: { at: "2026-08-31T18:00:00Z" },
+      selection: { fields: ["temperature_2m"] },
+      forecast: { run: run.toISOString() },
+    })) as any;
+
+    expect(point.source.decoder).toBe("gribberish");
+  });
 
   it("supports field-only point and hourly range queries", async () => {
     const point = await service().query(queryAtmosphereSchema.parse({
