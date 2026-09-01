@@ -17,6 +17,17 @@ export interface AromeDataRequest {
   run: Date;
   forecastHour: number;
   fields: RawNonIsobaricFieldDefinition[];
+  /**
+   * Optional geographic subset for sources that can subset server-side.
+   * The anonymous AROME package source intentionally ignores this because
+   * its files are already packaged by run/lead rather than request geometry.
+   */
+  subset?: {
+    westLongitude: number;
+    eastLongitude: number;
+    southLatitude: number;
+    northLatitude: number;
+  };
 }
 
 export interface AromeSourceFile {
