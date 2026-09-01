@@ -9,7 +9,7 @@ export const catalogSearchSectionSchema = z.enum([
 ]);
 
 export const catalogSearchClassificationSchema = z.enum(["raw", "derived"]);
-export const catalogSearchTemporalSchema = z.enum(["instantaneous", "accumulation", "average"]);
+export const catalogSearchTemporalSchema = z.enum(["instantaneous", "accumulation", "average", "maximum"]);
 
 export const catalogSearchQuerySchema = z.object({
   search: z.string().trim().min(1).max(120).optional(),
