@@ -21,7 +21,7 @@ const result = await new UnifiedAtmosphereQueryService().query({
   geometry: { type: "point", latitude: 48.8566, longitude: 2.3522 },
   time: { at: validTime.toISOString() },
   selection: {
-    fields: ["temperature_2m", "wind_10m"],
+    fields: ["temperature_2m", "relative_humidity_2m"],
   },
   forecast: { run: safelyPublishedRun.toISOString() },
   ensemble: {
@@ -44,14 +44,14 @@ assert.deepEqual(point.selection.members, ["c00", "p01"]);
 assert.equal(point.members.length, 2);
 
 const temperature = point.fieldSummaries.find((item: any) => item.field === "temperature_2m");
-const wind = point.fieldSummaries.find((item: any) => item.field === "wind_10m");
+const humidity = point.fieldSummaries.find((item: any) => item.field === "relative_humidity_2m");
 assert(temperature, "missing PE-AROME temperature_2m field summary");
-assert(wind, "missing PE-AROME wind_10m field summary");
+assert(humidity, "missing PE-AROME relative_humidity_2m field summary");
 assert(Number.isFinite(
   temperature.outputs.find((item: any) => item.field === "temperatureC").distribution.mean,
 ));
 assert(Number.isFinite(
-  wind.outputs.find((item: any) => item.field === "windSpeedMs").distribution.mean,
+  humidity.outputs.find((item: any) => item.field === "relativeHumidityPct").distribution.mean,
 ));
 assert.equal(point.source.provider, "Météo-France Public API");
 assert.equal(point.source.access, "meteo_france_wcs");
