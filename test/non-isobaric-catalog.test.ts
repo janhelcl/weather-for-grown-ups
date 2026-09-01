@@ -32,6 +32,15 @@ describe("non-isobaric field catalog", () => {
       kind: "raw", gfsCode: "SNOW_CON", level: { type: "surface" }, temporalSemantics: "accumulation",
       outputs: [{ field: "convectiveSnowWaterEquivalentMm", unit: "mm" }],
     });
+    expect(NON_ISOBARIC_FIELD_CATALOG.visibility).toMatchObject({
+      kind: "raw", gfsCode: "VIS", level: { type: "surface" }, temporalSemantics: "instantaneous",
+      outputs: [{ field: "visibilityM", unit: "m" }],
+    });
+    expect(NON_ISOBARIC_FIELD_CATALOG.cloud_ceiling_height_msl).toMatchObject({
+      kind: "raw", gfsCode: "CEILING", level: { type: "named_level", id: "cloud_ceiling" },
+      temporalSemantics: "instantaneous",
+      outputs: [{ field: "cloudCeilingHeightMslM", unit: "m" }],
+    });
   });
 
   it("expands derived winds at multiple heights to exact U/V dependencies", () => {
@@ -48,6 +57,8 @@ describe("non-isobaric field catalog", () => {
     for (const id of [
       "convective_rain",
       "convective_snow",
+      "visibility",
+      "cloud_ceiling_height_msl",
       "column_maximum_reflectivity",
     ] as const) {
       expect(supported.has(NON_ISOBARIC_FIELD_CATALOG[id].gfsCode)).toBe(false);
@@ -62,5 +73,7 @@ describe("non-isobaric field catalog", () => {
     expect(catalog.fields.find((field) => field.id === "total_precipitation")).toMatchObject({ temporalSemantics: "accumulation" });
     expect(catalog.fields.some((field) => field.id === "convective_rain")).toBe(false);
     expect(catalog.fields.some((field) => field.id === "convective_snow")).toBe(false);
+    expect(catalog.fields.some((field) => field.id === "visibility")).toBe(false);
+    expect(catalog.fields.some((field) => field.id === "cloud_ceiling_height_msl")).toBe(false);
   });
 });
