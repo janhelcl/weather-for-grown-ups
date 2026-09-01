@@ -95,7 +95,7 @@ export class Wgrib2GridDecoder {
     ]);
     const matches = inventory
       .split(/\r?\n/)
-      .map((line) => parseSelectedAreaInventoryLine(line, selector))
+      .map((line) => parseSelectedAreaInventoryLine(line, selector, this.names))
       .filter((value): value is { record: number; temporal: SelectedMessageTemporal } => value !== null);
 
     if (matches.length === 0) {
