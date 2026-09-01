@@ -7,7 +7,10 @@ import {
   type AromeSourceFile,
   type AromeSubsetCache,
 } from "../cache/arome-open-data-cache.js";
-import { expandArome0p01RequestedFields } from "../catalog/arome.js";
+import {
+  aromeFieldDefinition,
+  expandArome0p01RequestedFields,
+} from "../catalog/arome.js";
 import {
   NON_ISOBARIC_FIELD_CATALOG,
   type NonIsobaricFieldId,
@@ -405,12 +408,15 @@ export class AromeForecastService {
     point: PointCoordinate,
     selection: ExpandedSelection,
   ): Promise<AromePointResult> {
-    const decoded = await this.decoder.extractPoint(cached.path, point.longitude, point.latitude);
-    const firstValue = decoded[0];
+    const rawDecoded = await this.decoder.extractPoint(cached.path, point.longitude, point.latitude);
+    const firstValue = rawDecoded[0];
     if (firstValue === undefined) throw new Error("AROME decoder returned no grid point");
+    const decoded = selection.fieldIds.includes("wind_gust")
+      ? withAromeWindGust(rawDecoded)
+      : rawDecoded;
     assertFieldsComplete(decoded, selection.fields);
     const fields = selection.fieldIds.map((id) =>
-      buildFieldResult(NON_ISOBARIC_FIELD_CATALOG[id], decoded, run));
+      buildFieldResult(aromeFieldDefinition(id), decoded, run));
 
     return {
       model: MODEL,
@@ -431,6 +437,46 @@ export class AromeForecastService {
   ): Promise<Date> {
     return Promise.resolve(resolveAromeRun(selector, requirement, this.runProvider));
   }
+}
+
+export function withAromeWindGust(values: readonly DecodedValue[]): DecodedValue[] {
+  const u = values.find((value) =>
+    value.code === "U_RAF" && value.heightAboveGroundM === 10);
+  const v = values.find((value) =>
+    value.code === "V_RAF" && value.heightAboveGroundM === 10);
+  if (!u || !v) {
+    throw new Error(
+      "AROME wind_gust requires both native U_RAF and V_RAF components at 10 m",
+    );
+  }
+  if (!u.maximum || !v.maximum) {
+    throw new Error(
+      "AROME wind_gust components are missing their native maximum-over-period interval",
+    );
+  }
+  if (
+    u.maximum.startForecastHour !== v.maximum.startForecastHour
+    || u.maximum.endForecastHour !== v.maximum.endForecastHour
+  ) {
+    throw new Error("AROME U_RAF/V_RAF gust components have inconsistent maximum intervals");
+  }
+  if (
+    u.gridPoint.latitude !== v.gridPoint.latitude
+    || u.gridPoint.longitude !== v.gridPoint.longitude
+  ) {
+    throw new Error("AROME U_RAF/V_RAF gust components resolved to different grid points");
+  }
+
+  return [
+    ...values,
+    {
+      code: "GUST",
+      heightAboveGroundM: 10,
+      maximum: { ...u.maximum },
+      value: Math.hypot(u.value, v.value),
+      gridPoint: { ...u.gridPoint },
+    },
+  ];
 }
 
 function expandedSelection(request: QueryAtmosphereRequest): ExpandedSelection {

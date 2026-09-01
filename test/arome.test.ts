@@ -9,7 +9,10 @@ import {
   expandArome0p01RequestedFields,
 } from "../src/catalog/arome.js";
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
-import { AromeForecastService } from "../src/core/arome.js";
+import {
+  AromeForecastService,
+  withAromeWindGust,
+} from "../src/core/arome.js";
 import { AromeRunResolver, resolveAromeRun } from "../src/core/arome-run.js";
 import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-api.js";
 import {
@@ -125,6 +128,25 @@ describe("AROME selected-package cache", () => {
     const second = await cache.fetch(request);
     expect(second).toMatchObject({ path: first.path, cacheHit: true });
     expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps AROME gusts in the native SP1 package", async () => {
+    const fetchFn = vi.fn(async () =>
+      new Response(new TextEncoder().encode("GRIB-SP1"), { status: 200 }));
+    const cache = new AromeOpenDataCache(
+      rootDir,
+      fetchFn as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+    );
+
+    await cache.fetch({
+      run: new Date("2026-08-31T12:00:00Z"),
+      forecastHour: 6,
+      fields: expandArome0p01RequestedFields(["wind_gust"]),
+    });
+
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(String(fetchFn.mock.calls[0]?.[0])).toContain("/SP1/");
   });
 
   it("rejects empty selections and non-GRIB upstream payloads", async () => {
@@ -439,6 +461,18 @@ describe("AROME unified capabilities", () => {
     expect(result.matches.some((match) =>
       match.id === "wind_10m"
       && match.support.some((support) => support.dataset === "arome"))).toBe(true);
+
+    const gust = searchAtmosphereCatalog({
+      datasets: ["arome"],
+      search: "gust",
+      sections: ["fields"],
+    });
+    expect(gust.matches.find((match) => match.id === "wind_gust")).toMatchObject({
+      id: "wind_gust",
+      verticalSemantics: "10 m above ground",
+      temporalSemantics: "maximum",
+      support: [{ dataset: "arome" }],
+    });
     expect(searchAtmosphereCatalog({
       datasets: ["arome"],
       sections: ["variables", "layer_diagnostics", "profile_diagnostics"],
@@ -532,7 +566,7 @@ describe("AROME deterministic field operations", () => {
       dataset: "arome",
       geometry: { type: "point", latitude: 48.86, longitude: 2.35 },
       time: { at: "2026-08-31T18:00:00Z" },
-      selection: { fields: ["temperature_2m", "relative_humidity_2m", "wind_10m"] },
+      selection: { fields: ["temperature_2m", "relative_humidity_2m", "wind_10m", "wind_gust"] },
       forecast: { run: run.toISOString() },
     })) as any;
     expect(point).toMatchObject({
@@ -552,6 +586,17 @@ describe("AROME deterministic field operations", () => {
       .toBe(70);
     expect(point.fields.find((field: any) => field.id === "wind_10m").values.windSpeedMs)
       .toBe(5);
+    expect(point.fields.find((field: any) => field.id === "wind_gust")).toMatchObject({
+      level: { type: "height_above_ground_m", heightM: 10 },
+      temporal: {
+        type: "maximum",
+        startForecastHour: 5,
+        endForecastHour: 6,
+        startTime: "2026-08-31T17:00:00.000Z",
+        endTime: "2026-08-31T18:00:00.000Z",
+      },
+      values: { windGustMs: 10 },
+    });
 
     const range = await service().query(queryAtmosphereSchema.parse({
       dataset: "arome",
@@ -565,6 +610,36 @@ describe("AROME deterministic field operations", () => {
     })) as any;
     expect(range.series.map((step: any) => step.forecastHour)).toEqual([6, 7, 8]);
     expect(range.series.every((step: any) => step.levels.length === 0)).toBe(true);
+  });
+
+  it("derives gust magnitude only from aligned native AROME gust components", () => {
+    const gridPoint = { longitude: 2.35, latitude: 48.86 };
+    const maximum = { startForecastHour: 5, endForecastHour: 6 };
+    expect(withAromeWindGust([
+      { code: "U_RAF", heightAboveGroundM: 10, maximum, value: 6, gridPoint },
+      { code: "V_RAF", heightAboveGroundM: 10, maximum, value: 8, gridPoint },
+    ])).toContainEqual({
+      code: "GUST",
+      heightAboveGroundM: 10,
+      maximum,
+      value: 10,
+      gridPoint,
+    });
+
+    expect(() => withAromeWindGust([
+      { code: "U_RAF", heightAboveGroundM: 10, maximum, value: 6, gridPoint },
+    ])).toThrow("both native U_RAF and V_RAF");
+
+    expect(() => withAromeWindGust([
+      { code: "U_RAF", heightAboveGroundM: 10, maximum, value: 6, gridPoint },
+      {
+        code: "V_RAF",
+        heightAboveGroundM: 10,
+        maximum: { startForecastHour: 4, endForecastHour: 6 },
+        value: 8,
+        gridPoint,
+      },
+    ])).toThrow("inconsistent maximum intervals");
   });
 
   it("reuses one package file for multi-point and transect decoding", async () => {
@@ -788,6 +863,20 @@ function fakeDecodedValues(longitude: number, latitude: number) {
     { code: "RH", heightAboveGroundM: 2, value: 70, gridPoint },
     { code: "UGRD", heightAboveGroundM: 10, value: 3, gridPoint },
     { code: "VGRD", heightAboveGroundM: 10, value: 4, gridPoint },
+    {
+      code: "U_RAF",
+      heightAboveGroundM: 10,
+      maximum: { startForecastHour: 5, endForecastHour: 6 },
+      value: 6,
+      gridPoint,
+    },
+    {
+      code: "V_RAF",
+      heightAboveGroundM: 10,
+      maximum: { startForecastHour: 5, endForecastHour: 6 },
+      value: 8,
+      gridPoint,
+    },
     { code: "UGRD", heightAboveGroundM: 20, value: 5, gridPoint },
     { code: "VGRD", heightAboveGroundM: 20, value: 12, gridPoint },
     { code: "UGRD", heightAboveGroundM: 50, value: 8, gridPoint },

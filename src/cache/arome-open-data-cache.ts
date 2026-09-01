@@ -186,6 +186,7 @@ function fieldPackage(field: RawNonIsobaricFieldDefinition): Arome0p01Package {
     case "relative_humidity_2m":
     case "u_wind_10m":
     case "v_wind_10m":
+    case "wind_gust":
       return "SP1";
     case "u_wind_20m":
     case "v_wind_20m":

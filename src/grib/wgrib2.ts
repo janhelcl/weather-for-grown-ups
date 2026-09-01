@@ -15,9 +15,15 @@ const ALL_SUPPORTED_CODES = [...new Set([
   ...GEFS_RAW_FIELDS.map((definition) => definition.gfsCode),
   "GP",
   "VMAX_10M",
+  "U_RAF",
+  "V_RAF",
+  "UGUST",
+  "VGUST",
+  "efg10",
+  "nfg10",
 ])];
-const SUPPORTED_CODE_SET = new Set<string>(ALL_SUPPORTED_CODES);
-const CODE_PATTERN = new RegExp(`:(${ALL_SUPPORTED_CODES.join("|")}):`);
+const SUPPORTED_CODE_SET = new Set<string>(ALL_SUPPORTED_CODES.map((code) => code.toUpperCase()));
+const CODE_PATTERN = new RegExp(`:(${ALL_SUPPORTED_CODES.join("|")}):`, "i");
 const GEFS_NAMED_VERTICALS = new Set(
   GEFS_RAW_FIELDS.map((definition) => definition.level.gribLevel),
 );
@@ -93,7 +99,7 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
   }
 
   const rawCode = codeMatch[1];
-  if (!rawCode || !SUPPORTED_CODE_SET.has(rawCode)) return null;
+  if (!rawCode || !SUPPORTED_CODE_SET.has(rawCode.toUpperCase())) return null;
   const code = canonicalGribCode(rawCode);
 
   const accumulationMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour acc(?: fcst)?:/i);

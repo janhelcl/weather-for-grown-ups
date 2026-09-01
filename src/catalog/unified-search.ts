@@ -3,7 +3,7 @@ import {
   AIGFS_FIELD_IDS,
   AIGFS_PRESSURE_VARIABLE_IDS,
 } from "./aigfs.js";
-import { AROME_0P01_FIELD_IDS } from "./arome.js";
+import { AROME_0P01_FIELD_IDS, aromeFieldDefinition } from "./arome.js";
 import { PE_AROME_FIELD_IDS } from "./pe-arome.js";
 import {
   ICON_D2_FIELD_IDS,
@@ -197,7 +197,7 @@ function aigfsEntries(dataset: "aigfs" | "aigefs" | "hgefs"): CatalogEntry[] {
 
 function aromeEntries(): CatalogEntry[] {
   return AROME_0P01_FIELD_IDS.map((id) => {
-    const definition = NON_ISOBARIC_FIELD_CATALOG[id];
+    const definition = aromeFieldDefinition(id);
     return {
       dataset: "arome" as const,
       section: "fields" as const,

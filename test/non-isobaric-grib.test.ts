@@ -86,6 +86,27 @@ describe("non-isobaric wgrib2 decoding", () => {
     });
   });
 
+  it("decodes Météo-France gust components without leaking decoder/provider aliases", () => {
+    expect(parseWgrib2PointLine(
+      "9:64:d=2026081906:UGUST:10 m above ground:5-6 hour max fcst:lon=2.35,lat=48.86,val=6",
+    )).toEqual({
+      code: "U_RAF",
+      heightAboveGroundM: 10,
+      maximum: { startForecastHour: 5, endForecastHour: 6 },
+      value: 6,
+      gridPoint: { longitude: 2.35, latitude: 48.86 },
+    });
+    expect(parseWgrib2PointLine(
+      "9:64:d=2026081906:efg10:10 m above ground:5-6 hour max fcst:lon=2.35,lat=48.86,val=6",
+    )).toEqual({
+      code: "U_RAF",
+      heightAboveGroundM: 10,
+      maximum: { startForecastHour: 5, endForecastHour: 6 },
+      value: 6,
+      gridPoint: { longitude: 2.35, latitude: 48.86 },
+    });
+  });
+
   it("does not misclassify PV surfaces as the model surface", () => {
     expect(parseWgrib2PointLine("9:64:d=2026081906:TMP:PV=2e-06 (Km^2/kg/s) surface:6 hour fcst:lon=14.5,lat=50,val=220")).toBeNull();
   });
