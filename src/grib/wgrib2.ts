@@ -15,6 +15,8 @@ const ALL_SUPPORTED_CODES = [...new Set([
   ...ALL_SUPPORTED_GFS_CODES,
   ...GEFS_RAW_FIELDS.map((definition) => definition.gfsCode),
   "BREF",
+  "RAIN_CON",
+  "SNOW_CON",
   "GP",
   "VMAX_10M",
   "U_RAF",
