@@ -24,6 +24,14 @@ describe("non-isobaric field catalog", () => {
       kind: "raw", gfsCode: "APCP", level: { type: "surface" }, temporalSemantics: "accumulation",
       outputs: [{ field: "totalPrecipitationMm", unit: "mm" }],
     });
+    expect(NON_ISOBARIC_FIELD_CATALOG.convective_rain).toMatchObject({
+      kind: "raw", gfsCode: "RAIN_CON", level: { type: "surface" }, temporalSemantics: "accumulation",
+      outputs: [{ field: "convectiveRainMm", unit: "mm" }],
+    });
+    expect(NON_ISOBARIC_FIELD_CATALOG.convective_snow).toMatchObject({
+      kind: "raw", gfsCode: "SNOW_CON", level: { type: "surface" }, temporalSemantics: "accumulation",
+      outputs: [{ field: "convectiveSnowWaterEquivalentMm", unit: "mm" }],
+    });
   });
 
   it("expands derived winds at multiple heights to exact U/V dependencies", () => {
@@ -37,9 +45,13 @@ describe("non-isobaric field catalog", () => {
       .map((id) => NON_ISOBARIC_FIELD_CATALOG[id])
       .filter((field) => field.kind === "raw")
       .every((field) => supported.has(field.gfsCode))).toBe(true);
-    expect(supported.has(
-      NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity.gfsCode,
-    )).toBe(false);
+    for (const id of [
+      "convective_rain",
+      "convective_snow",
+      "column_maximum_reflectivity",
+    ] as const) {
+      expect(supported.has(NON_ISOBARIC_FIELD_CATALOG[id].gfsCode)).toBe(false);
+    }
   });
 
   it("exposes the new fields through the agent catalog", () => {
@@ -48,5 +60,7 @@ describe("non-isobaric field catalog", () => {
       kind: "derived", level: { type: "height_above_ground_m", heightM: 100 }, temporalSemantics: "instantaneous",
     });
     expect(catalog.fields.find((field) => field.id === "total_precipitation")).toMatchObject({ temporalSemantics: "accumulation" });
+    expect(catalog.fields.some((field) => field.id === "convective_rain")).toBe(false);
+    expect(catalog.fields.some((field) => field.id === "convective_snow")).toBe(false);
   });
 });
