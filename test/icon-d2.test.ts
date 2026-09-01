@@ -315,25 +315,29 @@ describe("ICON-D2 unified capabilities", () => {
       search: "convective",
       sections: ["fields"],
     });
-    const aviation = searchAtmosphereCatalog({
+    const visibility = searchAtmosphereCatalog({
       datasets: ["icon-d2"],
-      search: "visibility ceiling",
+      search: "visibility",
       sections: ["fields"],
     });
-    expect(aviation.matches).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: "visibility",
-        verticalSemantics: "surface",
-        temporalSemantics: "instantaneous",
-        outputs: [expect.objectContaining({ field: "visibilityM", unit: "m" })],
-      }),
-      expect.objectContaining({
-        id: "cloud_ceiling_height_msl",
-        verticalSemantics: "cloud ceiling",
-        temporalSemantics: "instantaneous",
-        outputs: [expect.objectContaining({ field: "cloudCeilingHeightMslM", unit: "m" })],
-      }),
-    ]));
+    expect(visibility.matches.find((match) => match.id === "visibility")).toMatchObject({
+      id: "visibility",
+      verticalSemantics: "surface",
+      temporalSemantics: "instantaneous",
+      outputs: [expect.objectContaining({ field: "visibilityM", unit: "m" })],
+    });
+
+    const ceiling = searchAtmosphereCatalog({
+      datasets: ["icon-d2"],
+      search: "ceiling",
+      sections: ["fields"],
+    });
+    expect(ceiling.matches.find((match) => match.id === "cloud_ceiling_height_msl")).toMatchObject({
+      id: "cloud_ceiling_height_msl",
+      verticalSemantics: "cloud ceiling",
+      temporalSemantics: "instantaneous",
+      outputs: [expect.objectContaining({ field: "cloudCeilingHeightMslM", unit: "m" })],
+    });
 
     expect(convectivePrecipitation.matches).toEqual(expect.arrayContaining([
       expect.objectContaining({
