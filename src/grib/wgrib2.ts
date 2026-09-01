@@ -37,10 +37,15 @@ const GEFS_NAMED_VERTICALS = new Set(
  * The default implementation is bundled through npm and needs no system executable.
  * Set WGRIB2_PATH (or WFG_DECODER=wgrib2) to opt into the legacy native wgrib2 path.
  */
+export type Wgrib2NameConvention = "DWD" | "ECMWF" | "NCEP";
+
 export class Wgrib2Decoder {
   readonly engine: GribDecoderName;
 
-  constructor(private readonly executable = defaultNativeExecutable()) {
+  constructor(
+    private readonly executable = defaultNativeExecutable(),
+    private readonly names?: Wgrib2NameConvention,
+  ) {
     this.engine = executable === undefined ? "gribberish" : "wgrib2";
   }
 
@@ -67,6 +72,7 @@ export class Wgrib2Decoder {
       const longitude360 = ((longitude % 360) + 360) % 360;
       ({ stdout } = await execa(this.executable, [
         path,
+        ...wgrib2NamesArgs(this.names),
         "-s",
         "-lon",
         String(longitude360),
@@ -201,6 +207,12 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
       latitude: Number(pointMatch[2]),
     },
   };
+}
+
+export function wgrib2NamesArgs(
+  names: Wgrib2NameConvention | undefined,
+): string[] {
+  return names === undefined ? [] : ["-names", names];
 }
 
 function defaultNativeExecutable(): string | undefined {
