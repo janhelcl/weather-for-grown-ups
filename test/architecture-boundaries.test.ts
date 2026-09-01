@@ -29,11 +29,16 @@ describe("architecture boundaries", () => {
         "gfs:aigfs",
         "gfs:gefs",
         "gfs:ifs",
+        "gfs:icon-d2",
         "hgefs:aigefs",
         "hgefs:gefs",
         "ifs:aifs",
+        "ifs:arome",
+        "ifs:icon-d2",
         "ifs:ifs-ens",
         "ifs-ens:aifs-ens",
+        "ifs-ens:icon-d2-eps",
+        "ifs-ens:pe-arome",
       ].sort(),
     );
     expect(Object.keys(createAtmosphericVerificationAdapterRegistry()).sort()).toEqual(
