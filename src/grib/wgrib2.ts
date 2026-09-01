@@ -3,13 +3,18 @@ import { GEFS_PGRB2A_FIELD_CATALOG } from "../catalog/gefs-fields.js";
 import { findNamedNonIsobaricLevel } from "../catalog/non-isobaric-fields.js";
 import { ALL_SUPPORTED_GFS_CODES } from "../catalog/variables.js";
 import type { DecodedValue, GribDecoderName } from "../core/types.js";
-import { decodePointMessages, readGribMessages } from "./gribberish-runtime.js";
+import {
+  canonicalGribCode,
+  decodePointMessages,
+  readGribMessages,
+} from "./gribberish-runtime.js";
 
 const GEFS_RAW_FIELDS = Object.values(GEFS_PGRB2A_FIELD_CATALOG).filter((definition) => definition.kind === "raw");
 const ALL_SUPPORTED_CODES = [...new Set([
   ...ALL_SUPPORTED_GFS_CODES,
   ...GEFS_RAW_FIELDS.map((definition) => definition.gfsCode),
   "GP",
+  "VMAX_10M",
 ])];
 const SUPPORTED_CODE_SET = new Set<string>(ALL_SUPPORTED_CODES);
 const CODE_PATTERN = new RegExp(`:(${ALL_SUPPORTED_CODES.join("|")}):`);
@@ -89,10 +94,11 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
 
   const rawCode = codeMatch[1];
   if (!rawCode || !SUPPORTED_CODE_SET.has(rawCode)) return null;
-  const code = rawCode === "GP" ? "HGT" : rawCode;
+  const code = canonicalGribCode(rawCode);
 
   const accumulationMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour acc(?: fcst)?:/i);
   const averageMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour ave(?: fcst)?:/i);
+  const maximumMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour max(?: fcst)?:/i);
   const level = pressureMatch?.[1] !== undefined
     ? { pressureHpa: Number(pressureMatch[1]) }
     : heightMatch?.[1] !== undefined
@@ -117,6 +123,14 @@ export function parseWgrib2PointLine(line: string): DecodedValue | null {
           average: {
             startForecastHour: Number(averageMatch[1]),
             endForecastHour: Number(averageMatch[2]),
+          },
+        }
+      : {}),
+    ...(maximumMatch?.[1] !== undefined && maximumMatch[2] !== undefined
+      ? {
+          maximum: {
+            startForecastHour: Number(maximumMatch[1]),
+            endForecastHour: Number(maximumMatch[2]),
           },
         }
       : {}),

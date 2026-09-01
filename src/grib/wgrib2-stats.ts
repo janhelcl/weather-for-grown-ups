@@ -3,6 +3,7 @@ import type { FieldTemporalSemantics } from "../catalog/non-isobaric-fields.js";
 import type { GfsCode } from "../catalog/variables.js";
 import type { ForecastInterval, GribDecoderName } from "../core/types.js";
 import {
+  canonicalGribCode,
   readGribMessages,
   selectMessage,
   summarizeMessageInBox,
@@ -34,7 +35,8 @@ export interface AreaMessageSelector {
 export type SelectedMessageTemporal =
   | { type: "instantaneous" }
   | ({ type: "accumulation" } & ForecastInterval)
-  | ({ type: "average" } & ForecastInterval);
+  | ({ type: "average" } & ForecastInterval)
+  | ({ type: "maximum" } & ForecastInterval);
 
 export interface SelectedGridStatistics extends GridStatistics {
   temporal: SelectedMessageTemporal;
@@ -151,15 +153,21 @@ export function parseSelectedAreaInventoryLine(
   const record = Number(parts[0]);
   const code = parts[3];
   const gribLevel = parts[4];
-  if (!Number.isInteger(record) || record < 1 || code !== selector.code || gribLevel !== selector.gribLevel) {
+  if (
+    !Number.isInteger(record)
+    || record < 1
+    || canonicalGribCode(code ?? "") !== selector.code
+    || gribLevel !== selector.gribLevel
+  ) {
     return null;
   }
 
   const accumulationMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour acc(?: fcst)?:/i);
   const averageMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour ave(?: fcst)?:/i);
+  const maximumMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour max(?: fcst)?:/i);
 
   if (selector.temporalSemantics === "instantaneous") {
-    if (accumulationMatch || averageMatch) return null;
+    if (accumulationMatch || averageMatch || maximumMatch) return null;
     return { record, temporal: { type: "instantaneous" } };
   }
   if (selector.temporalSemantics === "accumulation") {
@@ -173,13 +181,24 @@ export function parseSelectedAreaInventoryLine(
       },
     };
   }
-  if (!averageMatch?.[1] || !averageMatch[2]) return null;
+  if (selector.temporalSemantics === "average") {
+    if (!averageMatch?.[1] || !averageMatch[2]) return null;
+    return {
+      record,
+      temporal: {
+        type: "average",
+        startForecastHour: Number(averageMatch[1]),
+        endForecastHour: Number(averageMatch[2]),
+      },
+    };
+  }
+  if (!maximumMatch?.[1] || !maximumMatch[2]) return null;
   return {
     record,
     temporal: {
-      type: "average",
-      startForecastHour: Number(averageMatch[1]),
-      endForecastHour: Number(averageMatch[2]),
+      type: "maximum",
+      startForecastHour: Number(maximumMatch[1]),
+      endForecastHour: Number(maximumMatch[2]),
     },
   };
 }

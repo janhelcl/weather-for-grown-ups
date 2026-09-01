@@ -85,6 +85,25 @@ describe("bundled GRIB2 point decoding", () => {
     expect(decoded?.average).toBeUndefined();
   });
 
+  it("normalizes DWD gust aliases and preserves maximum intervals", () => {
+    const [decoded] = decodePointMessages([
+      fakeMessage({
+        key: "VMAX_10M:202608240600:10 in above ground:Maximum Forecast",
+        code: "VMAX_10M",
+        forecast: "2026-08-24T05:00:00Z",
+        forecastEnd: "2026-08-24T06:00:00Z",
+      }),
+    ], 14, 50);
+
+    expect(decoded).toMatchObject({
+      code: "GUST",
+      heightAboveGroundM: 10,
+      maximum: { startForecastHour: 5, endForecastHour: 6 },
+    });
+    expect(decoded?.accumulation).toBeUndefined();
+    expect(decoded?.average).toBeUndefined();
+  });
+
   it("preserves average intervals independently", () => {
     const [decoded] = decodePointMessages([
       fakeMessage({

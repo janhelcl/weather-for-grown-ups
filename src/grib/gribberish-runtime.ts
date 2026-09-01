@@ -15,13 +15,14 @@ export interface GribBox {
 export interface GribMessageSelector {
   code: string;
   gribLevel: string;
-  temporalSemantics: "instantaneous" | "accumulation" | "average";
+  temporalSemantics: "instantaneous" | "accumulation" | "average" | "maximum";
 }
 
 export type GribTemporal =
   | { type: "instantaneous" }
   | ({ type: "accumulation" } & ForecastInterval)
-  | ({ type: "average" } & ForecastInterval);
+  | ({ type: "average" } & ForecastInterval)
+  | ({ type: "maximum" } & ForecastInterval);
 
 export interface GribGridPoint {
   longitude: number;
@@ -86,6 +87,7 @@ export function decodePointMessages(
       ...vertical,
       ...(semantics === "accumulation" && interval !== undefined ? { accumulation: interval } : {}),
       ...(semantics === "average" && interval !== undefined ? { average: interval } : {}),
+      ...(semantics === "maximum" && interval !== undefined ? { maximum: interval } : {}),
       value: normalized.value,
       gridPoint: { latitude: sample.latitude, longitude: sample.longitude },
     });
@@ -98,7 +100,7 @@ export function selectMessage(
   selector: GribMessageSelector,
 ): GribMessage {
   const matches = messages.filter((message) =>
-    message.varAbbrev === selector.code
+    canonicalGribCode(message.varAbbrev) === selector.code
     && matchesGribLevel(message.key, selector.gribLevel)
     && matchesTemporalSemantics(message, selector.temporalSemantics));
   if (matches.length === 0) {
@@ -313,7 +315,7 @@ function coordinateLayout(
   );
 }
 
-function verticalFromKey(key: string): Omit<DecodedValue, "code" | "value" | "gridPoint" | "accumulation" | "average"> | null {
+function verticalFromKey(key: string): Omit<DecodedValue, "code" | "value" | "gridPoint" | "accumulation" | "average" | "maximum"> | null {
   const pressureMatch = key.match(/:([-+]?\d+(?:\.\d+)?) in mb(?=:|$)/i);
   if (pressureMatch?.[1] !== undefined) {
     const rawPressure = Number(pressureMatch[1]);
@@ -366,10 +368,11 @@ function matchesTemporalSemantics(
   return statisticalSemantics(message.key) === semantics;
 }
 
-function statisticalSemantics(key: string): "accumulation" | "average" | undefined {
+function statisticalSemantics(key: string): "accumulation" | "average" | "maximum" | undefined {
   const lowerKey = key.toLowerCase();
   if (/(?:^|[: ])(?:acc|accumulation)(?:[ :]|$)/.test(lowerKey)) return "accumulation";
   if (/(?:^|[: ])(?:avg|average)(?:[ :]|$)/.test(lowerKey)) return "average";
+  if (/(?:^|[: ])(?:max|maximum)(?:[ :]|$)/.test(lowerKey)) return "maximum";
   return undefined;
 }
 
@@ -415,10 +418,17 @@ function toSignedLongitude(longitude: number): number {
 }
 
 
+export function canonicalGribCode(code: string): string {
+  if (code === "GP") return "HGT";
+  if (code === "VMAX_10M") return "GUST";
+  return code;
+}
+
 function normalizeDecodedCodeValue(code: string, value: number): { code: string; value: number } {
   // DWD ICON pressure-level FI is GRIB geopotential (GP, m²/s²), while the
   // normalized atmospheric vocabulary uses geopotential height (HGT, gpm).
-  return code === "GP"
-    ? { code: "HGT", value: value / 9.80665 }
-    : { code, value };
+  return {
+    code: canonicalGribCode(code),
+    value: code === "GP" ? value / 9.80665 : value,
+  };
 }

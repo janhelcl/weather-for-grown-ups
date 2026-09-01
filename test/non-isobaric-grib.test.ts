@@ -74,6 +74,18 @@ describe("non-isobaric wgrib2 decoding", () => {
     });
   });
 
+  it("normalizes DWD 10 m gust maxima into the shared wind-gust vocabulary", () => {
+    expect(parseWgrib2PointLine(
+      "8:56:d=2026081906:VMAX_10M:10 m above ground:5-6 hour max fcst:lon=14.5,lat=50,val=18.5",
+    )).toEqual({
+      code: "GUST",
+      heightAboveGroundM: 10,
+      maximum: { startForecastHour: 5, endForecastHour: 6 },
+      value: 18.5,
+      gridPoint: { longitude: 14.5, latitude: 50 },
+    });
+  });
+
   it("does not misclassify PV surfaces as the model surface", () => {
     expect(parseWgrib2PointLine("9:64:d=2026081906:TMP:PV=2e-06 (Km^2/kg/s) surface:6 hour fcst:lon=14.5,lat=50,val=220")).toBeNull();
   });

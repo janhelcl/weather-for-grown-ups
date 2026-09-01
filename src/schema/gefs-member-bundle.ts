@@ -112,6 +112,13 @@ export const gefsFieldTemporalResultSchema = z.discriminatedUnion("type", [
     startTime: isoDateTimeSchema,
     endTime: isoDateTimeSchema,
   }),
+  z.object({
+    type: z.literal("maximum"),
+    startForecastHour: z.number().nonnegative(),
+    endForecastHour: z.number().nonnegative(),
+    startTime: isoDateTimeSchema,
+    endTime: isoDateTimeSchema,
+  }),
 ]);
 
 const pressureSummarySchema = z.object({

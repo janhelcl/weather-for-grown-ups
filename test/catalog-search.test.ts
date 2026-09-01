@@ -11,7 +11,8 @@ describe("catalog search schema", () => {
     expect(catalogSearchQuerySchema.safeParse({ sections: ["fields"], classification: "raw", temporalSemantics: "average", limit: 100 }).success).toBe(true);
     expect(catalogSearchQuerySchema.safeParse({ sections: [] }).success).toBe(false);
     expect(catalogSearchQuerySchema.safeParse({ classification: "magic" }).success).toBe(false);
-    expect(catalogSearchQuerySchema.safeParse({ temporalSemantics: "maximum" }).success).toBe(false);
+    expect(catalogSearchQuerySchema.safeParse({ temporalSemantics: "maximum" }).success).toBe(true);
+    expect(catalogSearchQuerySchema.safeParse({ temporalSemantics: "minimum" }).success).toBe(false);
     expect(catalogSearchQuerySchema.safeParse({ limit: 101 }).success).toBe(false);
     expect(catalogSearchQuerySchema.safeParse({ search: "   " }).success).toBe(false);
   });

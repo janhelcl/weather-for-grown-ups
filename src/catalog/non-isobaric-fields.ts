@@ -111,7 +111,7 @@ export type NamedNonIsobaricLevel = Extract<
   { type: "named_layer" | "named_level" }
 >;
 
-export type FieldTemporalSemantics = "instantaneous" | "accumulation" | "average";
+export type FieldTemporalSemantics = "instantaneous" | "accumulation" | "average" | "maximum";
 
 export interface RawNonIsobaricFieldDefinition {
   id: RawNonIsobaricFieldId;

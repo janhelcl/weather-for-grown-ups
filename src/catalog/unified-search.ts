@@ -8,6 +8,7 @@ import { PE_AROME_FIELD_IDS } from "./pe-arome.js";
 import {
   ICON_D2_FIELD_IDS,
   ICON_D2_PRESSURE_VARIABLE_IDS,
+  iconD2FieldDefinition,
 } from "./icon-d2.js";
 import {
   GEFS_REFORECAST_FIELD_IDS,
@@ -50,7 +51,7 @@ interface CatalogEntry {
   kind: string;
   description: string;
   verticalSemantics: string;
-  temporalSemantics?: "instantaneous" | "accumulation" | "average";
+  temporalSemantics?: "instantaneous" | "accumulation" | "average" | "maximum";
   outputs: Array<{ field: string; unit: string; description?: string }>;
 }
 
@@ -130,7 +131,7 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
         description: representative.description,
         verticalSemantics: representative.verticalSemantics,
         ...(temporalValues.size === 1
-          ? { temporalSemantics: [...temporalValues][0] as "instantaneous" | "accumulation" | "average" }
+          ? { temporalSemantics: [...temporalValues][0] as "instantaneous" | "accumulation" | "average" | "maximum" }
           : {}),
         outputs: representative.outputs.map((output) => ({ ...output })),
         support: group
@@ -231,7 +232,7 @@ function peAromeEntries(): CatalogEntry[] {
 function iconD2Entries(
   dataset: "icon-d2" | "icon-d2-eps",
 ): CatalogEntry[] {
-  const fields = ICON_D2_FIELD_IDS.map((id) => NON_ISOBARIC_FIELD_CATALOG[id]);
+  const fields = ICON_D2_FIELD_IDS.map((id) => iconD2FieldDefinition(id));
   return [
     ...ICON_D2_PRESSURE_VARIABLE_IDS.map((id) => {
       const definition = VARIABLE_CATALOG[id];
