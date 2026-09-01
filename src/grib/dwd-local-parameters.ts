@@ -1,0 +1,318 @@
+export type DwdLocalGribCode = "RAIN_CON" | "SNOW_CON";
+
+export interface Grib2MessageSlice {
+  start: number;
+  end: number;
+  discipline: number;
+  center?: number;
+  subcenter?: number;
+  masterTable?: number;
+  localTable?: number;
+  centerOffset?: number;
+  subcenterOffset?: number;
+  masterTableOffset?: number;
+  localTableOffset?: number;
+  category?: number;
+  parameter?: number;
+  categoryOffset?: number;
+  parameterOffset?: number;
+}
+
+export interface DwdLocalParameterDefinition {
+  alias: DwdLocalGribCode;
+  localParameter: number;
+  surrogate: readonly [category: number, parameter: number];
+}
+
+export interface DwdLocalRewriteSummary extends DwdLocalParameterDefinition {
+  count: number;
+  identification: {
+    center: number;
+    subcenter: number;
+    masterTable: number;
+    localTable: number;
+  };
+}
+
+export interface PreparedDwdLocalParameters {
+  bytes: Uint8Array;
+  rewrites: readonly DwdLocalRewriteSummary[];
+}
+
+const DWD_CENTER = 78;
+const METEOROLOGICAL_DISCIPLINE = 0;
+const MOISTURE_CATEGORY = 1;
+
+const DWD_LOCAL_PARAMETERS = [
+  {
+    alias: "RAIN_CON",
+    localParameter: 76,
+    surrogate: [1, 10],
+  },
+  {
+    alias: "SNOW_CON",
+    localParameter: 55,
+    surrogate: [1, 53],
+  },
+] as const satisfies readonly DwdLocalParameterDefinition[];
+
+export function knownDwdLocalParameter(
+  discipline: number,
+  center: number | undefined,
+  category: number | undefined,
+  parameter: number | undefined,
+): DwdLocalParameterDefinition | undefined {
+  if (
+    discipline !== METEOROLOGICAL_DISCIPLINE
+    || center !== DWD_CENTER
+    || category !== MOISTURE_CATEGORY
+  ) return undefined;
+  return DWD_LOCAL_PARAMETERS.find((entry) => entry.localParameter === parameter);
+}
+
+/**
+ * Replace only the two DWD-local convective-precipitation parameter numbers
+ * with WMO-defined surrogates that generic GRIB tooling understands.
+ *
+ * Only section-4 parameter metadata changes. Values, grid definitions,
+ * ensemble metadata, reference/valid times, and statistical intervals stay
+ * untouched. The returned rewrite summary is sufficient to restore the exact
+ * DWD identification after a generic-tool processing step.
+ */
+export function prepareDwdLocalParametersForGenericProcessing(
+  bytes: Uint8Array,
+): PreparedDwdLocalParameters {
+  const chunks = scanGrib2Messages(bytes);
+  let rewritten: Uint8Array | undefined;
+  const summaries = new Map<DwdLocalGribCode, DwdLocalRewriteSummary>();
+
+  for (const chunk of chunks) {
+    const local = knownDwdLocalParameter(
+      chunk.discipline,
+      chunk.center,
+      chunk.category,
+      chunk.parameter,
+    );
+    if (local === undefined) continue;
+    if (
+      chunk.categoryOffset === undefined
+      || chunk.parameterOffset === undefined
+      || chunk.center === undefined
+      || chunk.subcenter === undefined
+      || chunk.masterTable === undefined
+      || chunk.localTable === undefined
+    ) {
+      throw new Error(`DWD local parameter ${local.alias} is missing required GRIB2 metadata`);
+    }
+
+    rewritten ??= Uint8Array.from(bytes);
+    rewritten[chunk.categoryOffset] = local.surrogate[0];
+    rewritten[chunk.parameterOffset] = local.surrogate[1];
+
+    const existing = summaries.get(local.alias);
+    const identification = {
+      center: chunk.center,
+      subcenter: chunk.subcenter,
+      masterTable: chunk.masterTable,
+      localTable: chunk.localTable,
+    };
+    if (existing === undefined) {
+      summaries.set(local.alias, {
+        ...local,
+        count: 1,
+        identification,
+      });
+    } else {
+      if (!sameIdentification(existing.identification, identification)) {
+        throw new Error(
+          `DWD local parameter ${local.alias} used inconsistent GRIB2 identification metadata`,
+        );
+      }
+      existing.count += 1;
+    }
+  }
+
+  return {
+    bytes: rewritten ?? bytes,
+    rewrites: [...summaries.values()],
+  };
+}
+
+/**
+ * Restore DWD-local parameter identities after a generic processing step.
+ *
+ * Restoration is deliberately strict: the number of surrogate messages must
+ * match the number rewritten before processing. This prevents accidentally
+ * relabelling an unrelated standard ACPCP/SF message if a future request mixes
+ * those products into the same file.
+ */
+export function restoreDwdLocalParametersAfterGenericProcessing(
+  bytes: Uint8Array,
+  rewrites: readonly DwdLocalRewriteSummary[],
+): Uint8Array {
+  if (rewrites.length === 0) return bytes;
+  const restored = Uint8Array.from(bytes);
+  const chunks = scanGrib2Messages(restored);
+
+  for (const rewrite of rewrites) {
+    const candidates = chunks.filter((chunk) =>
+      chunk.discipline === METEOROLOGICAL_DISCIPLINE
+      && chunk.category === rewrite.surrogate[0]
+      && chunk.parameter === rewrite.surrogate[1]);
+    if (candidates.length !== rewrite.count) {
+      throw new Error(
+        `Generic GRIB processing changed ${rewrite.alias} message cardinality: expected ${rewrite.count}, found ${candidates.length}`,
+      );
+    }
+
+    for (const chunk of candidates) {
+      if (
+        chunk.categoryOffset === undefined
+        || chunk.parameterOffset === undefined
+        || chunk.centerOffset === undefined
+        || chunk.subcenterOffset === undefined
+        || chunk.masterTableOffset === undefined
+        || chunk.localTableOffset === undefined
+      ) {
+        throw new Error(`Cannot restore DWD local parameter ${rewrite.alias}: incomplete GRIB2 metadata`);
+      }
+      restored[chunk.categoryOffset] = MOISTURE_CATEGORY;
+      restored[chunk.parameterOffset] = rewrite.localParameter;
+      writeUint16Be(restored, chunk.centerOffset, rewrite.identification.center);
+      writeUint16Be(restored, chunk.subcenterOffset, rewrite.identification.subcenter);
+      restored[chunk.masterTableOffset] = rewrite.identification.masterTable;
+      restored[chunk.localTableOffset] = rewrite.identification.localTable;
+    }
+  }
+
+  return restored;
+}
+
+export function scanGrib2Messages(bytes: Uint8Array): Grib2MessageSlice[] {
+  const chunks: Grib2MessageSlice[] = [];
+  let cursor = 0;
+
+  while (cursor + 16 <= bytes.length) {
+    if (!hasGribMagic(bytes, cursor) || bytes[cursor + 7] !== 2) {
+      cursor += 1;
+      continue;
+    }
+
+    const length = readUint64Be(bytes, cursor + 8);
+    if (length < 20 || cursor + length > bytes.length) {
+      cursor += 1;
+      continue;
+    }
+
+    const end = cursor + length;
+    const discipline = bytes[cursor + 6]!;
+    let center: number | undefined;
+    let subcenter: number | undefined;
+    let masterTable: number | undefined;
+    let localTable: number | undefined;
+    let centerOffset: number | undefined;
+    let subcenterOffset: number | undefined;
+    let masterTableOffset: number | undefined;
+    let localTableOffset: number | undefined;
+    let category: number | undefined;
+    let parameter: number | undefined;
+    let categoryOffset: number | undefined;
+    let parameterOffset: number | undefined;
+    let sectionCursor = cursor + 16;
+
+    while (sectionCursor + 5 <= end - 4) {
+      if (has7777(bytes, sectionCursor)) break;
+      const sectionLength = readUint32Be(bytes, sectionCursor);
+      if (sectionLength < 5 || sectionCursor + sectionLength > end) break;
+      const sectionNumber = bytes[sectionCursor + 4];
+
+      if (sectionNumber === 1 && sectionLength >= 11) {
+        centerOffset = sectionCursor + 5;
+        subcenterOffset = sectionCursor + 7;
+        masterTableOffset = sectionCursor + 9;
+        localTableOffset = sectionCursor + 10;
+        center = readUint16Be(bytes, centerOffset);
+        subcenter = readUint16Be(bytes, subcenterOffset);
+        masterTable = bytes[masterTableOffset];
+        localTable = bytes[localTableOffset];
+      } else if (sectionNumber === 4 && sectionLength >= 11) {
+        categoryOffset = sectionCursor + 9;
+        parameterOffset = sectionCursor + 10;
+        category = bytes[categoryOffset];
+        parameter = bytes[parameterOffset];
+      }
+      sectionCursor += sectionLength;
+    }
+
+    chunks.push({
+      start: cursor,
+      end,
+      discipline,
+      ...(center === undefined ? {} : { center }),
+      ...(subcenter === undefined ? {} : { subcenter }),
+      ...(masterTable === undefined ? {} : { masterTable }),
+      ...(localTable === undefined ? {} : { localTable }),
+      ...(centerOffset === undefined ? {} : { centerOffset }),
+      ...(subcenterOffset === undefined ? {} : { subcenterOffset }),
+      ...(masterTableOffset === undefined ? {} : { masterTableOffset }),
+      ...(localTableOffset === undefined ? {} : { localTableOffset }),
+      ...(category === undefined ? {} : { category }),
+      ...(parameter === undefined ? {} : { parameter }),
+      ...(categoryOffset === undefined ? {} : { categoryOffset }),
+      ...(parameterOffset === undefined ? {} : { parameterOffset }),
+    });
+    cursor = end;
+  }
+
+  return chunks;
+}
+
+function sameIdentification(
+  left: DwdLocalRewriteSummary["identification"],
+  right: DwdLocalRewriteSummary["identification"],
+): boolean {
+  return left.center === right.center
+    && left.subcenter === right.subcenter
+    && left.masterTable === right.masterTable
+    && left.localTable === right.localTable;
+}
+
+function hasGribMagic(bytes: Uint8Array, offset: number): boolean {
+  return bytes[offset] === 0x47
+    && bytes[offset + 1] === 0x52
+    && bytes[offset + 2] === 0x49
+    && bytes[offset + 3] === 0x42;
+}
+
+function has7777(bytes: Uint8Array, offset: number): boolean {
+  return bytes[offset] === 0x37
+    && bytes[offset + 1] === 0x37
+    && bytes[offset + 2] === 0x37
+    && bytes[offset + 3] === 0x37;
+}
+
+function readUint16Be(bytes: Uint8Array, offset: number): number {
+  return (bytes[offset]! << 8) | bytes[offset + 1]!;
+}
+
+function writeUint16Be(bytes: Uint8Array, offset: number, value: number): void {
+  bytes[offset] = (value >>> 8) & 0xff;
+  bytes[offset + 1] = value & 0xff;
+}
+
+function readUint32Be(bytes: Uint8Array, offset: number): number {
+  return (
+    bytes[offset]! * 0x1000000
+    + bytes[offset + 1]! * 0x10000
+    + bytes[offset + 2]! * 0x100
+    + bytes[offset + 3]!
+  );
+}
+
+function readUint64Be(bytes: Uint8Array, offset: number): number {
+  let value = 0n;
+  for (let index = 0; index < 8; index += 1) {
+    value = (value << 8n) | BigInt(bytes[offset + index] ?? 0);
+  }
+  return value > BigInt(Number.MAX_SAFE_INTEGER) ? 0 : Number(value);
+}
