@@ -312,7 +312,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points",
       "points_timeseries",
       "transect",
-      "area_summary",
+      "area_summary",      "aligned_model_comparison",
     ],
   },
   icon_d2_eps_2p1km: {
@@ -352,6 +352,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "transect",
       "area_summary",
       "ensemble_distribution",
+      "aligned_model_comparison",
     ],
   },
   arome_0p01: {
@@ -386,7 +387,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points",
       "points_timeseries",
       "transect",
-      "area_summary",
+      "area_summary",      "aligned_model_comparison",
     ],
   },
   pe_arome_0p025: {
@@ -423,6 +424,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "transect",
       "area_summary",
       "ensemble_distribution",
+      "aligned_model_comparison",
     ],
   },
   aifs_0p25: {
