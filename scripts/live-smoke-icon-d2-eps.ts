@@ -1,7 +1,4 @@
 import assert from "node:assert/strict";
-import { readdir } from "node:fs/promises";
-import { join } from "node:path";
-import { execa } from "execa";
 import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-api.js";
 import {
   floorToIconD2EpsCycle,
@@ -13,12 +10,7 @@ const safelyPublishedRun = floorToIconD2EpsCycle(
 );
 const validTime = iconD2EpsValidTime(safelyPublishedRun, 6);
 
-const diagnosticCacheDir = "/tmp/wfg-live-icon-d2-eps-diagnostics";
-process.env.WFG_CACHE_DIR = diagnosticCacheDir;
-
-let result: Awaited<ReturnType<UnifiedAtmosphereQueryService["query"]>>;
-try {
-  result = await new UnifiedAtmosphereQueryService().query({
+const result = await new UnifiedAtmosphereQueryService().query({
   dataset: "icon-d2-eps",
   geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
   time: { at: validTime.toISOString() },
@@ -32,11 +24,7 @@ try {
     members: ["p01", "p02"],
     quantiles: [0.5],
   },
-  });
-} catch (error) {
-  await dumpInventories(diagnosticCacheDir);
-  throw error;
-}
+});
 
 assert.equal(result.dataset, "icon-d2-eps");
 assert.equal(result.internalDatasetId, "icon_d2_eps_2p1km");
@@ -104,32 +92,3 @@ console.log(JSON.stringify({
   fieldSummaries: ensemble.fieldSummaries,
   source: ensemble.source,
 }, null, 2));
-
-
-async function dumpInventories(cacheDir: string): Promise<void> {
-  for (const subdir of [
-    "icon-d2-eps-open-data",
-    "icon-d2-eps-remapped",
-    "icon-d2-eps-members",
-    "icon-d2-eps-member-combined",
-  ]) {
-    const dir = join(cacheDir, subdir);
-    let files: string[];
-    try {
-      files = await readdir(dir);
-    } catch {
-      continue;
-    }
-    for (const file of files.filter((name) => name.endsWith(".grib2"))) {
-      const path = join(dir, file);
-      const { stdout } = await execa(process.env.WGRIB2_PATH ?? "wgrib2", [path, "-s"]);
-      const lines = stdout.split(/\r?\n/);
-      const relevant = lines.filter((line) =>
-        /RAIN|SNOW|parmcat=1|parm=55|parm=76|BREF|REFC|DBZ|TMP:850/i.test(line));
-      console.error(
-        `WFG EPS STAGE ${subdir}/${file} records=${lines.filter(Boolean).length}\n`
-        + (relevant.length > 0 ? relevant.join("\n") : "<no relevant records>"),
-      );
-    }
-  }
-}
