@@ -4,6 +4,11 @@ import {
   type GribMessage,
 } from "@mattnucc/gribberish";
 import type { DecodedValue, ForecastInterval } from "../core/types.js";
+import {
+  knownDwdLocalParameter,
+  scanGrib2Messages,
+} from "./dwd-local-parameters.js";
+
 
 export interface GribBox {
   westLongitude: number;
@@ -64,9 +69,71 @@ const NAMED_VERTICAL_ALIASES: ReadonlyArray<readonly [string, string]> = [
 
 export async function readGribMessages(path: string): Promise<GribMessage[]> {
   const bytes = await readFile(path);
-  const messages = parseMessagesFromBuffer(bytes);
+  const messages = parseMessagesWithKnownLocalAliases(bytes);
   if (messages.length === 0) throw new Error(`Bundled GRIB2 decoder found no readable messages in ${path}`);
   return messages;
+}
+
+/**
+ * gribberish intentionally follows the WMO parameter tables and currently
+ * drops DWD-local precipitation parameters before exposing a GribMessage.
+ * Rewrite only the parameter metadata of those messages to parseable
+ * surrogates, then restore the provider code at the WFG normalization
+ * boundary. Grid values, level metadata, reference time, and accumulation
+ * intervals remain byte-for-byte unchanged.
+ */
+function parseMessagesWithKnownLocalAliases(bytes: Uint8Array): GribMessage[] {
+  const chunks = scanGrib2Messages(bytes);
+  const locals = chunks.map((chunk) =>
+    knownDwdLocalParameter(
+      chunk.discipline,
+      chunk.center,
+      chunk.category,
+      chunk.parameter,
+    ));
+  if (!locals.some((local) => local !== undefined)) {
+    return parseMessagesFromBuffer(bytes);
+  }
+
+  const messages: GribMessage[] = [];
+  for (let index = 0; index < chunks.length; index += 1) {
+    const chunk = chunks[index]!;
+    const local = locals[index];
+    const chunkBytes = Uint8Array.from(bytes.subarray(chunk.start, chunk.end));
+    if (
+      local !== undefined
+      && chunk.categoryOffset !== undefined
+      && chunk.parameterOffset !== undefined
+    ) {
+      chunkBytes[chunk.categoryOffset - chunk.start] = local.surrogate[0];
+      chunkBytes[chunk.parameterOffset - chunk.start] = local.surrogate[1];
+    }
+
+    const parsed = parseMessagesFromBuffer(chunkBytes);
+    if (local !== undefined && parsed.length === 0) {
+      throw new Error(
+        `Bundled GRIB2 decoder could not normalize DWD local parameter ${local.alias}`,
+      );
+    }
+    messages.push(...parsed.map((message) =>
+      local === undefined ? message : withGribCodeAlias(message, local.alias)));
+  }
+  return messages;
+}
+
+function withGribCodeAlias(message: GribMessage, alias: string): GribMessage {
+  return new Proxy(message, {
+    get(target, property) {
+      if (property === "varAbbrev") return alias;
+      if (property === "key") {
+        const key = Reflect.get(target, property, target) as string;
+        const separator = key.indexOf(":");
+        return separator < 0 ? alias : `${alias}${key.slice(separator)}`;
+      }
+      const value = Reflect.get(target, property, target) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
 }
 
 export function messagesAtForecastHour(

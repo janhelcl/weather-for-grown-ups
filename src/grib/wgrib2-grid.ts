@@ -1,6 +1,10 @@
 import { execa } from "execa";
 import type { GribDecoderName } from "../core/types.js";
 import {
+  wgrib2NamesArgs,
+  type Wgrib2NameConvention,
+} from "./wgrib2.js";
+import {
   gridPointsInBox,
   readGribMessages,
   selectMessage,
@@ -42,6 +46,7 @@ export class Wgrib2GridDecoder {
   constructor(
     private readonly executable = defaultNativeExecutable(),
     private readonly runner: Wgrib2GridCommandRunner = defaultRunner,
+    private readonly names?: Wgrib2NameConvention,
   ) {
     this.engine = executable === undefined ? "gribberish" : "wgrib2";
   }
@@ -55,7 +60,11 @@ export class Wgrib2GridDecoder {
       return gridPointsInBox(messages[0]!, box);
     }
 
-    const inventory = await this.run([path, "-s"]);
+    const inventory = await this.run([
+      path,
+      ...wgrib2NamesArgs(this.names),
+      "-s",
+    ]);
     const records = inventory
       .split(/\r?\n/)
       .map((line) => Number(line.split(":")[0]))
@@ -79,10 +88,14 @@ export class Wgrib2GridDecoder {
       };
     }
 
-    const inventory = await this.run([path, "-s"]);
+    const inventory = await this.run([
+      path,
+      ...wgrib2NamesArgs(this.names),
+      "-s",
+    ]);
     const matches = inventory
       .split(/\r?\n/)
-      .map((line) => parseSelectedAreaInventoryLine(line, selector))
+      .map((line) => parseSelectedAreaInventoryLine(line, selector, this.names))
       .filter((value): value is { record: number; temporal: SelectedMessageTemporal } => value !== null);
 
     if (matches.length === 0) {
@@ -106,6 +119,7 @@ export class Wgrib2GridDecoder {
   private async extractRecord(path: string, box: AreaBox, record: number): Promise<GridValuePoint[]> {
     const stdout = await this.run([
       path,
+      ...wgrib2NamesArgs(this.names),
       "-d",
       String(record),
       "-undefine",

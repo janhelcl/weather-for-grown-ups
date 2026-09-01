@@ -5,10 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   IconD2EpsMemberFileFilter,
   IconD2EpsOpenDataCache,
+  iconD2EpsExactMemberMatchPattern,
   iconD2EpsWgrib2TagForMember,
 } from "../src/cache/icon-d2-eps-open-data-cache.js";
 import {
   IconD2EpsAdaptiveMemberSubsetCache,
+  IconD2EpsMemberFileCombiner,
   iconD2EpsRequiresMemberFirstRemap,
 } from "../src/cache/icon-d2-eps-member-cache.js";
 import {
@@ -221,11 +223,13 @@ describe("ICON-D2-EPS source defensive branches", () => {
         NON_ISOBARIC_FIELD_CATALOG.wind_gust,
         NON_ISOBARIC_FIELD_CATALOG.mean_sea_level_pressure,
         NON_ISOBARIC_FIELD_CATALOG.total_precipitation,
+        NON_ISOBARIC_FIELD_CATALOG.convective_rain,
+        NON_ISOBARIC_FIELD_CATALOG.convective_snow,
         NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity,
       ] as RawNonIsobaricFieldDefinition[],
     });
 
-    expect(fetchFn).toHaveBeenCalledTimes(13);
+    expect(fetchFn).toHaveBeenCalledTimes(15);
     const urls = fetchFn.mock.calls.map((call) => String(call[0]));
     for (const parameter of [
       "/t/",
@@ -240,6 +244,8 @@ describe("ICON-D2-EPS source defensive branches", () => {
       "/vmax_10m/",
       "/pmsl/",
       "/tot_prec/",
+      "/rain_con/",
+      "/snow_con/",
       "/dbz_cmax/",
     ]) {
       expect(urls.some((url) => url.includes(parameter))).toBe(true);
@@ -387,12 +393,22 @@ describe("ICON-D2-EPS native member filtering", () => {
 
     expect(iconD2EpsWgrib2TagForMember(inventory, "p01")).toBe("ENS=? table4.6=192 pert=1");
     expect(iconD2EpsWgrib2TagForMember(inventory, "p20")).toBe("ENS=? table4.6=192 pert=20");
+    const p01Pattern = iconD2EpsExactMemberMatchPattern(
+      iconD2EpsWgrib2TagForMember(inventory, "p01"),
+    );
+    expect(p01Pattern).toBe(":ENS=\\? table4\\.6=192 pert=1:");
+    const p01Regex = new RegExp(p01Pattern);
+    expect(p01Regex.test(":ENS=? table4.6=192 pert=1:vt=2026083106:")).toBe(true);
+    expect(p01Regex.test(":ENS=? table4.6=192 pert=10:vt=2026083106:")).toBe(false);
 
     const first = await filter.filter(sourcePath, "p02");
     expect(first.cacheHit).toBe(false);
     expect(new TextDecoder().decode(await readFile(first.path))).toBe("GRIB-MEMBER");
     expect(runner).toHaveBeenCalledTimes(2);
-    expect(runner.mock.calls[1]![1]).toEqual(expect.arrayContaining(["-match_fs", ":ENS=? table4.6=192 pert=2"]));
+    expect(runner.mock.calls[1]![1]).toEqual(expect.arrayContaining([
+      "-match",
+      ":ENS=\\? table4\\.6=192 pert=2:",
+    ]));
 
     const second = await filter.filter(sourcePath, "p02");
     expect(second).toMatchObject({ path: first.path, cacheHit: true });
@@ -428,9 +444,12 @@ describe("ICON-D2-EPS adaptive member remapping", () => {
     pressureLevelsHpa: [],
   };
 
-  it("splits reflectivity before remapping but keeps the efficient default order", async () => {
+  it("isolates member-first reflectivity from ordinary fields in mixed requests", async () => {
     const source = {
-      fetch: vi.fn(async () => ({ path: "/raw/all.grib2", cacheHit: true })),
+      fetch: vi.fn(async (request: any) => ({
+        path: `/raw/${request.fields.map((field: any) => field.id).join("+") || "pressure"}.grib2`,
+        cacheHit: true,
+      })),
       isForecastAvailable: vi.fn(async () => true),
     };
     const remapper = {
@@ -445,40 +464,149 @@ describe("ICON-D2-EPS adaptive member remapping", () => {
         cacheHit: true,
       })),
     };
+    const combiner = {
+      combine: vi.fn(async () => ({
+        path: "/combined/p02.grib2",
+        cacheHit: true,
+      })),
+    };
     const cache = new IconD2EpsAdaptiveMemberSubsetCache(
       source as any,
       remapper as any,
       filter as any,
+      combiner as any,
       "p02",
     );
 
     const ordinary = {
       ...baseRequest,
-      fields: [NON_ISOBARIC_FIELD_CATALOG.temperature_2m] as RawNonIsobaricFieldDefinition[],
+      fields: [
+        NON_ISOBARIC_FIELD_CATALOG.temperature_2m,
+        NON_ISOBARIC_FIELD_CATALOG.convective_rain,
+      ] as RawNonIsobaricFieldDefinition[],
     };
     expect(iconD2EpsRequiresMemberFirstRemap(ordinary)).toBe(false);
     await expect(cache.fetch(ordinary)).resolves.toMatchObject({
-      path: "/raw/all.grib2.remapped.p02",
+      path: "/raw/temperature_2m+convective_rain.grib2.remapped.p02",
       cacheHit: true,
     });
-    expect(remapper.remap).toHaveBeenLastCalledWith("/raw/all.grib2");
-    expect(filter.filter).toHaveBeenLastCalledWith("/raw/all.grib2.remapped", "p02");
+    expect(remapper.remap).toHaveBeenLastCalledWith(
+      "/raw/temperature_2m+convective_rain.grib2",
+    );
+    expect(filter.filter).toHaveBeenLastCalledWith(
+      "/raw/temperature_2m+convective_rain.grib2.remapped",
+      "p02",
+    );
+    expect(combiner.combine).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    const reflectivity = {
+    const mixed = {
       ...baseRequest,
       fields: [
         NON_ISOBARIC_FIELD_CATALOG.temperature_2m,
+        NON_ISOBARIC_FIELD_CATALOG.convective_rain,
         NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity,
       ] as RawNonIsobaricFieldDefinition[],
     };
-    expect(iconD2EpsRequiresMemberFirstRemap(reflectivity)).toBe(true);
-    await expect(cache.fetch(reflectivity)).resolves.toMatchObject({
-      path: "/raw/all.grib2.p02.remapped",
+    expect(iconD2EpsRequiresMemberFirstRemap(mixed)).toBe(true);
+    await expect(cache.fetch(mixed)).resolves.toEqual({
+      path: "/combined/p02.grib2",
       cacheHit: true,
     });
-    expect(filter.filter).toHaveBeenLastCalledWith("/raw/all.grib2", "p02");
-    expect(remapper.remap).toHaveBeenLastCalledWith("/raw/all.grib2.p02");
+    expect(source.fetch).toHaveBeenCalledTimes(2);
+    expect(source.fetch.mock.calls.map(([request]: any[]) =>
+      request.fields.map((field: any) => field.id))).toEqual(expect.arrayContaining([
+      ["temperature_2m", "convective_rain"],
+      ["column_maximum_reflectivity"],
+    ]));
+    expect(remapper.remap).toHaveBeenCalledWith(
+      "/raw/temperature_2m+convective_rain.grib2",
+    );
+    expect(filter.filter).toHaveBeenCalledWith(
+      "/raw/temperature_2m+convective_rain.grib2.remapped",
+      "p02",
+    );
+    expect(filter.filter).toHaveBeenCalledWith(
+      "/raw/column_maximum_reflectivity.grib2",
+      "p02",
+    );
+    expect(remapper.remap).toHaveBeenCalledWith(
+      "/raw/column_maximum_reflectivity.grib2.p02",
+    );
+    expect(combiner.combine).toHaveBeenCalledWith([
+      {
+        path: "/raw/temperature_2m+convective_rain.grib2.remapped.p02",
+        cacheHit: true,
+      },
+      {
+        path: "/raw/column_maximum_reflectivity.grib2.p02.remapped",
+        cacheHit: true,
+      },
+    ]);
+
+    vi.clearAllMocks();
+    const reflectivityOnly = {
+      ...baseRequest,
+      fields: [
+        NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity,
+      ] as RawNonIsobaricFieldDefinition[],
+    };
+    await expect(cache.fetch(reflectivityOnly)).resolves.toEqual({
+      path: "/raw/column_maximum_reflectivity.grib2.p02.remapped",
+      cacheHit: true,
+    });
+    expect(combiner.combine).not.toHaveBeenCalled();
+  });
+});
+
+describe("ICON-D2-EPS member file combiner", () => {
+  let rootDir: string;
+
+  beforeEach(async () => {
+    rootDir = await mkdtemp(join(tmpdir(), "wfg-icon-d2-eps-combined-"));
+  });
+
+  afterEach(async () => {
+    await rm(rootDir, { recursive: true, force: true });
+  });
+
+  it("combines strategy-specific member GRIBs once and preserves cache provenance", async () => {
+    const first = join(rootDir, "ordinary.grib2");
+    const second = join(rootDir, "reflectivity.grib2");
+    await Promise.all([
+      writeFile(first, new TextEncoder().encode("GRIB-ORDINARY")),
+      writeFile(second, new TextEncoder().encode("GRIB-REFLECTIVITY")),
+    ]);
+    const combiner = new IconD2EpsMemberFileCombiner(join(rootDir, "combined"));
+
+    const materialized = await combiner.combine([
+      { path: first, cacheHit: true },
+      { path: second, cacheHit: true },
+    ]);
+    expect(materialized.cacheHit).toBe(false);
+    expect(new TextDecoder().decode(await readFile(materialized.path)))
+      .toBe("GRIB-ORDINARYGRIB-REFLECTIVITY");
+
+    await expect(combiner.combine([
+      { path: first, cacheHit: true },
+      { path: second, cacheHit: true },
+    ])).resolves.toEqual({
+      path: materialized.path,
+      cacheHit: true,
+    });
+
+    await expect(combiner.combine([
+      { path: first, cacheHit: false },
+      { path: second, cacheHit: true },
+    ])).resolves.toEqual({
+      path: materialized.path,
+      cacheHit: false,
+    });
+    await expect(combiner.combine([{ path: first, cacheHit: true }]))
+      .resolves.toEqual({ path: first, cacheHit: true });
+    await expect(combiner.combine([])).rejects.toThrow(
+      "requires at least one GRIB file",
+    );
   });
 });
 

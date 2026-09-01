@@ -113,6 +113,25 @@ describe("bundled GRIB2 point decoding", () => {
     expect(decoded?.average).toBeUndefined();
   });
 
+  it("preserves native ICON convective precipitation accumulation semantics", () => {
+    for (const code of ["RAIN_CON", "SNOW_CON"] as const) {
+      const [decoded] = decodePointMessages([
+        fakeMessage({
+          key: `${code}:202608240600: in surface:Accumulation Forecast`,
+          code,
+          forecast: "2026-08-24T00:00:00Z",
+          forecastEnd: "2026-08-24T06:00:00Z",
+        }),
+      ], 14, 50);
+
+      expect(decoded).toMatchObject({
+        code,
+        surface: true,
+        accumulation: { startForecastHour: 0, endForecastHour: 6 },
+      });
+    }
+  });
+
   it("normalizes DWD gust aliases and preserves maximum intervals", () => {
     const [decoded] = decodePointMessages([
       fakeMessage({

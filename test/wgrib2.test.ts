@@ -1,7 +1,11 @@
 import { execa } from "execa";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SUPPORTED_GFS_CODES } from "../src/catalog/variables.js";
-import { parseWgrib2PointLine, Wgrib2Decoder } from "../src/grib/wgrib2.js";
+import {
+  parseWgrib2PointLine,
+  Wgrib2Decoder,
+  wgrib2NamesArgs,
+} from "../src/grib/wgrib2.js";
 
 vi.mock("execa", () => ({ execa: vi.fn() }));
 const execaMock = vi.mocked(execa);
@@ -14,6 +18,44 @@ describe("parseWgrib2PointLine", () => {
     expect(parseWgrib2PointLine(line)).toEqual({
       code, pressureHpa: 850, value: 285.4, gridPoint: { longitude: 14.5, latitude: 50 },
     });
+  });
+
+  it("parses regional convective precipitation accumulations", () => {
+    for (const code of ["RAIN_CON", "SNOW_CON"] as const) {
+      expect(parseWgrib2PointLine(
+        `1:1:d=2026081906:${code}:surface:0-6 hour acc fcst:lon=14.5,lat=50,val=1.25`,
+      )).toEqual({
+        code,
+        surface: true,
+        accumulation: { startForecastHour: 0, endForecastHour: 6 },
+        value: 1.25,
+        gridPoint: { longitude: 14.5, latitude: 50 },
+      });
+    }
+  });
+
+  it("recognizes DWD convective precipitation when wgrib2 exposes raw parameter metadata", () => {
+    for (const [parameter, code] of [
+      [76, "RAIN_CON"],
+      [55, "SNOW_CON"],
+    ] as const) {
+      expect(parseWgrib2PointLine(
+        `1:1:d=2026081906:var discipline=0 center=78 local_table=1 parmcat=1 parm=${parameter}:surface:0-6 hour acc fcst:lon=14.5,lat=50,val=1.25`,
+      )).toEqual({
+        code,
+        surface: true,
+        accumulation: { startForecastHour: 0, endForecastHour: 6 },
+        value: 1.25,
+        gridPoint: { longitude: 14.5, latitude: 50 },
+      });
+    }
+
+    expect(parseWgrib2PointLine(
+      "1:1:d=2026081906:var discipline=0 center=7 local_table=1 parmcat=1 parm=76:surface:0-6 hour acc fcst:lon=14.5,lat=50,val=1.25",
+    )).toBeNull();
+    expect(parseWgrib2PointLine(
+      "1:1:d=2026081906:var discipline=0 center=78 local_table=1 parmcat=2 parm=76:surface:0-6 hour acc fcst:lon=14.5,lat=50,val=1.25",
+    )).toBeNull();
   });
 
   it("parses scientific notation and a published fractional pressure level", () => {
@@ -38,6 +80,48 @@ describe("parseWgrib2PointLine", () => {
 });
 
 describe("Wgrib2Decoder native compatibility path", () => {
+  it("passes provider-native naming conventions only when requested", () => {
+    expect(wgrib2NamesArgs(undefined)).toEqual([]);
+    expect(wgrib2NamesArgs("DWD")).toEqual(["-names", "DWD"]);
+  });
+
+  it("uses DWD naming and normalizes ICON codes before native point extraction", async () => {
+    execaMock.mockResolvedValue({
+      stdout: [
+        "1:1:d=2026081906:T:850 mb:6 hour fcst:lon=14.5,lat=50,val=282",
+        "2:2:d=2026081906:PRR_CON:surface:0-6 hour acc fcst:lon=14.5,lat=50,val=1.25",
+        "3:3:d=2026081906:PRS_CON:surface:0-6 hour acc fcst:lon=14.5,lat=50,val=0.4",
+        "4:4:d=2026081906:DBZ:atmos col:6 hour fcst:lon=14.5,lat=50,val=-16",
+      ].join("\n"),
+    } as never);
+    const values = await new Wgrib2Decoder("/opt/wgrib2", "DWD")
+      .extractPoint("/tmp/test.grib2", 14.5, 50);
+    expect(values.map((value) => value.code)).toEqual([
+      "TMP",
+      "RAIN_CON",
+      "SNOW_CON",
+      "BREF",
+    ]);
+    expect(execaMock).toHaveBeenCalledWith("/opt/wgrib2", [
+      "/tmp/test.grib2",
+      "-names",
+      "DWD",
+      "-s",
+      "-lon",
+      "14.5",
+      "50",
+    ]);
+  });
+
+  it("converts DWD FI geopotential to canonical HGT", async () => {
+    execaMock.mockResolvedValue({
+      stdout: "1:1:d=2026081906:FI:850 mb:6 hour fcst:lon=14.5,lat=50,val=9806.65",
+    } as never);
+    const [value] = await new Wgrib2Decoder("/opt/wgrib2", "DWD")
+      .extractPoint("/tmp/test.grib2", 14.5, 50);
+    expect(value).toMatchObject({ code: "HGT", value: 1000 });
+  });
+
   it("invokes wgrib2 with -s -lon and converts negative longitude to 0-360", async () => {
     execaMock.mockResolvedValue({ stdout: "1:1:d=2026081906:TMP:850 mb:6 hour fcst:lon=350,lat=50,val=285.4" } as never);
     const values = await new Wgrib2Decoder("/opt/wgrib2").extractPoint("/tmp/test.grib2", -10, 50);

@@ -17,7 +17,7 @@ const result = await new UnifiedAtmosphereQueryService().query({
   selection: {
     variables: ["temperature"],
     pressureLevelsHpa: [850],
-    fields: ["column_maximum_reflectivity"],
+    fields: ["convective_rain", "convective_snow", "column_maximum_reflectivity"],
   },
   forecast: { run: safelyPublishedRun.toISOString() },
   ensemble: {
@@ -55,6 +55,27 @@ const reflectivityOutput = reflectivity.outputs.find(
 assert(reflectivityOutput, "missing ICON-D2-EPS reflectivity output");
 assert.equal(reflectivityOutput.distribution.memberCount, 2);
 assert(Number.isFinite(reflectivityOutput.distribution.mean));
+
+for (const [id, output] of [
+  ["convective_rain", "convectiveRainMm"],
+  ["convective_snow", "convectiveSnowWaterEquivalentMm"],
+] as const) {
+  const precipitation = ensemble.fieldSummaries.find(
+    (summary: any) => summary.field === id,
+  );
+  assert(precipitation, `missing ICON-D2-EPS ${id} distribution`);
+  assert.deepEqual(precipitation.level, { type: "surface" });
+  assert.equal(precipitation.temporal.type, "accumulation");
+  assert.equal(precipitation.temporal.startForecastHour, 0);
+  assert.equal(precipitation.temporal.endForecastHour, 6);
+  const precipitationOutput = precipitation.outputs.find(
+    (item: any) => item.field === output,
+  );
+  assert(precipitationOutput, `missing ICON-D2-EPS ${id} output`);
+  assert.equal(precipitationOutput.distribution.memberCount, 2);
+  assert(Number.isFinite(precipitationOutput.distribution.mean));
+}
+
 assert.equal(ensemble.source.provider, "DWD Open Data");
 assert.equal(ensemble.source.access, "dwd_open_data");
 assert.equal(ensemble.source.packaging, "all_members_grib2_bz2");

@@ -8,7 +8,10 @@ import {
   IconD2EpsCdoRemapper,
   IconD2EpsDwdRemapAssetCache,
 } from "../cache/icon-d2-eps-remap-cache.js";
-import { IconD2EpsAdaptiveMemberSubsetCache } from "../cache/icon-d2-eps-member-cache.js";
+import {
+  IconD2EpsAdaptiveMemberSubsetCache,
+  IconD2EpsMemberFileCombiner,
+} from "../cache/icon-d2-eps-member-cache.js";
 import {
   ICON_D2_EPS_MEMBERS,
   sortIconD2EpsMembers,
@@ -84,19 +87,23 @@ export class IconD2EpsForecastService {
       join(cacheDir, "icon-d2-eps-members"),
       wgrib2,
     );
+    const memberCombiner = new IconD2EpsMemberFileCombiner(
+      join(cacheDir, "icon-d2-eps-member-combined"),
+    );
     this.memberServiceFactory = options.memberServiceFactory ?? ((member) => {
       const memberCache = new IconD2EpsAdaptiveMemberSubsetCache(
         cache,
         remapper,
         memberFilter,
+        memberCombiner,
         member,
       );
       return new IconD2ForecastService({
         cache: memberCache,
         runProvider,
-        decoder: new Wgrib2Decoder(wgrib2),
-        areaDecoder: new Wgrib2StatsDecoder(wgrib2),
-        areaGridDecoder: new Wgrib2GridDecoder(wgrib2),
+        decoder: new Wgrib2Decoder(wgrib2, "DWD"),
+        areaDecoder: new Wgrib2StatsDecoder(wgrib2, undefined, "DWD"),
+        areaGridDecoder: new Wgrib2GridDecoder(wgrib2, undefined, "DWD"),
       });
     });
   }

@@ -13,6 +13,10 @@ import {
   isIconD2PressureLevel,
   isIconD2PressureVariable,
 } from "../src/catalog/icon-d2.js";
+import {
+  NON_ISOBARIC_FIELD_CATALOG,
+  type RawNonIsobaricFieldDefinition,
+} from "../src/catalog/non-isobaric-fields.js";
 import { VARIABLE_CATALOG, type RawVariableDefinition } from "../src/catalog/variables.js";
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
 import {
@@ -125,6 +129,34 @@ describe("ICON-D2 selected-object cache", () => {
     expect(second).toMatchObject({ path: first.path, cacheHit: true });
     expect(fetchFn).toHaveBeenCalledTimes(2);
     expect(decompress).toHaveBeenCalledTimes(2);
+  });
+
+  it("maps convective rain and snow to their native DWD parameter objects", async () => {
+    const fetchFn = vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 }));
+    const cache = new IconD2OpenDataCache(
+      rootDir,
+      fetchFn as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+      async () => new TextEncoder().encode("GRIB-PRECIP"),
+    );
+
+    await cache.fetch({
+      run: new Date("2026-08-31T00:00:00Z"),
+      forecastHour: 6,
+      variables: [],
+      pressureLevelsHpa: [],
+      fields: [
+        NON_ISOBARIC_FIELD_CATALOG.convective_rain,
+        NON_ISOBARIC_FIELD_CATALOG.convective_snow,
+      ] as RawNonIsobaricFieldDefinition[],
+    });
+
+    const urls = fetchFn.mock.calls.map(([input]) => String(input));
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).toContain("/rain_con/");
+    expect(urls[0]).toContain("_006_2d_rain_con.grib2.bz2");
+    expect(urls[1]).toContain("/snow_con/");
+    expect(urls[1]).toContain("_006_2d_snow_con.grib2.bz2");
   });
 
   it("uses HEAD probes for products required by latest-run resolution", async () => {
@@ -249,6 +281,30 @@ describe("ICON-D2 unified capabilities", () => {
       temporalSemantics: "instantaneous",
       support: [{ dataset: "icon-d2" }],
     });
+
+    const convectivePrecipitation = searchAtmosphereCatalog({
+      datasets: ["icon-d2"],
+      search: "convective",
+      sections: ["fields"],
+    });
+    expect(convectivePrecipitation.matches).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "convective_rain",
+        verticalSemantics: "surface",
+        temporalSemantics: "accumulation",
+        support: expect.arrayContaining([
+          expect.objectContaining({ dataset: "icon-d2" }),
+        ]),
+      }),
+      expect.objectContaining({
+        id: "convective_snow",
+        verticalSemantics: "surface",
+        temporalSemantics: "accumulation",
+        support: expect.arrayContaining([
+          expect.objectContaining({ dataset: "icon-d2" }),
+        ]),
+      }),
+    ]));
   });
 
   it("rejects out-of-domain queries before touching the ICON-D2 adapter", async () => {
@@ -471,6 +527,29 @@ describe("ICON-D2 deterministic service operations", () => {
       startTime: "2026-08-31T00:00:00.000Z",
       endTime: "2026-08-31T06:00:00.000Z",
     });
+
+    const convectiveRain = await service().query(queryAtmosphereSchema.parse({
+      dataset: "icon-d2",
+      geometry: {
+        type: "area",
+        westLongitude: 13,
+        eastLongitude: 13.2,
+        southLatitude: 49,
+        northLatitude: 49.2,
+      },
+      time: { at: "2026-08-31T06:00:00Z" },
+      selection: { fields: ["convective_rain"] },
+      forecast: { run: run.toISOString() },
+    })) as any;
+    expect(convectiveRain.field).toMatchObject({
+      id: "convective_rain",
+      level: { type: "surface" },
+      temporal: {
+        type: "accumulation",
+        startForecastHour: 0,
+        endForecastHour: 6,
+      },
+    });
   });
 
   it("covers bounded-area pressure and field distributions", async () => {
@@ -572,6 +651,8 @@ describe("ICON-D2 deterministic service operations", () => {
           "wind_10m",
           "wind_gust",
           "mean_sea_level_pressure",
+          "convective_rain",
+          "convective_snow",
           "column_maximum_reflectivity",
         ],
       },
@@ -582,9 +663,33 @@ describe("ICON-D2 deterministic service operations", () => {
       "wind_10m",
       "wind_gust",
       "mean_sea_level_pressure",
+      "convective_rain",
+      "convective_snow",
       "column_maximum_reflectivity",
     ]);
     expect(point.fields.find((field: any) => field.id === "wind_10m")?.values.windSpeedMs).toBe(5);
+    expect(point.fields.find((field: any) => field.id === "convective_rain"))
+      .toMatchObject({
+        level: { type: "surface" },
+        temporal: {
+          type: "accumulation",
+          startForecastHour: 0,
+          endForecastHour: 6,
+          startTime: "2026-08-31T00:00:00.000Z",
+          endTime: "2026-08-31T06:00:00.000Z",
+        },
+        values: { convectiveRainMm: 0.8 },
+      });
+    expect(point.fields.find((field: any) => field.id === "convective_snow"))
+      .toMatchObject({
+        level: { type: "surface" },
+        temporal: {
+          type: "accumulation",
+          startForecastHour: 0,
+          endForecastHour: 6,
+        },
+        values: { convectiveSnowWaterEquivalentMm: 0.2 },
+      });
     expect(point.fields.find((field: any) => field.id === "column_maximum_reflectivity"))
       .toMatchObject({
         level: { type: "named_layer", id: "entire_atmosphere" },
@@ -886,6 +991,8 @@ describe("ICON-D2 guard and inventory branches", () => {
     expect(isIconD2RawAreaVariable("wind")).toBe(false);
     expect(isIconD2RawAreaVariable("not-a-variable")).toBe(false);
     expect(isIconD2RawAreaField("temperature_2m")).toBe(true);
+    expect(isIconD2RawAreaField("convective_rain")).toBe(true);
+    expect(isIconD2RawAreaField("convective_snow")).toBe(true);
     expect(isIconD2RawAreaField("wind_10m")).toBe(false);
     expect(isIconD2RawAreaField("column_maximum_reflectivity")).toBe(false);
     expect(isIconD2RawAreaField("not-a-field")).toBe(false);
@@ -1025,6 +1132,20 @@ function fakeDecodedValues(longitude: number, latitude: number) {
       surface: true,
       accumulation: { startForecastHour: 0, endForecastHour: 6 },
       value: 1.5,
+      gridPoint,
+    },
+    {
+      code: "RAIN_CON",
+      surface: true,
+      accumulation: { startForecastHour: 0, endForecastHour: 6 },
+      value: 0.8,
+      gridPoint,
+    },
+    {
+      code: "SNOW_CON",
+      surface: true,
+      accumulation: { startForecastHour: 0, endForecastHour: 6 },
+      value: 0.2,
       gridPoint,
     },
   ];

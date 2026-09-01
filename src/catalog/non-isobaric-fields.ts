@@ -39,6 +39,8 @@ export const NON_ISOBARIC_FIELD_IDS = [
   "v_wind_100m",
   "wind_100m",
   "total_precipitation",
+  "convective_rain",
+  "convective_snow",
   "column_maximum_reflectivity",
   "precipitable_water",
   "total_column_cloud_water",
@@ -113,7 +115,7 @@ export type NamedNonIsobaricLevel = Extract<
 >;
 
 export type FieldTemporalSemantics = "instantaneous" | "accumulation" | "average" | "maximum";
-export type NonIsobaricGribCode = GfsCode | "BREF";
+export type NonIsobaricGribCode = GfsCode | "BREF" | "RAIN_CON" | "SNOW_CON";
 
 export interface RawNonIsobaricFieldDefinition {
   id: RawNonIsobaricFieldId;
@@ -289,6 +291,28 @@ const definitions: NonIsobaricFieldDefinition[] = [
 
   raw("total_precipitation", "APCP", surface(), "kg/m^2", "Total precipitation accumulated over the GFS message interval", "totalPrecipitationMm", "mm", "Liquid-water-equivalent precipitation depth", "accumulation"),
   raw(
+    "convective_rain",
+    "RAIN_CON",
+    surface(),
+    "kg/m^2",
+    "Convective rain accumulated since model start",
+    "convectiveRainMm",
+    "mm",
+    "Liquid-water-equivalent depth of convective rain",
+    "accumulation",
+  ),
+  raw(
+    "convective_snow",
+    "SNOW_CON",
+    surface(),
+    "kg/m^2",
+    "Convective snowfall water equivalent accumulated since model start",
+    "convectiveSnowWaterEquivalentMm",
+    "mm",
+    "Liquid-water-equivalent depth of convective snowfall",
+    "accumulation",
+  ),
+  raw(
     "column_maximum_reflectivity",
     "BREF",
     namedLevels.entireAtmosphere,
@@ -335,6 +359,8 @@ export const NON_ISOBARIC_FIELD_CATALOG = Object.fromEntries(
 ) as Record<NonIsobaricFieldId, NonIsobaricFieldDefinition>;
 
 export const REGIONAL_ONLY_NON_ISOBARIC_FIELD_IDS = [
+  "convective_rain",
+  "convective_snow",
   "column_maximum_reflectivity",
 ] as const satisfies readonly NonIsobaricFieldId[];
 

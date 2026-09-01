@@ -58,6 +58,25 @@ describe("parseSelectedAreaInventoryLine", () => {
     });
   });
 
+  it("normalizes DWD ICON names for selected area fields", () => {
+    expect(parseSelectedAreaInventoryLine(
+      "41:5000:d=2026081912:PRR_CON:surface:0-6 hour acc fcst:",
+      { code: "RAIN_CON", gribLevel: "surface", temporalSemantics: "accumulation" },
+      "DWD",
+    )).toEqual({
+      record: 41,
+      temporal: { type: "accumulation", startForecastHour: 0, endForecastHour: 6 },
+    });
+    expect(parseSelectedAreaInventoryLine(
+      "42:6000:d=2026081912:PRS_CON:surface:0-6 hour acc fcst:",
+      { code: "SNOW_CON", gribLevel: "surface", temporalSemantics: "accumulation" },
+      "DWD",
+    )).toEqual({
+      record: 42,
+      temporal: { type: "accumulation", startForecastHour: 0, endForecastHour: 6 },
+    });
+  });
+
   it("parses accumulation intervals and rejects wrong vertical semantics", () => {
     expect(parseSelectedAreaInventoryLine(
       "41:5000:d=2026081912:APCP:surface:0-6 hour acc fcst:",
