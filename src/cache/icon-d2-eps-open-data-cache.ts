@@ -351,6 +351,8 @@ function fieldParameter(field: RawNonIsobaricFieldDefinition): string {
     case "wind_gust": return "vmax_10m";
     case "mean_sea_level_pressure": return "pmsl";
     case "total_precipitation": return "tot_prec";
+    case "convective_rain": return "rain_con";
+    case "convective_snow": return "snow_con";
     case "column_maximum_reflectivity": return "dbz_cmax";
     default:
       throw new Error(
