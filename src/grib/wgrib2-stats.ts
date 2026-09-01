@@ -2,6 +2,10 @@ import { execa } from "execa";
 import type { FieldTemporalSemantics } from "../catalog/non-isobaric-fields.js";
 import type { ForecastInterval, GribDecoderName } from "../core/types.js";
 import {
+  wgrib2NamesArgs,
+  type Wgrib2NameConvention,
+} from "./wgrib2.js";
+import {
   canonicalGribCode,
   readGribMessages,
   selectMessage,
@@ -60,6 +64,7 @@ export class Wgrib2StatsDecoder {
   constructor(
     private readonly executable = defaultNativeExecutable(),
     private readonly runner: Wgrib2CommandRunner = defaultRunner,
+    private readonly names?: Wgrib2NameConvention,
   ) {
     this.engine = executable === undefined ? "gribberish" : "wgrib2";
   }
@@ -75,6 +80,7 @@ export class Wgrib2StatsDecoder {
 
     const stdout = await this.run([
       path,
+      ...wgrib2NamesArgs(this.names),
       "-s",
       "-undefine",
       "out-box",
@@ -98,7 +104,11 @@ export class Wgrib2StatsDecoder {
       };
     }
 
-    const inventory = await this.run([path, "-s"]);
+    const inventory = await this.run([
+      path,
+      ...wgrib2NamesArgs(this.names),
+      "-s",
+    ]);
     const matches = inventory
       .split(/\r?\n/)
       .map((line) => parseSelectedAreaInventoryLine(line, selector))
@@ -118,6 +128,7 @@ export class Wgrib2StatsDecoder {
     const match = matches[0]!;
     const stdout = await this.run([
       path,
+      ...wgrib2NamesArgs(this.names),
       "-d",
       String(match.record),
       "-undefine",
