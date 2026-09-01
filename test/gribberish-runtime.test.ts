@@ -104,6 +104,44 @@ describe("bundled GRIB2 point decoding", () => {
     expect(decoded?.average).toBeUndefined();
   });
 
+  it("normalizes current AROME gust-component aliases", () => {
+    const standardDecoded = decodePointMessages([
+      fakeMessage({
+        key: "UGUST:202608240600:10 in above ground:Maximum Forecast",
+        code: "UGUST",
+        forecast: "2026-08-24T05:00:00Z",
+        forecastEnd: "2026-08-24T06:00:00Z",
+      }),
+      fakeMessage({
+        key: "VGUST:202608240600:10 in above ground:Maximum Forecast",
+        code: "VGUST",
+        forecast: "2026-08-24T05:00:00Z",
+        forecastEnd: "2026-08-24T06:00:00Z",
+      }),
+    ], 14, 50);
+    expect(standardDecoded.map((value) => value.code)).toEqual(["U_RAF", "V_RAF"]);
+
+    const decoded = decodePointMessages([
+      fakeMessage({
+        key: "efg10:202608240600:10 in above ground:Maximum Forecast",
+        code: "efg10",
+        forecast: "2026-08-24T05:00:00Z",
+        forecastEnd: "2026-08-24T06:00:00Z",
+      }),
+      fakeMessage({
+        key: "nfg10:202608240600:10 in above ground:Maximum Forecast",
+        code: "nfg10",
+        forecast: "2026-08-24T05:00:00Z",
+        forecastEnd: "2026-08-24T06:00:00Z",
+      }),
+    ], 14, 50);
+
+    expect(decoded.map((value) => value.code)).toEqual(["U_RAF", "V_RAF"]);
+    expect(decoded.every((value) =>
+      value.maximum?.startForecastHour === 5
+      && value.maximum.endForecastHour === 6)).toBe(true);
+  });
+
   it("preserves average intervals independently", () => {
     const [decoded] = decodePointMessages([
       fakeMessage({

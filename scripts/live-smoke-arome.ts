@@ -12,7 +12,7 @@ const result = await new UnifiedAtmosphereQueryService().query({
   geometry: { type: "point", latitude: 48.8566, longitude: 2.3522 },
   time: { at: validTime.toISOString() },
   selection: {
-    fields: ["temperature_2m", "relative_humidity_2m", "wind_10m"],
+    fields: ["temperature_2m", "relative_humidity_2m", "wind_10m", "wind_gust"],
   },
   forecast: { run: safelyPublishedRun.toISOString() },
 });
@@ -27,7 +27,7 @@ assert.equal(point.model, "arome_0p01");
 assert.equal(point.validTime, validTime.toISOString());
 assert.equal(point.forecastHour, 6);
 assert.deepEqual(point.levels, []);
-for (const field of ["temperature_2m", "relative_humidity_2m", "wind_10m"]) {
+for (const field of ["temperature_2m", "relative_humidity_2m", "wind_10m", "wind_gust"]) {
   assert(point.fields.some((item: any) => item.id === field), `missing AROME field ${field}`);
 }
 assert(Number.isFinite(
@@ -39,6 +39,13 @@ assert(Number.isFinite(
 assert(Number.isFinite(
   point.fields.find((item: any) => item.id === "wind_10m").values.windSpeedMs,
 ));
+const gust = point.fields.find((item: any) => item.id === "wind_gust");
+assert(Number.isFinite(gust.values.windGustMs));
+assert.equal(gust.level.type, "height_above_ground_m");
+assert.equal(gust.level.heightM, 10);
+assert.equal(gust.temporal.type, "maximum");
+assert.equal(gust.temporal.startForecastHour, 5);
+assert.equal(gust.temporal.endForecastHour, 6);
 assert.equal(point.source.provider, "Météo-France Open Data");
 assert.equal(point.source.access, "meteo_france_open_data");
 assert.equal(point.source.nativeGrid.type, "lambert_conformal");

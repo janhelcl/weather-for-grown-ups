@@ -419,8 +419,11 @@ function toSignedLongitude(longitude: number): number {
 
 
 export function canonicalGribCode(code: string): string {
-  if (code === "GP") return "HGT";
-  if (code === "VMAX_10M") return "GUST";
+  const normalized = code.toUpperCase();
+  if (normalized === "GP") return "HGT";
+  if (normalized === "VMAX_10M") return "GUST";
+  if (normalized === "U_RAF" || normalized === "UGUST" || normalized === "EFG10") return "U_RAF";
+  if (normalized === "V_RAF" || normalized === "VGUST" || normalized === "NFG10") return "V_RAF";
   return code;
 }
 
