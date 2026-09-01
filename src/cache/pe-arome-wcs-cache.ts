@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, rename, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   FileAccessPolicy,
   UPSTREAM_ACCESS_POLICIES,
@@ -65,7 +65,7 @@ export class PeAromeWcsCache implements AromeSubsetCache {
       ? options.tokenProvider ?? (() => resolveMeteoFranceBearerToken())
       : () => options.token!;
     this.accessPolicy = options.accessPolicy ?? new FileAccessPolicy(
-      join(rootDir, "access-state"),
+      join(dirname(rootDir), "access-state"),
       UPSTREAM_ACCESS_POLICIES.meteoFranceApi,
     );
   }
