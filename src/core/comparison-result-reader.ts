@@ -79,6 +79,19 @@ export function requiredProfileValue(
   return requiredNumber(level[field], `${dataset} ${field}@${pressureLevelHpa}hPa`);
 }
 
+export function requiredFieldValue(
+  result: ComparisonResultObject,
+  fieldId: string,
+  outputField: string,
+  dataset: string,
+): number {
+  const fields = requiredArray(result.fields, `${dataset} fields`).map(comparisonResultObject);
+  const field = fields.find((candidate) => candidate.id === fieldId || candidate.field === fieldId);
+  if (!field) throw new Error(`${dataset} comparison is missing field ${fieldId}`);
+  const values = comparisonResultObject(field.values);
+  return requiredNumber(values[outputField], `${dataset} ${fieldId}.${outputField}`);
+}
+
 export function scalarOutput(variable: string): { field: string; unit: string } {
   const definition = VARIABLE_CATALOG[variable as keyof typeof VARIABLE_CATALOG];
   if (!definition) throw new Error(`Unknown comparison variable: ${variable}`);
@@ -137,6 +150,38 @@ export function requiredDistribution(
   );
 }
 
+export function requiredFieldDistribution(
+  result: ComparisonResultObject,
+  fieldId: string,
+  outputField: string,
+  dataset: string,
+): NumericDistribution {
+  const summaries = requiredArray(result.fieldSummaries, `${dataset} field summaries`);
+  for (const raw of summaries) {
+    const summary = comparisonResultObject(raw);
+    if (summary.field !== fieldId && summary.id !== fieldId) continue;
+    if (Array.isArray(summary.outputs)) {
+      const output = summary.outputs.map(comparisonResultObject).find((candidate) =>
+        candidate.field === outputField
+        && candidate.aggregation === "numeric_distribution"
+        && candidate.distribution !== undefined);
+      if (output?.distribution !== undefined) {
+        return numericDistribution(output.distribution, dataset);
+      }
+    }
+    if (
+      summary.outputField === outputField
+      && summary.aggregation === "numeric_distribution"
+      && summary.distribution !== undefined
+    ) {
+      return numericDistribution(summary.distribution, dataset);
+    }
+  }
+  throw new Error(
+    `${dataset} comparison is missing numeric field distribution ${fieldId}.${outputField}`,
+  );
+}
+
 function numericDistribution(value: unknown, dataset: string): NumericDistribution {
   const distribution = comparisonResultObject(value);
   return {
@@ -170,6 +215,37 @@ export function compareThreshold(
   const leftValues = memberValues(left, variable, pressureLevelHpa, outputField, datasets[0]);
   const rightValues = memberValues(right, variable, pressureLevelHpa, outputField, datasets[1]);
   return thresholdFromValues(leftValues, rightValues, threshold, datasets[0], datasets[1]);
+}
+
+export function compareFieldThreshold(
+  left: ComparisonResultObject,
+  right: ComparisonResultObject,
+  datasets: readonly [PublicAtmosphericDataset, PublicAtmosphericDataset],
+  fieldId: string,
+  outputField: string,
+  threshold: number,
+) {
+  const leftValues = memberFieldValues(left, fieldId, outputField, datasets[0]);
+  const rightValues = memberFieldValues(right, fieldId, outputField, datasets[1]);
+  return thresholdFromValues(leftValues, rightValues, threshold, datasets[0], datasets[1]);
+}
+
+function memberFieldValues(
+  result: ComparisonResultObject,
+  fieldId: string,
+  outputField: string,
+  dataset: string,
+): number[] {
+  return requiredArray(result.members, `${dataset} member payloads`).map((rawMember) => {
+    const member = comparisonResultObject(rawMember);
+    const fields = requiredArray(member.fields, `${dataset} member fields`).map(comparisonResultObject);
+    const field = fields.find((candidate) => candidate.id === fieldId || candidate.field === fieldId);
+    if (!field) throw new Error(`${dataset} member is missing field ${fieldId}`);
+    return requiredNumber(
+      comparisonResultObject(field.values)[outputField],
+      `${dataset} member ${fieldId}.${outputField}`,
+    );
+  });
 }
 
 function memberValues(
