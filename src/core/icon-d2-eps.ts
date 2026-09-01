@@ -101,9 +101,9 @@ export class IconD2EpsForecastService {
       return new IconD2ForecastService({
         cache: memberCache,
         runProvider,
-        decoder: new Wgrib2Decoder(wgrib2),
-        areaDecoder: new Wgrib2StatsDecoder(wgrib2),
-        areaGridDecoder: new Wgrib2GridDecoder(wgrib2),
+        decoder: new Wgrib2Decoder(wgrib2, "DWD"),
+        areaDecoder: new Wgrib2StatsDecoder(wgrib2, undefined, "DWD"),
+        areaGridDecoder: new Wgrib2GridDecoder(wgrib2, undefined, "DWD"),
       });
     });
   }
