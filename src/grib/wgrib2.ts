@@ -6,6 +6,7 @@ import type { DecodedValue, GribDecoderName } from "../core/types.js";
 import {
   canonicalGribCode,
   decodePointMessages,
+  messagesAtForecastHour,
   readGribMessages,
 } from "./gribberish-runtime.js";
 
@@ -13,6 +14,7 @@ const GEFS_RAW_FIELDS = Object.values(GEFS_PGRB2A_FIELD_CATALOG).filter((definit
 const ALL_SUPPORTED_CODES = [...new Set([
   ...ALL_SUPPORTED_GFS_CODES,
   ...GEFS_RAW_FIELDS.map((definition) => definition.gfsCode),
+  "BREF",
   "GP",
   "VMAX_10M",
   "U_RAF",
@@ -40,9 +42,18 @@ export class Wgrib2Decoder {
     this.engine = executable === undefined ? "gribberish" : "wgrib2";
   }
 
-  async extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]> {
+  async extractPoint(
+    path: string,
+    longitude: number,
+    latitude: number,
+    forecastHour?: number,
+  ): Promise<DecodedValue[]> {
     if (this.executable === undefined) {
-      const decoded = decodePointMessages(await readGribMessages(path), longitude, latitude);
+      const messages = await readGribMessages(path);
+      const selected = forecastHour === undefined
+        ? messages
+        : messagesAtForecastHour(messages, forecastHour);
+      const decoded = decodePointMessages(selected, longitude, latitude);
       if (decoded.length === 0) {
         throw new Error("Bundled GRIB2 decoder returned no supported point values");
       }
@@ -70,6 +81,7 @@ export class Wgrib2Decoder {
 
     const decoded = stdout
       .split(/\r?\n/)
+      .filter((line) => forecastHour === undefined || wgrib2LineForecastHour(line) === forecastHour)
       .map((line) => parseWgrib2PointLine(line))
       .filter((value): value is DecodedValue => value !== null);
 
@@ -81,26 +93,52 @@ export class Wgrib2Decoder {
   }
 }
 
+export function wgrib2LineForecastHour(line: string): number | undefined {
+  if (/:anl:/i.test(line)) return 0;
+
+  const interval = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour (?:acc|ave|max)(?: fcst)?:/i);
+  if (interval?.[2] !== undefined) return Number(interval[2]);
+
+  const hourMinute = line.match(/:(\d+(?:\.\d+)?) hour(?: (\d+(?:\.\d+)?) (?:min|minute)s?)? fcst:/i);
+  if (hourMinute?.[1] !== undefined) {
+    return Number(hourMinute[1]) + Number(hourMinute[2] ?? 0) / 60;
+  }
+
+  const minute = line.match(/:(\d+(?:\.\d+)?) (?:min|minute)s? fcst:/i);
+  if (minute?.[1] !== undefined) return Number(minute[1]) / 60;
+  return undefined;
+}
+
 export function parseWgrib2PointLine(line: string): DecodedValue | null {
   const parts = line.split(":");
   const gribLevel = parts[4] ?? "";
   const codeMatch = line.match(CODE_PATTERN);
+  const aromeReflectivityMatch = line.match(
+    /:var discipline=0 center=85 local_table=0 parmcat=16 parm=193:/i,
+  );
   const pressureMatch = gribLevel.match(/^(\d+(?:\.\d+)?) mb$/);
   const surfaceMatch = gribLevel === "surface";
   const heightMatch = gribLevel.match(/^(\d+(?:\.\d+)?) m above ground$/);
   const gfsNamedLevel = findNamedNonIsobaricLevel(gribLevel);
-  const modelNamedVertical = gfsNamedLevel?.gribLevel
-    ?? (GEFS_NAMED_VERTICALS.has(gribLevel) ? gribLevel : undefined);
+  const modelNamedVertical = /^(?:atmos col|surface\s*-\s*top of atmosphere)$/i.test(gribLevel)
+    ? "entire atmosphere"
+    : gfsNamedLevel?.gribLevel
+      ?? (GEFS_NAMED_VERTICALS.has(gribLevel) ? gribLevel : undefined);
   const pointMatch = line.match(/lon=([-+\d.eE]+),lat=([-+\d.eE]+)/);
   const valueMatch = line.match(/val=([-+\d.eE]+)/);
 
-  if (!codeMatch || (!pressureMatch && !surfaceMatch && !heightMatch && !modelNamedVertical) || !pointMatch || !valueMatch) {
+  if (
+    (!codeMatch && !aromeReflectivityMatch)
+    || (!pressureMatch && !surfaceMatch && !heightMatch && !modelNamedVertical)
+    || !pointMatch
+    || !valueMatch
+  ) {
     return null;
   }
 
-  const rawCode = codeMatch[1];
-  if (!rawCode || !SUPPORTED_CODE_SET.has(rawCode.toUpperCase())) return null;
-  const code = canonicalGribCode(rawCode);
+  const rawCode = codeMatch?.[1] ?? "AROME_RFLCTVT_MAX";
+  if (!aromeReflectivityMatch && !SUPPORTED_CODE_SET.has(rawCode.toUpperCase())) return null;
+  const code = aromeReflectivityMatch ? "AROME_RFLCTVT_MAX" : canonicalGribCode(rawCode);
 
   const accumulationMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour acc(?: fcst)?:/i);
   const averageMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour ave(?: fcst)?:/i);

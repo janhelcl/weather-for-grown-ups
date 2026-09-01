@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   expandRequestedFields,
+  GFS_NON_ISOBARIC_FIELD_IDS,
   NON_ISOBARIC_FIELD_CATALOG,
   NON_ISOBARIC_FIELD_IDS,
 } from "../src/catalog/non-isobaric-fields.js";
@@ -30,11 +31,15 @@ describe("non-isobaric field catalog", () => {
     expect(expandRequestedFields(["wind_80m", "u_wind_80m"]).map((field) => field.id)).toEqual(["u_wind_80m", "v_wind_80m"]);
   });
 
-  it("only uses decoder-supported GFS codes", () => {
+  it("keeps GFS fields on GFS-supported codes while regional codes stay separate", () => {
     const supported = new Set<string>(ALL_SUPPORTED_GFS_CODES);
-    expect(Object.values(NON_ISOBARIC_FIELD_CATALOG)
+    expect(GFS_NON_ISOBARIC_FIELD_IDS
+      .map((id) => NON_ISOBARIC_FIELD_CATALOG[id])
       .filter((field) => field.kind === "raw")
       .every((field) => supported.has(field.gfsCode))).toBe(true);
+    expect(supported.has(
+      NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity.gfsCode,
+    )).toBe(false);
   });
 
   it("exposes the new fields through the agent catalog", () => {

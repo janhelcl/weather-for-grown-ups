@@ -17,6 +17,7 @@ const result = await new UnifiedAtmosphereQueryService().query({
   selection: {
     variables: ["temperature"],
     pressureLevelsHpa: [850],
+    fields: ["column_maximum_reflectivity"],
   },
   forecast: { run: safelyPublishedRun.toISOString() },
   ensemble: {
@@ -42,6 +43,18 @@ const temperature = ensemble.pressureSummaries.find(
 assert(temperature, "missing ICON-D2-EPS temperature distribution");
 assert.equal(temperature.distribution.memberCount, 2);
 assert(Number.isFinite(temperature.distribution.mean));
+const reflectivity = ensemble.fieldSummaries.find(
+  (summary: any) => summary.field === "column_maximum_reflectivity",
+);
+assert(reflectivity, "missing ICON-D2-EPS reflectivity distribution");
+assert.deepEqual(reflectivity.level, { type: "named_layer", id: "entire_atmosphere" });
+assert.deepEqual(reflectivity.temporal, { type: "instantaneous" });
+const reflectivityOutput = reflectivity.outputs.find(
+  (output: any) => output.field === "columnMaximumReflectivityFactorMm6M3",
+);
+assert(reflectivityOutput, "missing ICON-D2-EPS reflectivity output");
+assert.equal(reflectivityOutput.distribution.memberCount, 2);
+assert(Number.isFinite(reflectivityOutput.distribution.mean));
 assert.equal(ensemble.source.provider, "DWD Open Data");
 assert.equal(ensemble.source.access, "dwd_open_data");
 assert.equal(ensemble.source.packaging, "all_members_grib2_bz2");
@@ -55,5 +68,6 @@ console.log(JSON.stringify({
   validTime: ensemble.validTime,
   selection: ensemble.selection,
   pressureSummaries: ensemble.pressureSummaries,
+  fieldSummaries: ensemble.fieldSummaries,
   source: ensemble.source,
 }, null, 2));

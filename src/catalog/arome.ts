@@ -18,6 +18,7 @@ export const AROME_0P01_FIELD_IDS = [
   "v_wind_10m",
   "wind_10m",
   "wind_gust",
+  "column_maximum_reflectivity",
   "u_wind_20m",
   "v_wind_20m",
   "wind_20m",

@@ -8,6 +8,10 @@ import {
   iconD2EpsWgrib2TagForMember,
 } from "../src/cache/icon-d2-eps-open-data-cache.js";
 import {
+  IconD2EpsAdaptiveMemberSubsetCache,
+  iconD2EpsRequiresMemberFirstRemap,
+} from "../src/cache/icon-d2-eps-member-cache.js";
+import {
   ICON_D2_EPS_MEMBERS,
   iconD2EpsMemberOrdinal,
   sortIconD2EpsMembers,
@@ -217,10 +221,11 @@ describe("ICON-D2-EPS source defensive branches", () => {
         NON_ISOBARIC_FIELD_CATALOG.wind_gust,
         NON_ISOBARIC_FIELD_CATALOG.mean_sea_level_pressure,
         NON_ISOBARIC_FIELD_CATALOG.total_precipitation,
+        NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity,
       ] as RawNonIsobaricFieldDefinition[],
     });
 
-    expect(fetchFn).toHaveBeenCalledTimes(12);
+    expect(fetchFn).toHaveBeenCalledTimes(13);
     const urls = fetchFn.mock.calls.map((call) => String(call[0]));
     for (const parameter of [
       "/t/",
@@ -235,6 +240,7 @@ describe("ICON-D2-EPS source defensive branches", () => {
       "/vmax_10m/",
       "/pmsl/",
       "/tot_prec/",
+      "/dbz_cmax/",
     ]) {
       expect(urls.some((url) => url.includes(parameter))).toBe(true);
     }
@@ -411,6 +417,68 @@ describe("ICON-D2-EPS native member filtering", () => {
     );
     await expect(filter.filter(sourcePath, "p01"))
       .rejects.toThrow("ICON-D2-EPS requires native wgrib2");
+  });
+});
+
+describe("ICON-D2-EPS adaptive member remapping", () => {
+  const baseRequest = {
+    run: new Date("2026-08-31T00:00:00Z"),
+    forecastHour: 6,
+    variables: [],
+    pressureLevelsHpa: [],
+  };
+
+  it("splits reflectivity before remapping but keeps the efficient default order", async () => {
+    const source = {
+      fetch: vi.fn(async () => ({ path: "/raw/all.grib2", cacheHit: true })),
+      isForecastAvailable: vi.fn(async () => true),
+    };
+    const remapper = {
+      remap: vi.fn(async (path: string) => ({
+        path: `${path}.remapped`,
+        cacheHit: true,
+      })),
+    };
+    const filter = {
+      filter: vi.fn(async (path: string, member: string) => ({
+        path: `${path}.${member}`,
+        cacheHit: true,
+      })),
+    };
+    const cache = new IconD2EpsAdaptiveMemberSubsetCache(
+      source as any,
+      remapper as any,
+      filter as any,
+      "p02",
+    );
+
+    const ordinary = {
+      ...baseRequest,
+      fields: [NON_ISOBARIC_FIELD_CATALOG.temperature_2m] as RawNonIsobaricFieldDefinition[],
+    };
+    expect(iconD2EpsRequiresMemberFirstRemap(ordinary)).toBe(false);
+    await expect(cache.fetch(ordinary)).resolves.toMatchObject({
+      path: "/raw/all.grib2.remapped.p02",
+      cacheHit: true,
+    });
+    expect(remapper.remap).toHaveBeenLastCalledWith("/raw/all.grib2");
+    expect(filter.filter).toHaveBeenLastCalledWith("/raw/all.grib2.remapped", "p02");
+
+    vi.clearAllMocks();
+    const reflectivity = {
+      ...baseRequest,
+      fields: [
+        NON_ISOBARIC_FIELD_CATALOG.temperature_2m,
+        NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity,
+      ] as RawNonIsobaricFieldDefinition[],
+    };
+    expect(iconD2EpsRequiresMemberFirstRemap(reflectivity)).toBe(true);
+    await expect(cache.fetch(reflectivity)).resolves.toMatchObject({
+      path: "/raw/all.grib2.p02.remapped",
+      cacheHit: true,
+    });
+    expect(filter.filter).toHaveBeenLastCalledWith("/raw/all.grib2", "p02");
+    expect(remapper.remap).toHaveBeenLastCalledWith("/raw/all.grib2.p02");
   });
 });
 

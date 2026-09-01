@@ -7,6 +7,7 @@ import {
   type IconD2SubsetCache,
 } from "../cache/icon-d2-open-data-cache.js";
 import {
+  ICON_D2_AREA_FIELD_IDS,
   ICON_D2_RAW_PRESSURE_VARIABLE_IDS,
   expandIconD2RequestedFields,
   expandIconD2RequestedVariables,
@@ -81,7 +82,12 @@ const MAX_NATIVE_STEPS = 49;
 
 export interface IconD2PointDecoder {
   readonly engine?: GribDecoderName;
-  extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]>;
+  extractPoint(
+    path: string,
+    longitude: number,
+    latitude: number,
+    forecastHour?: number,
+  ): Promise<DecodedValue[]>;
 }
 
 export interface IconD2ForecastServiceOptions {
@@ -625,7 +631,16 @@ export class IconD2ForecastService {
     point: PointCoordinate,
     selection: ExpandedSelection,
   ): Promise<IconD2ProfileResult> {
-    const decoded = await this.decoder.extractPoint(cached.path, point.longitude, point.latitude);
+    const forecastHour = iconD2ForecastHour(run, validTime);
+    const rawDecoded = await this.decoder.extractPoint(
+      cached.path,
+      point.longitude,
+      point.latitude,
+      forecastHour,
+    );
+    const decoded = selection.fieldIds.includes("column_maximum_reflectivity")
+      ? withIconD2ColumnMaximumReflectivity(rawDecoded)
+      : rawDecoded;
     const firstValue = decoded[0];
     if (firstValue === undefined) throw new Error("ICON-D2 decoder returned no grid point");
 
@@ -678,6 +693,27 @@ export class IconD2ForecastService {
   ): Promise<Date> {
     return Promise.resolve(resolveIconD2Run(selector, requirement, this.runProvider));
   }
+}
+
+export function withIconD2ColumnMaximumReflectivity(
+  values: readonly DecodedValue[],
+): DecodedValue[] {
+  const candidates = values.filter((value) =>
+    value.code === "BREF"
+    && value.namedVertical === "entire atmosphere"
+    && value.accumulation === undefined
+    && value.average === undefined
+    && value.maximum === undefined);
+  if (candidates.length !== 1) {
+    throw new Error(
+      `ICON-D2 DBZ_CMAX expected one instantaneous column reflectivity message, found ${candidates.length}`,
+    );
+  }
+  const source = candidates[0]!;
+  return values.map((value) =>
+    value === source
+      ? { ...value, value: 10 ** (value.value / 10) }
+      : value);
 }
 
 function expandedSelection(request: QueryAtmosphereRequest): ExpandedSelection {
@@ -866,6 +902,7 @@ function areaSource(cacheHit: boolean, decoder: GribDecoderName | undefined) {
 }
 
 const ICON_D2_RAW_VARIABLE_SET = new Set<string>(ICON_D2_RAW_PRESSURE_VARIABLE_IDS);
+const ICON_D2_RAW_AREA_FIELD_SET = new Set<string>(ICON_D2_AREA_FIELD_IDS);
 
 export function isIconD2RawAreaVariable(id: string): boolean {
   return ICON_D2_RAW_VARIABLE_SET.has(id)
@@ -873,7 +910,8 @@ export function isIconD2RawAreaVariable(id: string): boolean {
 }
 
 export function isIconD2RawAreaField(id: string): boolean {
-  return NON_ISOBARIC_FIELD_CATALOG[id as NonIsobaricFieldId]?.kind === "raw";
+  return ICON_D2_RAW_AREA_FIELD_SET.has(id)
+    && NON_ISOBARIC_FIELD_CATALOG[id as NonIsobaricFieldId]?.kind === "raw";
 }
 
 function iconD2ProductGrid() {

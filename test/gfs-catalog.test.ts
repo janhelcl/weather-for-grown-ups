@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getGfsPressureCatalog } from "../src/catalog/catalog.js";
+import { searchGfsCatalog } from "../src/catalog/search.js";
+import { queryAtmosphereSchema } from "../src/schema/unified-api.js";
 
 describe("getGfsPressureCatalog", () => {
   it("returns an agent-discoverable pressure catalog", () => {
@@ -44,6 +46,25 @@ describe("getGfsPressureCatalog", () => {
       dependencies: ["temperature", "specific_humidity"],
       outputs: [{ field: "equivalentPotentialTemperatureK", unit: "K" }],
     });
+  });
+
+  it("does not advertise or accept regional-only reflectivity as GFS", () => {
+    const catalog = getGfsPressureCatalog();
+    expect(catalog.fields.some(
+      (field) => field.id === "column_maximum_reflectivity",
+    )).toBe(false);
+    expect(searchGfsCatalog({
+      search: "column maximum reflectivity",
+      sections: ["fields"],
+    }).matches).toEqual([]);
+
+    expect(() => queryAtmosphereSchema.parse({
+      dataset: "gfs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: { at: "2026-08-31T06:00:00Z" },
+      selection: { fields: ["column_maximum_reflectivity"] },
+      forecast: { run: "2026-08-31T00:00:00Z" },
+    })).toThrow("GFS fields not supported");
   });
 
   it("returns fresh arrays so callers cannot mutate the canonical catalog", () => {

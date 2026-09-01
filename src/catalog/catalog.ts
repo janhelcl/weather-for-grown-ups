@@ -1,5 +1,8 @@
 import { LAYER_DIAGNOSTIC_CATALOG } from "./layer-diagnostics.js";
-import { NON_ISOBARIC_FIELD_CATALOG } from "./non-isobaric-fields.js";
+import {
+  GFS_NON_ISOBARIC_FIELD_IDS,
+  NON_ISOBARIC_FIELD_CATALOG,
+} from "./non-isobaric-fields.js";
 import { PARCEL_DIAGNOSTIC_CATALOG } from "./parcel-diagnostics.js";
 import { GFS_PRESSURE_LEVELS_HPA } from "./pressure-levels.js";
 import { PROFILE_DIAGNOSTIC_CATALOG } from "./profile-diagnostics.js";
@@ -64,7 +67,9 @@ export function getGfsPressureCatalog() {
     })),
     fieldSemanticsNote:
       "Non-isobaric fields carry explicit vertical and temporal semantics. Named layers/levels remain distinct from pressure surfaces; accumulation and average results include their exact GFS forecast-hour interval.",
-    fields: Object.values(NON_ISOBARIC_FIELD_CATALOG).map((definition) =>
+    fields: GFS_NON_ISOBARIC_FIELD_IDS
+      .map((id) => NON_ISOBARIC_FIELD_CATALOG[id])
+      .map((definition) =>
       definition.kind === "raw"
         ? {
             id: definition.id,

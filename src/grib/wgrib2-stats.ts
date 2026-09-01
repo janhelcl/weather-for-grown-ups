@@ -1,6 +1,5 @@
 import { execa } from "execa";
 import type { FieldTemporalSemantics } from "../catalog/non-isobaric-fields.js";
-import type { GfsCode } from "../catalog/variables.js";
 import type { ForecastInterval, GribDecoderName } from "../core/types.js";
 import {
   canonicalGribCode,
@@ -27,7 +26,8 @@ export interface GridStatistics {
 }
 
 export interface AreaMessageSelector {
-  code: GfsCode;
+  /** Canonical GRIB short name; provider-neutral by design. */
+  code: string;
   gribLevel: string;
   temporalSemantics: FieldTemporalSemantics;
 }
