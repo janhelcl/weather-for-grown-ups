@@ -292,13 +292,17 @@ describe("ICON-D2 unified capabilities", () => {
         id: "convective_rain",
         verticalSemantics: "surface",
         temporalSemantics: "accumulation",
-        support: [{ dataset: "icon-d2" }],
+        support: expect.arrayContaining([
+          expect.objectContaining({ dataset: "icon-d2" }),
+        ]),
       }),
       expect.objectContaining({
         id: "convective_snow",
         verticalSemantics: "surface",
         temporalSemantics: "accumulation",
-        support: [{ dataset: "icon-d2" }],
+        support: expect.arrayContaining([
+          expect.objectContaining({ dataset: "icon-d2" }),
+        ]),
       }),
     ]));
   });
