@@ -38,14 +38,6 @@ const WCS_FIELD_MAPPINGS: Partial<Record<RawNonIsobaricFieldDefinition["id"], Wc
     coverageName: "RELATIVE_HUMIDITY__SPECIFIC_HEIGHT_LEVEL_ABOVE_GROUND",
     heightM: 2,
   },
-  u_wind_10m: {
-    coverageName: "U_COMPONENT_OF_WIND__SPECIFIC_HEIGHT_LEVEL_ABOVE_GROUND",
-    heightM: 10,
-  },
-  v_wind_10m: {
-    coverageName: "V_COMPONENT_OF_WIND__SPECIFIC_HEIGHT_LEVEL_ABOVE_GROUND",
-    heightM: 10,
-  },
 };
 
 export function parsePeAromeRun(value: string): Date {
