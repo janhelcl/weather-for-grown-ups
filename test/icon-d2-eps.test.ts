@@ -458,7 +458,10 @@ describe("ICON-D2-EPS adaptive member remapping", () => {
 
     const ordinary = {
       ...baseRequest,
-      fields: [NON_ISOBARIC_FIELD_CATALOG.temperature_2m] as RawNonIsobaricFieldDefinition[],
+      fields: [
+        NON_ISOBARIC_FIELD_CATALOG.temperature_2m,
+        NON_ISOBARIC_FIELD_CATALOG.convective_rain,
+      ] as RawNonIsobaricFieldDefinition[],
     };
     expect(iconD2EpsRequiresMemberFirstRemap(ordinary)).toBe(false);
     await expect(cache.fetch(ordinary)).resolves.toMatchObject({
