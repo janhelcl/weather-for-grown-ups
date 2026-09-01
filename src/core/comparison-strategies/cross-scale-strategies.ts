@@ -155,7 +155,9 @@ export class IfsEnsIconD2EpsComparisonStrategy
       validTime: query.time.at,
       run: query.run,
       selection: selectionFromRequest(query),
-      leftMembers: query.ifsEnsMembers,
+      ...(query.ifsEnsMembers === undefined
+        ? {}
+        : { leftMembers: query.ifsEnsMembers }),
       rightMembers: query.iconD2EpsMembers,
       quantiles: query.quantiles,
       ...(query.thresholdGte === undefined
@@ -195,7 +197,9 @@ export class IfsEnsPeAromeComparisonStrategy
       validTime: query.time.at,
       run: query.run,
       selection: { kind: "field", field: query.field },
-      leftMembers: query.ifsEnsMembers,
+      ...(query.ifsEnsMembers === undefined
+        ? {}
+        : { leftMembers: query.ifsEnsMembers }),
       rightMembers: query.peAromeMembers,
       quantiles: query.quantiles,
       ...(query.thresholdGte === undefined
@@ -207,9 +211,9 @@ export class IfsEnsPeAromeComparisonStrategy
 
 function selectionFromRequest(
   request: {
-    field?: string;
-    variable?: string;
-    pressureLevelHpa?: number;
+    field?: string | undefined;
+    variable?: string | undefined;
+    pressureLevelHpa?: number | undefined;
   },
 ): CrossScaleComparisonSelection {
   if (request.field !== undefined) {
