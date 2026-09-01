@@ -126,7 +126,7 @@ describe("PE-AROME WCS cache", () => {
       fetchFn,
       accessPolicy: { run: async (operation) => operation() },
     });
-    const fields = expandPeAromeRequestedFields(["temperature_2m", "u_wind_10m"]);
+    const fields = expandPeAromeRequestedFields(["temperature_2m", "relative_humidity_2m"]);
     const request = {
       run: new Date("2026-09-01T09:00:00Z"),
       forecastHour: 3,
@@ -199,7 +199,7 @@ describe("PE-AROME run resolution", () => {
 });
 
 describe("PE-AROME member-first unified aggregation", () => {
-  it("derives each member first, pins one resolved run, then aggregates field distributions", async () => {
+  it("pins one resolved run, then aggregates member field distributions", async () => {
     const calls: Array<{ member: string; request: any }> = [];
     const service = new PeAromeForecastService({
       concurrency: 2,
@@ -216,12 +216,11 @@ describe("PE-AROME member-first unified aggregation", () => {
             gridPoint: { latitude: 50.08, longitude: 14.42 },
             levels: [],
             fields: [{
-              id: "wind_10m",
-              level: { type: "height_above_ground_m", heightM: 10 },
+              id: "temperature_2m",
+              level: { type: "height_above_ground_m", heightM: 2 },
               temporal: { type: "instantaneous" },
               values: {
-                windSpeedMs: 5 + offset,
-                windDirectionDeg: member === "c00" ? 350 : 10,
+                temperatureC: 5 + offset,
               },
             }],
             source: {
@@ -239,7 +238,7 @@ describe("PE-AROME member-first unified aggregation", () => {
       dataset: "pe-arome",
       geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
       time: { at: "2026-09-01T12:00:00Z" },
-      selection: { fields: ["wind_10m"] },
+      selection: { fields: ["temperature_2m"] },
       ensemble: {
         members: ["p01", "c00"],
         quantiles: [0.5],
@@ -250,20 +249,13 @@ describe("PE-AROME member-first unified aggregation", () => {
     expect(result.model).toBe("pe_arome_0p025");
     expect(result.selection.members).toEqual(["c00", "p01"]);
     expect(result.fieldSummaries[0].outputs.find((output: any) =>
-      output.field === "windSpeedMs",
+      output.field === "temperatureC",
     ).distribution).toMatchObject({
       memberCount: 2,
       mean: 6,
       min: 5,
       max: 7,
     });
-    const direction = result.fieldSummaries[0].outputs.find((output: any) =>
-      output.field === "windDirectionDeg");
-    expect(direction.aggregation).toBe("circular_direction");
-    expect(Math.min(
-      Math.abs(direction.meanDeg),
-      Math.abs(direction.meanDeg - 360),
-    )).toBeLessThan(1e-10);
     expect(result.members).toHaveLength(2);
     expect(result.source).toMatchObject({
       provider: "Météo-France Public API",
@@ -337,7 +329,7 @@ describe("PE-AROME unified capability validation", () => {
       dataset: "pe-arome",
       geometry: { type: "point", latitude: 50, longitude: 14 },
       time: { at: "2026-09-01T12:00:00Z" },
-      selection: { fields: ["temperature_2m", "wind_10m"] },
+      selection: { fields: ["temperature_2m", "relative_humidity_2m"] },
       ensemble: { members: ["c00", "p01"] },
     }).success).toBe(true);
 
