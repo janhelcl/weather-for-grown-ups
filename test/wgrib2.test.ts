@@ -20,6 +20,27 @@ describe("parseWgrib2PointLine", () => {
     });
   });
 
+  it("parses DWD aviation visibility and ceiling fields", () => {
+    expect(parseWgrib2PointLine(
+      "1:1:d=2026081906:VIS:surface:6 hour fcst:lon=14.5,lat=50,val=12000",
+      "DWD",
+    )).toEqual({
+      code: "VIS",
+      surface: true,
+      value: 12000,
+      gridPoint: { longitude: 14.5, latitude: 50 },
+    });
+    expect(parseWgrib2PointLine(
+      "2:2:d=2026081906:CEILING:cloud base - mean sea level:6 hour fcst:lon=14.5,lat=50,val=1800",
+      "DWD",
+    )).toEqual({
+      code: "CEILING",
+      namedVertical: "cloud ceiling",
+      value: 1800,
+      gridPoint: { longitude: 14.5, latitude: 50 },
+    });
+  });
+
   it("parses regional convective precipitation accumulations", () => {
     for (const code of ["RAIN_CON", "SNOW_CON"] as const) {
       expect(parseWgrib2PointLine(
@@ -92,6 +113,8 @@ describe("Wgrib2Decoder native compatibility path", () => {
         "2:2:d=2026081906:PRR_CON:surface:0-6 hour acc fcst:lon=14.5,lat=50,val=1.25",
         "3:3:d=2026081906:PRS_CON:surface:0-6 hour acc fcst:lon=14.5,lat=50,val=0.4",
         "4:4:d=2026081906:DBZ:atmos col:6 hour fcst:lon=14.5,lat=50,val=-16",
+        "5:5:d=2026081906:VIS:surface:6 hour fcst:lon=14.5,lat=50,val=9000",
+        "6:6:d=2026081906:CEILING:cloud base - mean sea level:6 hour fcst:lon=14.5,lat=50,val=1400",
       ].join("\n"),
     } as never);
     const values = await new Wgrib2Decoder("/opt/wgrib2", "DWD")
@@ -101,6 +124,8 @@ describe("Wgrib2Decoder native compatibility path", () => {
       "RAIN_CON",
       "SNOW_CON",
       "BREF",
+      "VIS",
+      "CEILING",
     ]);
     expect(execaMock).toHaveBeenCalledWith("/opt/wgrib2", [
       "/tmp/test.grib2",
