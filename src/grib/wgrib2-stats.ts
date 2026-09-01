@@ -2,6 +2,7 @@ import { execa } from "execa";
 import type { FieldTemporalSemantics } from "../catalog/non-isobaric-fields.js";
 import type { ForecastInterval, GribDecoderName } from "../core/types.js";
 import {
+  canonicalWgrib2Code,
   wgrib2NamesArgs,
   type Wgrib2NameConvention,
 } from "./wgrib2.js";
@@ -111,7 +112,7 @@ export class Wgrib2StatsDecoder {
     ]);
     const matches = inventory
       .split(/\r?\n/)
-      .map((line) => parseSelectedAreaInventoryLine(line, selector))
+      .map((line) => parseSelectedAreaInventoryLine(line, selector, this.names))
       .filter((value): value is { record: number; temporal: SelectedMessageTemporal } => value !== null);
 
     if (matches.length === 0) {
@@ -159,6 +160,7 @@ export class Wgrib2StatsDecoder {
 export function parseSelectedAreaInventoryLine(
   line: string,
   selector: AreaMessageSelector,
+  names?: Wgrib2NameConvention,
 ): { record: number; temporal: SelectedMessageTemporal } | null {
   const parts = line.split(":");
   const record = Number(parts[0]);
@@ -167,7 +169,7 @@ export function parseSelectedAreaInventoryLine(
   if (
     !Number.isInteger(record)
     || record < 1
-    || canonicalGribCode(code ?? "") !== selector.code
+    || canonicalWgrib2Code(code ?? "", names) !== selector.code
     || gribLevel !== selector.gribLevel
   ) {
     return null;
