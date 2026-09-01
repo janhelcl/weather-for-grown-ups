@@ -201,8 +201,8 @@ export class IconD2EpsMemberFileFilter {
     try {
       const { stdout } = await this.run([
         sourcePath,
-        "-match_fs",
-        `:${ensembleTag}`,
+        "-match",
+        iconD2EpsExactMemberMatchPattern(ensembleTag),
         "-grib",
         tempPath,
       ]);
@@ -269,6 +269,10 @@ export class IconD2EpsMemberSubsetCache implements IconD2SubsetCache {
   }
 }
 
+export function iconD2EpsExactMemberMatchPattern(ensembleTag: string): string {
+  return `:${escapePosixExtendedRegex(ensembleTag)}:`;
+}
+
 export function iconD2EpsWgrib2TagForMember(
   inventory: string,
   member: IconD2EpsMember,
@@ -295,6 +299,10 @@ export function iconD2EpsWgrib2TagForMember(
     throw new Error(`ICON-D2-EPS inventory has no member mapping for ${member}`);
   }
   return selected.tag;
+}
+
+function escapePosixExtendedRegex(value: string): string {
+  return value.replace(/[.[\\*^$()+?{|]/g, "\\function ensembleTagOrder(tag: string): number | null {");
 }
 
 function ensembleTagOrder(tag: string): number | null {
