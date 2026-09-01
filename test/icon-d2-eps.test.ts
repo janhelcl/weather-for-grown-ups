@@ -221,11 +221,13 @@ describe("ICON-D2-EPS source defensive branches", () => {
         NON_ISOBARIC_FIELD_CATALOG.wind_gust,
         NON_ISOBARIC_FIELD_CATALOG.mean_sea_level_pressure,
         NON_ISOBARIC_FIELD_CATALOG.total_precipitation,
+        NON_ISOBARIC_FIELD_CATALOG.convective_rain,
+        NON_ISOBARIC_FIELD_CATALOG.convective_snow,
         NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity,
       ] as RawNonIsobaricFieldDefinition[],
     });
 
-    expect(fetchFn).toHaveBeenCalledTimes(13);
+    expect(fetchFn).toHaveBeenCalledTimes(15);
     const urls = fetchFn.mock.calls.map((call) => String(call[0]));
     for (const parameter of [
       "/t/",
@@ -240,6 +242,8 @@ describe("ICON-D2-EPS source defensive branches", () => {
       "/vmax_10m/",
       "/pmsl/",
       "/tot_prec/",
+      "/rain_con/",
+      "/snow_con/",
       "/dbz_cmax/",
     ]) {
       expect(urls.some((url) => url.includes(parameter))).toBe(true);
