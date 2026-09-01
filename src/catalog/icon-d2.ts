@@ -57,6 +57,8 @@ export const ICON_D2_FIELD_IDS = [
   "wind_gust",
   "mean_sea_level_pressure",
   "total_precipitation",
+  "convective_rain",
+  "convective_snow",
   "column_maximum_reflectivity",
 ] as const satisfies readonly NonIsobaricFieldId[];
 
@@ -75,6 +77,8 @@ export const ICON_D2_AREA_FIELD_IDS = [
   "wind_gust",
   "mean_sea_level_pressure",
   "total_precipitation",
+  "convective_rain",
+  "convective_snow",
 ] as const satisfies readonly NonIsobaricFieldId[];
 
 export const ICON_D2_WIND_GUST_FIELD: RawNonIsobaricFieldDefinition = {
