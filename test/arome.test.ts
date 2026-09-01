@@ -545,7 +545,6 @@ describe("AROME deterministic field operations", () => {
     }))).rejects.toThrow("exceeding maxSteps=2");
 
     await expect(service().query(queryAtmosphereSchema.parse({
-    await expect(service().query(queryAtmosphereSchema.parse({
       dataset: "arome",
       geometry: {
         type: "points",
