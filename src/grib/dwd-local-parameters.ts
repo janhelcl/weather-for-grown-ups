@@ -4,18 +4,18 @@ export interface Grib2MessageSlice {
   start: number;
   end: number;
   discipline: number;
-  center?: number;
-  subcenter?: number;
-  masterTable?: number;
-  localTable?: number;
-  centerOffset?: number;
-  subcenterOffset?: number;
-  masterTableOffset?: number;
-  localTableOffset?: number;
-  category?: number;
-  parameter?: number;
-  categoryOffset?: number;
-  parameterOffset?: number;
+  center: number | undefined;
+  subcenter: number | undefined;
+  masterTable: number | undefined;
+  localTable: number | undefined;
+  centerOffset: number | undefined;
+  subcenterOffset: number | undefined;
+  masterTableOffset: number | undefined;
+  localTableOffset: number | undefined;
+  category: number | undefined;
+  parameter: number | undefined;
+  categoryOffset: number | undefined;
+  parameterOffset: number | undefined;
 }
 
 export interface DwdLocalParameterDefinition {
@@ -221,7 +221,6 @@ export function scanGrib2Messages(bytes: Uint8Array): Grib2MessageSlice[] {
     let sectionCursor = cursor + 16;
 
     while (sectionCursor + 5 <= end - 4) {
-      if (has7777(bytes, sectionCursor)) break;
       const sectionLength = readUint32Be(bytes, sectionCursor);
       if (sectionLength < 5 || sectionCursor + sectionLength > end) break;
       const sectionNumber = bytes[sectionCursor + 4];
@@ -248,18 +247,18 @@ export function scanGrib2Messages(bytes: Uint8Array): Grib2MessageSlice[] {
       start: cursor,
       end,
       discipline,
-      ...(center === undefined ? {} : { center }),
-      ...(subcenter === undefined ? {} : { subcenter }),
-      ...(masterTable === undefined ? {} : { masterTable }),
-      ...(localTable === undefined ? {} : { localTable }),
-      ...(centerOffset === undefined ? {} : { centerOffset }),
-      ...(subcenterOffset === undefined ? {} : { subcenterOffset }),
-      ...(masterTableOffset === undefined ? {} : { masterTableOffset }),
-      ...(localTableOffset === undefined ? {} : { localTableOffset }),
-      ...(category === undefined ? {} : { category }),
-      ...(parameter === undefined ? {} : { parameter }),
-      ...(categoryOffset === undefined ? {} : { categoryOffset }),
-      ...(parameterOffset === undefined ? {} : { parameterOffset }),
+      center,
+      subcenter,
+      masterTable,
+      localTable,
+      centerOffset,
+      subcenterOffset,
+      masterTableOffset,
+      localTableOffset,
+      category,
+      parameter,
+      categoryOffset,
+      parameterOffset,
     });
     cursor = end;
   }
@@ -284,13 +283,6 @@ function hasGribMagic(bytes: Uint8Array, offset: number): boolean {
     && bytes[offset + 3] === 0x42;
 }
 
-function has7777(bytes: Uint8Array, offset: number): boolean {
-  return bytes[offset] === 0x37
-    && bytes[offset + 1] === 0x37
-    && bytes[offset + 2] === 0x37
-    && bytes[offset + 3] === 0x37;
-}
-
 function readUint16Be(bytes: Uint8Array, offset: number): number {
   return (bytes[offset]! << 8) | bytes[offset + 1]!;
 }
@@ -312,7 +304,7 @@ function readUint32Be(bytes: Uint8Array, offset: number): number {
 function readUint64Be(bytes: Uint8Array, offset: number): number {
   let value = 0n;
   for (let index = 0; index < 8; index += 1) {
-    value = (value << 8n) | BigInt(bytes[offset + index] ?? 0);
+    value = (value << 8n) | BigInt(bytes[offset + index]!);
   }
   return value > BigInt(Number.MAX_SAFE_INTEGER) ? 0 : Number(value);
 }
