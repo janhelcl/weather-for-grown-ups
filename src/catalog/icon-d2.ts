@@ -59,6 +59,8 @@ export const ICON_D2_FIELD_IDS = [
   "total_precipitation",
   "convective_rain",
   "convective_snow",
+  "visibility",
+  "cloud_ceiling_height_msl",
   "column_maximum_reflectivity",
 ] as const satisfies readonly NonIsobaricFieldId[];
 
@@ -79,6 +81,7 @@ export const ICON_D2_AREA_FIELD_IDS = [
   "total_precipitation",
   "convective_rain",
   "convective_snow",
+  "visibility",
 ] as const satisfies readonly NonIsobaricFieldId[];
 
 export const ICON_D2_WIND_GUST_FIELD: RawNonIsobaricFieldDefinition = {
