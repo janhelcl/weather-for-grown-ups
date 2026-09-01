@@ -1,7 +1,11 @@
 import { execa } from "execa";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SUPPORTED_GFS_CODES } from "../src/catalog/variables.js";
-import { parseWgrib2PointLine, Wgrib2Decoder } from "../src/grib/wgrib2.js";
+import {
+  parseWgrib2PointLine,
+  Wgrib2Decoder,
+  wgrib2NamesArgs,
+} from "../src/grib/wgrib2.js";
 
 vi.mock("execa", () => ({ execa: vi.fn() }));
 const execaMock = vi.mocked(execa);
@@ -76,6 +80,29 @@ describe("parseWgrib2PointLine", () => {
 });
 
 describe("Wgrib2Decoder native compatibility path", () => {
+  it("passes provider-native naming conventions only when requested", () => {
+    expect(wgrib2NamesArgs(undefined)).toEqual([]);
+    expect(wgrib2NamesArgs("DWD")).toEqual(["-names", "DWD"]);
+  });
+
+  it("uses DWD naming before native point extraction when configured", async () => {
+    execaMock.mockResolvedValue({
+      stdout: "1:1:d=2026081906:RAIN_CON:surface:0-6 hour acc fcst:lon=14.5,lat=50,val=1.25",
+    } as never);
+    await expect(
+      new Wgrib2Decoder("/opt/wgrib2", "DWD").extractPoint("/tmp/test.grib2", 14.5, 50),
+    ).resolves.toMatchObject([{ code: "RAIN_CON" }]);
+    expect(execaMock).toHaveBeenCalledWith("/opt/wgrib2", [
+      "/tmp/test.grib2",
+      "-names",
+      "DWD",
+      "-s",
+      "-lon",
+      "14.5",
+      "50",
+    ]);
+  });
+
   it("invokes wgrib2 with -s -lon and converts negative longitude to 0-360", async () => {
     execaMock.mockResolvedValue({ stdout: "1:1:d=2026081906:TMP:850 mb:6 hour fcst:lon=350,lat=50,val=285.4" } as never);
     const values = await new Wgrib2Decoder("/opt/wgrib2").extractPoint("/tmp/test.grib2", -10, 50);
