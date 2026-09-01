@@ -681,7 +681,7 @@ describe("AROME deterministic field operations", () => {
 
     expect(() => withAromeColumnMaximumReflectivity([
       { code: "TMP", surface: true, value: 280, gridPoint },
-    ])).toThrow("expected one instantaneous local parameter");
+    ])).toThrow("expected one instantaneous dBZ parameter 0/16/195");
   });
 
   it("derives gust magnitude only from aligned native AROME gust components", () => {
