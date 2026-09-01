@@ -134,6 +134,58 @@ describe("cross-scale comparison strategies", () => {
     };
   }
 
+  it("rejects requests routed to the wrong pair instead of falling back generically", async () => {
+    const mechanics = fakeMechanics();
+    const ifsArome = compareAtmosphericDatasetsSchema.parse({
+      datasets: ["ifs", "arome"],
+      geometry,
+      time: { at: validTime },
+      run,
+      field: "temperature_2m",
+    });
+    const ifsIcon = compareAtmosphericDatasetsSchema.parse({
+      datasets: ["ifs", "icon-d2"],
+      geometry,
+      time: { at: validTime },
+      run,
+      field: "temperature_2m",
+    });
+
+    await expect(
+      new IfsIconD2ComparisonStrategy(mechanics as any).compare(ifsArome),
+    ).rejects.toThrow("requires datasets=ifs,icon-d2");
+    await expect(
+      new IfsAromeComparisonStrategy(mechanics as any).compare(ifsIcon),
+    ).rejects.toThrow("requires datasets=ifs,arome");
+    await expect(
+      new GfsIconD2ComparisonStrategy(mechanics as any).compare(ifsIcon),
+    ).rejects.toThrow("requires datasets=gfs,icon-d2");
+    await expect(
+      new IfsEnsIconD2EpsComparisonStrategy(mechanics as any).compare(ifsIcon),
+    ).rejects.toThrow("requires datasets=ifs-ens,icon-d2-eps");
+    await expect(
+      new IfsEnsPeAromeComparisonStrategy(mechanics as any).compare(ifsIcon),
+    ).rejects.toThrow("requires datasets=ifs-ens,pe-arome");
+
+    expect(mechanics.compareDeterministic).not.toHaveBeenCalled();
+    expect(mechanics.compareEnsembles).not.toHaveBeenCalled();
+  });
+
+  it("rejects a correctly routed request that has no declared selection", async () => {
+    const mechanics = fakeMechanics();
+    const malformed = {
+      datasets: ["ifs", "icon-d2"],
+      geometry,
+      time: { at: validTime },
+      run,
+    } as any;
+
+    await expect(
+      new IfsIconD2ComparisonStrategy(mechanics as any).compare(malformed),
+    ).rejects.toThrow("missing its declared selection");
+    expect(mechanics.compareDeterministic).not.toHaveBeenCalled();
+  });
+
   it("routes all five declared pairs with pair-specific selection controls", async () => {
     const mechanics = fakeMechanics();
 
