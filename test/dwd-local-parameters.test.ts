@@ -23,6 +23,85 @@ describe("DWD local GRIB2 parameter normalization", () => {
     expect(knownDwdLocalParameter(1, 78, 1, 76)).toBeUndefined();
   });
 
+  it("is a zero-copy no-op when no supported DWD-local parameter is present", () => {
+    const standard = minimalGrib2({
+      center: 7,
+      subcenter: 0,
+      masterTable: 34,
+      localTable: 0,
+      category: 1,
+      parameter: 8,
+    });
+    const prepared = prepareDwdLocalParametersForGenericProcessing(standard);
+    expect(prepared.bytes).toBe(standard);
+    expect(prepared.rewrites).toEqual([]);
+    expect(restoreDwdLocalParametersAfterGenericProcessing(
+      standard,
+      prepared.rewrites,
+    )).toBe(standard);
+    expect(knownDwdLocalParameter(0, 78, 1, 99)).toBeUndefined();
+  });
+
+  it("counts repeated local messages and rejects inconsistent DWD identification", () => {
+    const rain = {
+      center: 78,
+      subcenter: 0,
+      masterTable: 34,
+      localTable: 1,
+      category: 1,
+      parameter: 76,
+    };
+    const repeated = prepareDwdLocalParametersForGenericProcessing(concat([
+      minimalGrib2(rain),
+      minimalGrib2(rain),
+    ]));
+    expect(repeated.rewrites).toEqual([
+      expect.objectContaining({ alias: "RAIN_CON", count: 2 }),
+    ]);
+
+    expect(() => prepareDwdLocalParametersForGenericProcessing(concat([
+      minimalGrib2(rain),
+      minimalGrib2({ ...rain, localTable: 2 }),
+    ]))).toThrow("inconsistent GRIB2 identification metadata");
+  });
+
+  it("ignores noise, non-GRIB2 data, and malformed GRIB2 lengths", () => {
+    expect(scanGrib2Messages(new Uint8Array(32))).toEqual([]);
+
+    const wrongEdition = minimalGrib2({
+      center: 78,
+      subcenter: 0,
+      masterTable: 34,
+      localTable: 1,
+      category: 1,
+      parameter: 76,
+    });
+    wrongEdition[7] = 1;
+    expect(scanGrib2Messages(wrongEdition)).toEqual([]);
+
+    const tooShort = minimalGrib2({
+      center: 78,
+      subcenter: 0,
+      masterTable: 34,
+      localTable: 1,
+      category: 1,
+      parameter: 76,
+    });
+    writeUint64Be(tooShort, 8, 10);
+    expect(scanGrib2Messages(tooShort)).toEqual([]);
+
+    const tooLong = minimalGrib2({
+      center: 78,
+      subcenter: 0,
+      masterTable: 34,
+      localTable: 1,
+      category: 1,
+      parameter: 76,
+    });
+    writeUint64Be(tooLong, 8, tooLong.length + 100);
+    expect(scanGrib2Messages(tooLong)).toEqual([]);
+  });
+
   it("rewrites only parameter metadata and restores the exact DWD identity", () => {
     const original = concat([
       minimalGrib2({ center: 78, subcenter: 0, masterTable: 34, localTable: 1, category: 1, parameter: 76 }),
