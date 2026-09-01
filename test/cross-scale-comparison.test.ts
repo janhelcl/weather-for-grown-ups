@@ -186,6 +186,42 @@ describe("cross-scale comparison strategies", () => {
     expect(mechanics.compareDeterministic).not.toHaveBeenCalled();
   });
 
+  it("omits optional IFS ENS member selection and forwards explicit thresholds", async () => {
+    const mechanics = fakeMechanics();
+
+    await new IfsEnsIconD2EpsComparisonStrategy(mechanics as any).compare(
+      compareAtmosphericDatasetsSchema.parse({
+        datasets: ["ifs-ens", "icon-d2-eps"],
+        geometry,
+        time: { at: validTime },
+        run,
+        field: "temperature_2m",
+        thresholdGte: 5,
+      }),
+    );
+    await new IfsEnsPeAromeComparisonStrategy(mechanics as any).compare(
+      compareAtmosphericDatasetsSchema.parse({
+        datasets: ["ifs-ens", "pe-arome"],
+        geometry,
+        time: { at: validTime },
+        run,
+        field: "temperature_2m",
+        thresholdGte: 5,
+      }),
+    );
+
+    expect(mechanics.compareEnsembles.mock.calls[0]![0]).toMatchObject({
+      datasets: ["ifs-ens", "icon-d2-eps"],
+      thresholdGte: 5,
+    });
+    expect(mechanics.compareEnsembles.mock.calls[0]![0]).not.toHaveProperty("leftMembers");
+    expect(mechanics.compareEnsembles.mock.calls[1]![0]).toMatchObject({
+      datasets: ["ifs-ens", "pe-arome"],
+      thresholdGte: 5,
+    });
+    expect(mechanics.compareEnsembles.mock.calls[1]![0]).not.toHaveProperty("leftMembers");
+  });
+
   it("routes all five declared pairs with pair-specific selection controls", async () => {
     const mechanics = fakeMechanics();
 
