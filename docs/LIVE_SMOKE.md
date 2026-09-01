@@ -72,6 +72,12 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 
 `npm run test:live:arome` makes one bounded field-only point query through public `dataset: "arome"`. It verifies the current Météo-France object-store path, CCSDS-packed GRIB2 decoding through the bundled decoder, 2 m temperature/RH plus derived 10 m wind, the ~1.3 km native model identity, and the separate 0.01° EURW1S100 public delivery grid. The smoke deliberately uses a safely published cycle rather than racing the newest run.
 
+### Météo-France PE-AROME
+
+`npm run test:live:pe-arome` makes one bounded two-member point query through public `dataset: "pe-arome"`. It checks authenticated WCS transport, member-specific source routing, server-side geographic subsetting, separate raw-field requests, local GRIB bundle caching/decoding, run pinning and member-first 2 m temperature / derived 10 m wind distributions on the 0.025° delivery grid.
+
+This smoke requires `WFG_METEO_FRANCE_TOKEN` plus either `WFG_PEAROME_WCS_URL_TEMPLATE` or `WFG_PEAROME_WCS_ENDPOINTS`. The PR live workflow reports a notice and skips the network call when repository credentials are not configured; normal offline CI remains authoritative.
+
 ### Historical GFS analysis and forecast skill
 
 `npm run test:live:history` exercises fixed NOAA NCEI Grid 4 data through THREDDS NCSS. It verifies a 2017 historical analysis profile and time series, then an archived 2019 forecast against the later 0.5° analysis and the bounded `gfs-analysis` skill-summary path. The skill smoke reuses the same fixed verification case, so it proves the range aggregation contract without turning the live test into a large archive scan.
@@ -149,7 +155,7 @@ Live tests should assert contracts and invariants rather than pinning today's we
 - fixed-cycle semantics across time;
 - upstream slice reuse across coordinates;
 - explicit temporal semantics for accumulation/average fields;
-- member-first AIGEFS/HGEFS/AIFS ENS/ICON-D2-EPS/GEFS computation and raw-member interpretation labels.
+- member-first AIGEFS/HGEFS/AIFS ENS/ICON-D2-EPS/PE-AROME/GEFS computation and raw-member interpretation labels.
 
 ## Failure triage
 
