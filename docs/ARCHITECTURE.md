@@ -5,7 +5,7 @@ Weather for Grown Ups is primarily a **numerical-weather-model access and meteor
 ```text
 NOAA GFS / AIGFS / GEFS / AIGEFS / HGEFS
 DWD ICON-D2 / ICON-D2-EPS
-Météo-France AROME
+Météo-France AROME / PE-AROME
 ECMWF IFS / AIFS / IFS ENS / AIFS ENS / NCEI historical GFS
       ↓
 dataset-specific catalogs, model metadata, time semantics and source adapters
@@ -29,7 +29,7 @@ The core is the product. CLI and MCP are adapters over it, not independent imple
 
 > **Unify operations and physics; preserve model semantics.**
 
-A common operation does not imply a common source inventory or a flattened result shape. GFS, AIGFS, IFS and AIFS return deterministic forecast states. Historical Grid 4 returns deterministic analyzed states. GEFS, AIGEFS, IFS ENS and AIFS ENS return member-derived forecast distributions. HGEFS is explicitly hybrid: it pools GEFS physics members with AIGEFS AI members while retaining constituent identity and provenance.
+A common operation does not imply a common source inventory or a flattened result shape. GFS, AIGFS, IFS and AIFS return deterministic forecast states. Historical Grid 4 returns deterministic analyzed states. GEFS, AIGEFS, ICON-D2-EPS, PE-AROME, IFS ENS and AIFS ENS return member-derived forecast distributions. HGEFS is explicitly hybrid: it pools GEFS physics members with AIGEFS AI members while retaining constituent identity and provenance.
 
 The engine is organized around **operation × dataset** internally, while the public contract is intentionally organized around one query language: `dataset × geometry × time × selection`. Dataset-specific schemas, source adapters and services are implementation details behind that boundary; adding a model must extend the shared vocabulary and capability registry rather than create another public query namespace.
 
