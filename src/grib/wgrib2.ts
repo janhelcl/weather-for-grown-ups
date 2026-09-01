@@ -211,7 +211,11 @@ export function parseWgrib2PointLine(
           },
         }
       : {}),
-    value: normalizeWgrib2Value(rawCode, Number(valueMatch[1]), names),
+    value: normalizeWgrib2Value(
+      names === "DWD" ? inventoryCode : rawCode,
+      Number(valueMatch[1]),
+      names,
+    ),
     gridPoint: {
       longitude: toSignedLongitude(Number(pointMatch[1])),
       latitude: Number(pointMatch[2]),
