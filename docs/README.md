@@ -23,6 +23,7 @@ These documents describe **what the upstream model/archive actually means**. The
 - [AIGEFS.md](AIGEFS.md) — NOAA's 31-member AI ensemble, member mapping, member-first diagnostics and EAGLE AWS access.
 - [HGEFS.md](HGEFS.md) — NOAA's 62-member GEFS + AIGEFS hybrid, population-qualified members, capability intersection and native-grid provenance.
 - [AIFS_ENS.md](AIFS_ENS.md) — ECMWF's 51-member stochastic AI ensemble, dedicated control semantics and indexed `cf`/`pf` Open Data access.
+- [AROME.md](AROME.md) — Météo-France regional deterministic AROME, 1.3 km native-model versus 0.01° public-product grid semantics, field inventory and Open Data package access.
 - [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — operational GEFS plus the explicit GEFSv12 reforecast population, member sets, products, grids, cadence and member-first semantics.
 - [IFS.md](IFS.md) — deterministic IFS and IFS ENS Open Data products, cadence, 50-perturbation semantics and ECMWF access behavior.
 - [HISTORY.md](HISTORY.md) — historical GFS Grid 4 analysis, archived GFS forecasts, analog workflows and verification semantics.

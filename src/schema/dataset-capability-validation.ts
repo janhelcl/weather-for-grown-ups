@@ -20,6 +20,7 @@ import {
   AIGFS_RAW_PRESSURE_VARIABLE_IDS,
 } from "../catalog/aigfs.js";
 import { AIGEFS_MEMBERS } from "../catalog/aigefs.js";
+import { AROME_0P01_AREA_FIELD_IDS, AROME_0P01_FIELD_IDS } from "../catalog/arome.js";
 import {
   ICON_D2_AREA_FIELD_IDS,
   ICON_D2_AREA_PRESSURE_VARIABLE_IDS,
@@ -60,6 +61,7 @@ const DATASET_CAPABILITY_VALIDATORS: Readonly<Record<string, readonly DatasetCap
   hgefs: [validateAigfsModifiers, validateHgefsModifiers, validateHgefsMembers],
   "icon-d2": [validateIconD2Modifiers],
   "icon-d2-eps": [validateIconD2Modifiers, validateIconD2EpsMembers],
+  arome: [validateAromeModifiers],
   aifs: [validateAifsModifiers],
   "aifs-ens": [validateAifsModifiers, validateAifsEnsMembers],
 };
@@ -420,6 +422,55 @@ function validateAigfsModifiers(
   }
 }
 
+
+function validateAromeModifiers(
+  request: any,
+  context: z.RefinementCtx,
+): void {
+  if (request.selection !== undefined) {
+    const variables = request.selection.variables ?? [];
+    const pressureLevelsHpa = request.selection.pressureLevelsHpa ?? [];
+    const fields = request.selection.fields ?? [];
+
+    if (variables.length > 0 || pressureLevelsHpa.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "variables"],
+        message: "AROME 0.01° EURW1S100 is a field-only capability in WFG; pressure-level variables belong to a separate Météo-France product and are not silently mixed into this dataset",
+      });
+    }
+
+    const supportedFields = new Set<string>(AROME_0P01_FIELD_IDS);
+    const unsupportedFields = fields.filter((field: string) => !supportedFields.has(field));
+    if (unsupportedFields.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["selection", "fields"],
+        message: `AROME 0.01° fields not supported: ${unsupportedFields.join(", ")}`,
+      });
+    }
+
+    if (request.geometry?.type === "area") {
+      const areaFields = new Set<string>(AROME_0P01_AREA_FIELD_IDS);
+      const unsupportedAreaFields = fields.filter((field: string) => !areaFields.has(field));
+      if (unsupportedAreaFields.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["selection", "fields"],
+          message: `AROME 0.01° area summaries require a native scalar field; unsupported: ${unsupportedAreaFields.join(", ")}`,
+        });
+      }
+    }
+  }
+
+  if (request.diagnostic !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["diagnostic"],
+      message: "AROME 0.01° EURW1S100 currently exposes field-only queries; pressure-based diagnostics are not available from this product",
+    });
+  }
+}
 
 function validateIconD2Modifiers(
   request: any,

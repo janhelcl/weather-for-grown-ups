@@ -31,6 +31,7 @@ export const UPSTREAM_ACCESS_POLICIES = {
   gdex: { id: "gdex", maxConcurrency: 4, minIntervalMs: 0 },
   nceiIgra: { id: "ncei-igra", maxConcurrency: 4, minIntervalMs: 0 },
   dwdOpenData: { id: "dwd-open-data", maxConcurrency: 4, minIntervalMs: 0 },
+  meteoFranceOpenData: { id: "meteo-france-open-data", maxConcurrency: 4, minIntervalMs: 0 },
 } as const satisfies Record<string, UpstreamAccessPolicyDefinition>;
 
 interface State {

@@ -4,6 +4,8 @@ Weather for Grown Ups is primarily a **numerical-weather-model access and meteor
 
 ```text
 NOAA GFS / AIGFS / GEFS / AIGEFS / HGEFS
+DWD ICON-D2 / ICON-D2-EPS
+Météo-France AROME
 ECMWF IFS / AIFS / IFS ENS / AIFS ENS / NCEI historical GFS
       ↓
 dataset-specific catalogs, model metadata, time semantics and source adapters
@@ -54,7 +56,7 @@ A practical rule for new datasets is: **add capabilities to the catalog and the 
 
 ## Atmospheric dataset capability boundary
 
-`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `aigfs`, `aigefs`, `hgefs`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth.
+`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `aigfs`, `aigefs`, `hgefs`, `icon-d2`, `icon-d2-eps`, `arome`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth.
 
 | Dataset | Model class | Result kind | Shared query/diagnostic role | Run comparison | Registered dataset comparisons |
 | --- | --- | --- | --- | --- | --- |
@@ -63,6 +65,9 @@ A practical rule for new datasets is: **add capabilities to the catalog and the 
 | GEFS | physics | ensemble | Member-first ensemble atmospheric surface and nonlinear diagnostics | ✅ distribution shift | GFS, IFS ENS, AIGEFS; HGEFS constituent view |
 | AIGEFS | AI | ensemble | Member-first AI ensemble surface; layer/profile diagnostics where inventory supports them | — | GEFS; HGEFS constituent view |
 | HGEFS | hybrid | ensemble | Application-level GEFS + AIGEFS member composition with constituent provenance | — | GEFS, AIGEFS |
+| ICON-D2 | physics | deterministic | Limited-area convection-permitting query surface with pressure/field operations and diagnostics where inventory supports them | — | — |
+| ICON-D2-EPS | physics | ensemble | 20-member limited-area member-first convection-permitting surface | — | — |
+| AROME | physics | deterministic | Limited-area field-only surface on the explicit 0.01° EURW1S100 public product | — | — |
 | IFS | physics | deterministic | Full deterministic ECMWF atmospheric surface, including parcel diagnostics | ✅ | GFS, IFS ENS, AIFS |
 | AIFS | AI | deterministic | Shared deterministic query surface; layer/profile diagnostics where inventory supports them | — | IFS, AIGFS |
 | IFS ENS | physics | ensemble | Member-first ECMWF ensemble surface and nonlinear diagnostics | ✅ distribution shift | GEFS, IFS, AIFS ENS |
@@ -191,7 +196,7 @@ IFS ENS composition is **member-first** across the 50 perturbed members `p01`–
 
 ## Catalogs and source contracts
 
-GFS, AIGFS, AIGEFS, GEFS, IFS, AIFS, AIFS ENS, IFS ENS and historical GFS analysis keep dataset-specific source inventories because their upstream products are not identical. HGEFS deliberately has no duplicate member-source stack: it composes the GEFS and AIGEFS source-backed member services. Canonical field IDs and shared physical derivations converge where the quantity is genuinely comparable; unavailable fields remain explicit capability differences rather than being fabricated for symmetry.
+GFS, AIGFS, AIGEFS, GEFS, ICON-D2, ICON-D2-EPS, AROME, IFS, AIFS, AIFS ENS, IFS ENS and historical GFS analysis keep dataset-specific source inventories because their upstream products are not identical. HGEFS deliberately has no duplicate member-source stack: it composes the GEFS and AIGEFS source-backed member services. Canonical field IDs and shared physical derivations converge where the quantity is genuinely comparable; unavailable fields remain explicit capability differences rather than being fabricated for symmetry.
 
 Catalogs define:
 

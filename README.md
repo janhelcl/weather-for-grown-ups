@@ -2,7 +2,7 @@
 
 **Weather is the hello-world of agent tools. This is the version for when “temperature tomorrow” stops being enough.**
 
-Weather for Grown Ups (WFG) gives agents direct, structured access to numerical weather prediction: NOAA **GFS**, **AIGFS**, **AIGEFS**, **HGEFS**, **GEFS** and historical GFS data, DWD **ICON-D2** and **ICON-D2-EPS**, plus ECMWF **IFS**, **AIFS**, **AIFS ENS** and **IFS ENS**.
+Weather for Grown Ups (WFG) gives agents direct, structured access to numerical weather prediction: NOAA **GFS**, **AIGFS**, **AIGEFS**, **HGEFS**, **GEFS** and historical GFS data, DWD **ICON-D2** and **ICON-D2-EPS**, Météo-France **AROME**, plus ECMWF **IFS**, **AIFS**, **AIFS ENS** and **IFS ENS**.
 
 The central idea is deliberately simple:
 
@@ -107,6 +107,7 @@ Old GFS initializations stay `dataset: "gfs"` and route to the matching archive.
 | `hgefs` | NOAA HGEFS | 62-member hybrid ensemble: 31 GEFS physics + 31 AIGEFS AI members; 6-hourly through f240; constituent identity and native grids preserved |
 | `icon-d2` | DWD ICON-D2 | limited-area convection-permitting deterministic forecast; native ~2.1 km icosahedral model grid; 3-hourly cycles; hourly output through f48 |
 | `icon-d2-eps` | DWD ICON-D2-EPS | 20-member convection-permitting regional ensemble; native ~2.1 km icosahedral grid; member-first aggregation; hourly output through f48; native CDO + `wgrib2` required for official DWD remapping/member extraction |
+| `arome` | Météo-France AROME | limited-area ~1.3 km deterministic model; current WFG slice uses the 0.01° EURW1S100 hourly public product through f51 and exposes near-surface/height fields without silently mixing in the separate 0.025° pressure-level product |
 | `gefs` | NOAA GEFS | member-first operational ensemble; explicit `forecast.kind: "reforecast"` selects the GEFSv12 retrospective population |
 | `ifs` | ECMWF deterministic IFS | 0.25° Open Data forecast with native ECMWF run/cadence semantics |
 | `aifs` | ECMWF AIFS Single | deterministic AI forecast; 0.25°; four daily cycles; native 6-hour output through f360; AIFS-native field inventory |
@@ -168,7 +169,7 @@ The deeper reasoning is documented in [Architecture](docs/ARCHITECTURE.md).
 
 WFG selects only the upstream messages needed for a request, caches immutable slices and decodes locally.
 
-DWD ICON-D2 uses selected regular-lat/lon Open Data objects, while ICON-D2-EPS preserves DWD's native all-member icosahedral GRIB packaging. Operational GFS point/profile access favors indexed byte-range reads from NOAA AWS Open Data; ECMWF IFS, AIFS and AIFS ENS sources use Open Data access. AIGFS uses NOMADS raw products with cached `.idx` inventories and partial HTTP byte ranges. AIGEFS reads member-specific indexed GRIB2 slices from NOAA EAGLE on AWS Open Data. HGEFS composes those AIGEFS members with GEFS member feeds rather than duplicating a third member-access stack. Bounded GFS areas use NOMADS geographic subsetting where that is materially better. Historical products route to NCEI or NCAR/GDEX as appropriate.
+DWD ICON-D2 uses selected regular-lat/lon Open Data objects, while ICON-D2-EPS preserves DWD's native all-member icosahedral GRIB packaging. Météo-France AROME uses the openly downloadable 0.01° EURW1S100 SP1/HP1 GRIB packages and keeps their delivery grid distinct from the model's ~1.3 km native mesh. Operational GFS point/profile access favors indexed byte-range reads from NOAA AWS Open Data; ECMWF IFS, AIFS and AIFS ENS sources use Open Data access. AIGFS uses NOMADS raw products with cached `.idx` inventories and partial HTTP byte ranges. AIGEFS reads member-specific indexed GRIB2 slices from NOAA EAGLE on AWS Open Data. HGEFS composes those AIGEFS members with GEFS member feeds rather than duplicating a third member-access stack. Bounded GFS areas use NOMADS geographic subsetting where that is materially better. Historical products route to NCEI or NCAR/GDEX as appropriate.
 
 Provider etiquette is also source-specific: NOMADS retains its courtesy pacing, while AWS, ECMWF, NCEI, GDEX and IGRA use independent bounded-concurrency policies with transient retry/backoff. A slow provider does not impose its policy on unrelated sources.
 

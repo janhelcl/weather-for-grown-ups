@@ -3,6 +3,7 @@ import {
   AIGFS_FIELD_IDS,
   AIGFS_PRESSURE_VARIABLE_IDS,
 } from "./aigfs.js";
+import { AROME_0P01_FIELD_IDS } from "./arome.js";
 import {
   ICON_D2_FIELD_IDS,
   ICON_D2_PRESSURE_VARIABLE_IDS,
@@ -90,6 +91,7 @@ export function searchAtmosphereCatalog(input: SearchAtmosphereCatalogInput = {}
     ...(datasets.has("hgefs") ? aigfsEntries("hgefs") : []),
     ...(datasets.has("icon-d2") ? iconD2Entries("icon-d2") : []),
     ...(datasets.has("icon-d2-eps") ? iconD2Entries("icon-d2-eps") : []),
+    ...(datasets.has("arome") ? aromeEntries() : []),
     ...(datasets.has("gefs")
       ? (query.forecastKind === "reforecast" ? gefsReforecastEntries() : gefsEntries())
       : []),
@@ -189,6 +191,23 @@ function aigfsEntries(dataset: "aigfs" | "aigefs" | "hgefs"): CatalogEntry[] {
   ];
 }
 
+
+function aromeEntries(): CatalogEntry[] {
+  return AROME_0P01_FIELD_IDS.map((id) => {
+    const definition = NON_ISOBARIC_FIELD_CATALOG[id];
+    return {
+      dataset: "arome" as const,
+      section: "fields" as const,
+      id: definition.id,
+      classification: definition.kind === "raw" ? "raw" as const : "derived" as const,
+      kind: definition.kind,
+      description: definition.description,
+      verticalSemantics: definition.level.gribLevel,
+      temporalSemantics: definition.temporalSemantics,
+      outputs: definition.outputs.map((output) => ({ ...output })),
+    };
+  });
+}
 
 function iconD2Entries(
   dataset: "icon-d2" | "icon-d2-eps",
@@ -506,6 +525,7 @@ function preferredRepresentative(entries: CatalogEntry[]): CatalogEntry {
     ?? entries.find((entry) => entry.dataset === "hgefs")
     ?? entries.find((entry) => entry.dataset === "icon-d2")
     ?? entries.find((entry) => entry.dataset === "icon-d2-eps")
+    ?? entries.find((entry) => entry.dataset === "arome")
     ?? entries.find((entry) => entry.dataset === "gefs")
     ?? entries.find((entry) => entry.dataset === "ifs")
     ?? entries.find((entry) => entry.dataset === "aifs")
@@ -531,6 +551,8 @@ function supportSemantics(
       return "DWD ICON-D2 limited-area deterministic convection-permitting forecast; 3-hourly cycles, hourly output through 48 hours, with provider-native domain/grid semantics preserved";
     case "icon-d2-eps":
       return "DWD ICON-D2-EPS 20-member limited-area convection-permitting ensemble; 3-hourly cycles, hourly output through 48 hours with member-first aggregation on the native icosahedral grid";
+    case "arome":
+      return "Météo-France AROME limited-area deterministic forecast; ~1.3 km native model mesh with the 0.01° EURW1S100 public delivery product, hourly output through 51 hours";
     case "gefs":
       return forecastKind === "reforecast"
         ? "GEFSv12 retrospective ensemble forecast; 2000-2019 point and multi-point field, pressure, or mixed selections plus native layer/profile diagnostics; ranges preserve native cadence and per-step grid provenance"

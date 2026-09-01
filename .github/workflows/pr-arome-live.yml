@@ -1,0 +1,29 @@
+name: PR Météo-France AROME live
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**/arome*.ts"
+      - "src/catalog/models.ts"
+      - "src/schema/unified-api.ts"
+      - "src/grib/**"
+      - "scripts/live-smoke-arome.ts"
+      - ".github/workflows/pr-arome-live.yml"
+      - "package.json"
+      - "package-lock.json"
+
+concurrency:
+  group: pr-arome-live-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned live-test environment
+        run: docker build --target live-test -t weather-for-grown-ups:live-test .
+      - name: Query live Météo-France AROME
+        run: docker run --rm weather-for-grown-ups:live-test npm run test:live:arome

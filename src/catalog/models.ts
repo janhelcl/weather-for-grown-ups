@@ -6,6 +6,7 @@ export const ATMOSPHERIC_DATASET_IDS = [
   "hgefs_0p25",
   "icon_d2_0p02",
   "icon_d2_eps_2p1km",
+  "arome_0p01",
   "aifs_0p25",
   "aifs_ens_0p25",
   "gefs_0p50",
@@ -97,7 +98,7 @@ export type AtmosphericOperationId = (typeof ATMOSPHERIC_OPERATION_IDS)[number];
 
 export interface AtmosphericDatasetDefinition {
   id: AtmosphericDatasetId;
-  family: "gfs" | "gefs" | "ifs" | "aigfs" | "aigefs" | "hgefs" | "aifs" | "icon-d2" | "icon-d2-eps";
+  family: "gfs" | "gefs" | "ifs" | "aigfs" | "aigefs" | "hgefs" | "aifs" | "icon-d2" | "icon-d2-eps" | "arome";
   provider: AtmosphericProvider;
   modelClass: AtmosphericModelClass;
   kind: AtmosphericDatasetKind;
@@ -352,6 +353,41 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "ensemble_distribution",
     ],
   },
+  arome_0p01: {
+    id: "arome_0p01",
+    family: "arome",
+    provider: "meteo_france",
+    modelClass: "physics",
+    kind: "deterministic",
+    role: "forecast",
+    horizontalGridDegrees: 0.01,
+    spatialDomain: {
+      scope: "limited_area",
+      name: "Météo-France AROME EURW1S100 public product domain",
+      bounds: {
+        westLongitude: -12,
+        eastLongitude: 16,
+        southLatitude: 37.5,
+        northLatitude: 55.4,
+      },
+    },
+    nativeGrid: {
+      type: "lambert_conformal",
+      nominalResolution: { value: 1.3, unit: "km" },
+    },
+    maxForecastHour: 51,
+    nativeTimeCadenceHours: [1],
+    nativeForecastIntervalHours: 1,
+    runSelectors: ["latest", "latest_complete", "explicit"],
+    operations: [
+      "profile",
+      "timeseries",
+      "points",
+      "points_timeseries",
+      "transect",
+      "area_summary",
+    ],
+  },
   aifs_0p25: {
     id: "aifs_0p25",
     family: "aifs",
@@ -589,6 +625,7 @@ export const ATMOSPHERIC_MODEL_IDS = [
   "hgefs_0p25",
   "icon_d2_0p02",
   "icon_d2_eps_2p1km",
+  "arome_0p01",
   "aifs_0p25",
   "aifs_ens_0p25",
   "gefs_0p50",
@@ -606,6 +643,7 @@ export const ATMOSPHERIC_MODEL_CATALOG: Record<AtmosphericModelId, AtmosphericDa
   hgefs_0p25: ATMOSPHERIC_DATASET_CATALOG.hgefs_0p25,
   icon_d2_0p02: ATMOSPHERIC_DATASET_CATALOG.icon_d2_0p02,
   icon_d2_eps_2p1km: ATMOSPHERIC_DATASET_CATALOG.icon_d2_eps_2p1km,
+  arome_0p01: ATMOSPHERIC_DATASET_CATALOG.arome_0p01,
   aifs_0p25: ATMOSPHERIC_DATASET_CATALOG.aifs_0p25,
   aifs_ens_0p25: ATMOSPHERIC_DATASET_CATALOG.aifs_ens_0p25,
   gefs_0p50: ATMOSPHERIC_DATASET_CATALOG.gefs_0p50,
