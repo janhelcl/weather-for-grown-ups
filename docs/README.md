@@ -45,6 +45,7 @@ Use these when the unified API contract is clear but the meteorological/statisti
 - [GFS_IFS_COMPARISON.md](GFS_IFS_COMPARISON.md) — aligned deterministic cross-model differences.
 - [GEFS_IFS_ENS_COMPARISON.md](GEFS_IFS_ENS_COMPARISON.md) — ensemble-distribution shifts without cross-center member pairing.
 - [IFS_IFS_ENS_COMPARISON.md](IFS_IFS_ENS_COMPARISON.md) — deterministic IFS control positioned in its 50-perturbation ENS distribution.
+- [CROSS_SCALE_COMPARISON.md](CROSS_SCALE_COMPARISON.md) — restrictive global↔regional point comparison, shared-cycle rules, field/pressure intersections and native-grid provenance.
 
 ## GEFS ensemble deep dives
 
