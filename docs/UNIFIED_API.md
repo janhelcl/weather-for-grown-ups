@@ -15,6 +15,7 @@ WFG's public API is organized around a small operation vocabulary and a growing 
 | `icon-d2` | `icon_d2_0p02` DWD regional forecast | forecast | deterministic convection-permitting physics model |
 | `icon-d2-eps` | `icon_d2_eps_2p1km` DWD regional ensemble | forecast | 20-member convection-permitting ensemble |
 | `arome` | `arome_0p01` Météo-France AROME / EURW1S100 public product | forecast | deterministic limited-area field-only capability |
+| `pe-arome` | `pe_arome_0p025` Météo-France PE-AROME targeted WCS | forecast | 25-member regional field ensemble |
 | `aifs` | `aifs_0p25` ECMWF AIFS Single | forecast | deterministic AI forecast |
 | `aifs-ens` | `aifs_ens_0p25` ECMWF AIFS ENS | forecast | 51-member stochastic AI ensemble |
 | `gefs` | operational `gefs_0p50`; explicit `forecast.kind=reforecast` resolves to `gefs_v12_reforecast` for supported retrospective queries | forecast | member-first ensemble |
@@ -27,6 +28,8 @@ WFG's public API is organized around a small operation vocabulary and a growing 
 `aigefs` preserves the same AI-state inventory while changing the result semantics to a 31-member ensemble on the native 0.25° / 6-hour / f384 product. WFG evaluates deterministic normalization and nonlinear layer/profile diagnostics independently inside each selected member before aggregation. Parcel diagnostics and comparison operations are not advertised yet. See [AIGEFS.md](AIGEFS.md).
 
 `arome` preserves two different grid truths at once: the operational AROME model has a nominal ~1.3 km limited-area mesh, while the current WFG source is Météo-France's regular 0.01° EURW1S100 public delivery product. The current integration exposes its verified near-surface/height field inventory across point/range/multi-point/transect/area geometry and deliberately does not mix in pressure levels from the separate 0.025° package family. Pressure diagnostics therefore fail explicitly. See [AROME.md](AROME.md).
+
+`pe-arome` preserves the Météo-France control + 24-perturbation population (`c00,p01..p24`) and hourly f51 regional semantics. The current verified WCS slice exposes 2 m temperature/RH and 10 m U/V/derived wind across point/range/multi-point/transect geometry, plus native scalar area summaries. WFG resolves one run, computes/normalizes each selected member first, then aggregates field distributions. Provider bearer auth and one-member/one-field WCS packaging stay in the source layer. See [PE_AROME.md](PE_AROME.md).
 
 `hgefs` composes 31 GEFS physics members with 31 AIGEFS AI members under one common 00/06/12/18Z initialization, native 6-hour output and f240 horizon. Member IDs are population-qualified (`gefs:c00..p30`, `aigefs:c00..p30`). WFG only exposes the scientifically compatible inventory intersection, computes nonlinear diagnostics inside each constituent member, and preserves constituent-native grids rather than inventing one homogeneous grid. See [HGEFS.md](HGEFS.md).
 
