@@ -16,6 +16,8 @@ const result = await new UnifiedAtmosphereQueryService().query({
       "temperature_2m",
       "wind_10m",
       "mean_sea_level_pressure",
+      "convective_rain",
+      "convective_snow",
       "column_maximum_reflectivity",
     ],
   },
@@ -40,6 +42,8 @@ for (const field of [
   "temperature_2m",
   "wind_10m",
   "mean_sea_level_pressure",
+  "convective_rain",
+  "convective_snow",
   "column_maximum_reflectivity",
 ]) {
   assert(profile.fields.some((item: any) => item.id === field), `missing ICON-D2 field ${field}`);
@@ -50,6 +54,19 @@ const reflectivity = profile.fields.find(
 assert(Number.isFinite(reflectivity.values.columnMaximumReflectivityFactorMm6M3));
 assert.deepEqual(reflectivity.level, { type: "named_layer", id: "entire_atmosphere" });
 assert.deepEqual(reflectivity.temporal, { type: "instantaneous" });
+
+for (const [id, output] of [
+  ["convective_rain", "convectiveRainMm"],
+  ["convective_snow", "convectiveSnowWaterEquivalentMm"],
+] as const) {
+  const precipitation = profile.fields.find((item: any) => item.id === id);
+  assert(Number.isFinite(precipitation.values[output]));
+  assert.deepEqual(precipitation.level, { type: "surface" });
+  assert.equal(precipitation.temporal.type, "accumulation");
+  assert.equal(precipitation.temporal.startForecastHour, 0);
+  assert.equal(precipitation.temporal.endForecastHour, 6);
+}
+
 assert.equal(profile.source.provider, "DWD Open Data");
 assert.equal(profile.source.access, "dwd_open_data");
 assert.equal(profile.source.productGrid.type, "regular_latlon");
