@@ -319,6 +319,144 @@ describe("cross-scale comparison mechanics", () => {
     expect(result.comparison.interpretation).toContain("no_member_pairing");
   });
 
+  it("compares pressure-level vector wind with circular direction deltas", async () => {
+    const query = vi.fn(async (input: any) => {
+      const left = input.dataset === "ifs";
+      return unified(input.dataset, {
+        model: input.dataset,
+        run,
+        validTime,
+        forecastHour: 6,
+        gridPoint: left
+          ? { latitude: 50, longitude: 14.5 }
+          : { latitude: 50.08, longitude: 14.43 },
+        levels: [{
+          pressureHpa: 850,
+          windSpeedMs: left ? 10 : 12,
+          windDirectionDeg: left ? 350 : 10,
+        }],
+        source: { dataset: input.dataset },
+      });
+    });
+    const service = new CrossScaleComparisonService({ query } as any);
+    const result: any = await service.compareDeterministic({
+      datasets: ["ifs", "icon-d2"],
+      latitude: geometry.latitude,
+      longitude: geometry.longitude,
+      validTime,
+      run,
+      selection: { kind: "pressure", variable: "wind", pressureLevelHpa: 850 },
+    });
+
+    expect(result.selection).toMatchObject({
+      kind: "pressure",
+      variable: "wind",
+      pressureLevelHpa: 850,
+    });
+    expect(result.comparison.outputs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        field: "windSpeedMs",
+        leftValue: 10,
+        rightValue: 12,
+        rightMinusLeft: 2,
+        deltaKind: "linear",
+      }),
+      expect.objectContaining({
+        field: "windDirectionDeg",
+        leftValue: 350,
+        rightValue: 10,
+        rightMinusLeft: 20,
+        deltaKind: "circular_degrees",
+      }),
+    ]));
+  });
+
+  it("uses native default ensemble populations for scalar pressure comparison without raw members", async () => {
+    const query = vi.fn(async (input: any) => {
+      const left = input.dataset === "ifs-ens";
+      return unified(input.dataset, {
+        model: input.dataset,
+        run,
+        validTime,
+        forecastHour: 6,
+        gridPoint: left
+          ? { latitude: 50, longitude: 14.5 }
+          : { latitude: 50.08, longitude: 14.43 },
+        pressureSummaries: [{
+          pressureLevelHpa: 850,
+          variable: "temperature",
+          distribution: {
+            memberCount: input.ensemble.members.length,
+            mean: left ? 5 : 6,
+            populationStdDev: left ? 2 : 3,
+            min: left ? 0 : 1,
+            max: left ? 10 : 11,
+            quantiles: [{ quantile: 0.5, value: left ? 5 : 6 }],
+          },
+        }],
+        source: { dataset: input.dataset },
+      });
+    });
+    const service = new CrossScaleComparisonService({ query } as any);
+    const result: any = await service.compareEnsembles({
+      datasets: ["ifs-ens", "icon-d2-eps"],
+      latitude: geometry.latitude,
+      longitude: geometry.longitude,
+      validTime,
+      run,
+      selection: { kind: "pressure", variable: "temperature", pressureLevelHpa: 850 },
+      quantiles: [0.5],
+    });
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[0]![0].ensemble).toMatchObject({ members: expect.any(Array) });
+    expect(query.mock.calls[0]![0].ensemble.members).toHaveLength(50);
+    expect(query.mock.calls[1]![0].ensemble.members).toHaveLength(20);
+    expect(query.mock.calls[0]![0].ensemble.includeMembers).toBeUndefined();
+    expect(query.mock.calls[1]![0].ensemble.includeMembers).toBeUndefined();
+    expect(result.comparison).toMatchObject({
+      rightMinusLeftMean: 1,
+      rightMinusLeftPopulationStdDev: 1,
+      populationStdDevRatioRightToLeft: 1.5,
+      quantileShifts: [{
+        quantile: 0.5,
+        leftValue: 5,
+        rightValue: 6,
+        rightMinusLeft: 1,
+      }],
+    });
+    expect(result.comparison.threshold).toBeUndefined();
+    expect(result.right.spatialContext.horizontalGridDegrees).toBeUndefined();
+  });
+
+  it("passes a requested GFS grid only to the GFS side", async () => {
+    const query = vi.fn(async (input: any) => unified(input.dataset, {
+      model: input.dataset,
+      run,
+      validTime,
+      forecastHour: 6,
+      gridPoint: { latitude: 50.08, longitude: 14.43 },
+      fields: [{
+        id: "temperature_2m",
+        values: { temperatureC: input.dataset === "gfs" ? 7 : 8 },
+      }],
+      source: { dataset: input.dataset },
+    }));
+    const service = new CrossScaleComparisonService({ query } as any);
+    await service.compareDeterministic({
+      datasets: ["gfs", "icon-d2"],
+      latitude: geometry.latitude,
+      longitude: geometry.longitude,
+      validTime,
+      run,
+      selection: { kind: "field", field: "temperature_2m" },
+      gfsGrid: "0p50",
+    });
+
+    expect(query.mock.calls[0]![0].forecast).toMatchObject({ run, grid: "0p50" });
+    expect(query.mock.calls[1]![0].forecast).toEqual({ run });
+  });
+
   it("rejects an out-of-domain point before any source query", async () => {
     const query = vi.fn();
     const service = new CrossScaleComparisonService({ query } as any);
