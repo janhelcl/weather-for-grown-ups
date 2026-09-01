@@ -141,8 +141,7 @@ export function parseWgrib2PointLine(
   const heightMatch = gribLevel.match(/^(\d+(?:\.\d+)?) m above ground$/);
   const gfsNamedLevel = findNamedNonIsobaricLevel(gribLevel);
   const dwdCeilingLevel = names === "DWD"
-    && canonicalDwdIconCode(inventoryCode) === "CEILING"
-    && /cloud\s*(?:base|ceiling).*?(?:mean\s*sea\s*level|msl)/i.test(gribLevel);
+    && canonicalDwdIconCode(inventoryCode) === "CEILING";
   const modelNamedVertical = /^(?:atmos col|surface\s*-\s*top of atmosphere)$/i.test(gribLevel)
     ? "entire atmosphere"
     : dwdCeilingLevel
@@ -257,6 +256,7 @@ export function canonicalDwdIconCode(code: string): string | undefined {
     case "PRR_CON": return "RAIN_CON";
     case "PRS_CON": return "SNOW_CON";
     case "VIS": return "VIS";
+    case "CEIL": return "CEILING";
     case "CEILING": return "CEILING";
     case "DBZ": return "BREF";
     default: return undefined;
