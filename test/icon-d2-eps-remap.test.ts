@@ -256,6 +256,58 @@ describe("ICON-D2-EPS CDO remap cache", () => {
     });
   });
 
+  it("restores mean-layer CAPE/CIN fixed-surface identity after CDO", async () => {
+    const sourcePath = join(rootDir, "native-mean-layer.grib2");
+    const targetGridPath = join(rootDir, "target-mean-layer.txt");
+    const weightsPath = join(rootDir, "weights-mean-layer.nc");
+    await Promise.all([
+      writeFile(sourcePath, concatBytes([
+        minimalDwdMeanLayerGrib2(6),
+        minimalDwdMeanLayerGrib2(7),
+      ])),
+      writeFile(targetGridPath, "grid"),
+      writeFile(weightsPath, "weights"),
+    ]);
+    const runner = vi.fn(async (_executable: string, args: string[]) => {
+      const prepared = Uint8Array.from(await readFile(args.at(-2)!));
+      const chunks = scanGrib2Messages(prepared);
+      expect(chunks.map((chunk) => [
+        chunk.category,
+        chunk.parameter,
+        chunk.firstFixedSurfaceType,
+      ])).toEqual([
+        [7, 6, 192],
+        [7, 7, 192],
+      ]);
+      for (const chunk of chunks) {
+        expect(chunk.firstFixedSurfaceTypeOffset).toBeDefined();
+        prepared[chunk.firstFixedSurfaceTypeOffset!] = 1;
+        writeUint16Be(prepared, chunk.centerOffset!, 255);
+        prepared[chunk.localTableOffset!] = 0;
+      }
+      await writeFile(args.at(-1)!, prepared);
+      return { stdout: "processed mean-layer fields" };
+    });
+    const remapper = new IconD2EpsCdoRemapper(
+      join(rootDir, "remapped-mean-layer"),
+      { paths: async () => ({ targetGridPath, weightsPath }) },
+      "cdo-test",
+      runner,
+    );
+
+    const result = await remapper.remap(sourcePath);
+    expect(scanGrib2Messages(await readFile(result.path)).map((chunk) => [
+      chunk.center,
+      chunk.localTable,
+      chunk.category,
+      chunk.parameter,
+      chunk.firstFixedSurfaceType,
+    ])).toEqual([
+      [78, 1, 7, 6, 192],
+      [78, 1, 7, 7, 192],
+    ]);
+  });
+
   it("deduplicates concurrent remaps and reports the waiter as a cache hit", async () => {
     const sourcePath = join(rootDir, "native-concurrent.grib2");
     const targetGridPath = join(rootDir, "target-concurrent.txt");
@@ -417,6 +469,44 @@ function writeAscii(
   value: string,
 ): void {
   target.set(encoder.encode(value).subarray(0, width), offset);
+}
+
+function minimalDwdMeanLayerGrib2(parameter: 6 | 7): Uint8Array {
+  const section1 = new Uint8Array(21);
+  writeUint32Be(section1, 0, section1.length);
+  section1[4] = 1;
+  writeUint16Be(section1, 5, 78);
+  writeUint16Be(section1, 7, 0);
+  section1[9] = 34;
+  section1[10] = 1;
+
+  const section4 = new Uint8Array(23);
+  writeUint32Be(section4, 0, section4.length);
+  section4[4] = 4;
+  section4[9] = 7;
+  section4[10] = parameter;
+  section4[22] = 192;
+
+  const totalLength = 16 + section1.length + section4.length + 4;
+  const message = new Uint8Array(totalLength);
+  message.set(encoder.encode("GRIB"), 0);
+  message[6] = 0;
+  message[7] = 2;
+  writeUint64Be(message, 8, totalLength);
+  message.set(section1, 16);
+  message.set(section4, 16 + section1.length);
+  message.set(encoder.encode("7777"), totalLength - 4);
+  return message;
+}
+
+function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
+  const output = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return output;
 }
 
 function minimalDwdLocalGrib2(parameter: number): Uint8Array {

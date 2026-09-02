@@ -16,6 +16,8 @@ const result = await new UnifiedAtmosphereQueryService().query({
       "temperature_2m",
       "wind_10m",
       "mean_sea_level_pressure",
+      "mean_layer_cape",
+      "mean_layer_cin",
       "convective_rain",
       "convective_snow",
       "visibility",
@@ -47,6 +49,8 @@ for (const field of [
   "temperature_2m",
   "wind_10m",
   "mean_sea_level_pressure",
+  "mean_layer_cape",
+  "mean_layer_cin",
   "convective_rain",
   "convective_snow",
   "visibility",
@@ -58,6 +62,16 @@ for (const field of [
 ]) {
   assert(profile.fields.some((item: any) => item.id === field), `missing ICON-D2 field ${field}`);
 }
+for (const [id, output] of [
+  ["mean_layer_cape", "meanLayerCapeJkg"],
+  ["mean_layer_cin", "meanLayerCinJkg"],
+] as const) {
+  const ingredient = profile.fields.find((item: any) => item.id === id);
+  assert(Number.isFinite(ingredient.values[output]));
+  assert.deepEqual(ingredient.level, { type: "named_layer", id: "mean_layer" });
+  assert.deepEqual(ingredient.temporal, { type: "instantaneous" });
+}
+
 const reflectivity = profile.fields.find(
   (item: any) => item.id === "column_maximum_reflectivity",
 );
