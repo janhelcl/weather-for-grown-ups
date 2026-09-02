@@ -52,11 +52,12 @@ describe("DWD local GRIB2 parameter normalization", () => {
     });
   });
 
-  it("recognizes standard DWD updraft helicity without rewriting it for CDO", () => {
+  it("records standard DWD updraft helicity so provider identity survives CDO", () => {
     expect(knownDwdLocalParameter(0, 78, 7, 15, 102)).toMatchObject({
       alias: "UH_MAX",
       firstFixedSurfaceType: 102,
-      genericProcessing: false,
+      genericProcessing: true,
+      surrogate: [7, 15],
     });
     expect(knownDwdLocalParameter(0, 78, 7, 15, 1)).toBeUndefined();
 
@@ -70,8 +71,34 @@ describe("DWD local GRIB2 parameter normalization", () => {
       firstFixedSurfaceType: 102,
     });
     const prepared = prepareDwdLocalParametersForGenericProcessing(updraftHelicity);
-    expect(prepared.bytes).toBe(updraftHelicity);
-    expect(prepared.rewrites).toEqual([]);
+    expect(prepared.bytes).not.toBe(updraftHelicity);
+    expect(prepared.bytes).toEqual(updraftHelicity);
+    expect(prepared.rewrites).toEqual([
+      expect.objectContaining({
+        alias: "UH_MAX",
+        count: 1,
+        surrogate: [7, 15],
+        firstFixedSurfaceType: 102,
+      }),
+    ]);
+
+    const genericOutput = Uint8Array.from(prepared.bytes);
+    const chunk = scanGrib2Messages(genericOutput)[0]!;
+    writeUint16Be(genericOutput, chunk.centerOffset!, 255);
+    genericOutput[chunk.localTableOffset!] = 0;
+    genericOutput[chunk.firstFixedSurfaceTypeOffset!] = 1;
+
+    const restored = restoreDwdLocalParametersAfterGenericProcessing(
+      genericOutput,
+      prepared.rewrites,
+    );
+    expect(scanGrib2Messages(restored)[0]).toMatchObject({
+      center: 78,
+      localTable: 1,
+      category: 7,
+      parameter: 15,
+      firstFixedSurfaceType: 102,
+    });
   });
 
   it("restores DWD mean-layer parcel identity after generic processing", () => {
