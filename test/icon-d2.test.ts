@@ -243,6 +243,31 @@ describe("ICON-D2 selected-object cache", () => {
     expect(urls[1]).toContain("_006_2d_snow_con.grib2.bz2");
   });
 
+  it("maps 2-8 km updraft helicity to the native DWD UH_MAX object", async () => {
+    const fetchFn = vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 }));
+    const cache = new IconD2OpenDataCache(
+      rootDir,
+      fetchFn as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+      async () => new TextEncoder().encode("GRIB-UH"),
+    );
+
+    await cache.fetch({
+      run: new Date("2026-08-31T00:00:00Z"),
+      forecastHour: 6,
+      variables: [],
+      pressureLevelsHpa: [],
+      fields: [
+        NON_ISOBARIC_FIELD_CATALOG.updraft_helicity_max_2_8km,
+      ] as RawNonIsobaricFieldDefinition[],
+    });
+
+    const urls = fetchFn.mock.calls.map(([input]) => String(input));
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toContain("/uh_max/");
+    expect(urls[0]).toContain("_006_2d_uh_max.grib2.bz2");
+  });
+
   it("uses HEAD probes for products required by latest-run resolution", async () => {
     const fetchFn = vi.fn(async () => new Response(null, { status: 200 }));
     const cache = new IconD2OpenDataCache(
@@ -805,6 +830,7 @@ describe("ICON-D2 deterministic service operations", () => {
           "temperature_2m",
           "wind_10m",
           "wind_gust",
+          "updraft_helicity_max_2_8km",
           "mean_sea_level_pressure",
           "convective_rain",
           "convective_snow",
@@ -822,6 +848,7 @@ describe("ICON-D2 deterministic service operations", () => {
       "temperature_2m",
       "wind_10m",
       "wind_gust",
+      "updraft_helicity_max_2_8km",
       "mean_sea_level_pressure",
       "convective_rain",
       "convective_snow",
@@ -890,6 +917,18 @@ describe("ICON-D2 deterministic service operations", () => {
         level: { type: "named_layer", id: "entire_atmosphere" },
         temporal: { type: "instantaneous" },
         values: { columnMaximumReflectivityFactorMm6M3: 1000 },
+      });
+    expect(point.fields.find((field: any) => field.id === "updraft_helicity_max_2_8km"))
+      .toMatchObject({
+        level: { type: "named_layer", id: "height_layer_2_8km_msl" },
+        temporal: {
+          type: "maximum",
+          startForecastHour: 5,
+          endForecastHour: 6,
+          startTime: "2026-08-31T05:00:00.000Z",
+          endTime: "2026-08-31T06:00:00.000Z",
+        },
+        values: { updraftHelicityM2S2: 165 },
       });
     expect(point.fields.find((field: any) => field.id === "wind_gust")).toMatchObject({
       level: { type: "height_above_ground_m", heightM: 10 },
@@ -1195,6 +1234,7 @@ describe("ICON-D2 guard and inventory branches", () => {
     expect(isIconD2RawAreaField("dry_convection_top_height_msl")).toBe(false);
     expect(isIconD2RawAreaField("wind_10m")).toBe(false);
     expect(isIconD2RawAreaField("column_maximum_reflectivity")).toBe(false);
+    expect(isIconD2RawAreaField("updraft_helicity_max_2_8km")).toBe(false);
     expect(isIconD2RawAreaField("not-a-field")).toBe(false);
   });
 
@@ -1235,6 +1275,7 @@ describe("ICON-D2 guard and inventory branches", () => {
     expect(isIconD2Field("shallow_convective_cloud_top_height_msl")).toBe(true);
     expect(isIconD2Field("dry_convection_top_height_msl")).toBe(true);
     expect(isIconD2Field("column_maximum_reflectivity")).toBe(true);
+    expect(isIconD2Field("updraft_helicity_max_2_8km")).toBe(true);
     expect(isIconD2Field("dew_point_2m")).toBe(false);
     expect(() => expandIconD2RequestedVariables(["specific_humidity"]))
       .toThrow("ICON-D2 pressure variables not supported");
@@ -1337,6 +1378,13 @@ function fakeDecodedValues(longitude: number, latitude: number) {
     { code: "HTOP_SC", namedVertical: "mean sea level", value: 2_400, gridPoint },
     { code: "HTOP_DC", namedVertical: "mean sea level", value: 1_800, gridPoint },
     { code: "BREF", namedVertical: "entire atmosphere", value: 30, gridPoint },
+    {
+      code: "UH_MAX",
+      namedVertical: "2-8 km above mean sea level",
+      maximum: { startForecastHour: 5, endForecastHour: 6 },
+      value: 165,
+      gridPoint,
+    },
     {
       code: "APCP",
       surface: true,
