@@ -18,6 +18,8 @@ const result = await new UnifiedAtmosphereQueryService().query({
     variables: ["temperature"],
     pressureLevelsHpa: [850],
     fields: [
+      "mean_layer_cape",
+      "mean_layer_cin",
       "convective_rain",
       "convective_snow",
       "visibility",
@@ -51,6 +53,22 @@ const temperature = ensemble.pressureSummaries.find(
 assert(temperature, "missing ICON-D2-EPS temperature distribution");
 assert.equal(temperature.distribution.memberCount, 2);
 assert(Number.isFinite(temperature.distribution.mean));
+for (const [id, output] of [
+  ["mean_layer_cape", "meanLayerCapeJkg"],
+  ["mean_layer_cin", "meanLayerCinJkg"],
+] as const) {
+  const ingredient = ensemble.fieldSummaries.find(
+    (summary: any) => summary.field === id,
+  );
+  assert(ingredient, `missing ICON-D2-EPS ${id} distribution`);
+  assert.deepEqual(ingredient.level, { type: "named_layer", id: "mean_layer" });
+  assert.deepEqual(ingredient.temporal, { type: "instantaneous" });
+  const outputSummary = ingredient.outputs.find((item: any) => item.field === output);
+  assert(outputSummary, `missing ICON-D2-EPS ${id} output`);
+  assert.equal(outputSummary.distribution.memberCount, 2);
+  assert(Number.isFinite(outputSummary.distribution.mean));
+}
+
 const reflectivity = ensemble.fieldSummaries.find(
   (summary: any) => summary.field === "column_maximum_reflectivity",
 );
