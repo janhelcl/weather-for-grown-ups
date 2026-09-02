@@ -92,6 +92,7 @@ function parseMessagesWithKnownLocalAliases(bytes: Uint8Array): GribMessage[] {
       chunk.center,
       chunk.category,
       chunk.parameter,
+      chunk.firstFixedSurfaceType,
     ));
   if (!locals.some((local) => local !== undefined)) {
     return parseMessagesFromBuffer(bytes);
@@ -160,7 +161,9 @@ export function decodePointMessages(
       ? { namedVertical: "cloud ceiling" as const }
       : isDwdMslHeightCode(normalized.code)
         ? { namedVertical: "mean sea level" as const }
-        : verticalFromKey(message.key);
+        : isDwdMeanLayerCode(normalized.code)
+          ? { namedVertical: "mean layer" as const }
+          : verticalFromKey(message.key);
     if (vertical === null) continue;
     const sample = nearestPoint(message, longitude, latitude);
     const interval = forecastInterval(message);
@@ -507,6 +510,10 @@ function toSignedLongitude(longitude: number): number {
 
 function isDwdMslHeightCode(code: string): boolean {
   return code === "HBAS_SC" || code === "HTOP_SC" || code === "HTOP_DC";
+}
+
+function isDwdMeanLayerCode(code: string): boolean {
+  return code === "CAPE_ML" || code === "CIN_ML";
 }
 
 export function canonicalGribCode(code: string): string {
