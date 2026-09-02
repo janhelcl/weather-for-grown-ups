@@ -233,6 +233,7 @@ describe("ICON-D2-EPS source defensive branches", () => {
         NON_ISOBARIC_FIELD_CATALOG.wind_gust,
         NON_ISOBARIC_FIELD_CATALOG.mean_layer_cape,
         NON_ISOBARIC_FIELD_CATALOG.mean_layer_cin,
+        NON_ISOBARIC_FIELD_CATALOG.updraft_helicity_max_2_8km,
         NON_ISOBARIC_FIELD_CATALOG.mean_sea_level_pressure,
         NON_ISOBARIC_FIELD_CATALOG.total_precipitation,
         NON_ISOBARIC_FIELD_CATALOG.convective_rain,
@@ -245,7 +246,7 @@ describe("ICON-D2-EPS source defensive branches", () => {
       ] as RawNonIsobaricFieldDefinition[],
     });
 
-    expect(fetchFn).toHaveBeenCalledTimes(21);
+    expect(fetchFn).toHaveBeenCalledTimes(22);
     const urls = fetchFn.mock.calls.map((call) => String(call[0]));
     for (const parameter of [
       "/t/",
@@ -260,6 +261,7 @@ describe("ICON-D2-EPS source defensive branches", () => {
       "/vmax_10m/",
       "/cape_ml/",
       "/cin_ml/",
+      "/uh_max/",
       "/pmsl/",
       "/tot_prec/",
       "/rain_con/",
@@ -743,6 +745,18 @@ describe("ICON-D2-EPS member-first aggregation", () => {
                 values: { temperatureC: 12 + offset },
               },
               {
+                id: "updraft_helicity_max_2_8km",
+                level: { type: "named_layer", id: "height_layer_2_8km_msl" },
+                temporal: {
+                  type: "maximum",
+                  startForecastHour: 5,
+                  endForecastHour: 6,
+                  startTime: "2026-08-31T05:00:00.000Z",
+                  endTime: "2026-08-31T06:00:00.000Z",
+                },
+                values: { updraftHelicityM2S2: 150 + offset * 10 },
+              },
+              {
                 id: "visibility",
                 level: { type: "surface" },
                 temporal: { type: "instantaneous" },
@@ -788,6 +802,7 @@ describe("ICON-D2-EPS member-first aggregation", () => {
         pressureLevelsHpa: [850],
         fields: [
           "temperature_2m",
+          "updraft_helicity_max_2_8km",
           "visibility",
           "cloud_ceiling_height_msl",
           "shallow_convective_cloud_base_height_msl",
@@ -813,6 +828,22 @@ describe("ICON-D2-EPS member-first aggregation", () => {
     });
     expect(result.fieldSummaries.find((summary: any) => summary.field === "temperature_2m")
       .outputs[0].distribution.mean).toBe(13);
+    expect(result.fieldSummaries.find(
+      (summary: any) => summary.field === "updraft_helicity_max_2_8km",
+    )).toMatchObject({
+      level: { type: "named_layer", id: "height_layer_2_8km_msl" },
+      temporal: {
+        type: "maximum",
+        startForecastHour: 5,
+        endForecastHour: 6,
+        startTime: "2026-08-31T05:00:00.000Z",
+        endTime: "2026-08-31T06:00:00.000Z",
+      },
+      outputs: [expect.objectContaining({
+        field: "updraftHelicityM2S2",
+        distribution: expect.objectContaining({ mean: 160 }),
+      })],
+    });
     expect(result.fieldSummaries.find((summary: any) => summary.field === "visibility"))
       .toMatchObject({
         level: { type: "surface" },
