@@ -1,3 +1,4 @@
+import type { NonIsobaricFieldId } from "./non-isobaric-fields.js";
 import {
   ICON_D2_AREA_FIELD_IDS,
   ICON_D2_AREA_PRESSURE_VARIABLE_IDS,
@@ -26,16 +27,35 @@ export {
   ICON_D2_AREA_FIELD_IDS as ICON_D2_EPS_AREA_FIELD_IDS,
   ICON_D2_AREA_PRESSURE_VARIABLE_IDS as ICON_D2_EPS_AREA_PRESSURE_VARIABLE_IDS,
   ICON_D2_DERIVED_PRESSURE_VARIABLE_IDS as ICON_D2_EPS_DERIVED_PRESSURE_VARIABLE_IDS,
-  ICON_D2_FIELD_IDS as ICON_D2_EPS_FIELD_IDS,
   ICON_D2_PRESSURE_LEVELS_HPA as ICON_D2_EPS_PRESSURE_LEVELS_HPA,
   ICON_D2_PRESSURE_VARIABLE_IDS as ICON_D2_EPS_PRESSURE_VARIABLE_IDS,
   ICON_D2_RAW_PRESSURE_VARIABLE_IDS as ICON_D2_EPS_RAW_PRESSURE_VARIABLE_IDS,
-  expandIconD2RequestedFields as expandIconD2EpsRequestedFields,
   expandIconD2RequestedVariables as expandIconD2EpsRequestedVariables,
-  isIconD2Field as isIconD2EpsField,
   isIconD2PressureLevel as isIconD2EpsPressureLevel,
   isIconD2PressureVariable as isIconD2EpsPressureVariable,
 };
+
+export const ICON_D2_EPS_FIELD_IDS = ICON_D2_FIELD_IDS.filter(
+  (id) => id !== "dry_convection_top_height_msl",
+) satisfies readonly NonIsobaricFieldId[];
+
+const ICON_D2_EPS_FIELD_SET = new Set<string>(ICON_D2_EPS_FIELD_IDS);
+
+export function isIconD2EpsField(
+  value: string,
+): value is (typeof ICON_D2_EPS_FIELD_IDS)[number] {
+  return ICON_D2_EPS_FIELD_SET.has(value);
+}
+
+export function expandIconD2EpsRequestedFields(
+  ids: readonly NonIsobaricFieldId[],
+) {
+  const unsupported = ids.filter((id) => !isIconD2EpsField(id));
+  if (unsupported.length > 0) {
+    throw new Error(`ICON-D2-EPS fields not supported: ${unsupported.join(", ")}`);
+  }
+  return expandIconD2RequestedFields(ids);
+}
 
 const MEMBER_INDEX = new Map<string, number>(
   ICON_D2_EPS_MEMBERS.map((member, index) => [member, index]),
