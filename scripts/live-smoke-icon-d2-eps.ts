@@ -6,6 +6,8 @@ import {
   iconD2EpsValidTime,
 } from "../src/sources/icon-d2-eps.js";
 
+process.env.WFG_DEBUG_WGRIB2_POINT = "1";
+
 const safelyPublishedRun = floorToIconD2EpsCycle(
   new Date(Date.now() - 12 * 3_600_000),
 );
