@@ -95,15 +95,6 @@ export class Wgrib2Decoder {
       throw error;
     }
 
-    if (process.env.WFG_DEBUG_WGRIB2_POINT === "1") {
-      const focused = stdout
-        .split(/\r?\n/)
-        .filter((line) =>
-          /UH|helicit|parmcat=7|2000|8000|hour max/i.test(line))
-        .join("\n");
-      console.error("[wfg:wgrib2-point]", focused || "(no focused inventory lines)");
-    }
-
     const decoded = stdout
       .split(/\r?\n/)
       .filter((line) => forecastHour === undefined || wgrib2LineForecastHour(line) === forecastHour)
@@ -155,9 +146,9 @@ export function parseWgrib2PointLine(
   const dwdCloudHeightMatch = line.match(
     /:var discipline=0 center=78 local_table=\d+ parmcat=6 parm=(192|193|196):/i,
   );
-  const dwdUpdraftHelicityMatch = line.match(
-    /:var discipline=0 center=78 local_table=\d+ parmcat=7 parm=15:/i,
-  );
+  const dwdUpdraftHelicityMatch = names === "DWD"
+    ? line.match(/:var discipline=0[^:]*\bparmcat=7\s+parm=15:/i)
+    : null;
   const dwdCloudHeightCode = names === "DWD"
     ? conventionCode ?? dwdCloudHeightCodeFromParameter(dwdCloudHeightMatch?.[1])
     : undefined;
@@ -308,6 +299,7 @@ export function canonicalDwdIconCode(code: string): string | undefined {
     case "CAPE_ML": return "CAPE_ML";
     case "CIN_ML": return "CIN_ML";
     case "UH_MAX": return "UH_MAX";
+    case "UPHL": return "UH_MAX";
     case "DBZ": return "BREF";
     default: return undefined;
   }
