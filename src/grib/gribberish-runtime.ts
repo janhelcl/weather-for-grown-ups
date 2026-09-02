@@ -163,7 +163,9 @@ export function decodePointMessages(
         ? { namedVertical: "mean sea level" as const }
         : isDwdMeanLayerCode(normalized.code)
           ? { namedVertical: "mean layer" as const }
-          : verticalFromKey(message.key);
+          : isDwdUpdraftHelicityCode(normalized.code)
+            ? { namedVertical: "2-8 km above mean sea level" as const }
+            : verticalFromKey(message.key);
     if (vertical === null) continue;
     const sample = nearestPoint(message, longitude, latitude);
     const interval = forecastInterval(message);
@@ -514,6 +516,10 @@ function isDwdMslHeightCode(code: string): boolean {
 
 function isDwdMeanLayerCode(code: string): boolean {
   return code === "CAPE_ML" || code === "CIN_ML";
+}
+
+function isDwdUpdraftHelicityCode(code: string): boolean {
+  return code === "UH_MAX";
 }
 
 export function canonicalGribCode(code: string): string {
