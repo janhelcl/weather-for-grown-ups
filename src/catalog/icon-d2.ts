@@ -61,6 +61,9 @@ export const ICON_D2_FIELD_IDS = [
   "convective_snow",
   "visibility",
   "cloud_ceiling_height_msl",
+  "shallow_convective_cloud_base_height_msl",
+  "shallow_convective_cloud_top_height_msl",
+  "dry_convection_top_height_msl",
   "column_maximum_reflectivity",
 ] as const satisfies readonly NonIsobaricFieldId[];
 
