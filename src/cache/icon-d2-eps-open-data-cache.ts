@@ -357,6 +357,8 @@ function fieldParameter(field: RawNonIsobaricFieldDefinition): string {
     case "u_wind_10m": return "u_10m";
     case "v_wind_10m": return "v_10m";
     case "wind_gust": return "vmax_10m";
+    case "mean_layer_cape": return "cape_ml";
+    case "mean_layer_cin": return "cin_ml";
     case "mean_sea_level_pressure": return "pmsl";
     case "total_precipitation": return "tot_prec";
     case "convective_rain": return "rain_con";
