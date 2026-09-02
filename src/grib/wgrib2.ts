@@ -22,6 +22,8 @@ const ALL_SUPPORTED_CODES = [...new Set([
   "HBAS_SC",
   "HTOP_SC",
   "HTOP_DC",
+  "CAPE_ML",
+  "CIN_ML",
   "GP",
   "VMAX_10M",
   "U_RAF",
@@ -154,13 +156,16 @@ export function parseWgrib2PointLine(
   const dwdMslHeightLevel = dwdCloudHeightCode === "HBAS_SC"
     || dwdCloudHeightCode === "HTOP_SC"
     || dwdCloudHeightCode === "HTOP_DC";
+  const dwdMeanLayerLevel = conventionCode === "CAPE_ML" || conventionCode === "CIN_ML";
   const modelNamedVertical = /^(?:atmos col|surface\s*-\s*top of atmosphere)$/i.test(gribLevel)
     ? "entire atmosphere"
     : dwdCeilingLevel
       ? "cloud ceiling"
       : dwdMslHeightLevel
         ? "mean sea level"
-        : gfsNamedLevel?.gribLevel
+        : dwdMeanLayerLevel
+          ? "mean layer"
+          : gfsNamedLevel?.gribLevel
         ?? (GEFS_NAMED_VERTICALS.has(gribLevel) ? gribLevel : undefined);
   const pointMatch = line.match(/lon=([-+\d.eE]+),lat=([-+\d.eE]+)/);
   const valueMatch = line.match(/val=([-+\d.eE]+)/);
@@ -277,6 +282,8 @@ export function canonicalDwdIconCode(code: string): string | undefined {
     case "HBAS_SC": return "HBAS_SC";
     case "HTOP_SC": return "HTOP_SC";
     case "HTOP_DC": return "HTOP_DC";
+    case "CAPE_ML": return "CAPE_ML";
+    case "CIN_ML": return "CIN_ML";
     case "DBZ": return "BREF";
     default: return undefined;
   }
