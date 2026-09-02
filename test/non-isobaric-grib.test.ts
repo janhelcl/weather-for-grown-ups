@@ -130,11 +130,11 @@ describe("non-isobaric wgrib2 decoding", () => {
 
   it("normalizes DWD mean-layer CAPE/CIN without conflating them with surface CAPE/CIN", () => {
     for (const [inventoryCode, expectedCode, value] of [
-      ["CAPE", "CAPE_ML", 1240],
+      ["CAPE_CON", "CAPE_ML", 1240],
       ["CIN", "CIN_ML", 42],
     ] as const) {
       expect(parseWgrib2PointLine(
-        `10:72:d=2026090200:${inventoryCode}:local level type 192 0:6 hour fcst:lon=14.5,lat=50,val=${value}`,
+        `10:72:d=2026090200:${inventoryCode}:local level type 192 0:360 min fcst:ENS=? table4.6=192 pert=1:lon=14.5,lat=50,val=${value}`,
         "DWD",
       )).toEqual({
         code: expectedCode,
