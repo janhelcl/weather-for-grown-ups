@@ -131,6 +131,34 @@ describe("ICON-D2 selected-object cache", () => {
     expect(decompress).toHaveBeenCalledTimes(2);
   });
 
+  it("maps mean-layer CAPE and CIN to their native DWD parameter objects", async () => {
+    const fetchFn = vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 }));
+    const cache = new IconD2OpenDataCache(
+      rootDir,
+      fetchFn as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+      async () => new TextEncoder().encode("GRIB-CONVECTION"),
+    );
+
+    await cache.fetch({
+      run: new Date("2026-09-02T00:00:00Z"),
+      forecastHour: 6,
+      variables: [],
+      pressureLevelsHpa: [],
+      fields: [
+        NON_ISOBARIC_FIELD_CATALOG.mean_layer_cape,
+        NON_ISOBARIC_FIELD_CATALOG.mean_layer_cin,
+      ] as RawNonIsobaricFieldDefinition[],
+    });
+
+    const urls = fetchFn.mock.calls.map(([input]) => String(input));
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).toContain("/cape_ml/");
+    expect(urls[0]).toContain("_006_2d_cape_ml.grib2.bz2");
+    expect(urls[1]).toContain("/cin_ml/");
+    expect(urls[1]).toContain("_006_2d_cin_ml.grib2.bz2");
+  });
+
   it("maps visibility and aviation ceiling to their native DWD parameter objects", async () => {
     const fetchFn = vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 }));
     const cache = new IconD2OpenDataCache(
@@ -323,6 +351,26 @@ describe("ICON-D2 unified capabilities", () => {
       temporalSemantics: "maximum",
       support: [{ dataset: "icon-d2" }],
     });
+
+    const severeConvection = searchAtmosphereCatalog({
+      datasets: ["icon-d2"],
+      search: "mean layer",
+      sections: ["fields"],
+    });
+    expect(severeConvection.matches).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "mean_layer_cape",
+        verticalSemantics: "mean layer",
+        temporalSemantics: "instantaneous",
+        outputs: [expect.objectContaining({ field: "meanLayerCapeJkg", unit: "J/kg" })],
+      }),
+      expect.objectContaining({
+        id: "mean_layer_cin",
+        verticalSemantics: "mean layer",
+        temporalSemantics: "instantaneous",
+        outputs: [expect.objectContaining({ field: "meanLayerCinJkg", unit: "J/kg" })],
+      }),
+    ]));
 
     const reflectivity = searchAtmosphereCatalog({
       datasets: ["icon-d2"],
