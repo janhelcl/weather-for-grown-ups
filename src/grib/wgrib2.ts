@@ -95,6 +95,15 @@ export class Wgrib2Decoder {
       throw error;
     }
 
+    if (process.env.WFG_DEBUG_WGRIB2_POINT === "1") {
+      const focused = stdout
+        .split(/\r?\n/)
+        .filter((line) =>
+          /UH|helicit|parmcat=7|2000|8000|hour max/i.test(line))
+        .join("\n");
+      console.error("[wfg:wgrib2-point]", focused || "(no focused inventory lines)");
+    }
+
     const decoded = stdout
       .split(/\r?\n/)
       .filter((line) => forecastHour === undefined || wgrib2LineForecastHour(line) === forecastHour)
