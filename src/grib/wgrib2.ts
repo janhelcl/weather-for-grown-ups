@@ -311,7 +311,9 @@ function dwdMeanLayerCodeFromInventory(
 ): "CAPE_ML" | "CIN_ML" | undefined {
   if (!/^local level type 192(?:\s|$)/i.test(gribLevel)) return undefined;
   switch (code.toUpperCase()) {
-    case "CAPE": return "CAPE_ML";
+    case "CAPE":
+    case "CAPE_CON":
+      return "CAPE_ML";
     case "CIN": return "CIN_ML";
     default: return undefined;
   }
