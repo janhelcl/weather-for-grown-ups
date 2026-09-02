@@ -3,7 +3,9 @@ export type DwdLocalGribCode =
   | "SNOW_CON"
   | "HBAS_SC"
   | "HTOP_SC"
-  | "HTOP_DC";
+  | "HTOP_DC"
+  | "CAPE_ML"
+  | "CIN_ML";
 
 export interface Grib2MessageSlice {
   start: number;
@@ -21,6 +23,7 @@ export interface Grib2MessageSlice {
   parameter: number | undefined;
   categoryOffset: number | undefined;
   parameterOffset: number | undefined;
+  firstFixedSurfaceType: number | undefined;
 }
 
 export interface DwdLocalParameterDefinition {
@@ -29,6 +32,7 @@ export interface DwdLocalParameterDefinition {
   localParameter: number;
   surrogate: readonly [category: number, parameter: number];
   genericProcessing: boolean;
+  firstFixedSurfaceType?: number;
 }
 
 export interface DwdLocalRewriteSummary extends DwdLocalParameterDefinition {
@@ -84,6 +88,22 @@ const DWD_LOCAL_PARAMETERS = [
     surrogate: [3, 5],
     genericProcessing: false,
   },
+  {
+    alias: "CAPE_ML",
+    category: 7,
+    localParameter: 6,
+    surrogate: [7, 6],
+    genericProcessing: false,
+    firstFixedSurfaceType: 192,
+  },
+  {
+    alias: "CIN_ML",
+    category: 7,
+    localParameter: 7,
+    surrogate: [7, 7],
+    genericProcessing: false,
+    firstFixedSurfaceType: 192,
+  },
 ] as const satisfies readonly DwdLocalParameterDefinition[];
 
 export function knownDwdLocalParameter(
@@ -91,13 +111,17 @@ export function knownDwdLocalParameter(
   center: number | undefined,
   category: number | undefined,
   parameter: number | undefined,
+  firstFixedSurfaceType?: number,
 ): DwdLocalParameterDefinition | undefined {
   if (
     discipline !== METEOROLOGICAL_DISCIPLINE
     || center !== DWD_CENTER
   ) return undefined;
   return DWD_LOCAL_PARAMETERS.find((entry) =>
-    entry.category === category && entry.localParameter === parameter);
+    entry.category === category
+    && entry.localParameter === parameter
+    && (entry.firstFixedSurfaceType === undefined
+      || entry.firstFixedSurfaceType === firstFixedSurfaceType));
 }
 
 /**
@@ -122,6 +146,7 @@ export function prepareDwdLocalParametersForGenericProcessing(
       chunk.center,
       chunk.category,
       chunk.parameter,
+      chunk.firstFixedSurfaceType,
     );
     if (local === undefined || !local.genericProcessing) continue;
     if (
@@ -248,6 +273,7 @@ export function scanGrib2Messages(bytes: Uint8Array): Grib2MessageSlice[] {
     let parameter: number | undefined;
     let categoryOffset: number | undefined;
     let parameterOffset: number | undefined;
+    let firstFixedSurfaceType: number | undefined;
     let sectionCursor = cursor + 16;
 
     while (sectionCursor + 5 <= end - 4) {
@@ -269,6 +295,9 @@ export function scanGrib2Messages(bytes: Uint8Array): Grib2MessageSlice[] {
         parameterOffset = sectionCursor + 10;
         category = bytes[categoryOffset];
         parameter = bytes[parameterOffset];
+        if (sectionLength >= 23) {
+          firstFixedSurfaceType = bytes[sectionCursor + 22];
+        }
       }
       sectionCursor += sectionLength;
     }
@@ -289,6 +318,7 @@ export function scanGrib2Messages(bytes: Uint8Array): Grib2MessageSlice[] {
       parameter,
       categoryOffset,
       parameterOffset,
+      firstFixedSurfaceType,
     });
     cursor = end;
   }
