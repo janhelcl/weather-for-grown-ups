@@ -22,6 +22,8 @@ const result = await new UnifiedAtmosphereQueryService().query({
       "convective_snow",
       "visibility",
       "cloud_ceiling_height_msl",
+      "shallow_convective_cloud_base_height_msl",
+      "shallow_convective_cloud_top_height_msl",
       "column_maximum_reflectivity",
     ],
   },
@@ -77,6 +79,22 @@ for (const [id, output, level] of [
   assert.deepEqual(aviation.level, level);
   assert.deepEqual(aviation.temporal, { type: "instantaneous" });
   const outputSummary = aviation.outputs.find((item: any) => item.field === output);
+  assert(outputSummary, `missing ICON-D2-EPS ${id} output`);
+  assert.equal(outputSummary.distribution.memberCount, 2);
+  assert(Number.isFinite(outputSummary.distribution.mean));
+}
+
+for (const [id, output] of [
+  ["shallow_convective_cloud_base_height_msl", "shallowConvectiveCloudBaseHeightMslM"],
+  ["shallow_convective_cloud_top_height_msl", "shallowConvectiveCloudTopHeightMslM"],
+] as const) {
+  const height = ensemble.fieldSummaries.find(
+    (summary: any) => summary.field === id,
+  );
+  assert(height, `missing ICON-D2-EPS ${id} distribution`);
+  assert.deepEqual(height.level, { type: "named_level", id: "mean_sea_level" });
+  assert.deepEqual(height.temporal, { type: "instantaneous" });
+  const outputSummary = height.outputs.find((item: any) => item.field === output);
   assert(outputSummary, `missing ICON-D2-EPS ${id} output`);
   assert.equal(outputSummary.distribution.memberCount, 2);
   assert(Number.isFinite(outputSummary.distribution.mean));

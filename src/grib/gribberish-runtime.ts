@@ -77,10 +77,10 @@ export async function readGribMessages(path: string): Promise<GribMessage[]> {
 }
 
 /**
- * gribberish intentionally follows the WMO parameter tables and currently
- * drops DWD-local precipitation parameters before exposing a GribMessage.
- * Rewrite only the parameter metadata of those messages to parseable
- * surrogates, then restore the provider code at the WFG normalization
+ * gribberish intentionally follows the WMO parameter tables and can drop
+ * DWD-local parameters before exposing a GribMessage. Rewrite only the
+ * parameter metadata of known local messages to parseable surrogates, then
+ * restore the provider code at the WFG normalization
  * boundary. Grid values, level metadata, reference time, and accumulation
  * intervals remain byte-for-byte unchanged.
  */
@@ -158,7 +158,9 @@ export function decodePointMessages(
     const normalized = normalizeDecodedCodeValue(message.varAbbrev, 0);
     const vertical = normalized.code === "CEILING"
       ? { namedVertical: "cloud ceiling" as const }
-      : verticalFromKey(message.key);
+      : isDwdMslHeightCode(normalized.code)
+        ? { namedVertical: "mean sea level" as const }
+        : verticalFromKey(message.key);
     if (vertical === null) continue;
     const sample = nearestPoint(message, longitude, latitude);
     const interval = forecastInterval(message);
@@ -502,6 +504,10 @@ function toSignedLongitude(longitude: number): number {
   return Object.is(normalized, -0) ? 0 : normalized;
 }
 
+
+function isDwdMslHeightCode(code: string): boolean {
+  return code === "HBAS_SC" || code === "HTOP_SC" || code === "HTOP_DC";
+}
 
 export function canonicalGribCode(code: string): string {
   const normalized = code.toUpperCase();

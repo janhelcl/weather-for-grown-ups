@@ -212,7 +212,7 @@ Point comparison can be relatively direct. Spatial comparison requires much stri
 
 ## 7. Regional and convective meteorology
 
-**In progress.** Native regional gust semantics and column-maximum reflectivity are already exposed where the current provider products substantiate them. DWD ICON-D2 and ICON-D2-EPS now also expose phase-explicit convective rain and convective snowfall water-equivalent accumulations, preserving their native model-start accumulation intervals, plus near-surface visibility and provider-native aviation ceiling height above mean sea level. Visibility is available for scalar area summaries; ceiling remains point/range/multi-point/transect only until its provider-specific vertical selector is normalized for area extraction. AROME and PE-AROME do not advertise equivalent convective-precipitation or aviation fields until current public product or coverage identities are verified rather than inferred.
+**In progress.** Native regional gust semantics and column-maximum reflectivity are already exposed where the current provider products substantiate them. DWD ICON-D2 and ICON-D2-EPS now also expose phase-explicit convective rain and convective snowfall water-equivalent accumulations, near-surface visibility, provider-native aviation ceiling height above mean sea level, and shallow-convection cloud-base/cloud-top heights above mean sea level. Deterministic ICON-D2 additionally exposes the provider-native top of dry convection above mean sea level; ICON-D2-EPS does not advertise that field because it is absent from the current public ensemble product inventory. Visibility is available for scalar area summaries; the provider-specific height diagnostics remain point/range/multi-point/transect only until their vertical selectors are normalized for area extraction. AROME and PE-AROME do not advertise equivalent convective-precipitation, aviation, or cloud-structure fields until current public product or coverage identities are verified rather than inferred.
 
 Once the core regional datasets are stable, expand the shared meteorological vocabulary where the source products justify it.
 
@@ -221,7 +221,7 @@ High-value candidates include:
 - convective precipitation and intense-precipitation fields;
 - gusts;
 - visibility and near-surface aviation fields;
-- cloud-base/cloud-top structure;
+- broader cloud-base/cloud-top structure beyond the currently exposed DWD shallow-convection diagnostics;
 - reflectivity-related fields where operationally available and scientifically interpretable;
 - severe-convection ingredients derived from existing pressure/profile fields.
 

@@ -20,6 +20,9 @@ const result = await new UnifiedAtmosphereQueryService().query({
       "convective_snow",
       "visibility",
       "cloud_ceiling_height_msl",
+      "shallow_convective_cloud_base_height_msl",
+      "shallow_convective_cloud_top_height_msl",
+      "dry_convection_top_height_msl",
       "column_maximum_reflectivity",
     ],
   },
@@ -48,6 +51,9 @@ for (const field of [
   "convective_snow",
   "visibility",
   "cloud_ceiling_height_msl",
+  "shallow_convective_cloud_base_height_msl",
+  "shallow_convective_cloud_top_height_msl",
+  "dry_convection_top_height_msl",
   "column_maximum_reflectivity",
 ]) {
   assert(profile.fields.some((item: any) => item.id === field), `missing ICON-D2 field ${field}`);
@@ -70,6 +76,17 @@ const ceiling = profile.fields.find(
 assert(Number.isFinite(ceiling.values.cloudCeilingHeightMslM));
 assert.deepEqual(ceiling.level, { type: "named_level", id: "cloud_ceiling" });
 assert.deepEqual(ceiling.temporal, { type: "instantaneous" });
+
+for (const [id, output] of [
+  ["shallow_convective_cloud_base_height_msl", "shallowConvectiveCloudBaseHeightMslM"],
+  ["shallow_convective_cloud_top_height_msl", "shallowConvectiveCloudTopHeightMslM"],
+  ["dry_convection_top_height_msl", "dryConvectionTopHeightMslM"],
+] as const) {
+  const height = profile.fields.find((item: any) => item.id === id);
+  assert(Number.isFinite(height.values[output]));
+  assert.deepEqual(height.level, { type: "named_level", id: "mean_sea_level" });
+  assert.deepEqual(height.temporal, { type: "instantaneous" });
+}
 
 for (const [id, output] of [
   ["convective_rain", "convectiveRainMm"],

@@ -14,8 +14,11 @@ import {
   iconD2EpsRequiresMemberFirstRemap,
 } from "../src/cache/icon-d2-eps-member-cache.js";
 import {
+  ICON_D2_EPS_FIELD_IDS,
   ICON_D2_EPS_MEMBERS,
+  expandIconD2EpsRequestedFields,
   iconD2EpsMemberOrdinal,
+  isIconD2EpsField,
   sortIconD2EpsMembers,
 } from "../src/catalog/icon-d2-eps.js";
 import { ATMOSPHERIC_DATASET_CATALOG } from "../src/catalog/models.js";
@@ -48,6 +51,13 @@ describe("ICON-D2-EPS source and catalog", () => {
     ])).toEqual(["p01", "p20", "unknown"]);
     expect(() => iconD2EpsMemberOrdinal("unknown" as any))
       .toThrow("Unknown ICON-D2-EPS member");
+    expect(ICON_D2_EPS_FIELD_IDS).toContain("shallow_convective_cloud_base_height_msl");
+    expect(ICON_D2_EPS_FIELD_IDS).toContain("shallow_convective_cloud_top_height_msl");
+    expect(ICON_D2_EPS_FIELD_IDS).not.toContain("dry_convection_top_height_msl");
+    expect(isIconD2EpsField("shallow_convective_cloud_base_height_msl")).toBe(true);
+    expect(isIconD2EpsField("dry_convection_top_height_msl")).toBe(false);
+    expect(() => expandIconD2EpsRequestedFields(["dry_convection_top_height_msl"]))
+      .toThrow("ICON-D2-EPS fields not supported");
 
     expect(buildIconD2EpsOpenDataUrl(run, 6, {
       type: "pressure",
@@ -227,11 +237,13 @@ describe("ICON-D2-EPS source defensive branches", () => {
         NON_ISOBARIC_FIELD_CATALOG.convective_snow,
         NON_ISOBARIC_FIELD_CATALOG.visibility,
         NON_ISOBARIC_FIELD_CATALOG.cloud_ceiling_height_msl,
+        NON_ISOBARIC_FIELD_CATALOG.shallow_convective_cloud_base_height_msl,
+        NON_ISOBARIC_FIELD_CATALOG.shallow_convective_cloud_top_height_msl,
         NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity,
       ] as RawNonIsobaricFieldDefinition[],
     });
 
-    expect(fetchFn).toHaveBeenCalledTimes(17);
+    expect(fetchFn).toHaveBeenCalledTimes(19);
     const urls = fetchFn.mock.calls.map((call) => String(call[0]));
     for (const parameter of [
       "/t/",
@@ -250,6 +262,8 @@ describe("ICON-D2-EPS source defensive branches", () => {
       "/snow_con/",
       "/vis/",
       "/ceiling/",
+      "/hbas_sc/",
+      "/htop_sc/",
       "/dbz_cmax/",
     ]) {
       expect(urls.some((url) => url.includes(parameter))).toBe(true);
@@ -736,6 +750,18 @@ describe("ICON-D2-EPS member-first aggregation", () => {
                 temporal: { type: "instantaneous" },
                 values: { cloudCeilingHeightMslM: 1_500 + offset * 100 },
               },
+              {
+                id: "shallow_convective_cloud_base_height_msl",
+                level: { type: "named_level", id: "mean_sea_level" },
+                temporal: { type: "instantaneous" },
+                values: { shallowConvectiveCloudBaseHeightMslM: 1_100 + offset * 100 },
+              },
+              {
+                id: "shallow_convective_cloud_top_height_msl",
+                level: { type: "named_level", id: "mean_sea_level" },
+                temporal: { type: "instantaneous" },
+                values: { shallowConvectiveCloudTopHeightMslM: 2_300 + offset * 100 },
+              },
             ],
             source: {
               provider: "DWD Open Data",
@@ -756,7 +782,13 @@ describe("ICON-D2-EPS member-first aggregation", () => {
       selection: {
         variables: ["temperature", "wind"],
         pressureLevelsHpa: [850],
-        fields: ["temperature_2m", "visibility", "cloud_ceiling_height_msl"],
+        fields: [
+          "temperature_2m",
+          "visibility",
+          "cloud_ceiling_height_msl",
+          "shallow_convective_cloud_base_height_msl",
+          "shallow_convective_cloud_top_height_msl",
+        ],
       },
       ensemble: {
         members: ["p01", "p02"],
@@ -795,6 +827,26 @@ describe("ICON-D2-EPS member-first aggregation", () => {
           distribution: expect.objectContaining({ mean: 1_600 }),
         })],
       });
+    expect(result.fieldSummaries.find(
+      (summary: any) => summary.field === "shallow_convective_cloud_base_height_msl",
+    )).toMatchObject({
+      level: { type: "named_level", id: "mean_sea_level" },
+      temporal: { type: "instantaneous" },
+      outputs: [expect.objectContaining({
+        field: "shallowConvectiveCloudBaseHeightMslM",
+        distribution: expect.objectContaining({ mean: 1_200 }),
+      })],
+    });
+    expect(result.fieldSummaries.find(
+      (summary: any) => summary.field === "shallow_convective_cloud_top_height_msl",
+    )).toMatchObject({
+      level: { type: "named_level", id: "mean_sea_level" },
+      temporal: { type: "instantaneous" },
+      outputs: [expect.objectContaining({
+        field: "shallowConvectiveCloudTopHeightMslM",
+        distribution: expect.objectContaining({ mean: 2_400 }),
+      })],
+    });
     expect(result.source).toMatchObject({
       provider: "DWD Open Data",
       product: "icon_d2_eps_native_icosahedral",

@@ -41,6 +41,42 @@ describe("parseWgrib2PointLine", () => {
     });
   });
 
+  it("parses DWD shallow-cloud and dry-convection heights", () => {
+    for (const [code, value] of [
+      ["HBAS_SC", 1_200],
+      ["HTOP_SC", 2_400],
+      ["HTOP_DC", 1_800],
+    ] as const) {
+      expect(parseWgrib2PointLine(
+        `1:1:d=2026081906:${code}:mean sea level:6 hour fcst:lon=14.5,lat=50,val=${value}`,
+        "DWD",
+      )).toEqual({
+        code,
+        namedVertical: "mean sea level",
+        value,
+        gridPoint: { longitude: 14.5, latitude: 50 },
+      });
+    }
+  });
+
+  it("recognizes raw DWD cloud-height parameter metadata", () => {
+    for (const [parameter, code] of [
+      [192, "HBAS_SC"],
+      [193, "HTOP_SC"],
+      [196, "HTOP_DC"],
+    ] as const) {
+      expect(parseWgrib2PointLine(
+        `1:1:d=2026081906:var discipline=0 center=78 local_table=1 parmcat=6 parm=${parameter}:mean sea level:6 hour fcst:lon=14.5,lat=50,val=1500`,
+        "DWD",
+      )).toEqual({
+        code,
+        namedVertical: "mean sea level",
+        value: 1500,
+        gridPoint: { longitude: 14.5, latitude: 50 },
+      });
+    }
+  });
+
   it("parses regional convective precipitation accumulations", () => {
     for (const code of ["RAIN_CON", "SNOW_CON"] as const) {
       expect(parseWgrib2PointLine(
@@ -115,6 +151,9 @@ describe("Wgrib2Decoder native compatibility path", () => {
         "4:4:d=2026081906:DBZ:atmos col:6 hour fcst:lon=14.5,lat=50,val=-16",
         "5:5:d=2026081906:VIS:surface:6 hour fcst:lon=14.5,lat=50,val=9000",
         "6:6:d=2026081906:CEILING:cloud base - mean sea level:6 hour fcst:lon=14.5,lat=50,val=1400",
+        "7:7:d=2026081906:HBAS_SC:mean sea level:6 hour fcst:lon=14.5,lat=50,val=1100",
+        "8:8:d=2026081906:HTOP_SC:mean sea level:6 hour fcst:lon=14.5,lat=50,val=2300",
+        "9:9:d=2026081906:HTOP_DC:mean sea level:6 hour fcst:lon=14.5,lat=50,val=1700",
       ].join("\n"),
     } as never);
     const values = await new Wgrib2Decoder("/opt/wgrib2", "DWD")
@@ -126,6 +165,9 @@ describe("Wgrib2Decoder native compatibility path", () => {
       "BREF",
       "VIS",
       "CEILING",
+      "HBAS_SC",
+      "HTOP_SC",
+      "HTOP_DC",
     ]);
     expect(execaMock).toHaveBeenCalledWith("/opt/wgrib2", [
       "/tmp/test.grib2",

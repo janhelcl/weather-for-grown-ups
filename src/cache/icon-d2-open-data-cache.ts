@@ -214,6 +214,9 @@ function fieldParameter(field: RawNonIsobaricFieldDefinition): string {
     case "convective_snow": return "snow_con";
     case "visibility": return "vis";
     case "cloud_ceiling_height_msl": return "ceiling";
+    case "shallow_convective_cloud_base_height_msl": return "hbas_sc";
+    case "shallow_convective_cloud_top_height_msl": return "htop_sc";
+    case "dry_convection_top_height_msl": return "htop_dc";
     case "column_maximum_reflectivity": return "dbz_cmax";
     default:
       throw new Error(

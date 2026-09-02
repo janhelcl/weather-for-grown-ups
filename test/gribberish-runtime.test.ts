@@ -100,6 +100,27 @@ describe("bundled GRIB2 point decoding", () => {
     });
   });
 
+  it("normalizes DWD cloud-structure heights to the MSL vertical reference", () => {
+    for (const [code, value] of [
+      ["HBAS_SC", 1_200],
+      ["HTOP_SC", 2_400],
+      ["HTOP_DC", 1_800],
+    ] as const) {
+      const [decoded] = decodePointMessages([
+        fakeMessage({
+          key: `${code}:202608240600:0 in local diagnostic:Forecast`,
+          code,
+          values: [value, value, value, value],
+        }),
+      ], 14, 50);
+      expect(decoded).toMatchObject({
+        code,
+        namedVertical: "mean sea level",
+        value,
+      });
+    }
+  });
+
   it("selects the exact requested lead from sub-hourly messages in one provider object", () => {
     const messages = [
       fakeMessage({

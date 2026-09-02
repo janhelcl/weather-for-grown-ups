@@ -41,6 +41,21 @@ describe("non-isobaric field catalog", () => {
       temporalSemantics: "instantaneous",
       outputs: [{ field: "cloudCeilingHeightMslM", unit: "m" }],
     });
+    expect(NON_ISOBARIC_FIELD_CATALOG.shallow_convective_cloud_base_height_msl).toMatchObject({
+      kind: "raw", gfsCode: "HBAS_SC", level: { type: "named_level", id: "mean_sea_level" },
+      temporalSemantics: "instantaneous",
+      outputs: [{ field: "shallowConvectiveCloudBaseHeightMslM", unit: "m" }],
+    });
+    expect(NON_ISOBARIC_FIELD_CATALOG.shallow_convective_cloud_top_height_msl).toMatchObject({
+      kind: "raw", gfsCode: "HTOP_SC", level: { type: "named_level", id: "mean_sea_level" },
+      temporalSemantics: "instantaneous",
+      outputs: [{ field: "shallowConvectiveCloudTopHeightMslM", unit: "m" }],
+    });
+    expect(NON_ISOBARIC_FIELD_CATALOG.dry_convection_top_height_msl).toMatchObject({
+      kind: "raw", gfsCode: "HTOP_DC", level: { type: "named_level", id: "mean_sea_level" },
+      temporalSemantics: "instantaneous",
+      outputs: [{ field: "dryConvectionTopHeightMslM", unit: "m" }],
+    });
   });
 
   it("expands derived winds at multiple heights to exact U/V dependencies", () => {
@@ -59,6 +74,9 @@ describe("non-isobaric field catalog", () => {
       "convective_snow",
       "visibility",
       "cloud_ceiling_height_msl",
+      "shallow_convective_cloud_base_height_msl",
+      "shallow_convective_cloud_top_height_msl",
+      "dry_convection_top_height_msl",
       "column_maximum_reflectivity",
     ] as const) {
       expect(supported.has(NON_ISOBARIC_FIELD_CATALOG[id].gfsCode)).toBe(false);
@@ -75,5 +93,8 @@ describe("non-isobaric field catalog", () => {
     expect(catalog.fields.some((field) => field.id === "convective_snow")).toBe(false);
     expect(catalog.fields.some((field) => field.id === "visibility")).toBe(false);
     expect(catalog.fields.some((field) => field.id === "cloud_ceiling_height_msl")).toBe(false);
+    expect(catalog.fields.some((field) => field.id === "shallow_convective_cloud_base_height_msl")).toBe(false);
+    expect(catalog.fields.some((field) => field.id === "shallow_convective_cloud_top_height_msl")).toBe(false);
+    expect(catalog.fields.some((field) => field.id === "dry_convection_top_height_msl")).toBe(false);
   });
 });
