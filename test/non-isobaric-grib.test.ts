@@ -128,6 +128,27 @@ describe("non-isobaric wgrib2 decoding", () => {
     )).toBe(6);
   });
 
+  it("normalizes DWD mean-layer CAPE/CIN without conflating them with surface CAPE/CIN", () => {
+    expect(parseWgrib2PointLine(
+      "10:72:d=2026090200:CAPE_ML:mean layer:6 hour fcst:lon=14.5,lat=50,val=1240",
+      "DWD",
+    )).toEqual({
+      code: "CAPE_ML",
+      namedVertical: "mean layer",
+      value: 1240,
+      gridPoint: { longitude: 14.5, latitude: 50 },
+    });
+    expect(parseWgrib2PointLine(
+      "11:80:d=2026090200:CIN_ML:mean layer:6 hour fcst:lon=14.5,lat=50,val=42",
+      "DWD",
+    )).toEqual({
+      code: "CIN_ML",
+      namedVertical: "mean layer",
+      value: 42,
+      gridPoint: { longitude: 14.5, latitude: 50 },
+    });
+  });
+
   it("normalizes native surface-to-top column layers", () => {
     expect(parseWgrib2PointLine(
       "10:72:d=2026081906:BREF:surface - top of atmosphere:6 hour fcst:lon=14.5,lat=50,val=32",
