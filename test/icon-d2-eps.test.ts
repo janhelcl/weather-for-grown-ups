@@ -530,6 +530,7 @@ describe("ICON-D2-EPS adaptive member remapping", () => {
         NON_ISOBARIC_FIELD_CATALOG.temperature_2m,
         NON_ISOBARIC_FIELD_CATALOG.convective_rain,
         NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity,
+        NON_ISOBARIC_FIELD_CATALOG.updraft_helicity_max_2_8km,
       ] as RawNonIsobaricFieldDefinition[],
     };
     expect(iconD2EpsRequiresMemberFirstRemap(mixed)).toBe(true);
@@ -541,7 +542,7 @@ describe("ICON-D2-EPS adaptive member remapping", () => {
     expect(source.fetch.mock.calls.map(([request]: any[]) =>
       request.fields.map((field: any) => field.id))).toEqual(expect.arrayContaining([
       ["temperature_2m", "convective_rain"],
-      ["column_maximum_reflectivity"],
+      ["column_maximum_reflectivity", "updraft_helicity_max_2_8km"],
     ]));
     expect(remapper.remap).toHaveBeenCalledWith(
       "/raw/temperature_2m+convective_rain.grib2",
@@ -551,11 +552,11 @@ describe("ICON-D2-EPS adaptive member remapping", () => {
       "p02",
     );
     expect(filter.filter).toHaveBeenCalledWith(
-      "/raw/column_maximum_reflectivity.grib2",
+      "/raw/column_maximum_reflectivity+updraft_helicity_max_2_8km.grib2",
       "p02",
     );
     expect(remapper.remap).toHaveBeenCalledWith(
-      "/raw/column_maximum_reflectivity.grib2.p02",
+      "/raw/column_maximum_reflectivity+updraft_helicity_max_2_8km.grib2.p02",
     );
     expect(combiner.combine).toHaveBeenCalledWith([
       {
@@ -563,7 +564,7 @@ describe("ICON-D2-EPS adaptive member remapping", () => {
         cacheHit: true,
       },
       {
-        path: "/raw/column_maximum_reflectivity.grib2.p02.remapped",
+        path: "/raw/column_maximum_reflectivity+updraft_helicity_max_2_8km.grib2.p02.remapped",
         cacheHit: true,
       },
     ]);
