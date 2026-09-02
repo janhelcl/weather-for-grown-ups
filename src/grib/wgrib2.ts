@@ -19,6 +19,9 @@ const ALL_SUPPORTED_CODES = [...new Set([
   "SNOW_CON",
   "VIS",
   "CEILING",
+  "HBAS_SC",
+  "HTOP_SC",
+  "HTOP_DC",
   "GP",
   "VMAX_10M",
   "U_RAF",
@@ -136,17 +139,28 @@ export function parseWgrib2PointLine(
   const dwdConvectivePrecipitationMatch = line.match(
     /:var discipline=0 center=78 local_table=\d+ parmcat=1 parm=(76|55):/i,
   );
+  const dwdCloudHeightMatch = line.match(
+    /:var discipline=0 center=78 local_table=\d+ parmcat=6 parm=(192|193|196):/i,
+  );
+  const dwdCloudHeightCode = names === "DWD"
+    ? conventionCode ?? dwdCloudHeightCodeFromParameter(dwdCloudHeightMatch?.[1])
+    : undefined;
   const pressureMatch = gribLevel.match(/^(\d+(?:\.\d+)?) mb$/);
   const surfaceMatch = gribLevel === "surface";
   const heightMatch = gribLevel.match(/^(\d+(?:\.\d+)?) m above ground$/);
   const gfsNamedLevel = findNamedNonIsobaricLevel(gribLevel);
   const dwdCeilingLevel = names === "DWD"
     && canonicalDwdIconCode(inventoryCode) === "CEILING";
+  const dwdMslHeightLevel = dwdCloudHeightCode === "HBAS_SC"
+    || dwdCloudHeightCode === "HTOP_SC"
+    || dwdCloudHeightCode === "HTOP_DC";
   const modelNamedVertical = /^(?:atmos col|surface\s*-\s*top of atmosphere)$/i.test(gribLevel)
     ? "entire atmosphere"
     : dwdCeilingLevel
       ? "cloud ceiling"
-      : gfsNamedLevel?.gribLevel
+      : dwdMslHeightLevel
+        ? "mean sea level"
+        : gfsNamedLevel?.gribLevel
         ?? (GEFS_NAMED_VERTICALS.has(gribLevel) ? gribLevel : undefined);
   const pointMatch = line.match(/lon=([-+\d.eE]+),lat=([-+\d.eE]+)/);
   const valueMatch = line.match(/val=([-+\d.eE]+)/);
@@ -155,7 +169,8 @@ export function parseWgrib2PointLine(
     (!codeMatch
       && conventionCode === undefined
       && !aromeReflectivityMatch
-      && !dwdConvectivePrecipitationMatch)
+      && !dwdConvectivePrecipitationMatch
+      && !dwdCloudHeightMatch)
     || (!pressureMatch && !surfaceMatch && !heightMatch && !modelNamedVertical)
     || !pointMatch
     || !valueMatch
@@ -166,6 +181,7 @@ export function parseWgrib2PointLine(
   const dwdRawParameter = dwdConvectivePrecipitationMatch?.[1];
   const rawCode = codeMatch?.[1]
     ?? conventionCode
+    ?? dwdCloudHeightCode
     ?? (dwdRawParameter === "76"
       ? "RAIN_CON"
       : dwdRawParameter === "55"
@@ -258,7 +274,21 @@ export function canonicalDwdIconCode(code: string): string | undefined {
     case "VIS": return "VIS";
     case "CEIL": return "CEILING";
     case "CEILING": return "CEILING";
+    case "HBAS_SC": return "HBAS_SC";
+    case "HTOP_SC": return "HTOP_SC";
+    case "HTOP_DC": return "HTOP_DC";
     case "DBZ": return "BREF";
+    default: return undefined;
+  }
+}
+
+function dwdCloudHeightCodeFromParameter(
+  parameter: string | undefined,
+): "HBAS_SC" | "HTOP_SC" | "HTOP_DC" | undefined {
+  switch (parameter) {
+    case "192": return "HBAS_SC";
+    case "193": return "HTOP_SC";
+    case "196": return "HTOP_DC";
     default: return undefined;
   }
 }
