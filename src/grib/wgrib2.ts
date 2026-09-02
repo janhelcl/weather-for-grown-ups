@@ -134,6 +134,7 @@ export function parseWgrib2PointLine(
   const codeMatch = line.match(CODE_PATTERN);
   const conventionCode = names === "DWD"
     ? canonicalDwdIconCode(inventoryCode)
+      ?? dwdMeanLayerCodeFromInventory(inventoryCode, gribLevel)
     : undefined;
   const aromeReflectivityMatch = line.match(
     /:var discipline=0 center=85 local_table=0 parmcat=16 parm=193:/i,
@@ -184,8 +185,8 @@ export function parseWgrib2PointLine(
   }
 
   const dwdRawParameter = dwdConvectivePrecipitationMatch?.[1];
-  const rawCode = codeMatch?.[1]
-    ?? conventionCode
+  const rawCode = conventionCode
+    ?? codeMatch?.[1]
     ?? dwdCloudHeightCode
     ?? (dwdRawParameter === "76"
       ? "RAIN_CON"
@@ -285,6 +286,18 @@ export function canonicalDwdIconCode(code: string): string | undefined {
     case "CAPE_ML": return "CAPE_ML";
     case "CIN_ML": return "CIN_ML";
     case "DBZ": return "BREF";
+    default: return undefined;
+  }
+}
+
+function dwdMeanLayerCodeFromInventory(
+  code: string,
+  gribLevel: string,
+): "CAPE_ML" | "CIN_ML" | undefined {
+  if (!/^local level type 192(?:\s|$)/i.test(gribLevel)) return undefined;
+  switch (code.toUpperCase()) {
+    case "CAPE": return "CAPE_ML";
+    case "CIN": return "CIN_ML";
     default: return undefined;
   }
 }
