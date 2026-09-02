@@ -581,6 +581,27 @@ describe("ICON-D2-EPS adaptive member remapping", () => {
       cacheHit: true,
     });
     expect(combiner.combine).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    const updraftHelicityOnly = {
+      ...baseRequest,
+      fields: [
+        NON_ISOBARIC_FIELD_CATALOG.updraft_helicity_max_2_8km,
+      ] as RawNonIsobaricFieldDefinition[],
+    };
+    expect(iconD2EpsRequiresMemberFirstRemap(updraftHelicityOnly)).toBe(true);
+    await expect(cache.fetch(updraftHelicityOnly)).resolves.toEqual({
+      path: "/raw/updraft_helicity_max_2_8km.grib2.p02.remapped",
+      cacheHit: true,
+    });
+    expect(filter.filter).toHaveBeenCalledWith(
+      "/raw/updraft_helicity_max_2_8km.grib2",
+      "p02",
+    );
+    expect(remapper.remap).toHaveBeenCalledWith(
+      "/raw/updraft_helicity_max_2_8km.grib2.p02",
+    );
+    expect(combiner.combine).not.toHaveBeenCalled();
   });
 });
 
