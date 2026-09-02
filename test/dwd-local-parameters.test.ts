@@ -23,6 +23,32 @@ describe("DWD local GRIB2 parameter normalization", () => {
     expect(knownDwdLocalParameter(1, 78, 1, 76)).toBeUndefined();
   });
 
+  it("distinguishes DWD mean-layer CAPE/CIN by fixed-surface type", () => {
+    expect(knownDwdLocalParameter(0, 78, 7, 6, 192)).toMatchObject({
+      alias: "CAPE_ML",
+      firstFixedSurfaceType: 192,
+      genericProcessing: false,
+    });
+    expect(knownDwdLocalParameter(0, 78, 7, 7, 192)).toMatchObject({
+      alias: "CIN_ML",
+      firstFixedSurfaceType: 192,
+      genericProcessing: false,
+    });
+    expect(knownDwdLocalParameter(0, 78, 7, 6, 193)).toBeUndefined();
+    expect(knownDwdLocalParameter(0, 78, 7, 6, 1)).toBeUndefined();
+
+    const meanLayer = minimalGrib2({
+      center: 78,
+      subcenter: 0,
+      masterTable: 34,
+      localTable: 1,
+      category: 7,
+      parameter: 6,
+      firstFixedSurfaceType: 192,
+    });
+    expect(scanGrib2Messages(meanLayer)[0]?.firstFixedSurfaceType).toBe(192);
+  });
+
   it("is a zero-copy no-op when no supported DWD-local parameter is present", () => {
     const standard = minimalGrib2({
       center: 7,
@@ -193,6 +219,7 @@ interface MinimalGribOptions {
   localTable: number;
   category: number;
   parameter: number;
+  firstFixedSurfaceType?: number;
 }
 
 function minimalGrib2(options: MinimalGribOptions): Uint8Array {
@@ -204,11 +231,14 @@ function minimalGrib2(options: MinimalGribOptions): Uint8Array {
   section1[9] = options.masterTable;
   section1[10] = options.localTable;
 
-  const section4 = new Uint8Array(11);
+  const section4 = new Uint8Array(options.firstFixedSurfaceType === undefined ? 11 : 23);
   writeUint32Be(section4, 0, section4.length);
   section4[4] = 4;
   section4[9] = options.category;
   section4[10] = options.parameter;
+  if (options.firstFixedSurfaceType !== undefined) {
+    section4[22] = options.firstFixedSurfaceType;
+  }
 
   const totalLength = 16 + section1.length + section4.length + 4;
   const message = new Uint8Array(totalLength);
