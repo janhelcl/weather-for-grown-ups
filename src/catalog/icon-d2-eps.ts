@@ -9,7 +9,6 @@ import {
   ICON_D2_RAW_PRESSURE_VARIABLE_IDS,
   expandIconD2RequestedFields,
   expandIconD2RequestedVariables,
-  isIconD2Field,
   isIconD2PressureLevel,
   isIconD2PressureVariable,
 } from "./icon-d2.js";
