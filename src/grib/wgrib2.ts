@@ -94,8 +94,23 @@ export class Wgrib2Decoder {
       throw error;
     }
 
-    const decoded = stdout
-      .split(/\r?\n/)
+    const lines = stdout.split(/\r?\n/);
+    if (process.env.WFG_DEBUG_WGRIB2_MEAN_LAYER === "1" && this.names === "DWD") {
+      const meanLayerCandidates = lines.filter((line) =>
+        /:(?:CAPE|CIN|CAPE_ML|CIN_ML):/i.test(line)
+        || /:local level type 192(?:\s|:)/i.test(line)
+      );
+      console.error(
+        "[wfg:wgrib2:mean-layer-debug]",
+        JSON.stringify(meanLayerCandidates.map((line) => ({
+          line,
+          parsedForecastHour: wgrib2LineForecastHour(line),
+          requestedForecastHour: forecastHour,
+        }))),
+      );
+    }
+
+    const decoded = lines
       .filter((line) => forecastHour === undefined || wgrib2LineForecastHour(line) === forecastHour)
       .map((line) => parseWgrib2PointLine(line, this.names))
       .filter((value): value is DecodedValue => value !== null);
