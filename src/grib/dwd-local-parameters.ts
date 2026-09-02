@@ -24,6 +24,7 @@ export interface Grib2MessageSlice {
   categoryOffset: number | undefined;
   parameterOffset: number | undefined;
   firstFixedSurfaceType: number | undefined;
+  firstFixedSurfaceTypeOffset: number | undefined;
 }
 
 export interface DwdLocalParameterDefinition {
@@ -93,7 +94,7 @@ const DWD_LOCAL_PARAMETERS = [
     category: 7,
     localParameter: 6,
     surrogate: [7, 6],
-    genericProcessing: false,
+    genericProcessing: true,
     firstFixedSurfaceType: 192,
   },
   {
@@ -101,7 +102,7 @@ const DWD_LOCAL_PARAMETERS = [
     category: 7,
     localParameter: 7,
     surrogate: [7, 7],
-    genericProcessing: false,
+    genericProcessing: true,
     firstFixedSurfaceType: 192,
   },
 ] as const satisfies readonly DwdLocalParameterDefinition[];
@@ -125,13 +126,14 @@ export function knownDwdLocalParameter(
 }
 
 /**
- * Replace only the two DWD-local convective-precipitation parameter numbers
- * with WMO-defined surrogates that generic GRIB tooling understands.
+ * Preserve DWD-specific GRIB semantics across generic processing.
  *
- * Only section-4 parameter metadata changes. Values, grid definitions,
- * ensemble metadata, reference/valid times, and statistical intervals stay
- * untouched. The returned rewrite summary is sufficient to restore the exact
- * DWD identification after a generic-tool processing step.
+ * Local convective-precipitation parameter numbers are temporarily rewritten
+ * to WMO-defined surrogates. Mean-layer CAPE/CIN already use standard
+ * parameter numbers, but their DWD fixed-surface type 192 is still recorded so
+ * tools such as CDO cannot silently collapse them into another CAPE/CIN parcel
+ * definition. Values, grid definitions, ensemble metadata, reference/valid
+ * times, and statistical intervals stay untouched.
  */
 export function prepareDwdLocalParametersForGenericProcessing(
   bytes: Uint8Array,
@@ -194,12 +196,12 @@ export function prepareDwdLocalParametersForGenericProcessing(
 }
 
 /**
- * Restore DWD-local parameter identities after a generic processing step.
+ * Restore DWD parameter and fixed-surface identities after generic processing.
  *
- * Restoration is deliberately strict: the number of surrogate messages must
- * match the number rewritten before processing. This prevents accidentally
- * relabelling an unrelated standard ACPCP/SF message if a future request mixes
- * those products into the same file.
+ * Restoration is deliberately strict: the number of matching messages must
+ * equal the number recorded before processing. This prevents accidentally
+ * relabelling an unrelated standard field if a future request mixes an
+ * ambiguous surrogate or CAPE/CIN parcel definition into the same file.
  */
 export function restoreDwdLocalParametersAfterGenericProcessing(
   bytes: Uint8Array,
@@ -228,6 +230,8 @@ export function restoreDwdLocalParametersAfterGenericProcessing(
         || chunk.subcenterOffset === undefined
         || chunk.masterTableOffset === undefined
         || chunk.localTableOffset === undefined
+        || (rewrite.firstFixedSurfaceType !== undefined
+          && chunk.firstFixedSurfaceTypeOffset === undefined)
       ) {
         throw new Error(`Cannot restore DWD local parameter ${rewrite.alias}: incomplete GRIB2 metadata`);
       }
@@ -237,6 +241,12 @@ export function restoreDwdLocalParametersAfterGenericProcessing(
       writeUint16Be(restored, chunk.subcenterOffset, rewrite.identification.subcenter);
       restored[chunk.masterTableOffset] = rewrite.identification.masterTable;
       restored[chunk.localTableOffset] = rewrite.identification.localTable;
+      if (
+        rewrite.firstFixedSurfaceType !== undefined
+        && chunk.firstFixedSurfaceTypeOffset !== undefined
+      ) {
+        restored[chunk.firstFixedSurfaceTypeOffset] = rewrite.firstFixedSurfaceType;
+      }
     }
   }
 
@@ -274,6 +284,7 @@ export function scanGrib2Messages(bytes: Uint8Array): Grib2MessageSlice[] {
     let categoryOffset: number | undefined;
     let parameterOffset: number | undefined;
     let firstFixedSurfaceType: number | undefined;
+    let firstFixedSurfaceTypeOffset: number | undefined;
     let sectionCursor = cursor + 16;
 
     while (sectionCursor + 5 <= end - 4) {
@@ -296,7 +307,8 @@ export function scanGrib2Messages(bytes: Uint8Array): Grib2MessageSlice[] {
         category = bytes[categoryOffset];
         parameter = bytes[parameterOffset];
         if (sectionLength >= 23) {
-          firstFixedSurfaceType = bytes[sectionCursor + 22];
+          firstFixedSurfaceTypeOffset = sectionCursor + 22;
+          firstFixedSurfaceType = bytes[firstFixedSurfaceTypeOffset];
         }
       }
       sectionCursor += sectionLength;
@@ -319,6 +331,7 @@ export function scanGrib2Messages(bytes: Uint8Array): Grib2MessageSlice[] {
       categoryOffset,
       parameterOffset,
       firstFixedSurfaceType,
+      firstFixedSurfaceTypeOffset,
     });
     cursor = end;
   }
