@@ -55,6 +55,8 @@ export const ICON_D2_FIELD_IDS = [
   "v_wind_10m",
   "wind_10m",
   "wind_gust",
+  "mean_layer_cape",
+  "mean_layer_cin",
   "mean_sea_level_pressure",
   "total_precipitation",
   "convective_rain",
