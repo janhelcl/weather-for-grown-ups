@@ -26,8 +26,9 @@ import { IconD2EpsCdoRemapper } from "./icon-d2-eps-remap-cache.js";
  *
  * A request may contain both kinds. Keep the exceptional field isolated
  * instead of forcing unrelated parameters through the member-first path:
- * ordinary variables/fields use remap -> member split, DBZ_CMAX uses member
- * split -> remap, and the two per-member GRIBs are combined afterward.
+ * ordinary variables/fields use remap -> member split, while fields whose
+ * statistical or ensemble metadata are not preserved by all-member remapping
+ * use member split -> remap. The per-member GRIBs are combined afterward.
  */
 export class IconD2EpsAdaptiveMemberSubsetCache implements IconD2SubsetCache {
   constructor(
@@ -40,10 +41,12 @@ export class IconD2EpsAdaptiveMemberSubsetCache implements IconD2SubsetCache {
 
   async fetch(request: IconD2DataRequest): Promise<IconD2SourceFile> {
     const memberFirstFields = request.fields.filter(
-      (field) => field.id === "column_maximum_reflectivity",
+      (field) => field.id === "column_maximum_reflectivity"
+        || field.id === "updraft_helicity_max_2_8km",
     );
     const ordinaryFields = request.fields.filter(
-      (field) => field.id !== "column_maximum_reflectivity",
+      (field) => field.id !== "column_maximum_reflectivity"
+        && field.id !== "updraft_helicity_max_2_8km",
     );
     const hasOrdinary = request.variables.length > 0 || ordinaryFields.length > 0;
     const hasMemberFirst = memberFirstFields.length > 0;
@@ -162,7 +165,9 @@ export class IconD2EpsMemberFileCombiner {
 export function iconD2EpsRequiresMemberFirstRemap(
   request: IconD2DataRequest,
 ): boolean {
-  return request.fields.some((field) => field.id === "column_maximum_reflectivity");
+  return request.fields.some((field) =>
+    field.id === "column_maximum_reflectivity"
+      || field.id === "updraft_helicity_max_2_8km");
 }
 
 async function exists(path: string): Promise<boolean> {
