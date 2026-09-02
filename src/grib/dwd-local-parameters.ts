@@ -1,4 +1,9 @@
-export type DwdLocalGribCode = "RAIN_CON" | "SNOW_CON";
+export type DwdLocalGribCode =
+  | "RAIN_CON"
+  | "SNOW_CON"
+  | "HBAS_SC"
+  | "HTOP_SC"
+  | "HTOP_DC";
 
 export interface Grib2MessageSlice {
   start: number;
@@ -20,8 +25,10 @@ export interface Grib2MessageSlice {
 
 export interface DwdLocalParameterDefinition {
   alias: DwdLocalGribCode;
+  category: number;
   localParameter: number;
   surrogate: readonly [category: number, parameter: number];
+  genericProcessing: boolean;
 }
 
 export interface DwdLocalRewriteSummary extends DwdLocalParameterDefinition {
@@ -41,18 +48,41 @@ export interface PreparedDwdLocalParameters {
 
 const DWD_CENTER = 78;
 const METEOROLOGICAL_DISCIPLINE = 0;
-const MOISTURE_CATEGORY = 1;
-
 const DWD_LOCAL_PARAMETERS = [
   {
     alias: "RAIN_CON",
+    category: 1,
     localParameter: 76,
     surrogate: [1, 10],
+    genericProcessing: true,
   },
   {
     alias: "SNOW_CON",
+    category: 1,
     localParameter: 55,
     surrogate: [1, 53],
+    genericProcessing: true,
+  },
+  {
+    alias: "HBAS_SC",
+    category: 6,
+    localParameter: 192,
+    surrogate: [3, 5],
+    genericProcessing: false,
+  },
+  {
+    alias: "HTOP_SC",
+    category: 6,
+    localParameter: 193,
+    surrogate: [3, 5],
+    genericProcessing: false,
+  },
+  {
+    alias: "HTOP_DC",
+    category: 6,
+    localParameter: 196,
+    surrogate: [3, 5],
+    genericProcessing: false,
   },
 ] as const satisfies readonly DwdLocalParameterDefinition[];
 
@@ -65,9 +95,9 @@ export function knownDwdLocalParameter(
   if (
     discipline !== METEOROLOGICAL_DISCIPLINE
     || center !== DWD_CENTER
-    || category !== MOISTURE_CATEGORY
   ) return undefined;
-  return DWD_LOCAL_PARAMETERS.find((entry) => entry.localParameter === parameter);
+  return DWD_LOCAL_PARAMETERS.find((entry) =>
+    entry.category === category && entry.localParameter === parameter);
 }
 
 /**
@@ -93,7 +123,7 @@ export function prepareDwdLocalParametersForGenericProcessing(
       chunk.category,
       chunk.parameter,
     );
-    if (local === undefined) continue;
+    if (local === undefined || !local.genericProcessing) continue;
     if (
       chunk.categoryOffset === undefined
       || chunk.parameterOffset === undefined
@@ -176,7 +206,7 @@ export function restoreDwdLocalParametersAfterGenericProcessing(
       ) {
         throw new Error(`Cannot restore DWD local parameter ${rewrite.alias}: incomplete GRIB2 metadata`);
       }
-      restored[chunk.categoryOffset] = MOISTURE_CATEGORY;
+      restored[chunk.categoryOffset] = rewrite.category;
       restored[chunk.parameterOffset] = rewrite.localParameter;
       writeUint16Be(restored, chunk.centerOffset, rewrite.identification.center);
       writeUint16Be(restored, chunk.subcenterOffset, rewrite.identification.subcenter);
