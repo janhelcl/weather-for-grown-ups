@@ -21,6 +21,7 @@ const result = await new UnifiedAtmosphereQueryService().query({
     fields: [
       "mean_layer_cape",
       "mean_layer_cin",
+      "updraft_helicity_max_2_8km",
       "convective_rain",
       "convective_snow",
       "visibility",
@@ -69,6 +70,24 @@ for (const [id, output] of [
   assert.equal(outputSummary.distribution.memberCount, 2);
   assert(Number.isFinite(outputSummary.distribution.mean));
 }
+
+const updraftHelicity = ensemble.fieldSummaries.find(
+  (summary: any) => summary.field === "updraft_helicity_max_2_8km",
+);
+assert(updraftHelicity, "missing ICON-D2-EPS updraft helicity distribution");
+assert.deepEqual(updraftHelicity.level, {
+  type: "named_layer",
+  id: "height_layer_2_8km_msl",
+});
+assert.equal(updraftHelicity.temporal.type, "maximum");
+assert.equal(updraftHelicity.temporal.startForecastHour, 5);
+assert.equal(updraftHelicity.temporal.endForecastHour, 6);
+const updraftHelicityOutput = updraftHelicity.outputs.find(
+  (output: any) => output.field === "updraftHelicityM2S2",
+);
+assert(updraftHelicityOutput, "missing ICON-D2-EPS updraft helicity output");
+assert.equal(updraftHelicityOutput.distribution.memberCount, 2);
+assert(Number.isFinite(updraftHelicityOutput.distribution.mean));
 
 const reflectivity = ensemble.fieldSummaries.find(
   (summary: any) => summary.field === "column_maximum_reflectivity",
