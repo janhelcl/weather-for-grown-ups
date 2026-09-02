@@ -142,7 +142,7 @@ export class IconD2EpsCdoRemapper {
   async remap(path: string): Promise<IconD2SourceFile> {
     await mkdir(this.rootDir, { recursive: true });
     const key = createHash("sha256")
-      .update(`dwd-icon-d2-002-nearest-neighbour-v2-local-parameters\0${path}`)
+      .update(`dwd-icon-d2-002-nearest-neighbour-v3-dwd-semantics\0${path}`)
       .digest("hex");
     const outputPath = join(this.rootDir, `${key}.grib2`);
     if (await exists(outputPath)) return { path: outputPath, cacheHit: true };
