@@ -110,8 +110,8 @@ const DWD_LOCAL_PARAMETERS = [
     alias: "UH_MAX",
     category: 7,
     localParameter: 15,
-    surrogate: [7, 6],
-    genericProcessing: false,
+    surrogate: [7, 15],
+    genericProcessing: true,
     firstFixedSurfaceType: 102,
   },
 ] as const satisfies readonly DwdLocalParameterDefinition[];
@@ -141,9 +141,10 @@ export function knownDwdLocalParameter(
  * to WMO-defined surrogates. Mean-layer CAPE/CIN already use standard
  * parameter numbers, but their DWD fixed-surface type 192 is still recorded so
  * tools such as CDO cannot silently collapse them into another CAPE/CIN parcel
- * definition. UH_MAX is a standard parameter and is only aliased for bundled
- * decoding, so it is not rewritten for generic processing. Values, grid
- * definitions, ensemble metadata, reference/valid
+ * definition. UH_MAX is also a standard parameter, so its identity surrogate
+ * keeps the same category/number while recording DWD identification and layer
+ * metadata for restoration after CDO. Values, grid definitions, ensemble
+ * metadata, reference/valid
  * times, and statistical intervals stay untouched.
  */
 export function prepareDwdLocalParametersForGenericProcessing(
