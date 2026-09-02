@@ -27,12 +27,12 @@ describe("DWD local GRIB2 parameter normalization", () => {
     expect(knownDwdLocalParameter(0, 78, 7, 6, 192)).toMatchObject({
       alias: "CAPE_ML",
       firstFixedSurfaceType: 192,
-      genericProcessing: false,
+      genericProcessing: true,
     });
     expect(knownDwdLocalParameter(0, 78, 7, 7, 192)).toMatchObject({
       alias: "CIN_ML",
       firstFixedSurfaceType: 192,
-      genericProcessing: false,
+      genericProcessing: true,
     });
     expect(knownDwdLocalParameter(0, 78, 7, 6, 193)).toBeUndefined();
     expect(knownDwdLocalParameter(0, 78, 7, 6, 1)).toBeUndefined();
@@ -46,7 +46,81 @@ describe("DWD local GRIB2 parameter normalization", () => {
       parameter: 6,
       firstFixedSurfaceType: 192,
     });
-    expect(scanGrib2Messages(meanLayer)[0]?.firstFixedSurfaceType).toBe(192);
+    expect(scanGrib2Messages(meanLayer)[0]).toMatchObject({
+      firstFixedSurfaceType: 192,
+      firstFixedSurfaceTypeOffset: expect.any(Number),
+    });
+  });
+
+  it("restores DWD mean-layer parcel identity after generic processing", () => {
+    const original = concat([
+      minimalGrib2({
+        center: 78,
+        subcenter: 0,
+        masterTable: 34,
+        localTable: 1,
+        category: 7,
+        parameter: 6,
+        firstFixedSurfaceType: 192,
+      }),
+      minimalGrib2({
+        center: 78,
+        subcenter: 0,
+        masterTable: 34,
+        localTable: 1,
+        category: 7,
+        parameter: 7,
+        firstFixedSurfaceType: 192,
+      }),
+    ]);
+    const prepared = prepareDwdLocalParametersForGenericProcessing(original);
+    expect(prepared.rewrites).toEqual([
+      expect.objectContaining({
+        alias: "CAPE_ML",
+        count: 1,
+        firstFixedSurfaceType: 192,
+      }),
+      expect.objectContaining({
+        alias: "CIN_ML",
+        count: 1,
+        firstFixedSurfaceType: 192,
+      }),
+    ]);
+
+    const genericOutput = Uint8Array.from(prepared.bytes);
+    for (const chunk of scanGrib2Messages(genericOutput)) {
+      expect(chunk.firstFixedSurfaceTypeOffset).toBeDefined();
+      genericOutput[chunk.firstFixedSurfaceTypeOffset!] = 1;
+      writeUint16Be(genericOutput, chunk.centerOffset!, 255);
+      genericOutput[chunk.localTableOffset!] = 0;
+    }
+
+    const restored = restoreDwdLocalParametersAfterGenericProcessing(
+      genericOutput,
+      prepared.rewrites,
+    );
+    expect(scanGrib2Messages(restored).map((chunk) => ({
+      center: chunk.center,
+      localTable: chunk.localTable,
+      category: chunk.category,
+      parameter: chunk.parameter,
+      firstFixedSurfaceType: chunk.firstFixedSurfaceType,
+    }))).toEqual([
+      {
+        center: 78,
+        localTable: 1,
+        category: 7,
+        parameter: 6,
+        firstFixedSurfaceType: 192,
+      },
+      {
+        center: 78,
+        localTable: 1,
+        category: 7,
+        parameter: 7,
+        firstFixedSurfaceType: 192,
+      },
+    ]);
   });
 
   it("is a zero-copy no-op when no supported DWD-local parameter is present", () => {
