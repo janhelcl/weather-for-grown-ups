@@ -10,6 +10,7 @@ export const NON_ISOBARIC_FIELD_IDS = [
   "surface_cin",
   "mean_layer_cape",
   "mean_layer_cin",
+  "updraft_helicity_max_2_8km",
   "boundary_layer_height",
   "temperature_2m",
   "relative_humidity_2m",
@@ -93,6 +94,7 @@ export const NON_ISOBARIC_NAMED_LAYER_IDS = [
   "convective_cloud_layer",
   "boundary_layer_cloud_layer",
   "mean_layer",
+  "height_layer_2_8km_msl",
 ] as const;
 
 export const NON_ISOBARIC_NAMED_LEVEL_IDS = [
@@ -134,7 +136,8 @@ export type NonIsobaricGribCode =
   | "HTOP_SC"
   | "HTOP_DC"
   | "CAPE_ML"
-  | "CIN_ML";
+  | "CIN_ML"
+  | "UH_MAX";
 
 export interface RawNonIsobaricFieldDefinition {
   id: RawNonIsobaricFieldId;
@@ -213,6 +216,11 @@ const namedLevels = {
     "boundary_layer_cloud_layer",
   ),
   meanLayer: namedLayer("mean_layer", "mean layer", "mean_layer"),
+  heightLayer2To8KmMsl: namedLayer(
+    "height_layer_2_8km_msl",
+    "2-8 km above mean sea level",
+    "2_8_km_above_mean_sea_level",
+  ),
   meanSeaLevel: namedLevel("mean_sea_level", "mean sea level", "mean_sea_level"),
   cloudCeiling: namedLevel("cloud_ceiling", "cloud ceiling", "cloud_ceiling"),
   convectiveCloudBase: namedLevel(
@@ -286,6 +294,17 @@ const definitions: NonIsobaricFieldDefinition[] = [
   raw("surface_cin", "CIN", surface(), "J/kg", "Surface-based convective inhibition", "cinJkg", "J/kg", "Surface-based CIN"),
   raw("mean_layer_cape", "CAPE_ML", namedLevels.meanLayer, "J/kg", "Provider-native CAPE for a mean surface-layer parcel; the source model defines the parcel layer", "meanLayerCapeJkg", "J/kg", "Mean-layer CAPE"),
   raw("mean_layer_cin", "CIN_ML", namedLevels.meanLayer, "J/kg", "Provider-native CIN for a mean surface-layer parcel; the source model defines the parcel layer", "meanLayerCinJkg", "J/kg", "Mean-layer CIN"),
+  raw(
+    "updraft_helicity_max_2_8km",
+    "UH_MAX",
+    namedLevels.heightLayer2To8KmMsl,
+    "m^2/s^2",
+    "Provider-native updraft helicity vertically averaged over 2-8 km above mean sea level, maximum over the native one-hour interval",
+    "updraftHelicityM2S2",
+    "m^2/s^2",
+    "2-8 km updraft helicity maximum",
+    "maximum",
+  ),
   raw("boundary_layer_height", "HPBL", surface(), "m", "Planetary boundary-layer height", "boundaryLayerHeightM", "m", "Planetary boundary-layer height"),
 
   raw("temperature_2m", "TMP", aboveGround(2), "K", "Air temperature at 2 m above ground", "temperatureC", "degC", "Air temperature converted to degrees Celsius"),
@@ -433,6 +452,7 @@ export const NON_ISOBARIC_FIELD_CATALOG = Object.fromEntries(
 export const REGIONAL_ONLY_NON_ISOBARIC_FIELD_IDS = [
   "mean_layer_cape",
   "mean_layer_cin",
+  "updraft_helicity_max_2_8km",
   "convective_rain",
   "convective_snow",
   "visibility",
