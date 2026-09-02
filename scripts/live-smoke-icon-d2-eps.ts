@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+
+process.env.WFG_DEBUG_WGRIB2_MEAN_LAYER = "1";
 import { UnifiedAtmosphereQueryService } from "../src/core/unified-atmosphere-api.js";
 import {
   floorToIconD2EpsCycle,
