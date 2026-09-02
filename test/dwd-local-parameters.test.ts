@@ -52,6 +52,28 @@ describe("DWD local GRIB2 parameter normalization", () => {
     });
   });
 
+  it("recognizes standard DWD updraft helicity without rewriting it for CDO", () => {
+    expect(knownDwdLocalParameter(0, 78, 7, 15, 102)).toMatchObject({
+      alias: "UH_MAX",
+      firstFixedSurfaceType: 102,
+      genericProcessing: false,
+    });
+    expect(knownDwdLocalParameter(0, 78, 7, 15, 1)).toBeUndefined();
+
+    const updraftHelicity = minimalGrib2({
+      center: 78,
+      subcenter: 0,
+      masterTable: 34,
+      localTable: 1,
+      category: 7,
+      parameter: 15,
+      firstFixedSurfaceType: 102,
+    });
+    const prepared = prepareDwdLocalParametersForGenericProcessing(updraftHelicity);
+    expect(prepared.bytes).toBe(updraftHelicity);
+    expect(prepared.rewrites).toEqual([]);
+  });
+
   it("restores DWD mean-layer parcel identity after generic processing", () => {
     const original = concat([
       minimalGrib2({
