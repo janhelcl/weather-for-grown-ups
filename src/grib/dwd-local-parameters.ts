@@ -120,7 +120,7 @@ export function knownDwdLocalParameter(
   return DWD_LOCAL_PARAMETERS.find((entry) =>
     entry.category === category
     && entry.localParameter === parameter
-    && (entry.firstFixedSurfaceType === undefined
+    && (!("firstFixedSurfaceType" in entry)
       || entry.firstFixedSurfaceType === firstFixedSurfaceType));
 }
 
