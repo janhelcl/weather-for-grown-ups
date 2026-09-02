@@ -18,6 +18,7 @@ const result = await new UnifiedAtmosphereQueryService().query({
       "mean_sea_level_pressure",
       "mean_layer_cape",
       "mean_layer_cin",
+      "updraft_helicity_max_2_8km",
       "convective_rain",
       "convective_snow",
       "visibility",
@@ -51,6 +52,7 @@ for (const field of [
   "mean_sea_level_pressure",
   "mean_layer_cape",
   "mean_layer_cin",
+  "updraft_helicity_max_2_8km",
   "convective_rain",
   "convective_snow",
   "visibility",
@@ -71,6 +73,18 @@ for (const [id, output] of [
   assert.deepEqual(ingredient.level, { type: "named_layer", id: "mean_layer" });
   assert.deepEqual(ingredient.temporal, { type: "instantaneous" });
 }
+
+const updraftHelicity = profile.fields.find(
+  (item: any) => item.id === "updraft_helicity_max_2_8km",
+);
+assert(Number.isFinite(updraftHelicity.values.updraftHelicityM2S2));
+assert.deepEqual(updraftHelicity.level, {
+  type: "named_layer",
+  id: "height_layer_2_8km_msl",
+});
+assert.equal(updraftHelicity.temporal.type, "maximum");
+assert.equal(updraftHelicity.temporal.startForecastHour, 5);
+assert.equal(updraftHelicity.temporal.endForecastHour, 6);
 
 const reflectivity = profile.fields.find(
   (item: any) => item.id === "column_maximum_reflectivity",
