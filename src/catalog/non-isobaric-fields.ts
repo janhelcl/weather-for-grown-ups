@@ -43,6 +43,9 @@ export const NON_ISOBARIC_FIELD_IDS = [
   "convective_snow",
   "visibility",
   "cloud_ceiling_height_msl",
+  "shallow_convective_cloud_base_height_msl",
+  "shallow_convective_cloud_top_height_msl",
+  "dry_convection_top_height_msl",
   "column_maximum_reflectivity",
   "precipitable_water",
   "total_column_cloud_water",
@@ -123,7 +126,10 @@ export type NonIsobaricGribCode =
   | "RAIN_CON"
   | "SNOW_CON"
   | "VIS"
-  | "CEILING";
+  | "CEILING"
+  | "HBAS_SC"
+  | "HTOP_SC"
+  | "HTOP_DC";
 
 export interface RawNonIsobaricFieldDefinition {
   id: RawNonIsobaricFieldId;
@@ -341,6 +347,36 @@ const definitions: NonIsobaricFieldDefinition[] = [
     "Cloud ceiling height above mean sea level",
   ),
   raw(
+    "shallow_convective_cloud_base_height_msl",
+    "HBAS_SC",
+    namedLevels.meanSeaLevel,
+    "m",
+    "Shallow-convection cloud-base height above mean sea level",
+    "shallowConvectiveCloudBaseHeightMslM",
+    "m",
+    "Shallow-convection cloud-base height above mean sea level",
+  ),
+  raw(
+    "shallow_convective_cloud_top_height_msl",
+    "HTOP_SC",
+    namedLevels.meanSeaLevel,
+    "m",
+    "Shallow-convection cloud-top height above mean sea level",
+    "shallowConvectiveCloudTopHeightMslM",
+    "m",
+    "Shallow-convection cloud-top height above mean sea level",
+  ),
+  raw(
+    "dry_convection_top_height_msl",
+    "HTOP_DC",
+    namedLevels.meanSeaLevel,
+    "m",
+    "Top of dry convection above mean sea level",
+    "dryConvectionTopHeightMslM",
+    "m",
+    "Top of dry convection above mean sea level",
+  ),
+  raw(
     "column_maximum_reflectivity",
     "BREF",
     namedLevels.entireAtmosphere,
@@ -391,6 +427,9 @@ export const REGIONAL_ONLY_NON_ISOBARIC_FIELD_IDS = [
   "convective_snow",
   "visibility",
   "cloud_ceiling_height_msl",
+  "shallow_convective_cloud_base_height_msl",
+  "shallow_convective_cloud_top_height_msl",
+  "dry_convection_top_height_msl",
   "column_maximum_reflectivity",
 ] as const satisfies readonly NonIsobaricFieldId[];
 
