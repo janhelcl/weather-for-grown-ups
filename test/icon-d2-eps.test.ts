@@ -225,11 +225,13 @@ describe("ICON-D2-EPS source defensive branches", () => {
         NON_ISOBARIC_FIELD_CATALOG.total_precipitation,
         NON_ISOBARIC_FIELD_CATALOG.convective_rain,
         NON_ISOBARIC_FIELD_CATALOG.convective_snow,
+        NON_ISOBARIC_FIELD_CATALOG.visibility,
+        NON_ISOBARIC_FIELD_CATALOG.cloud_ceiling_height_msl,
         NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity,
       ] as RawNonIsobaricFieldDefinition[],
     });
 
-    expect(fetchFn).toHaveBeenCalledTimes(15);
+    expect(fetchFn).toHaveBeenCalledTimes(17);
     const urls = fetchFn.mock.calls.map((call) => String(call[0]));
     for (const parameter of [
       "/t/",
@@ -246,6 +248,8 @@ describe("ICON-D2-EPS source defensive branches", () => {
       "/tot_prec/",
       "/rain_con/",
       "/snow_con/",
+      "/vis/",
+      "/ceiling/",
       "/dbz_cmax/",
     ]) {
       expect(urls.some((url) => url.includes(parameter))).toBe(true);
@@ -713,12 +717,26 @@ describe("ICON-D2-EPS member-first aggregation", () => {
               windSpeedMs: 5 + offset,
               windDirectionDeg: member === "p01" ? 350 : 10,
             }],
-            fields: [{
-              id: "temperature_2m",
-              level: { type: "height_above_ground_m", heightM: 2 },
-              temporal: { type: "instantaneous" },
-              values: { temperatureC: 12 + offset },
-            }],
+            fields: [
+              {
+                id: "temperature_2m",
+                level: { type: "height_above_ground_m", heightM: 2 },
+                temporal: { type: "instantaneous" },
+                values: { temperatureC: 12 + offset },
+              },
+              {
+                id: "visibility",
+                level: { type: "surface" },
+                temporal: { type: "instantaneous" },
+                values: { visibilityM: 10_000 + offset * 1_000 },
+              },
+              {
+                id: "cloud_ceiling_height_msl",
+                level: { type: "named_level", id: "cloud_ceiling" },
+                temporal: { type: "instantaneous" },
+                values: { cloudCeilingHeightMslM: 1_500 + offset * 100 },
+              },
+            ],
             source: {
               provider: "DWD Open Data",
               access: "dwd_open_data",
@@ -738,7 +756,7 @@ describe("ICON-D2-EPS member-first aggregation", () => {
       selection: {
         variables: ["temperature", "wind"],
         pressureLevelsHpa: [850],
-        fields: ["temperature_2m"],
+        fields: ["temperature_2m", "visibility", "cloud_ceiling_height_msl"],
       },
       ensemble: {
         members: ["p01", "p02"],
@@ -757,7 +775,26 @@ describe("ICON-D2-EPS member-first aggregation", () => {
       min: 10,
       max: 12,
     });
-    expect(result.fieldSummaries[0].outputs[0].distribution.mean).toBe(13);
+    expect(result.fieldSummaries.find((summary: any) => summary.field === "temperature_2m")
+      .outputs[0].distribution.mean).toBe(13);
+    expect(result.fieldSummaries.find((summary: any) => summary.field === "visibility"))
+      .toMatchObject({
+        level: { type: "surface" },
+        temporal: { type: "instantaneous" },
+        outputs: [expect.objectContaining({
+          field: "visibilityM",
+          distribution: expect.objectContaining({ mean: 11_000 }),
+        })],
+      });
+    expect(result.fieldSummaries.find((summary: any) => summary.field === "cloud_ceiling_height_msl"))
+      .toMatchObject({
+        level: { type: "named_level", id: "cloud_ceiling" },
+        temporal: { type: "instantaneous" },
+        outputs: [expect.objectContaining({
+          field: "cloudCeilingHeightMslM",
+          distribution: expect.objectContaining({ mean: 1_600 }),
+        })],
+      });
     expect(result.source).toMatchObject({
       provider: "DWD Open Data",
       product: "icon_d2_eps_native_icosahedral",

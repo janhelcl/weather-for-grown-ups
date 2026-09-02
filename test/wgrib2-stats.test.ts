@@ -75,6 +75,14 @@ describe("parseSelectedAreaInventoryLine", () => {
       record: 42,
       temporal: { type: "accumulation", startForecastHour: 0, endForecastHour: 6 },
     });
+    expect(parseSelectedAreaInventoryLine(
+      "43:7000:d=2026081912:VIS:surface:6 hour fcst:",
+      { code: "VIS", gribLevel: "surface", temporalSemantics: "instantaneous" },
+      "DWD",
+    )).toEqual({
+      record: 43,
+      temporal: { type: "instantaneous" },
+    });
   });
 
   it("parses accumulation intervals and rejects wrong vertical semantics", () => {

@@ -41,6 +41,8 @@ export const NON_ISOBARIC_FIELD_IDS = [
   "total_precipitation",
   "convective_rain",
   "convective_snow",
+  "visibility",
+  "cloud_ceiling_height_msl",
   "column_maximum_reflectivity",
   "precipitable_water",
   "total_column_cloud_water",
@@ -115,7 +117,13 @@ export type NamedNonIsobaricLevel = Extract<
 >;
 
 export type FieldTemporalSemantics = "instantaneous" | "accumulation" | "average" | "maximum";
-export type NonIsobaricGribCode = GfsCode | "BREF" | "RAIN_CON" | "SNOW_CON";
+export type NonIsobaricGribCode =
+  | GfsCode
+  | "BREF"
+  | "RAIN_CON"
+  | "SNOW_CON"
+  | "VIS"
+  | "CEILING";
 
 export interface RawNonIsobaricFieldDefinition {
   id: RawNonIsobaricFieldId;
@@ -313,6 +321,26 @@ const definitions: NonIsobaricFieldDefinition[] = [
     "accumulation",
   ),
   raw(
+    "visibility",
+    "VIS",
+    surface(),
+    "m",
+    "Near-surface horizontal visibility",
+    "visibilityM",
+    "m",
+    "Near-surface horizontal visibility",
+  ),
+  raw(
+    "cloud_ceiling_height_msl",
+    "CEILING",
+    namedLevels.cloudCeiling,
+    "m",
+    "Aviation cloud ceiling height above mean sea level",
+    "cloudCeilingHeightMslM",
+    "m",
+    "Cloud ceiling height above mean sea level",
+  ),
+  raw(
     "column_maximum_reflectivity",
     "BREF",
     namedLevels.entireAtmosphere,
@@ -361,6 +389,8 @@ export const NON_ISOBARIC_FIELD_CATALOG = Object.fromEntries(
 export const REGIONAL_ONLY_NON_ISOBARIC_FIELD_IDS = [
   "convective_rain",
   "convective_snow",
+  "visibility",
+  "cloud_ceiling_height_msl",
   "column_maximum_reflectivity",
 ] as const satisfies readonly NonIsobaricFieldId[];
 

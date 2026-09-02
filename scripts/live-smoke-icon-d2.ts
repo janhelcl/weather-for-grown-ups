@@ -18,6 +18,8 @@ const result = await new UnifiedAtmosphereQueryService().query({
       "mean_sea_level_pressure",
       "convective_rain",
       "convective_snow",
+      "visibility",
+      "cloud_ceiling_height_msl",
       "column_maximum_reflectivity",
     ],
   },
@@ -44,6 +46,8 @@ for (const field of [
   "mean_sea_level_pressure",
   "convective_rain",
   "convective_snow",
+  "visibility",
+  "cloud_ceiling_height_msl",
   "column_maximum_reflectivity",
 ]) {
   assert(profile.fields.some((item: any) => item.id === field), `missing ICON-D2 field ${field}`);
@@ -54,6 +58,18 @@ const reflectivity = profile.fields.find(
 assert(Number.isFinite(reflectivity.values.columnMaximumReflectivityFactorMm6M3));
 assert.deepEqual(reflectivity.level, { type: "named_layer", id: "entire_atmosphere" });
 assert.deepEqual(reflectivity.temporal, { type: "instantaneous" });
+
+const visibility = profile.fields.find((item: any) => item.id === "visibility");
+assert(Number.isFinite(visibility.values.visibilityM));
+assert.deepEqual(visibility.level, { type: "surface" });
+assert.deepEqual(visibility.temporal, { type: "instantaneous" });
+
+const ceiling = profile.fields.find(
+  (item: any) => item.id === "cloud_ceiling_height_msl",
+);
+assert(Number.isFinite(ceiling.values.cloudCeilingHeightMslM));
+assert.deepEqual(ceiling.level, { type: "named_level", id: "cloud_ceiling" });
+assert.deepEqual(ceiling.temporal, { type: "instantaneous" });
 
 for (const [id, output] of [
   ["convective_rain", "convectiveRainMm"],

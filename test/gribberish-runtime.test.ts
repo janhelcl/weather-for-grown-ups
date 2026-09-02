@@ -72,6 +72,34 @@ describe("bundled GRIB2 point decoding", () => {
     expect(decoded).toMatchObject(expectedVertical);
   });
 
+  it("normalizes standard visibility and ceiling messages to WFG aviation semantics", () => {
+    const [visibility] = decodePointMessages([
+      fakeMessage({
+        key: "VIS:202608240600: in surface:Forecast",
+        code: "VIS",
+        values: [12_000, 11_000, 10_000, 9_000],
+      }),
+    ], 14, 50);
+    expect(visibility).toMatchObject({
+      code: "VIS",
+      surface: true,
+      value: 12_000,
+    });
+
+    const [ceiling] = decodePointMessages([
+      fakeMessage({
+        key: "CEIL:202608240600:0 in cloud base:Forecast",
+        code: "CEIL",
+        values: [1_800, 1_600, 1_400, 1_200],
+      }),
+    ], 14, 50);
+    expect(ceiling).toMatchObject({
+      code: "CEILING",
+      namedVertical: "cloud ceiling",
+      value: 1_800,
+    });
+  });
+
   it("selects the exact requested lead from sub-hourly messages in one provider object", () => {
     const messages = [
       fakeMessage({

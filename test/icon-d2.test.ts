@@ -131,6 +131,34 @@ describe("ICON-D2 selected-object cache", () => {
     expect(decompress).toHaveBeenCalledTimes(2);
   });
 
+  it("maps visibility and aviation ceiling to their native DWD parameter objects", async () => {
+    const fetchFn = vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 }));
+    const cache = new IconD2OpenDataCache(
+      rootDir,
+      fetchFn as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+      async () => new TextEncoder().encode("GRIB-AVIATION"),
+    );
+
+    await cache.fetch({
+      run: new Date("2026-08-31T00:00:00Z"),
+      forecastHour: 6,
+      variables: [],
+      pressureLevelsHpa: [],
+      fields: [
+        NON_ISOBARIC_FIELD_CATALOG.visibility,
+        NON_ISOBARIC_FIELD_CATALOG.cloud_ceiling_height_msl,
+      ] as RawNonIsobaricFieldDefinition[],
+    });
+
+    const urls = fetchFn.mock.calls.map(([input]) => String(input));
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).toContain("/vis/");
+    expect(urls[0]).toContain("_006_2d_vis.grib2.bz2");
+    expect(urls[1]).toContain("/ceiling/");
+    expect(urls[1]).toContain("_006_2d_ceiling.grib2.bz2");
+  });
+
   it("maps convective rain and snow to their native DWD parameter objects", async () => {
     const fetchFn = vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 }));
     const cache = new IconD2OpenDataCache(
@@ -287,6 +315,30 @@ describe("ICON-D2 unified capabilities", () => {
       search: "convective",
       sections: ["fields"],
     });
+    const visibility = searchAtmosphereCatalog({
+      datasets: ["icon-d2"],
+      search: "visibility",
+      sections: ["fields"],
+    });
+    expect(visibility.matches.find((match) => match.id === "visibility")).toMatchObject({
+      id: "visibility",
+      verticalSemantics: "surface",
+      temporalSemantics: "instantaneous",
+      outputs: [expect.objectContaining({ field: "visibilityM", unit: "m" })],
+    });
+
+    const ceiling = searchAtmosphereCatalog({
+      datasets: ["icon-d2"],
+      search: "ceiling",
+      sections: ["fields"],
+    });
+    expect(ceiling.matches.find((match) => match.id === "cloud_ceiling_height_msl")).toMatchObject({
+      id: "cloud_ceiling_height_msl",
+      verticalSemantics: "cloud ceiling",
+      temporalSemantics: "instantaneous",
+      outputs: [expect.objectContaining({ field: "cloudCeilingHeightMslM", unit: "m" })],
+    });
+
     expect(convectivePrecipitation.matches).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: "convective_rain",
@@ -653,6 +705,8 @@ describe("ICON-D2 deterministic service operations", () => {
           "mean_sea_level_pressure",
           "convective_rain",
           "convective_snow",
+          "visibility",
+          "cloud_ceiling_height_msl",
           "column_maximum_reflectivity",
         ],
       },
@@ -665,6 +719,8 @@ describe("ICON-D2 deterministic service operations", () => {
       "mean_sea_level_pressure",
       "convective_rain",
       "convective_snow",
+      "visibility",
+      "cloud_ceiling_height_msl",
       "column_maximum_reflectivity",
     ]);
     expect(point.fields.find((field: any) => field.id === "wind_10m")?.values.windSpeedMs).toBe(5);
@@ -689,6 +745,18 @@ describe("ICON-D2 deterministic service operations", () => {
           endForecastHour: 6,
         },
         values: { convectiveSnowWaterEquivalentMm: 0.2 },
+      });
+    expect(point.fields.find((field: any) => field.id === "visibility"))
+      .toMatchObject({
+        level: { type: "surface" },
+        temporal: { type: "instantaneous" },
+        values: { visibilityM: 12_000 },
+      });
+    expect(point.fields.find((field: any) => field.id === "cloud_ceiling_height_msl"))
+      .toMatchObject({
+        level: { type: "named_level", id: "cloud_ceiling" },
+        temporal: { type: "instantaneous" },
+        values: { cloudCeilingHeightMslM: 1_800 },
       });
     expect(point.fields.find((field: any) => field.id === "column_maximum_reflectivity"))
       .toMatchObject({
@@ -993,6 +1061,8 @@ describe("ICON-D2 guard and inventory branches", () => {
     expect(isIconD2RawAreaField("temperature_2m")).toBe(true);
     expect(isIconD2RawAreaField("convective_rain")).toBe(true);
     expect(isIconD2RawAreaField("convective_snow")).toBe(true);
+    expect(isIconD2RawAreaField("visibility")).toBe(true);
+    expect(isIconD2RawAreaField("cloud_ceiling_height_msl")).toBe(false);
     expect(isIconD2RawAreaField("wind_10m")).toBe(false);
     expect(isIconD2RawAreaField("column_maximum_reflectivity")).toBe(false);
     expect(isIconD2RawAreaField("not-a-field")).toBe(false);
@@ -1029,6 +1099,8 @@ describe("ICON-D2 guard and inventory branches", () => {
     expect(isIconD2PressureVariable("specific_humidity")).toBe(false);
     expect(isIconD2Field("wind_10m")).toBe(true);
     expect(isIconD2Field("wind_gust")).toBe(true);
+    expect(isIconD2Field("visibility")).toBe(true);
+    expect(isIconD2Field("cloud_ceiling_height_msl")).toBe(true);
     expect(isIconD2Field("column_maximum_reflectivity")).toBe(true);
     expect(isIconD2Field("dew_point_2m")).toBe(false);
     expect(() => expandIconD2RequestedVariables(["specific_humidity"]))
@@ -1126,6 +1198,8 @@ function fakeDecodedValues(longitude: number, latitude: number) {
       gridPoint,
     },
     { code: "PRMSL", namedVertical: "mean sea level", value: 101_325, gridPoint },
+    { code: "VIS", surface: true, value: 12_000, gridPoint },
+    { code: "CEILING", namedVertical: "cloud ceiling", value: 1_800, gridPoint },
     { code: "BREF", namedVertical: "entire atmosphere", value: 30, gridPoint },
     {
       code: "APCP",
