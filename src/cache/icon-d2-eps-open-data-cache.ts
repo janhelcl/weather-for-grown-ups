@@ -223,7 +223,16 @@ export class IconD2EpsMemberFileFilter {
   private inventory(path: string): Promise<string> {
     const cached = this.inventories.get(path);
     if (cached !== undefined) return cached;
-    const pending = this.run([path, "-s"]).then(({ stdout }) => stdout);
+    const pending = this.run([path, "-s"]).then(({ stdout }) => {
+      if (process.env.WFG_DEBUG_WGRIB2_POINT === "1") {
+        const focused = stdout
+          .split(/\r?\n/)
+          .filter((line) => /UH|helicit|parmcat=7|2000|8000|hour max/i.test(line))
+          .join("\n");
+        console.error("[wfg:eps-native-inventory]", focused || "(no focused inventory lines)");
+      }
+      return stdout;
+    });
     this.inventories.set(path, pending);
     void pending.catch(() => this.inventories.delete(path));
     return pending;
