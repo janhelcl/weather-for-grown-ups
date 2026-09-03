@@ -30,6 +30,7 @@ import {
   compareIfsEnsAifsEnsDatasetsSchema,
 } from "./model-class-comparison.js";
 import {
+  CROSS_SCALE_COMPARISON_PAIRS,
   compareGfsIconD2DatasetsSchema,
   compareIfsAromeDatasetsSchema,
   compareIfsEnsIconD2EpsDatasetsSchema,
@@ -45,6 +46,31 @@ import {
   publicAtmosphericDatasetSchema,
   publicDatasetCapabilities,
 } from "./unified-api.js";
+
+export const ATMOSPHERIC_DATASET_COMPARISON_PAIRS = [
+  ["gfs", "gefs"],
+  ["gfs", "ifs"],
+  ["gefs", "ifs-ens"],
+  ["ifs", "ifs-ens"],
+  ["gfs", "aigfs"],
+  ["ifs", "aifs"],
+  ["aigfs", "aifs"],
+  ["gefs", "aigefs"],
+  ["ifs-ens", "aifs-ens"],
+  ["hgefs", "gefs"],
+  ["hgefs", "aigefs"],
+  ...CROSS_SCALE_COMPARISON_PAIRS,
+] as const;
+
+export function isAtmosphericDatasetComparisonPair(
+  left: string,
+  right: string,
+): boolean {
+  return ATMOSPHERIC_DATASET_COMPARISON_PAIRS.some(
+    ([candidateLeft, candidateRight]) =>
+      candidateLeft === left && candidateRight === right,
+  );
+}
 
 export const compareAtmosphericRunsSchema = z.object({
   dataset: z.enum(["gfs", "gefs", "ifs", "ifs-ens"]),

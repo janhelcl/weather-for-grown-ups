@@ -5,11 +5,13 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
+import { deriveSaturationVaporPressureHpa } from "../derived/thermodynamics.js";
 import type { IgraVerificationVariable } from "../schema/igra-verification.js";
 import type { ProfileLevel } from "./types.js";
 import {
   NceiIgraSource,
   type IgraSounding,
+  type IgraSoundingLevel,
   type IgraStation,
 } from "../sources/ncei-igra.js";
 
@@ -215,15 +217,19 @@ export function greatCircleDistanceKm(
 }
 
 function projectObservationLevel(
-  source: ProfileLevel,
+  source: IgraSoundingLevel,
   variables: readonly IgraVerificationVariable[],
 ): ProfileLevel {
   const result: ProfileLevel = { pressureHpa: source.pressureHpa };
   for (const variable of variables) {
     if (variable === "temperature" && source.temperatureC !== undefined) {
       result.temperatureC = source.temperatureC;
-    } else if (variable === "relative_humidity" && source.relativeHumidityPct !== undefined) {
-      result.relativeHumidityPct = source.relativeHumidityPct;
+    } else if (variable === "relative_humidity") {
+      const relativeHumidityPct = source.relativeHumidityPct
+        ?? derivedRelativeHumidityPct(source.temperatureC, source.dewPointC);
+      if (relativeHumidityPct !== undefined) {
+        result.relativeHumidityPct = relativeHumidityPct;
+      }
     } else if (variable === "geopotential_height" && source.geopotentialHeightGpm !== undefined) {
       result.geopotentialHeightGpm = source.geopotentialHeightGpm;
     } else if (variable === "dew_point" && source.dewPointC !== undefined) {
@@ -234,6 +240,16 @@ function projectObservationLevel(
     }
   }
   return result;
+}
+
+function derivedRelativeHumidityPct(
+  temperatureC: number | undefined,
+  dewPointC: number | undefined,
+): number | undefined {
+  if (temperatureC === undefined || dewPointC === undefined) return undefined;
+  const saturation = deriveSaturationVaporPressureHpa(temperatureC);
+  const vapor = deriveSaturationVaporPressureHpa(dewPointC);
+  return Math.max(0, Math.min(100, 100 * vapor / saturation));
 }
 
 function pressureKey(pressureHpa: number): number {

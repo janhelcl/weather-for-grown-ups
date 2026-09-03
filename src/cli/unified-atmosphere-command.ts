@@ -15,9 +15,11 @@ import {
   type PublicAtmosphericDataset,
   type QueryAtmosphereInput,
 } from "../schema/unified-api.js";
-import type {
-  CompareAtmosphericDatasetsInput,
-  CompareAtmosphericRunsInput,
+import {
+  compareAtmosphericDatasetsSchema,
+  isAtmosphericDatasetComparisonPair,
+  type CompareAtmosphericDatasetsInput,
+  type CompareAtmosphericRunsInput,
 } from "../schema/unified-specialized.js";
 import type { PointCoordinate } from "../schema/query.js";
 import type { AtmosphericStepProgress } from "../core/progress.js";
@@ -50,7 +52,7 @@ function registerQueryCommand(program: Command): void {
   program
     .command("query")
     .description("Query atmospheric state through dataset × geometry × time × selection")
-    .option("--dataset <gfs|aigfs|aigefs|hgefs|gefs|ifs|aifs|aifs-ens|ifs-ens|gfs-analysis>", "Atmospheric dataset", "gfs")
+    .option("--dataset <id>", `Atmospheric dataset (${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")})`, "gfs")
     .option("--lat <number>", "Point latitude", Number)
     .option("--lon <number>", "Point longitude", Number)
     .option("--point <lat,lon>", "Multi-point coordinate; repeat as needed", collectPoint)
@@ -73,7 +75,7 @@ function registerQueryCommand(program: Command): void {
     .option("--forecast-kind <operational|reforecast>", "Forecast population; reforecast currently selects GEFSv12 retrospective forecasts")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--source <nomads|s3|archive>", "GFS source override; omit for automatic AWS/NOMADS/archive routing")
-    .option("--members <list>", "Ensemble members: AIGEFS/GEFS c00,p01..p30; HGEFS gefs:c00..p30,aigefs:c00..p30; IFS ENS p01..p50")
+    .option("--members <list>", "Dataset-native ensemble member IDs; use catalog/search_catalog for the supported population")
     .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
     .option("--include-members", "Include raw ensemble member payloads where supported")
     .option("--percentiles <list>", "Area spatial percentiles, e.g. 10,50,90")
@@ -99,7 +101,7 @@ function registerDiagnoseCommand(program: Command): void {
   program
     .command("diagnose")
     .description("Derive layer, profile, or parcel meteorology from any atmospheric dataset")
-    .option("--dataset <gfs|aigfs|aigefs|hgefs|gefs|ifs|aifs|aifs-ens|ifs-ens|gfs-analysis>", "Atmospheric dataset", "gfs")
+    .option("--dataset <id>", `Atmospheric dataset (${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")})`, "gfs")
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--kind <layer|profile|parcel>", "Diagnostic family")
@@ -116,7 +118,7 @@ function registerDiagnoseCommand(program: Command): void {
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--source <nomads|s3|archive>", "GFS source override; omit for automatic AWS/NOMADS/archive routing")
-    .option("--members <list>", "Ensemble members: AIGEFS/GEFS c00,p01..p30; HGEFS gefs:c00..p30,aigefs:c00..p30; IFS ENS p01..p50")
+    .option("--members <list>", "Dataset-native ensemble member IDs; use catalog/search_catalog for the supported population")
     .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
     .option("--include-members", "Ensemble instant diagnostics only: include member payloads")
     .option("--json", "Output JSON")
@@ -141,7 +143,7 @@ function registerCompareRunsCommand(program: Command): void {
     .option("--anchor-run <iso|latest>", "Newest initialization cycle to compare", "latest")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--cycles <number>", "Number of consecutive cycles", Number, 3)
-    .option("--members <list>", "Ensemble members: AIGEFS/GEFS c00,p01..p30; HGEFS gefs:c00..p30,aigefs:c00..p30; IFS ENS p01..p50")
+    .option("--members <list>", "Dataset-native ensemble member IDs; use catalog/search_catalog for the supported population")
     .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
     .option("--gte <number>", "Ensemble threshold in normalized units", Number)
     .option("--cycle-stride-hours <6|12>", "IFS ENS only: initialization-cycle stride", Number)
@@ -163,22 +165,29 @@ function registerCompareDatasetsCommand(program: Command): void {
     .requiredOption("--at <iso>", "Forecast valid time")
     .option(
       "--dataset <id>",
-      "Left-side dataset: gfs, aigfs, gefs, hgefs, ifs, or ifs-ens; omit to preserve legacy defaults",
+      "Left-side dataset; omit only to preserve the legacy GFS/GEFS or GEFS/IFS-ENS defaults",
     )
     .option(
       "--against <id>",
-      "Right-side dataset: aigfs, aifs, aigefs, gefs, ifs, ifs-ens, or aifs-ens",
+      "Right-side dataset from an explicitly registered comparison pair",
       "gefs",
     )
-    .requiredOption("--var <id>", "Canonical pressure-level variable")
-    .requiredOption("--level <hpa>", "Pressure level in hPa", Number)
-    .option("--run <iso|latest>", "Shared aligned initialization", "latest")
+    .option("--var <id>", "Canonical pressure-level variable")
+    .option("--level <hpa>", "Pressure level in hPa", Number)
+    .option("--field <id>", "Canonical non-isobaric field for registered field comparisons")
+    .option(
+      "--run <iso|latest>",
+      "Shared aligned initialization; global↔regional comparisons require an explicit ISO cycle",
+      "latest",
+    )
     .option("--grid <0p25|0p50>", "GFS horizontal grid; GFS comparison branches only")
     .option("--members <list>", "GFS↔GEFS only: GEFS members (c00,p01..p30)")
     .option("--gefs-members <list>", "GEFS members for cross-ensemble comparisons")
     .option("--aigefs-members <list>", "AIGEFS members (c00,p01..p30)")
     .option("--ifs-ens-members <list>", "IFS ENS perturbations (p01..p50)")
     .option("--aifs-ens-members <list>", "AIFS ENS members (c00,p01..p50)")
+    .option("--icon-d2-eps-members <list>", "ICON-D2-EPS members (p01..p20)")
+    .option("--pe-arome-members <list>", "PE-AROME members (c00,p01..p24)")
     .option(
       "--hgefs-members <list>",
       "HGEFS population-qualified members (gefs:c00..p30,aigefs:c00..p30)",
@@ -197,167 +206,70 @@ function registerCompareDatasetsCommand(program: Command): void {
 export function buildUnifiedDatasetComparison(
   options: Record<string, any>,
 ): CompareAtmosphericDatasetsInput {
-      const against = String(options.against).trim().toLowerCase();
-      const rightDatasets = new Set([
-        "aigfs", "aifs", "aigefs", "gefs", "ifs", "ifs-ens", "aifs-ens",
-      ]);
-      if (!rightDatasets.has(against)) {
-        throw new Error(
-          `Expected --against aigfs|aifs|aigefs|gefs|ifs|ifs-ens|aifs-ens, received: ${options.against}`,
-        );
-      }
+  const against = String(options.against ?? "gefs").trim().toLowerCase();
+  if (!publicAtmosphericDatasetSchema.safeParse(against).success) {
+    throw new Error(
+      `Expected --against ${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}, received: ${options.against}`,
+    );
+  }
 
-      const requestedLeft = options.dataset === undefined
-        ? undefined
-        : String(options.dataset).trim().toLowerCase();
-      const leftDatasets = new Set(["gfs", "aigfs", "gefs", "hgefs", "ifs", "ifs-ens"]);
-      if (requestedLeft !== undefined && !leftDatasets.has(requestedLeft)) {
-        throw new Error(
-          `Expected --dataset gfs|aigfs|gefs|hgefs|ifs|ifs-ens, received: ${options.dataset}`,
-        );
-      }
-      const left = requestedLeft ?? (against === "ifs-ens" ? "gefs" : "gfs");
-      const pair = `${left}:${against}`;
-      const supportedPairs = new Set([
-        "gfs:gefs",
-        "gfs:ifs",
-        "gefs:ifs-ens",
-        "ifs:ifs-ens",
-        "gfs:aigfs",
-        "ifs:aifs",
-        "aigfs:aifs",
-        "gefs:aigefs",
-        "ifs-ens:aifs-ens",
-        "hgefs:gefs",
-        "hgefs:aigefs",
-      ]);
-      if (!supportedPairs.has(pair)) {
-        throw new Error(`Unsupported comparison pair: ${left}↔${against}`);
-      }
+  const requestedLeft = options.dataset === undefined
+    ? undefined
+    : String(options.dataset).trim().toLowerCase();
+  if (
+    requestedLeft !== undefined
+    && !publicAtmosphericDatasetSchema.safeParse(requestedLeft).success
+  ) {
+    throw new Error(
+      `Expected --dataset ${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}, received: ${options.dataset}`,
+    );
+  }
 
-      const base = {
-        geometry: { type: "point" as const, latitude: options.lat, longitude: options.lon },
-        time: { at: options.at },
-        variable: options.var,
-        pressureLevelHpa: options.level,
-        run: options.run,
-      };
-      const quantiles = options.quantiles === undefined
-        ? {}
-        : { quantiles: parseNumbers(options.quantiles) };
-      const threshold = options.gte === undefined ? {} : { thresholdGte: options.gte };
+  const left = requestedLeft ?? (against === "ifs-ens" ? "gefs" : "gfs");
+  if (!isAtmosphericDatasetComparisonPair(left, against)) {
+    throw new Error(`Unsupported comparison pair: ${left}↔${against}`);
+  }
 
-      let request: CompareAtmosphericDatasetsInput;
-      switch (pair) {
-        case "gfs:gefs":
-          request = {
-            ...base,
-            datasets: ["gfs", "gefs"],
-            ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
-            ...(options.members === undefined
-              ? {}
-              : { members: parseGefsMembers(options.members) }),
-            ...quantiles,
-          };
-          break;
-        case "gfs:ifs":
-          request = {
-            ...base,
-            datasets: ["gfs", "ifs"],
-            ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
-          };
-          break;
-        case "gefs:ifs-ens":
-          request = {
-            ...base,
-            datasets: ["gefs", "ifs-ens"],
-            ...(options.gefsMembers === undefined
-              ? {}
-              : { gefsMembers: parseGefsMembers(options.gefsMembers) }),
-            ...(options.ifsEnsMembers === undefined
-              ? {}
-              : { ifsEnsMembers: parseIfsEnsMembers(options.ifsEnsMembers) }),
-            ...quantiles,
-            ...threshold,
-          };
-          break;
-        case "ifs:ifs-ens":
-          request = {
-            ...base,
-            datasets: ["ifs", "ifs-ens"],
-            ...(options.ifsEnsMembers === undefined
-              ? {}
-              : { ifsEnsMembers: parseIfsEnsMembers(options.ifsEnsMembers) }),
-            ...quantiles,
-          };
-          break;
-        case "gfs:aigfs":
-          request = {
-            ...base,
-            datasets: ["gfs", "aigfs"],
-            ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
-          };
-          break;
-        case "ifs:aifs":
-          request = { ...base, datasets: ["ifs", "aifs"] };
-          break;
-        case "aigfs:aifs":
-          request = { ...base, datasets: ["aigfs", "aifs"] };
-          break;
-        case "gefs:aigefs":
-          request = {
-            ...base,
-            datasets: ["gefs", "aigefs"],
-            ...(options.gefsMembers === undefined
-              ? {}
-              : { gefsMembers: parseGefsMembers(options.gefsMembers) }),
-            ...(options.aigefsMembers === undefined
-              ? {}
-              : { aigefsMembers: parseAigefsMembers(options.aigefsMembers) }),
-            ...quantiles,
-            ...threshold,
-          };
-          break;
-        case "ifs-ens:aifs-ens":
-          request = {
-            ...base,
-            datasets: ["ifs-ens", "aifs-ens"],
-            ...(options.ifsEnsMembers === undefined
-              ? {}
-              : { ifsEnsMembers: parseIfsEnsMembers(options.ifsEnsMembers) }),
-            ...(options.aifsEnsMembers === undefined
-              ? {}
-              : { aifsEnsMembers: parseAifsEnsMembers(options.aifsEnsMembers) }),
-            ...quantiles,
-            ...threshold,
-          };
-          break;
-        case "hgefs:gefs":
-          request = {
-            ...base,
-            datasets: ["hgefs", "gefs"],
-            ...(options.hgefsMembers === undefined
-              ? {}
-              : { hgefsMembers: parseStrings(options.hgefsMembers) }),
-            ...quantiles,
-            ...threshold,
-          };
-          break;
-        case "hgefs:aigefs":
-          request = {
-            ...base,
-            datasets: ["hgefs", "aigefs"],
-            ...(options.hgefsMembers === undefined
-              ? {}
-              : { hgefsMembers: parseStrings(options.hgefsMembers) }),
-            ...quantiles,
-            ...threshold,
-          };
-          break;
-        default:
-          throw new Error(`Unsupported comparison pair: ${left}↔${against}`);
-      }
-      return request;
+  const request = {
+    datasets: [left, against],
+    geometry: { type: "point", latitude: options.lat, longitude: options.lon },
+    time: { at: options.at },
+    ...(options.var === undefined ? {} : { variable: String(options.var) }),
+    ...(options.level === undefined ? {} : { pressureLevelHpa: options.level }),
+    ...(options.field === undefined ? {} : { field: String(options.field) }),
+    run: options.run ?? "latest",
+    ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
+    ...(options.members === undefined
+      ? {}
+      : { members: parseGefsMembers(options.members) }),
+    ...(options.gefsMembers === undefined
+      ? {}
+      : { gefsMembers: parseGefsMembers(options.gefsMembers) }),
+    ...(options.aigefsMembers === undefined
+      ? {}
+      : { aigefsMembers: parseAigefsMembers(options.aigefsMembers) }),
+    ...(options.ifsEnsMembers === undefined
+      ? {}
+      : { ifsEnsMembers: parseIfsEnsMembers(options.ifsEnsMembers) }),
+    ...(options.aifsEnsMembers === undefined
+      ? {}
+      : { aifsEnsMembers: parseAifsEnsMembers(options.aifsEnsMembers) }),
+    ...(options.hgefsMembers === undefined
+      ? {}
+      : { hgefsMembers: parseStrings(options.hgefsMembers) }),
+    ...(options.iconD2EpsMembers === undefined
+      ? {}
+      : { iconD2EpsMembers: parseStrings(options.iconD2EpsMembers) }),
+    ...(options.peAromeMembers === undefined
+      ? {}
+      : { peAromeMembers: parseStrings(options.peAromeMembers) }),
+    ...(options.quantiles === undefined
+      ? {}
+      : { quantiles: parseNumbers(options.quantiles) }),
+    ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
+  };
+
+  return compareAtmosphericDatasetsSchema.parse(request);
 }
 
 function registerVerifyCommand(program: Command): void {

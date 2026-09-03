@@ -110,6 +110,40 @@ describe("IgraObservationProfileService", () => {
     );
   });
 
+  it("derives missing relative humidity above the provider parser boundary", async () => {
+    const service = new IgraObservationProfileService({
+      source: {
+        listStations: vi.fn(async () => stations),
+        getSounding: vi.fn(async () => ({
+          stationId: "EZM00011520",
+          nominalTime: "2026-08-24T12:00:00.000Z",
+          soundingLatitude: 50.0078,
+          soundingLongitude: 14.4469,
+          levels: [{
+            pressureHpa: 850,
+            temperatureC: 14.5,
+            dewPointC: 9,
+          }],
+          sourceFile: "test.zip",
+          cacheHit: false,
+        })),
+      },
+      now: () => new Date("2026-08-27T00:00:00Z"),
+    });
+
+    const result = await service.getProfile({
+      latitude: 50.08,
+      longitude: 14.43,
+      validTime: new Date("2026-08-24T12:00:00Z"),
+      variables: ["relative_humidity"],
+      pressureLevelsHpa: [850],
+      maxStationDistanceKm: 250,
+    });
+
+    expect(result.levels[0]!.relativeHumidityPct).toBeGreaterThan(60);
+    expect(result.levels[0]!.relativeHumidityPct).toBeLessThan(80);
+  });
+
   it("does not interpolate when no requested level is observed", async () => {
     const service = new IgraObservationProfileService({
       source: {

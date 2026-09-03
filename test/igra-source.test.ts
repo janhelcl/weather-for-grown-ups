@@ -146,8 +146,7 @@ describe("IGRA sounding parser", () => {
       windSpeedMs: 9.5,
       dewPointC: 9,
     });
-    expect(result.levels[0]!.relativeHumidityPct).toBeGreaterThan(60);
-    expect(result.levels[0]!.relativeHumidityPct).toBeLessThan(80);
+    expect(result.levels[0]).not.toHaveProperty("relativeHumidityPct");
   });
 
   it("fails explicitly when the nominal sounding is absent", () => {

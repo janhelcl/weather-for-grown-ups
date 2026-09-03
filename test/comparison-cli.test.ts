@@ -23,6 +23,9 @@ describe("comparison CLI request builder", () => {
     ["ifs-ens", "aifs-ens"],
     ["hgefs", "gefs"],
     ["hgefs", "aigefs"],
+    ["ifs", "icon-d2"],
+    ["gfs", "icon-d2"],
+    ["ifs-ens", "icon-d2-eps"],
   ] as const)("builds the registered %s:%s pair", (dataset, against) => {
     const request: any = buildUnifiedDatasetComparison({
       ...base,
@@ -32,6 +35,42 @@ describe("comparison CLI request builder", () => {
     expect(request.datasets).toEqual([dataset, against]);
     expect(request.geometry).toEqual({ type: "point", latitude: 50, longitude: 14 });
     expect(request.time).toEqual({ at: base.at });
+  });
+
+  it("builds field-only regional comparisons through the same public operation", () => {
+    const deterministic: any = buildUnifiedDatasetComparison({
+      lat: 50,
+      lon: 14,
+      at: "2026-08-31T06:00:00.000Z",
+      dataset: "ifs",
+      against: "arome",
+      field: "temperature_2m",
+      run: "2026-08-31T00:00:00.000Z",
+    });
+    expect(deterministic).toMatchObject({
+      datasets: ["ifs", "arome"],
+      field: "temperature_2m",
+    });
+    expect(deterministic).not.toHaveProperty("variable");
+
+    const ensemble: any = buildUnifiedDatasetComparison({
+      lat: 50,
+      lon: 14,
+      at: "2026-08-31T06:00:00.000Z",
+      dataset: "ifs-ens",
+      against: "pe-arome",
+      field: "relative_humidity_2m",
+      run: "2026-08-31T00:00:00.000Z",
+      ifsEnsMembers: "p01,p02",
+      peAromeMembers: "c00,p01",
+      quantiles: "0.1,0.5,0.9",
+    });
+    expect(ensemble).toMatchObject({
+      datasets: ["ifs-ens", "pe-arome"],
+      field: "relative_humidity_2m",
+      ifsEnsMembers: ["p01", "p02"],
+      peAromeMembers: ["c00", "p01"],
+    });
   });
 
   it("preserves pair-specific controls without leaking them across pairs", () => {

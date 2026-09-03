@@ -9,6 +9,7 @@ import {
   UnifiedRunComparisonService,
 } from "./core/unified-atmosphere-api.js";
 import {
+  PUBLIC_ATMOSPHERIC_DATASET_IDS,
   diagnoseAtmosphereSchema,
   queryAtmosphereSchema,
   unifiedAtmosphereResultSchema,
@@ -18,12 +19,18 @@ import {
   unifiedCatalogResultSchema,
 } from "./schema/unified-catalog.js";
 import {
+  ATMOSPHERIC_DATASET_COMPARISON_PAIRS,
   compareAtmosphericDatasetsSchema,
   compareAtmosphericRunsSchema,
   findAtmosphericAnalogsSchema,
   unifiedSpecializedResultSchema,
   verifyAtmosphericForecastSchema,
 } from "./schema/unified-specialized.js";
+
+const PUBLIC_DATASET_DESCRIPTION = PUBLIC_ATMOSPHERIC_DATASET_IDS.join(", ");
+const DATASET_COMPARISON_DESCRIPTION = ATMOSPHERIC_DATASET_COMPARISON_PAIRS
+  .map(([left, right]) => `${left}↔${right}`)
+  .join(", ");
 
 export function registerUnifiedAtmosphereTools(server: McpServer): void {
   const queryService = new UnifiedAtmosphereQueryService();
@@ -48,7 +55,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("query_atmosphere", {
     title: "Query atmospheric state",
-    description: "Query atmospheric state through one dataset × geometry × time × selection contract across GFS, NOAA AIGFS, NOAA AIGEFS, NOAA HGEFS, GEFS, deterministic ECMWF IFS, ECMWF AIFS, ECMWF AIFS ENS, ECMWF IFS ENS, and historical GFS analysis. Dataset-native cadence, provenance, deterministic/member-first semantics and capability limits stay explicit; unsupported combinations fail rather than being coerced into fake symmetry.",
+    description: `Query atmospheric state through one dataset × geometry × time × selection contract across every public dataset: ${PUBLIC_DATASET_DESCRIPTION}. Dataset-native domain, cadence, grid, provenance, deterministic/member-first semantics and capability limits stay explicit; unsupported combinations fail rather than being coerced into fake symmetry.`,
     inputSchema: queryAtmosphereSchema,
     outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => {
@@ -87,7 +94,7 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("compare_datasets", {
     title: "Compare atmospheric datasets",
-    description: "Compare only explicitly registered, scientifically compatible atmospheric dataset pairs at one point, valid time, pressure variable, and pressure level. Physics baselines include GFS↔GEFS, GFS↔IFS, GEFS↔IFS ENS, and IFS↔IFS ENS. AI/model-class comparisons add GFS↔AIGFS, IFS↔AIFS, AIGFS↔AIFS, GEFS↔AIGEFS, and IFS ENS↔AIFS ENS; each side keeps its native member population, so AIFS ENS retains its dedicated control while IFS ENS remains the 50 perturbations. HGEFS↔GEFS and HGEFS↔AIGEFS compare the hybrid distribution with an overlapping constituent population and explicitly report that those distributions are not independent. Ensemble member labels are never paired as trajectories. Differences, spread shifts, and raw member fractions are descriptive model evidence, not forecast error or calibrated uncertainty.",
+    description: `Compare only explicitly registered, scientifically compatible atmospheric dataset pairs at one point and valid time. Registered pairs: ${DATASET_COMPARISON_DESCRIPTION}. Pair contracts choose pressure-level or field selection explicitly. Global↔regional strategies require one shared explicit initialization cycle, sample each native grid independently at the requested coordinate, and never silently regrid or downscale. Ensemble comparisons preserve native populations and never pair member labels as trajectories. Differences, spread shifts, and raw member fractions are descriptive model evidence, not forecast error or calibrated uncertainty.`,
     inputSchema: compareAtmosphericDatasetsSchema,
     outputSchema: unifiedSpecializedResultSchema,
   }, async (query) => {
