@@ -1,9 +1,17 @@
+import {
+  GEFS_FORECAST_STEP_HOURS,
+  GEFS_MAX_FORECAST_HOUR,
+  GEFS_TOTAL_NATIVE_FORECAST_STEPS,
+} from "../catalog/gefs.js";
+export {
+  GEFS_FORECAST_STEP_HOURS,
+  GEFS_MAX_FORECAST_HOUR,
+  GEFS_TOTAL_NATIVE_FORECAST_STEPS,
+} from "../catalog/gefs.js";
+
 const GEFS_RUN_HOURS = new Set([0, 6, 12, 18]);
 const HOUR_MS = 3_600_000;
 const THREE_HOURS_MS = 3 * HOUR_MS;
-export const GEFS_MAX_FORECAST_HOUR = 384;
-export const GEFS_FORECAST_STEP_HOURS = 3;
-export const GEFS_TOTAL_NATIVE_FORECAST_STEPS = GEFS_MAX_FORECAST_HOUR / GEFS_FORECAST_STEP_HOURS + 1;
 
 export function parseGefsRun(value: string): Date {
   const run = new Date(value);
