@@ -71,7 +71,7 @@
     "test:live:gefs": "tsx scripts/live-smoke-gefs.ts && tsx scripts/live-smoke-gefs-points-timeseries.ts && tsx scripts/live-smoke-gefs-points-bundle-timeseries.ts && tsx scripts/live-smoke-gefs-transect.ts",
     "test:live:gefs-runs": "tsx scripts/live-smoke-gefs-run-comparison.ts",
     "test:live:area": "tsx scripts/live-smoke-area.ts",
-    "test:live:all": "npm run test:live:bundled && npm run test:live:s3 && npm run test:live:aigfs && npm run test:live:aigefs && npm run test:live:hgefs && npm run test:live:icon-d2 && npm run test:live:icon-d2-eps && npm run test:live:arome && npm run test:live:pe-arome && npm run test:live:history && npm run test:live:gfs-equivalence && npm run test:live:ifs && npm run test:live:aifs && npm run test:live:aifs-ens && npm run test:live:gefs && npm run test:live:gefs-reforecast && npm run test:live:gefs-runs && npm run test:live:area && npm run test:live:igra && npm run test:live:igra-skill",
+    "test:live:all": "npm run test:live:bundled && npm run test:live:s3 && npm run test:live:aigfs && npm run test:live:aigefs && npm run test:live:hgefs && npm run test:live:icon-d2 && npm run test:live:icon-d2-eps && npm run test:live:arome && npm run test:live:history && npm run test:live:gfs-equivalence && npm run test:live:ifs && npm run test:live:aifs && npm run test:live:aifs-ens && npm run test:live:gefs && npm run test:live:gefs-reforecast && npm run test:live:gefs-runs && npm run test:live:area && npm run test:live:igra && npm run test:live:igra-skill",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "pack:check": "npm pack --dry-run",
     "prepack": "npm run build",
