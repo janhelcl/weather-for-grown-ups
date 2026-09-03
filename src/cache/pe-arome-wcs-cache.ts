@@ -1,3 +1,4 @@
+import { resolveMeteoFranceBearerToken } from "../access/meteo-france-auth.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, rename, rm, writeFile } from "node:fs/promises";
@@ -18,7 +19,6 @@ import { expandPeAromeRequestedFields, type PeAromeMember } from "../catalog/pe-
 import {
   buildPeAromeGetCoverageUrl,
   peAromeValidTime,
-  resolveMeteoFranceBearerToken,
   resolvePeAromeWcsEndpoint,
   type PeAromeSpatialSubset,
 } from "../sources/pe-arome.js";
