@@ -63,157 +63,51 @@ Provider-specific access constraints remain source-policy concerns rather than p
 
 ## 1. Spatial domain and grid semantics ✅
 
-**Implemented as the shared regional-capability foundation.**
+The dataset registry carries first-class spatial domain, native-grid, nominal-resolution, horizon and native-cadence metadata. Catalog discovery can filter by global versus limited-area scope and by whether a declared domain covers a point or bounded area. Query and diagnostic dispatch reject unsupported geography with distinct `OUT_OF_DOMAIN` semantics before source access.
 
-The dataset registry now carries first-class spatial domain, native-grid, nominal-resolution, horizon and native-cadence metadata. Catalog discovery can filter by global versus limited-area scope and by whether a declared domain fully covers a point or bounded area. Query and diagnostic dispatch enforce the same domain contract before source access and raise a distinct `OUT_OF_DOMAIN` failure.
-
-No regional model has been added by this milestone alone; instead, ICON-D2, ICON-D2-EPS, AROME and PE-AROME can now plug into the existing query language without teaching the public schema model-specific geometry or degree-grid assumptions.
-
-Limited-area NWP introduces semantics that global models never forced WFG to represent explicitly enough.
-
-Add first-class descriptive/capability metadata for:
-
-- geographic coverage/domain;
-- native horizontal grid type and nominal resolution;
-- forecast horizon and native cadence;
-- whether a dataset is global or limited-area;
-- deterministic versus ensemble result kind;
-- provider and model class, reusing the existing registry metadata.
-
-Coverage must be usable by capability discovery. The catalog should be able to answer questions such as:
-
-- which datasets cover this point?
-- which datasets cover this bounded area?
-- which regional datasets expose this variable or diagnostic?
-- what native grid and horizon does each candidate provide?
-
-Out-of-domain queries must fail truthfully and distinctly from unsupported-variable, unavailable-run or source-access failures.
-
-Do not add model-specific public geometry types or namespaces.
+Regional models use the same public geometry vocabulary as global models; model-specific grid/projection concepts stay behind the dataset capability boundary.
 
 ## 2. ICON-D2 ✅
 
-**Implemented as the first regional deterministic forecast dataset.**
+DWD ICON-D2 is the first regional deterministic dataset behind the shared atmospheric query language. It preserves the limited-area domain, 3-hourly run schedule, hourly forecast cadence and 48-hour horizon, while keeping the native ~2.1 km icosahedral model grid distinct from the DWD 0.02° regular-lat/lon delivery product.
 
-DWD ICON-D2 now sits behind the same public atmospheric query and diagnostic language as the global datasets. The integration preserves the limited-area domain, 3-hourly run schedule, hourly forecast cadence and 48-hour horizon, while keeping the model's native ~2.1 km icosahedral grid distinct from the DWD Open Data 0.02° regular-lat/lon access product.
-
-The initial capability deliberately exposes a coherent pressure/field subset rather than claiming GFS/IFS inventory parity. Point, time-range, multi-point, multi-point-range, transect and bounded-area operations are covered, together with shared layer/profile diagnostics. DWD URL construction, compression, run probing, access policy and caching remain below the unified adapter boundary, and out-of-domain queries are rejected before source access. A dedicated live CI smoke exercises the real DWD transport and GRIB decode path.
-
-Add DWD ICON-D2 as the first regional deterministic forecast dataset.
-
-Goals:
-
-- reuse the existing public atmospheric query/diagnostic schemas;
-- introduce a DWD source/access implementation without leaking DWD-specific transport concepts upward;
-- preserve ICON-D2-native domain, grid, run cadence, forecast horizon and provenance;
-- support the common field/profile vocabulary only where the actual upstream inventory permits;
-- prove that point, range, multi-point, transect and bounded-area operations behave correctly on a limited-area model.
-
-The first implementation should prefer a coherent, well-tested shared-variable subset over pretending to match the full GFS/IFS inventories.
+Point, range, multi-point, multi-point-range, transect and bounded-area operations are supported over a verified field/pressure subset, with shared diagnostics where inventory permits them. DWD URL construction, compression, run probing, access policy and caching remain below the unified adapter boundary.
 
 ## 3. ICON-D2-EPS ✅
 
-**Implemented as the first convection-permitting regional ensemble.**
+DWD ICON-D2-EPS preserves its native 20-member convection-permitting population and the same limited-area capability contract. WFG handles DWD's all-member GRIB2 packaging, official grid remapping and member extraction below the public API; nonlinear diagnostics remain member-first.
 
-DWD ICON-D2-EPS now uses the same limited-area capability/domain contract and public atmospheric query language as ICON-D2 while preserving its native 20-member population. WFG reads DWD's all-members GRIB2 parameter objects on the native ~2.1 km icosahedral grid, remaps each selected all-member object once through DWD's official 0.02° target grid and nearest-neighbour weights with CDO, then inventories/materializes requested members with `wgrib2`. Shared nonlinear diagnostics still run independently per member before aggregation. The CDO/`wgrib2` requirement and remapping product are explicit source/runtime provenance, not public query dimensions.
-
-Point, time-range, multi-point, multi-point-range, transect and bounded-area ensemble summaries are routed through the existing ensemble result semantics, with layer/profile diagnostic summaries, native member IDs, run pinning and source provenance. Source packaging, decompression, DWD request policy and caching remain isolated below the unified adapter boundary. A focused live smoke exercises the real two-member Open Data decode path.
-
-Add ICON-D2-EPS as the first convection-permitting regional ensemble.
-
-Ensemble meteorology remains **member first**:
-
-- retrieve/select members;
-- compute nonlinear diagnostics within each member;
-- aggregate distributions only afterward.
-
-Goals:
-
-- preserve the native 20-member population;
-- reuse the same regional coverage/grid abstraction established for ICON-D2;
-- support point/range/multi-point/transect/area ensemble summaries where source volume and access patterns make them practical;
-- expose truthful member and source provenance;
-- avoid synthetic equivalence with GEFS, IFS ENS, AIGEFS or AIFS ENS.
-
-This is the key test that WFG's ensemble architecture survives a radically different spatial scale.
+Point/range, multi-point/range, transect and bounded-area ensemble summaries use the existing ensemble result semantics with explicit member/run/source provenance.
 
 ## 4. AROME ✅
 
-**Implemented as the second-provider regional deterministic dataset.**
+Météo-France AROME proves the regional abstraction across a second provider. WFG exposes the current 0.01° EURW1S100 public product with its limited-area domain, 3-hourly initialization schedule and hourly output through f51.
 
-Météo-France AROME now sits behind the same public atmospheric query language as the existing NOAA, ECMWF and DWD datasets. WFG exposes the current 0.01° EURW1S100 public product with its limited-area domain, 3-hourly initialization schedule, hourly output through f51, and near-surface/height field inventory across point, range, multi-point, multi-point-range, transect and bounded-area operations.
-
-The integration keeps AROME's nominal ~1.3 km native model mesh distinct from the 0.01° regular-lat/lon delivery grid, isolates Météo-France object naming/access/caching/run resolution below the unified adapter boundary, and deliberately does not mix pressure levels from the separate 0.025° product. A dedicated live smoke proves the real Open Data transport and bundled CCSDS GRIB2 decode path.
-
-Add Météo-France AROME as the second-provider regional deterministic dataset.
-
-The purpose of this milestone is architectural as much as meteorological:
-
-- prevent ICON/DWD-specific assumptions from becoming the generic regional abstraction;
-- prove coverage and grid semantics across another provider;
-- keep Météo-France account/token, retention, throttling and transport rules isolated in the source/access layer;
-- reuse the same public query language and capability-validation boundaries.
-
-Where AROME exposes multiple public grids or resolutions, WFG must represent them truthfully rather than silently substituting one product for another.
+The nominal ~1.3 km model mesh remains distinct from the delivery grid. The integration deliberately does not mix pressure levels from the separate 0.025° product family, and Météo-France object naming/access/caching stays below the shared application boundary.
 
 ## 5. PE-AROME ✅
 
-**Implemented as the second regional ensemble family.**
+Météo-France PE-AROME is the second regional ensemble family. WFG preserves the native 25-member control/perturbed population (`c00,p01..p24`), limited metropolitan domain, 0.025° WCS delivery grid, 6-hourly production cycles and hourly output through f51.
 
-Météo-France PE-AROME now sits behind the same public atmospheric query language as the other forecast datasets while preserving its native 25-member control/perturbed population (`c00,p01..p24`), limited metropolitan domain, 0.025° WCS delivery grid, 6-hourly production cycles and hourly output through f51.
-
-The current implementation deliberately exposes only the near-surface WCS coverage identities we can substantiate from Météo-France's published service nomenclature: 2 m temperature and relative humidity. Point, range, multi-point, multi-point-range, transect and scalar bounded-area ensemble summaries are supported. One resolved initialization is pinned across selected members, ensemble aggregation remains member-first, and raw member output stays optional. Wind and pressure-level capabilities stay unadvertised until their PE-AROME coverage identities are confirmed against the subscribed service rather than inferred from another Météo-France product.
-
-Unlike anonymous deterministic AROME packages, PE-AROME uses Météo-France's authenticated targeted WCS API. Bearer credentials, subscription-specific member endpoints, one-member/one-field request packaging, geographic subsetting, retry/concurrency policy and immutable caching remain isolated below the unified adapter boundary. A credential-gated live smoke is available for repositories/deployments that configure the subscribed API endpoint and token.
-
-Add PE-AROME as the second regional ensemble family.
-
-Goals:
-
-- preserve its native control/perturbed population rather than reshaping it to resemble ICON-D2-EPS;
-- retain member-first diagnostic semantics;
-- reuse the same regional-domain and capability architecture;
-- validate that provider-specific ensemble packaging does not leak into the public schema.
-
-At this point WFG has two independent deterministic/ensemble regional families behind one atmospheric query language.
+The current capability exposes only verified near-surface WCS identities. One initialization is pinned across members, aggregation remains member-first, and bearer credentials plus one-member/one-field targeted WCS packaging remain source/access concerns.
 
 ## 6. Cross-scale comparison architecture ✅
 
-**Implemented as a restrictive point-comparison layer across the global/regional scale boundary.**
-
-The comparison registry now contains explicit strategies for IFS↔ICON-D2, IFS↔AROME, GFS↔ICON-D2, IFS ENS↔ICON-D2-EPS and IFS ENS↔PE-AROME. Each strategy declares its domain requirement, shared initialization/valid-time rule, compatible pressure/field intersection, independent point-sampling semantics, no-regridding rule, native-resolution representation, output shape and provenance shape.
-
-Cross-scale comparisons require an explicit shared 00/06/12/18Z initialization rather than resolving each provider's latest cycle independently. Deterministic pairs compare only substantiated pressure-level or instantaneous near-surface intersections; ensemble pairs compare scalar member distributions without cross-model member pairing. Both sides retain their own sampled grid point, native-grid metadata and source provenance. Spatial/area subtraction remains deliberately unsupported: there is still no universal global-to-regional comparison fallback.
-
-Extend the restrictive comparison-strategy registry to scientifically meaningful **global ↔ regional** pairs.
-
-Candidate families include:
+The restrictive comparison registry contains explicit point strategies for:
 
 - IFS ↔ ICON-D2;
 - IFS ↔ AROME;
-- GFS ↔ ICON-D2 where fields/times/domains genuinely align;
+- GFS ↔ ICON-D2;
 - IFS ENS ↔ ICON-D2-EPS;
 - IFS ENS ↔ PE-AROME.
 
-There must be **no universal global-to-regional subtraction fallback**.
-
-Every strategy must explicitly declare:
-
-- spatial overlap requirements;
-- valid-time/run alignment;
-- compatible variables/diagnostics;
-- point-sampling semantics;
-- any interpolation, aggregation or regridding rule;
-- how native resolution differences are represented;
-- comparison output and provenance shape.
-
-Point comparison can be relatively direct. Spatial comparison requires much stricter semantics: a kilometre-scale regional field and a 0.25° global field must not be presented as if they were measurements on the same grid.
+Every strategy declares shared initialization/valid-time rules, compatible field or pressure intersections, domain requirements, independent point sampling, native-resolution provenance and no cross-dataset regridding. Ensemble pairs compare independent distributions without member pairing. There is no universal global-to-regional subtraction fallback.
 
 ## 7. Regional and convective meteorology ✅
 
-**Completed to the v0.5 release boundary.** The shared vocabulary now includes a deliberately bounded set of regional fields that add real mesoscale evidence without pretending provider inventories are symmetric.
+The v0.5 release boundary adds a deliberately bounded set of provider-substantiated mesoscale fields without pretending inventories are symmetric.
 
-DWD ICON-D2 and ICON-D2-EPS expose, where the current products substantiate them:
+DWD ICON-D2 and ICON-D2-EPS expose, where available:
 
 - native gust semantics;
 - column-maximum reflectivity;
@@ -224,9 +118,9 @@ DWD ICON-D2 and ICON-D2-EPS expose, where the current products substantiate them
 - provider-native mean-layer CAPE/CIN;
 - provider-native 2–8 km updraft-helicity maxima over the previous one-hour interval.
 
-Deterministic ICON-D2 additionally exposes the provider-native top of dry convection above mean sea level. ICON-D2-EPS does not advertise that field because it is absent from the current public ensemble inventory. AROME and PE-AROME do not advertise equivalent convective fields unless their current public products or subscribed coverage identities verify the same physical quantity.
+Deterministic ICON-D2 additionally exposes top of dry convection above mean sea level. AROME and PE-AROME do not advertise equivalent fields unless their current products substantiate the same physical quantity.
 
-This milestone is intentionally **not field-parity complete**. Additional severe-convection, cloud, moisture and aviation diagnostics can continue as small atmospheric extensions when scientifically justified. The architectural line is complete because those additions now fit behind the established dataset/capability/source boundaries without changing the public query language.
+This milestone is intentionally **not field-parity complete**. Further severe-convection, cloud, moisture and aviation diagnostics can land as small extensions when scientifically justified; they no longer keep the architectural line open.
 
 ## Regional roadmap definition of done ✅
 
@@ -251,7 +145,7 @@ This is worth adding opportunistically without making it the central regional ro
 
 The implementation should remain the public GEFS dataset, preserving the actual lead-dependent cadence/grid/product semantics rather than inventing a separate "extended GEFS" dataset identity.
 
-This extension is explicitly secondary to the regional architecture line and should not delay it.
+This extension remains opportunistic. It should not reopen or delay the completed regional line, and it should not distract from the model-skill roadmap.
 
 # Next major capability line: forecast verification and model skill
 
