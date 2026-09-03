@@ -1,5 +1,5 @@
 import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
-import type { GfsGrid } from "../schema/gfs-grid.js";
+import type { GfsGrid } from "../catalog/gfs-grid.js";
 import {
   parseGribIndex,
   selectNonIsobaricByteRanges,

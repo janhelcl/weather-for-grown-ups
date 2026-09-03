@@ -1,6 +1,6 @@
 import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
 import type { RawVariableDefinition } from "../catalog/variables.js";
-import type { GfsGrid } from "../schema/gfs-grid.js";
+import type { GfsGrid } from "../catalog/gfs-grid.js";
 
 export interface NomadsPointRequest {
   run: Date;

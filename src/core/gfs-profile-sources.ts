@@ -1,7 +1,11 @@
 import type { NomadsCache } from "../cache/nomads-cache.js";
 import { GfsS3SubsetCache } from "../cache/s3-subset-cache.js";
-import { buildNomadsPointUrl } from "./nomads.js";
-import type { ProfileDataRequest, ProfileDataSource, ProfileSourceFile } from "./types.js";
+import { buildNomadsPointUrl } from "../sources/nomads.js";
+import type {
+  ProfileDataRequest,
+  ProfileDataSource,
+  ProfileSourceFile,
+} from "../sources/types.js";
 
 export class NomadsProfileSource implements ProfileDataSource {
   readonly id = "nomads" as const;
