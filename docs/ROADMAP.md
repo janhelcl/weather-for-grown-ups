@@ -16,7 +16,7 @@ A new dataset should change what atmospheric evidence is available, not force ca
 
 ## Current foundation
 
-The v0.4 line completed the first global model-class matrix:
+The v0.4 line completed WFG's first global physics/AI/hybrid model-class matrix. The v0.5 line completes the next architectural axis: **global ↔ regional ↔ convection-permitting**.
 
 ~~~text
                          deterministic        ensemble
@@ -25,42 +25,41 @@ NOAA AI                  AIGFS                AIGEFS
 ECMWF physics            IFS                  IFS ENS
 ECMWF AI                 AIFS                 AIFS ENS
 NOAA hybrid                                   HGEFS
+
+DWD regional             ICON-D2              ICON-D2-EPS
+Météo-France regional    AROME                PE-AROME
 ~~~
 
 WFG now exposes:
 
 - global physics, AI and hybrid forecast populations;
-- deterministic and member-first ensemble semantics;
+- two independent regional deterministic/ensemble families;
+- deterministic and member-first ensemble semantics across global and regional scales;
+- first-class limited-area domain, native-grid, nominal-resolution, horizon and cadence metadata;
 - archived GFS forecasts, historical GFS analysis and GEFSv12 reforecasts;
 - one public query/diagnostic vocabulary across point, points, time range, transect, area and profile operations;
-- run comparison, restrictive cross-dataset comparison, verification and analog search;
+- restrictive run, model-class and global↔regional comparison strategies;
+- verification, bounded local skill summaries and analog search;
 - equal CLI and MCP surfaces over the same application core.
 
-The AI/hybrid roadmap and comparison architecture are complete. The next major line should add a genuinely new axis rather than another global model-specific integration.
+The global model-class matrix and regional/convection-permitting roadmap are complete. New regional fields can continue to land opportunistically where provider inventories substantiate them, but they are no longer a reason to keep the architectural line open.
 
-# Next major capability line: regional and convection-permitting NWP
+# Completed capability line: regional and convection-permitting NWP ✅
 
-The next roadmap extends WFG across the **spatial-scale axis**:
+The v0.5 roadmap extended WFG across the **spatial-scale axis**:
 
 > **global ↔ regional ↔ convection-permitting**
 
-The goal is not simply to add ICON-D2 and AROME. The goal is to prove that the same atmospheric query language works when datasets have limited geographic domains, kilometre-scale grids, shorter horizons, finer cadence and more explicitly resolved mesoscale structure.
+The purpose was not merely to add model names. It was to prove that the same atmospheric query language survives limited geographic domains, kilometre-scale grids, shorter horizons, finer cadence, provider-specific packaging and explicitly resolved mesoscale structure.
 
-Initial target families:
+The line now includes:
 
 - DWD ICON-D2;
 - DWD ICON-D2-EPS;
 - Météo-France AROME;
 - Météo-France PE-AROME.
 
-Current upstream characteristics make these a useful architecture test:
-
-- ICON-D2 is a roughly 2 km limited-area deterministic model;
-- ICON-D2-EPS uses the same regional modelling family with 20 forecast members;
-- AROME provides kilometre-scale deterministic regional guidance;
-- PE-AROME provides a control plus 24 perturbed simulations with hourly output through roughly two days.
-
-Exact public inventories, run schedules, retention, licences and access policies must be verified against the provider before each implementation. Provider-specific access constraints remain source-policy concerns rather than public query dimensions.
+Provider-specific access constraints remain source-policy concerns rather than public query dimensions.
 
 ## 1. Spatial domain and grid semantics ✅
 
@@ -210,26 +209,28 @@ Every strategy must explicitly declare:
 
 Point comparison can be relatively direct. Spatial comparison requires much stricter semantics: a kilometre-scale regional field and a 0.25° global field must not be presented as if they were measurements on the same grid.
 
-## 7. Regional and convective meteorology
+## 7. Regional and convective meteorology ✅
 
-**In progress.** Native regional gust semantics and column-maximum reflectivity are already exposed where the current provider products substantiate them. DWD ICON-D2 and ICON-D2-EPS now also expose phase-explicit convective rain and convective snowfall water-equivalent accumulations, near-surface visibility, provider-native aviation ceiling height above mean sea level, provider-native mean-layer CAPE/CIN, provider-native 2–8 km updraft-helicity maxima over the previous one-hour interval, and shallow-convection cloud-base/cloud-top heights above mean sea level. Deterministic ICON-D2 additionally exposes the provider-native top of dry convection above mean sea level; ICON-D2-EPS does not advertise that field because it is absent from the current public ensemble product inventory. Visibility is available for scalar area summaries; the provider-specific mean-layer and height diagnostics remain point/range/multi-point/transect only until their vertical selectors are normalized for area extraction. AROME and PE-AROME do not advertise equivalent convective-precipitation, aviation, cloud-structure, mean-layer CAPE/CIN, or updraft-helicity fields until current public product or coverage identities are verified rather than inferred.
+**Completed to the v0.5 release boundary.** The shared vocabulary now includes a deliberately bounded set of regional fields that add real mesoscale evidence without pretending provider inventories are symmetric.
 
-Once the core regional datasets are stable, expand the shared meteorological vocabulary where the source products justify it.
+DWD ICON-D2 and ICON-D2-EPS expose, where the current products substantiate them:
 
-High-value candidates include:
+- native gust semantics;
+- column-maximum reflectivity;
+- phase-explicit convective rain and convective snowfall water-equivalent accumulations;
+- near-surface visibility;
+- provider-native aviation ceiling height above mean sea level;
+- shallow-convection cloud-base/cloud-top heights above mean sea level;
+- provider-native mean-layer CAPE/CIN;
+- provider-native 2–8 km updraft-helicity maxima over the previous one-hour interval.
 
-- convective precipitation and intense-precipitation fields;
-- gusts;
-- visibility and near-surface aviation fields;
-- broader cloud-base/cloud-top structure beyond the currently exposed DWD shallow-convection diagnostics;
-- reflectivity-related fields where operationally available and scientifically interpretable;
-- broader severe-convection ingredients beyond native mean-layer CAPE/CIN, 2–8 km updraft helicity, and existing pressure-layer diagnostics.
+Deterministic ICON-D2 additionally exposes the provider-native top of dry convection above mean sea level. ICON-D2-EPS does not advertise that field because it is absent from the current public ensemble inventory. AROME and PE-AROME do not advertise equivalent convective fields unless their current public products or subscribed coverage identities verify the same physical quantity.
 
-These remain atmospheric fields and diagnostics behind the existing query/diagnostic surfaces. Do not turn the core into an activity-specific forecast or safety layer.
+This milestone is intentionally **not field-parity complete**. Additional severe-convection, cloud, moisture and aviation diagnostics can continue as small atmospheric extensions when scientifically justified. The architectural line is complete because those additions now fit behind the established dataset/capability/source boundaries without changing the public query language.
 
-## Regional roadmap definition of done
+## Regional roadmap definition of done ✅
 
-The line is complete when:
+All release-defining criteria are satisfied:
 
 1. at least two providers expose regional deterministic forecasts through the same public query language;
 2. at least two regional ensemble families preserve native member-first semantics;
@@ -239,6 +240,8 @@ The line is complete when:
 6. source access, retry/concurrency, caching and provider etiquette remain isolated from the public schema;
 7. CLI and MCP expose equivalent normal capabilities from the same application core;
 8. architecture tests prevent regional/provider-specific concepts from leaking into dataset-agnostic schemas.
+
+Regional work after v0.5 is maintenance or meteorological depth unless it introduces a genuinely new architectural requirement.
 
 # Parallel small extension: GEFS 00Z extended horizon
 
@@ -250,29 +253,127 @@ The implementation should remain the public GEFS dataset, preserving the actual 
 
 This extension is explicitly secondary to the regional architecture line and should not delay it.
 
+# Next major capability line: forecast verification and model skill
+
+The next roadmap moves WFG from answering **what the models say** to answering **how forecast systems perform over comparable historical samples**.
+
+WFG already has the seed of this capability: atomic archived-GFS verification against later GFS analysis or IGRA radiosondes, a resumable local verification corpus, and bounded bias/MAE/RMSE summaries by lead/pressure/field. The next line should generalize that architecture rather than create a second, disconnected verification system.
+
+The central distinction remains:
+
+- `compare_datasets`: how two forecasts differ for one aligned case;
+- `verify_forecast`: how one forecast performed against one reference case;
+- **model skill**: how forecast systems perform over an explicitly defined sample.
+
+Historical skill is therefore a composition capability above the normal `dataset × geometry × time × selection` query language, not another model-specific namespace.
+
+## 1. Generalized evaluation-case and corpus semantics
+
+Define one normalized evaluation-case boundary that can represent:
+
+- forecast dataset and native initialization/lead;
+- reference dataset or observation source;
+- requested and actually sampled location/grid/station;
+- canonical variable/field/level selection;
+- valid time and forecast lead;
+- deterministic value, ensemble distribution or event outcome as appropriate;
+- source/model version and provenance needed to interpret historical changes.
+
+The current local GFS verification JSONL corpus is an implementation seed, not a permanent public storage contract. Storage, backfill and settlement mechanics must remain below the public skill semantics.
+
+Missing cases stay explicit. A skill result must disclose selected cases, materialized/evaluable cases, failures, exclusions and coverage rate rather than silently scoring whatever happened to download.
+
+## 2. Truthful historical coverage and settlement
+
+Generalize resumable verification backfill into a dataset-aware settlement pipeline.
+
+Priorities:
+
+- preserve the long-lived GFS archive as the first deep deterministic corpus;
+- add other physics models only where truthful forecast archives and comparable references exist;
+- accumulate AI, hybrid and regional forecast cases forward when deep public archives do not exist;
+- never imply historical skill for periods where the forecast population was unavailable;
+- record model/product version changes so a long sample does not masquerade as one stationary forecast system.
+
+The architecture should support local materialization first while keeping the corpus abstraction replaceable by a database/object-store implementation later.
+
+## 3. Deterministic skill summaries
+
+Lift the existing GFS bias/MAE/RMSE kernels into a dataset-neutral scoring layer.
+
+Initial statistics:
+
+- count and coverage;
+- bias;
+- MAE;
+- RMSE;
+- circular error treatment for direction-like quantities;
+- anomaly/correlation-oriented scores only where a reference climatology is explicitly defined.
+
+Every statistic must retain variable, level/field, lead-time and sample provenance. Aggregation across physically different quantities or unmatched samples is forbidden.
+
+## 4. Same-sample model skill comparison
+
+Add explicit forecast-system comparison over a **shared evaluation sample**.
+
+A pairwise skill comparison must:
+
+- intersect cases by valid time, location/reference, selection and lead;
+- report how many cases each model had before and after same-sample intersection;
+- compare metrics only on that common sample;
+- preserve each model's native grid/source provenance;
+- avoid interpreting a lower error from a different sample as superior skill.
+
+This should be a dedicated specialized composition capability, distinct from single-case `compare_datasets`.
+
+## 5. Ensemble and probabilistic verification
+
+Extend scoring only where the stored corpus preserves member-level or distribution-level information required by the metric.
+
+High-value targets:
+
+- CRPS for continuous scalar ensemble forecasts;
+- Brier score for declared threshold events;
+- reliability and resolution summaries where sample size supports them;
+- rank/PIT-style diagnostics where the reference and ensemble semantics permit them;
+- spread-skill diagnostics;
+- explicit raw-versus-calibrated probability labeling.
+
+Member-first physics remains unchanged. Verification must score the forecast distribution that actually existed, not a synthetic ensemble reconstructed from aggregate quantiles.
+
+## 6. Stratification and regime-aware skill
+
+Allow bounded skill queries by scientifically meaningful dimensions such as:
+
+- forecast lead;
+- variable/field/pressure level;
+- geographic point or bounded region;
+- month/season;
+- initialization cycle;
+- declared weather regime or threshold event.
+
+Stratification must disclose sample counts and avoid producing apparently precise metrics from tiny subsets.
+
+## 7. Spatial verification
+
+Treat precipitation and other scale-sensitive regional fields separately from point error metrics.
+
+Potential methods include neighborhood/event scores and scale-aware spatial verification, but no method should be generalized until its alignment and regridding semantics are explicit. A kilometre-scale regional forecast and a coarse global analysis must not be scored as if they were collocated measurements on one grid.
+
+## Model-skill roadmap definition of done
+
+The line is complete when:
+
+1. evaluation cases and corpus coverage are dataset-neutral and provenance-complete;
+2. deterministic skill can be summarized for more than one forecast system where historical evidence genuinely exists;
+3. pairwise model skill uses explicit same-sample intersection;
+4. at least one ensemble family supports proper probabilistic scoring from preserved distribution/member evidence;
+5. sample coverage, exclusions and model-version caveats are first-class output;
+6. CLI and MCP expose the same normal skill capability from one application service;
+7. corpus storage/backfill remains replaceable infrastructure rather than part of the public weather schema;
+8. tests prevent single-case comparison semantics from leaking into historical skill comparison.
+
 # Following major axes
-
-The regional line is the next priority. The likely major directions after it are:
-
-## Forecast verification and model skill
-
-Move from verifying individual forecasts toward comparing **historical model skill** over bounded samples.
-
-Candidate capabilities:
-
-- deterministic bias / MAE / RMSE and anomaly-oriented scores where meaningful;
-- ensemble CRPS, Brier score, reliability, rank and spread-skill diagnostics;
-- threshold/event verification;
-- spatial verification for precipitation and other scale-sensitive fields;
-- explicit model-skill comparison by variable, lead time, region and forecast regime.
-
-Conceptually keep these operations distinct:
-
-- compare_datasets: how forecasts differ;
-- verify_forecast: how a forecast performed against a reference;
-- future skill comparison: how forecast systems perform over samples.
-
-AI-model archive depth is currently much shorter than long-lived physics archives. WFG should accumulate or index a truthful forecast-settlement corpus rather than pretending historical coverage exists where it does not.
 
 ## Waves and marine forecasting
 
