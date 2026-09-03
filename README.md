@@ -189,14 +189,13 @@ Start here:
 - [NOAA AIGEFS semantics](docs/AIGEFS.md)
 - [NOAA HGEFS hybrid semantics](docs/HGEFS.md)
 - [Météo-France PE-AROME semantics](docs/PE_AROME.md)
-- [Regional/convection-permitting roadmap](docs/ROADMAP.md)
+- [Roadmap: model skill next](docs/ROADMAP.md)
 - [ECMWF AIFS ENS semantics](docs/AIFS_ENS.md)
 - [GEFS and GEFSv12 reforecast semantics](docs/GEFS_ENSEMBLE.md)
 - [ECMWF IFS / IFS ENS semantics](docs/IFS.md)
 - [Historical GFS, archives and verification](docs/HISTORY.md)
 - [Testing](docs/TESTING.md) and [meteorology validation](docs/METEOROLOGY_VALIDATION.md)
 - [Release notes](docs/RELEASES.md)
-- [Roadmap](docs/ROADMAP.md)
 
 ## Scope
 
