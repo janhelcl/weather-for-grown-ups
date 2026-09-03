@@ -1,6 +1,6 @@
 # Testing
 
-WFG's default verification is deterministic and offline. Tests do not contact NOAA unless they are one of the explicit live scripts.
+WFG's default verification is deterministic and offline. Tests do not contact upstream weather providers unless they are one of the explicit live scripts.
 
 ## Normal verification
 
@@ -74,9 +74,9 @@ Normal tests install a network guard so accidental external requests fail immedi
 This separation is deliberate:
 
 - deterministic CI answers whether WFG itself behaves correctly;
-- live integration answers whether today's NOAA products and access assumptions still match those contracts.
+- live integration answers whether today's upstream products and access assumptions still match those contracts.
 
-## Live NOAA integration
+## Live provider integration
 
 ```bash
 npm run test:live:all
