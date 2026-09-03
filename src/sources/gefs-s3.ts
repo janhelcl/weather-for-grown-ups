@@ -1,3 +1,4 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import type { GefsMember } from "../catalog/gefs.js";
 
 export const GEFS_S3_BASE_URL = "https://noaa-gefs-pds.s3.amazonaws.com";
@@ -59,7 +60,7 @@ export class GefsS3RunProbe implements GefsAvailabilityProbe {
   private async isAvailable(url: string): Promise<boolean> {
     const response = await this.fetchFn(url, {
       method: "HEAD",
-      headers: { "user-agent": "weather-for-grown-ups/0.1" },
+      headers: { "user-agent": WFG_USER_AGENT },
     });
     if (response.ok) return true;
     if (response.status === 404) return false;

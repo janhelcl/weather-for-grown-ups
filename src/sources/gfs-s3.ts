@@ -1,3 +1,4 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
 import type { GfsGrid } from "../catalog/gfs-grid.js";
 import {
@@ -47,7 +48,7 @@ export class GfsS3RunProbe implements RunAvailabilityProbe {
     const url = buildGfsS3RunMarkerUrl(run, grid);
     const response = await this.fetchFn(url, {
       method: "HEAD",
-      headers: { "user-agent": "weather-for-grown-ups/0.1" },
+      headers: { "user-agent": WFG_USER_AGENT },
     });
 
     if (response.ok) return true;
@@ -65,7 +66,7 @@ export class GfsS3RunProbe implements RunAvailabilityProbe {
   ): Promise<boolean> {
     const url = buildGfsS3ForecastIndexUrl(run, forecastHour, grid);
     const response = await this.fetchFn(url, {
-      headers: { "user-agent": "weather-for-grown-ups/0.1" },
+      headers: { "user-agent": WFG_USER_AGENT },
     });
 
     if (response.status === 404) return false;

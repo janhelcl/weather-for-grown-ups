@@ -1,3 +1,4 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -130,7 +131,7 @@ export class NceiIgraSource {
         }
 
         const response = await this.fetchFn(url, {
-          headers: { "user-agent": "weather-for-grown-ups/0.2" },
+          headers: { "user-agent": WFG_USER_AGENT },
         });
         if (!response.ok) {
           return {
