@@ -1,10 +1,10 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { inflateRawSync } from "node:zlib";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
 import { runWithHttpRetry } from "../access/http-retry.js";
-import { deriveSaturationVaporPressureHpa } from "../derived/thermodynamics.js";
 
 export const NCEI_IGRA_STATION_LIST_URL =
   "https://www.ncei.noaa.gov/pub/data/igra/igra2-station-list.txt";
@@ -131,7 +131,7 @@ export class NceiIgraSource {
         }
 
         const response = await this.fetchFn(url, {
-          headers: { "user-agent": "weather-for-grown-ups/0.2" },
+          headers: { "user-agent": WFG_USER_AGENT },
         });
         if (!response.ok) {
           return {
@@ -305,16 +305,6 @@ export function parseIgraSounding(
     if (level.temperatureC !== undefined && dewPointDepressionRaw !== undefined && dewPointDepressionRaw >= 0) {
       level.dewPointC ??= level.temperatureC - dewPointDepressionRaw / 10;
     }
-    if (
-      level.relativeHumidityPct === undefined
-      && level.temperatureC !== undefined
-      && level.dewPointC !== undefined
-    ) {
-      const saturation = deriveSaturationVaporPressureHpa(level.temperatureC);
-      const vapor = deriveSaturationVaporPressureHpa(level.dewPointC);
-      level.relativeHumidityPct = Math.max(0, Math.min(100, 100 * vapor / saturation));
-    }
-
     levelMap.set(key, level);
   }
 

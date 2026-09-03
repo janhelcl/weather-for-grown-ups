@@ -1,3 +1,4 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { isRetryableHttpStatus } from "../access/http-retry.js";
 import {
   IFS_OPEN_DATA_MIRRORS,
@@ -52,7 +53,7 @@ export class AifsOpenDataRunProbe implements AifsAvailabilityProbe {
       const result = await runIfsHttpWithRetry(() =>
         runWithAccessPolicy(this.accessPolicy, url, async () => {
           const response = await this.fetchFn(url, {
-            headers: { "user-agent": "weather-for-grown-ups/0.3" },
+            headers: { "user-agent": WFG_USER_AGENT },
           });
           return {
             status: response.status,

@@ -1,3 +1,4 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import {
   parseGribIndex,
   type GribIndexEntry,
@@ -246,7 +247,7 @@ async function isIfsProductAvailable(
     const result = await runIfsHttpWithRetry(() =>
       runWithIfsAccessPolicy(accessPolicy, url, async () => {
         const response = await fetchFn(url, {
-          headers: { "user-agent": "weather-for-grown-ups/0.2" },
+          headers: { "user-agent": WFG_USER_AGENT },
         });
         return {
           status: response.status,

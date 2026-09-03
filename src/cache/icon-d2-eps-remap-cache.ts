@@ -1,3 +1,4 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import {
   access,
@@ -90,7 +91,7 @@ export class IconD2EpsDwdRemapAssetCache implements IconD2EpsRemapAssetProvider 
 
     const response = await fetchWithRetry(
       DWD_ICON_D2_REMAP_BUNDLE_URL,
-      { headers: { "user-agent": "weather-for-grown-ups/0.4" } },
+      { headers: { "user-agent": WFG_USER_AGENT } },
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (!response.ok) {

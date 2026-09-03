@@ -26,14 +26,14 @@ import {
 } from "../derived/thermodynamics.js";
 import { deriveWind } from "../derived/wind.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
-import { operationalGfsModelId } from "../schema/gfs-grid.js";
+import { operationalGfsModelId } from "../catalog/gfs-grid.js";
 import {
   profileQuerySchema,
   type ProfileQueryInput,
   type ProfileSourceId,
   type VariableId,
 } from "../schema/query.js";
-import { NomadsProfileSource, S3ProfileSource } from "../sources/profile-source.js";
+import { NomadsProfileSource, S3ProfileSource } from "./gfs-profile-sources.js";
 import type { ProfileDataSource } from "../sources/types.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
 import {

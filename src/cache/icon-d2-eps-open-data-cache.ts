@@ -1,3 +1,4 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -95,7 +96,7 @@ export class IconD2EpsOpenDataCache implements IconD2SubsetCache {
         url,
         {
           method: "HEAD",
-          headers: { "user-agent": "weather-for-grown-ups/0.4" },
+          headers: { "user-agent": WFG_USER_AGENT },
         },
         { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
       );
@@ -137,7 +138,7 @@ export class IconD2EpsOpenDataCache implements IconD2SubsetCache {
   private async fetchAndDecompress(url: string): Promise<Uint8Array> {
     const response = await fetchWithRetry(
       url,
-      { headers: { "user-agent": "weather-for-grown-ups/0.4" } },
+      { headers: { "user-agent": WFG_USER_AGENT } },
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (!response.ok) {

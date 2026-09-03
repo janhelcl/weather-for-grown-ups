@@ -1,3 +1,4 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -54,7 +55,7 @@ export class NomadsCache {
         }
 
         const response = await this.fetchFn(url, {
-          headers: { "user-agent": "weather-for-grown-ups/0.1" },
+          headers: { "user-agent": WFG_USER_AGENT },
         });
         const retryAfter = response.headers.get("retry-after");
         if (!response.ok) {

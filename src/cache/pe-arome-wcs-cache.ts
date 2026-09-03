@@ -1,3 +1,4 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -167,7 +168,7 @@ export class PeAromeWcsCache implements AromeSubsetCache {
         headers: {
           accept: acceptBinary ? "application/octet-stream" : "*/*",
           authorization: `Bearer ${token}`,
-          "user-agent": "weather-for-grown-ups/0.4",
+          "user-agent": WFG_USER_AGENT,
         },
       },
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },

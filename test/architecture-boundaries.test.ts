@@ -9,6 +9,7 @@ import {
   createAtmosphericVerificationAdapterRegistry,
 } from "../src/core/specialized-adapters/registry.js";
 import { PUBLIC_ATMOSPHERIC_DATASET_IDS } from "../src/schema/unified-api.js";
+import { ATMOSPHERIC_DATASET_COMPARISON_PAIRS } from "../src/schema/unified-specialized.js";
 
 describe("architecture boundaries", () => {
   it("keeps one query and diagnostic adapter registered for every public atmospheric dataset", () => {
@@ -22,24 +23,9 @@ describe("architecture boundaries", () => {
       ["gefs", "gfs", "ifs", "ifs-ens"],
     );
     expect(Object.keys(createAtmosphericDatasetComparisonStrategyRegistry()).sort()).toEqual(
-      [
-        "aigfs:aifs",
-        "gefs:aigefs",
-        "gefs:ifs-ens",
-        "gfs:aigfs",
-        "gfs:gefs",
-        "gfs:ifs",
-        "gfs:icon-d2",
-        "hgefs:aigefs",
-        "hgefs:gefs",
-        "ifs:aifs",
-        "ifs:arome",
-        "ifs:icon-d2",
-        "ifs:ifs-ens",
-        "ifs-ens:aifs-ens",
-        "ifs-ens:icon-d2-eps",
-        "ifs-ens:pe-arome",
-      ].sort(),
+      ATMOSPHERIC_DATASET_COMPARISON_PAIRS
+        .map(([left, right]) => `${left}:${right}`)
+        .sort(),
     );
     expect(Object.keys(createAtmosphericVerificationAdapterRegistry()).sort()).toEqual(
       ["gfs-analysis", "igra"],
@@ -151,12 +137,25 @@ describe("architecture boundaries", () => {
     expect(datasetValidation).not.toMatch(/from ["']\.\.\/(?:core|sources|access|cache|grib)\//);
   });
 
-  it("keeps provider sources independent of application core", async () => {
+  it("keeps provider sources below schema, cache and meteorological physics", async () => {
     const files = await tsFiles("src/sources");
     for (const path of files) {
       const source = await readFile(path, "utf8");
-      expect(source, path).not.toMatch(/from ["']\.\.\/(?:core|cli)\//);
+      expect(source, path).not.toMatch(
+        /from ["']\.\.\/(?:core|cli|schema|cache|derived)\//,
+      );
       expect(source, path).not.toMatch(/from ["'][^"']*mcp[^"']*["']/);
+    }
+  });
+
+  it("keeps transport identity centrally versioned", async () => {
+    const files = [
+      ...await tsFiles("src/sources"),
+      ...await tsFiles("src/cache"),
+    ];
+    for (const path of files) {
+      const source = await readFile(path, "utf8");
+      expect(source, path).not.toMatch(/weather-for-grown-ups\/\d+\.\d+/);
     }
   });
 

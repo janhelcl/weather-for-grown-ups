@@ -1,3 +1,4 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -75,7 +76,7 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
     const result = await runWithHttpRetry(
       () => this.options.limiter.run(async () => {
         const response = await this.fetchFn(url, {
-          headers: { "user-agent": "weather-for-grown-ups/0.1" },
+          headers: { "user-agent": WFG_USER_AGENT },
         });
         return {
           status: response.status,
@@ -140,7 +141,7 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
     const result = await runWithHttpRetry(
       () => this.options.limiter.run(async () => {
         const response = await this.fetchFn(url, {
-          headers: { "user-agent": "weather-for-grown-ups/0.1" },
+          headers: { "user-agent": WFG_USER_AGENT },
         });
         return {
           status: response.status,

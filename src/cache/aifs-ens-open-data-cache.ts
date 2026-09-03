@@ -1,3 +1,4 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -84,7 +85,7 @@ export class AifsEnsOpenDataSubsetCache
       const result = await runIfsHttpWithRetry(() =>
         this.accessPolicy.run(url, async () => {
           const response = await this.fetchFn(url, {
-            headers: { "user-agent": "weather-for-grown-ups/0.3" },
+            headers: { "user-agent": WFG_USER_AGENT },
           });
           return {
             status: response.status,
@@ -205,7 +206,7 @@ export class AifsEnsOpenDataSubsetCache
     const result = await runIfsHttpWithRetry(() =>
       this.accessPolicy.run(url, async () => {
         const response = await this.fetchFn(url, {
-          headers: { "user-agent": "weather-for-grown-ups/0.3" },
+          headers: { "user-agent": WFG_USER_AGENT },
         });
         return {
           status: response.status,
@@ -232,7 +233,7 @@ export class AifsEnsOpenDataSubsetCache
         const response = await this.fetchFn(url, {
           headers: {
             range: rangeValue,
-            "user-agent": "weather-for-grown-ups/0.3",
+            "user-agent": WFG_USER_AGENT,
           },
         });
         return {
