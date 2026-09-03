@@ -3,10 +3,10 @@
 Weather for Grown Ups is primarily a **numerical-weather-model access and meteorology product**, not a forecast interpretation layer.
 
 ```text
-NOAA GFS / AIGFS / GEFS / AIGEFS / HGEFS
+NOAA GFS / AIGFS / GEFS / AIGEFS / HGEFS / NCEI historical GFS
 DWD ICON-D2 / ICON-D2-EPS
 Météo-France AROME / PE-AROME
-ECMWF IFS / AIFS / IFS ENS / AIFS ENS / NCEI historical GFS
+ECMWF IFS / AIFS / IFS ENS / AIFS ENS
       ↓
 dataset-specific catalogs, model metadata, time semantics and source adapters
       ↓
@@ -56,21 +56,22 @@ A practical rule for new datasets is: **add capabilities to the catalog and the 
 
 ## Atmospheric dataset capability boundary
 
-`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `aigfs`, `aigefs`, `hgefs`, `icon-d2`, `icon-d2-eps`, `arome`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth.
+`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `aigfs`, `aigefs`, `hgefs`, `icon-d2`, `icon-d2-eps`, `arome`, `pe-arome`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth.
 
 | Dataset | Model class | Result kind | Shared query/diagnostic role | Run comparison | Registered dataset comparisons |
 | --- | --- | --- | --- | --- | --- |
-| GFS | physics | deterministic | Full deterministic atmospheric surface, including parcel diagnostics | ✅ | GEFS, IFS, AIGFS |
+| GFS | physics | deterministic | Full deterministic atmospheric surface, including parcel diagnostics | ✅ | GEFS, IFS, AIGFS, ICON-D2 |
 | AIGFS | AI | deterministic | Shared deterministic query surface; layer/profile diagnostics where inventory supports them | — | GFS, AIFS |
 | GEFS | physics | ensemble | Member-first ensemble atmospheric surface and nonlinear diagnostics | ✅ distribution shift | GFS, IFS ENS, AIGEFS; HGEFS constituent view |
 | AIGEFS | AI | ensemble | Member-first AI ensemble surface; layer/profile diagnostics where inventory supports them | — | GEFS; HGEFS constituent view |
 | HGEFS | hybrid | ensemble | Application-level GEFS + AIGEFS member composition with constituent provenance | — | GEFS, AIGEFS |
-| ICON-D2 | physics | deterministic | Limited-area convection-permitting query surface with pressure/field operations and diagnostics where inventory supports them | — | — |
-| ICON-D2-EPS | physics | ensemble | 20-member limited-area member-first convection-permitting surface | — | — |
-| AROME | physics | deterministic | Limited-area field-only surface on the explicit 0.01° EURW1S100 public product | — | — |
-| IFS | physics | deterministic | Full deterministic ECMWF atmospheric surface, including parcel diagnostics | ✅ | GFS, IFS ENS, AIFS |
+| ICON-D2 | physics | deterministic | Limited-area convection-permitting query surface with pressure/field operations and diagnostics where inventory supports them | — | IFS, GFS |
+| ICON-D2-EPS | physics | ensemble | 20-member limited-area member-first convection-permitting surface | — | IFS ENS |
+| AROME | physics | deterministic | Limited-area field-only surface on the explicit 0.01° EURW1S100 public product | — | IFS |
+| PE-AROME | physics | ensemble | 25-member limited-area member-first near-surface field ensemble | — | IFS ENS |
+| IFS | physics | deterministic | Full deterministic ECMWF atmospheric surface, including parcel diagnostics | ✅ | GFS, IFS ENS, AIFS, ICON-D2, AROME |
 | AIFS | AI | deterministic | Shared deterministic query surface; layer/profile diagnostics where inventory supports them | — | IFS, AIGFS |
-| IFS ENS | physics | ensemble | Member-first ECMWF ensemble surface and nonlinear diagnostics | ✅ distribution shift | GEFS, IFS, AIFS ENS |
+| IFS ENS | physics | ensemble | Member-first ECMWF ensemble surface and nonlinear diagnostics | ✅ distribution shift | GEFS, IFS, AIFS ENS, ICON-D2-EPS, PE-AROME |
 | AIFS ENS | AI | ensemble | Native 51-member AI ensemble surface; layer/profile diagnostics where inventory supports them | — | IFS ENS |
 | GFS analysis | physics | deterministic analysis | Shared historical analysis surface and diagnostics | — | Verification/analog workflows are separate |
 
@@ -196,7 +197,7 @@ IFS ENS composition is **member-first** across the 50 perturbed members `p01`–
 
 ## Catalogs and source contracts
 
-GFS, AIGFS, AIGEFS, GEFS, ICON-D2, ICON-D2-EPS, AROME, IFS, AIFS, AIFS ENS, IFS ENS and historical GFS analysis keep dataset-specific source inventories because their upstream products are not identical. HGEFS deliberately has no duplicate member-source stack: it composes the GEFS and AIGEFS source-backed member services. Canonical field IDs and shared physical derivations converge where the quantity is genuinely comparable; unavailable fields remain explicit capability differences rather than being fabricated for symmetry.
+GFS, AIGFS, AIGEFS, GEFS, ICON-D2, ICON-D2-EPS, AROME, PE-AROME, IFS, AIFS, AIFS ENS, IFS ENS and historical GFS analysis keep dataset-specific source inventories because their upstream products are not identical. HGEFS deliberately has no duplicate member-source stack: it composes the GEFS and AIGEFS source-backed member services. Canonical field IDs and shared physical derivations converge where the quantity is genuinely comparable; unavailable fields remain explicit capability differences rather than being fabricated for symmetry.
 
 Catalogs define:
 
@@ -244,6 +245,14 @@ GEFS uses member-specific NOAA AWS `pgrb2a` 0.5° and `pgrb2s` 0.25° objects wi
 
 Member work is bounded-concurrent. Multi-point and transect operations deliberately reuse upstream member slices rather than multiplying upstream transfer by point count.
 
+### Regional DWD / Météo-France
+
+Regional providers preserve their own packaging and access policy below the unified dataset boundary.
+
+ICON-D2 deterministic access uses DWD Open Data products while retaining the native ~2.1 km model-grid identity separately from regular-lat/lon delivery products. ICON-D2-EPS preserves the native 20-member all-member GRIB packaging and performs the official DWD grid remapping/member extraction path with CDO and `wgrib2`; those runtime requirements are source/decoder concerns, not query dimensions.
+
+AROME uses Météo-France's public EURW1S100 GRIB packages and keeps the 0.01° delivery grid distinct from the nominal ~1.3 km model mesh. PE-AROME uses authenticated targeted WCS requests with bearer credentials, one-member/one-field packaging and geographic subsetting. Credentials, endpoint details, retries, concurrency and immutable caching remain isolated in source/access layers.
+
 ### IFS / IFS ENS
 
 ECMWF access uses official Open Data indexed byte ranges with bounded mirror retry/failover and immutable local caching. Deterministic and ENS products keep their native product, cadence, run and member provenance. The source layer resolves model-specific filenames/messages; the public query layer only sees canonical dataset, geometry, time and selection semantics.
@@ -262,7 +271,7 @@ The public contract mirrors the core architecture instead of the order in which 
 
 > **One query language for atmospheric state; datasets preserve their semantics.**
 
-Normal access is `dataset × geometry × time × selection`. Public dataset IDs are `gfs`, `aigfs`, `aigefs`, `hgefs`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`; they map to the explicit internal dataset registry. Dataset-native result semantics remain unchanged.
+Normal access is `dataset × geometry × time × selection`. Public dataset IDs are `gfs`, `aigfs`, `aigefs`, `hgefs`, `icon-d2`, `icon-d2-eps`, `arome`, `pe-arome`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`; they map to the explicit internal dataset registry. Dataset-native result semantics remain unchanged.
 
 ### CLI
 
