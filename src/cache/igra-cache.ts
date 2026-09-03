@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import {
-  NCEI_IGRA_STATION_LIST_URL,
   NceiIgraSource,
   parseIgraSounding,
   parseIgraStationList,
