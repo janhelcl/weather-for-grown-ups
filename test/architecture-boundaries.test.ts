@@ -46,6 +46,10 @@ describe("architecture boundaries", () => {
       expect(surface).not.toMatch(
         /core\/(?:gfs|gefs|ifs|history|archived-gfs)-(?!unified)[^"']+\.js/,
       );
+      if (surface === cli) {
+        expect(surface).toContain("compareAtmosphericRunsSchema.parse");
+        expect(surface).not.toContain("parseForecastDataset");
+      }
     }
   });
 
