@@ -16,7 +16,9 @@ import {
   type QueryAtmosphereInput,
 } from "../schema/unified-api.js";
 import {
+  ATMOSPHERIC_RUN_COMPARISON_DATASET_IDS,
   compareAtmosphericDatasetsSchema,
+  compareAtmosphericRunsSchema,
   isAtmosphericDatasetComparisonPair,
   type CompareAtmosphericDatasetsInput,
   type CompareAtmosphericRunsInput,
@@ -132,8 +134,12 @@ function registerDiagnoseCommand(program: Command): void {
 function registerCompareRunsCommand(program: Command): void {
   program
     .command("compare-runs")
-    .description("Compare forecast initialization cycles for GFS, GEFS, IFS, or IFS ENS")
-    .option("--dataset <gfs|gefs|ifs|ifs-ens>", "Forecast dataset", "gfs")
+    .description("Compare forecast initialization cycles for supported atmospheric datasets")
+    .option(
+      `--dataset <${ATMOSPHERIC_RUN_COMPARISON_DATASET_IDS.join("|")}>`,
+      "Forecast dataset",
+      "gfs",
+    )
     .requiredOption("--lat <number>", "Latitude", Number)
     .requiredOption("--lon <number>", "Longitude", Number)
     .requiredOption("--at <iso>", "Forecast valid time")
@@ -396,13 +402,13 @@ export function buildUnifiedQuery(options: Record<string, any>): QueryAtmosphere
 export function buildUnifiedRunComparison(
   options: Record<string, any>,
 ): CompareAtmosphericRunsInput {
-  const dataset = parseForecastDataset(options.dataset);
+  const dataset = parseDataset(options.dataset);
   const selection = parseSelection({
     vars: options.vars,
     levels: options.levels,
     fields: options.fields,
   });
-  return {
+  const request = {
     dataset,
     geometry: { type: "point", latitude: options.lat, longitude: options.lon },
     time: { at: options.at },
@@ -427,6 +433,8 @@ export function buildUnifiedRunComparison(
       ? {}
       : { cycleStrideHours: options.cycleStrideHours }),
   };
+
+  return compareAtmosphericRunsSchema.parse(request);
 }
 
 export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAtmosphereInput {
@@ -476,16 +484,6 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
     ...(options.source === undefined ? {} : { source: options.source }),
     ...ensembleInput(dataset, options),
   };
-}
-
-function parseForecastDataset(
-  value: unknown,
-): "gfs" | "gefs" | "ifs" | "ifs-ens" {
-  const dataset = parseDataset(value);
-  if (dataset === "gfs" || dataset === "gefs" || dataset === "ifs" || dataset === "ifs-ens") {
-    return dataset;
-  }
-  throw new Error(`Run comparison supports gfs|gefs|ifs|ifs-ens, received: ${value}`);
 }
 
 function parseDataset(value: unknown): PublicAtmosphericDataset {
