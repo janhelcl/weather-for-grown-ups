@@ -14,9 +14,9 @@ import {
   peAromeForecastHour,
   peAromeNativeForecastHoursInRange,
   peAromeValidTime,
-  resolveMeteoFranceBearerToken,
   resolvePeAromeWcsEndpoint,
 } from "../src/sources/pe-arome.js";
+import { resolveMeteoFranceBearerToken } from "../src/access/meteo-france-auth.js";
 
 const roots: string[] = [];
 const products = { sp1: true, hp1: false };
