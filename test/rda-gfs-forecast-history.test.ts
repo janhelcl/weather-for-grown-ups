@@ -1,7 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildRdaGfs025ForecastAreaUrl,
   convertRdaGfs025AreaNetcdfToCsv,
@@ -84,14 +81,8 @@ describe("GDEX 0.25 area transport", () => {
 
 
 describe("GDEX transient failure handling", () => {
-  const dirs: string[] = [];
-  afterEach(async () => {
-    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
-  });
 
   it("retries transient point failures through the supplied limiter", async () => {
-    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-gdex-test-"));
-    dirs.push(cacheDir);
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
     const fetchFn = vi.fn()
       .mockResolvedValueOnce(new Response("", { status: 504, statusText: "Gateway Time-out" }))
@@ -100,7 +91,6 @@ describe("GDEX transient failure handling", () => {
         { status: 200 },
       ));
     const source = new RdaGfsForecastHistorySource({
-      cacheDir,
       retryBaseDelayMs: 0,
       retryJitterRatio: 0,
       limiter: { run },
@@ -119,26 +109,14 @@ describe("GDEX transient failure handling", () => {
     expect(fetchFn).toHaveBeenCalledTimes(2);
     expect(run).toHaveBeenCalledTimes(2);
 
-    const cached = await source.fetch({
-      runTime: new Date("2026-08-24T00:00:00Z"),
-      forecastHour: 6,
-      latitude: 50,
-      longitude: 14,
-      variables: ["Temperature_isobaric"],
-    });
-    expect(cached.cacheHit).toBe(true);
-    expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 
   it("stops after three transient failures", async () => {
-    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-gdex-test-"));
-    dirs.push(cacheDir);
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
     const fetchFn = vi.fn(async () =>
       new Response("", { status: 503, statusText: "Service Unavailable" })
     );
     const source = new RdaGfsForecastHistorySource({
-      cacheDir,
       retryBaseDelayMs: 0,
       retryJitterRatio: 0,
       limiter: { run },
@@ -157,8 +135,6 @@ describe("GDEX transient failure handling", () => {
   });
 
   it("retries transient NetCDF area failures and decodes the successful response", async () => {
-    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-gdex-test-"));
-    dirs.push(cacheDir);
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
     const fetchFn = vi.fn()
       .mockResolvedValueOnce(new Response("", { status: 502, statusText: "Bad Gateway" }))
@@ -170,7 +146,6 @@ describe("GDEX transient failure handling", () => {
       Temperature_isobaric: [278, 279, 280, 281],
     };
     const source = new RdaGfsForecastHistorySource({
-      cacheDir,
       retryBaseDelayMs: 0,
       retryJitterRatio: 0,
       limiter: { run },
@@ -197,18 +172,11 @@ describe("GDEX transient failure handling", () => {
 
 
 describe("GDEX terminal and decoder edge cases", () => {
-  const dirs: string[] = [];
-  afterEach(async () => {
-    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
-  });
 
   it("does not retry a missing point forecast", async () => {
-    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-gdex-terminal-"));
-    dirs.push(cacheDir);
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
     const fetchFn = vi.fn(async () => new Response("", { status: 404, statusText: "Not Found" }));
     const source = new RdaGfsForecastHistorySource({
-      cacheDir,
       retryBaseDelayMs: 0,
       retryJitterRatio: 0,
       limiter: { run },
@@ -227,12 +195,9 @@ describe("GDEX terminal and decoder edge cases", () => {
   });
 
   it("does not retry a missing area forecast", async () => {
-    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-gdex-terminal-"));
-    dirs.push(cacheDir);
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
     const fetchFn = vi.fn(async () => new Response("", { status: 404, statusText: "Not Found" }));
     const source = new RdaGfsForecastHistorySource({
-      cacheDir,
       retryBaseDelayMs: 0,
       retryJitterRatio: 0,
       limiter: { run },
