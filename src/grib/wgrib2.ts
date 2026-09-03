@@ -2,7 +2,7 @@ import { execa } from "execa";
 import { GEFS_PGRB2A_FIELD_CATALOG } from "../catalog/gefs-fields.js";
 import { findNamedNonIsobaricLevel } from "../catalog/non-isobaric-fields.js";
 import { ALL_SUPPORTED_GFS_CODES } from "../catalog/variables.js";
-import type { DecodedValue, GribDecoderName } from "../core/types.js";
+import type { DecodedValue, GribDecoderName } from "../types/decoded.js";
 import {
   canonicalGribCode,
   decodePointMessages,
