@@ -2,6 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CachedNceiGfsHistorySource } from "../src/cache/historical-gfs-cache.js";
+import { CachedNceiIgraSource } from "../src/cache/igra-cache.js";
 import { NceiGfsHistorySource } from "../src/sources/ncei-gfs-history.js";
 import { NceiIgraSource } from "../src/sources/ncei-igra.js";
 
@@ -13,8 +15,6 @@ afterEach(async () => {
 
 describe("provider transport retries", () => {
   it("retries transient NCEI THREDDS failures through the access policy", async () => {
-    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-ncei-retry-"));
-    roots.push(cacheDir);
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
     const fetchFn = vi.fn()
       .mockResolvedValueOnce(new Response("busy", {
@@ -24,7 +24,6 @@ describe("provider transport retries", () => {
       }))
       .mockResolvedValueOnce(new Response("a,b\n1,2", { status: 200 }));
     const source = new NceiGfsHistorySource({
-      cacheDir,
       limiter: { run },
       fetchFn,
       retryBaseDelayMs: 0,
@@ -45,8 +44,6 @@ describe("provider transport retries", () => {
   });
 
   it("classifies exhausted NCEI 5xx responses as upstream unavailability", async () => {
-    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-ncei-unavailable-"));
-    roots.push(cacheDir);
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
     const fetchFn = vi.fn(async () =>
       new Response("busy", {
@@ -56,7 +53,6 @@ describe("provider transport retries", () => {
       })
     );
     const source = new NceiGfsHistorySource({
-      cacheDir,
       limiter: { run },
       fetchFn,
       retryBaseDelayMs: 0,
@@ -74,28 +70,32 @@ describe("provider transport retries", () => {
     expect(fetchFn.mock.calls.length).toBeGreaterThan(1);
   });
 
-  it("handles concurrent identical NCEI cache misses without temp-file collisions", async () => {
+  it("deduplicates concurrent identical NCEI cache misses above the source boundary", async () => {
     const cacheDir = await mkdtemp(join(tmpdir(), "wfg-ncei-concurrent-"));
     roots.push(cacheDir);
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
-    let started = 0;
     let release!: () => void;
+    let markStarted!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
     const fetchFn = vi.fn(async () => {
-      started += 1;
-      if (started === 2) release();
+      markStarted();
       await gate;
       return new Response("a,b\n1,2", { status: 200 });
     });
-    const source = new NceiGfsHistorySource({
+    const source = new CachedNceiGfsHistorySource(
       cacheDir,
-      limiter: { run },
-      fetchFn,
-      retryBaseDelayMs: 0,
-      retryJitterRatio: 0,
-    });
+      new NceiGfsHistorySource({
+        limiter: { run },
+        fetchFn,
+        retryBaseDelayMs: 0,
+        retryJitterRatio: 0,
+      }),
+    );
     const request = {
       analysisTime: new Date("2017-05-09T00:00:00Z"),
       latitude: 50,
@@ -103,27 +103,27 @@ describe("provider transport retries", () => {
       variables: ["Temperature_isobaric"] as const,
     };
 
-    const [first, second] = await Promise.all([
-      source.fetch(request),
-      source.fetch(request),
-    ]);
+    const firstPromise = source.fetch(request);
+    await started;
+    const secondPromise = source.fetch(request);
+    release();
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
     const cached = await source.fetch(request);
 
     expect(first.csv).toBe("a,b\n1,2");
     expect(second.csv).toBe("a,b\n1,2");
+    expect(first.cacheHit).toBe(false);
+    expect(second.cacheHit).toBe(true);
     expect(cached.cacheHit).toBe(true);
-    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(fetchFn).toHaveBeenCalledOnce();
   });
 
   it("does not retry terminal NCEI 404 responses", async () => {
-    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-ncei-terminal-"));
-    roots.push(cacheDir);
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
     const fetchFn = vi.fn(async () =>
       new Response("", { status: 404, statusText: "Not Found" })
     );
     const source = new NceiGfsHistorySource({
-      cacheDir,
       limiter: { run },
       fetchFn,
       retryBaseDelayMs: 0,
@@ -141,7 +141,7 @@ describe("provider transport retries", () => {
     expect(run).toHaveBeenCalledOnce();
   });
 
-  it("retries throttled IGRA downloads and then caches the station list", async () => {
+  it("retries throttled IGRA downloads and then reuses the cached station list", async () => {
     const cacheDir = await mkdtemp(join(tmpdir(), "wfg-igra-retry-"));
     roots.push(cacheDir);
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
@@ -162,14 +162,18 @@ describe("provider transport retries", () => {
         headers: { "retry-after": "0" },
       }))
       .mockResolvedValueOnce(new Response(stationList, { status: 200 }));
-    const source = new NceiIgraSource({
+    const now = () => new Date("2026-08-28T12:00:00Z");
+    const source = new CachedNceiIgraSource(
       cacheDir,
-      limiter: { run },
-      fetchFn,
-      retryBaseDelayMs: 0,
-      retryJitterRatio: 0,
-      now: () => new Date("2026-08-28T12:00:00Z"),
-    });
+      new NceiIgraSource({
+        limiter: { run },
+        fetchFn,
+        retryBaseDelayMs: 0,
+        retryJitterRatio: 0,
+        now,
+      }),
+      now,
+    );
 
     const first = await source.listStations();
     const second = await source.listStations();
