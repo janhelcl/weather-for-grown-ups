@@ -137,7 +137,7 @@ describe("architecture boundaries", () => {
     expect(datasetValidation).not.toMatch(/from ["']\.\.\/(?:core|sources|access|cache|grib)\//);
   });
 
-  it("keeps provider sources independent of application core", async () => {
+  it("keeps provider sources below schema, cache and meteorological physics", async () => {
     const files = await tsFiles("src/sources");
     for (const path of files) {
       const source = await readFile(path, "utf8");
@@ -145,6 +145,17 @@ describe("architecture boundaries", () => {
         /from ["']\.\.\/(?:core|cli|schema|cache|derived)\//,
       );
       expect(source, path).not.toMatch(/from ["'][^"']*mcp[^"']*["']/);
+    }
+  });
+
+  it("keeps transport identity centrally versioned", async () => {
+    const files = [
+      ...await tsFiles("src/sources"),
+      ...await tsFiles("src/cache"),
+    ];
+    for (const path of files) {
+      const source = await readFile(path, "utf8");
+      expect(source, path).not.toMatch(/weather-for-grown-ups\/\d+\.\d+/);
     }
   });
 
