@@ -1,7 +1,4 @@
 import { WFG_USER_AGENT } from "../access/user-agent.js";
-import { createHash, randomUUID } from "node:crypto";
-import { access, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { inflateRawSync } from "node:zlib";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
 import { runWithHttpRetry } from "../access/http-retry.js";
@@ -10,8 +7,6 @@ export const NCEI_IGRA_STATION_LIST_URL =
   "https://www.ncei.noaa.gov/pub/data/igra/igra2-station-list.txt";
 export const NCEI_IGRA_DATA_BASE_URL =
   "https://www.ncei.noaa.gov/data/integrated-global-radiosonde-archive/access";
-
-const DAY_MS = 24 * 60 * 60 * 1_000;
 
 export interface IgraStation {
   id: string;
@@ -46,12 +41,16 @@ export interface IgraSounding {
 }
 
 export interface NceiIgraSourceOptions {
-  cacheDir: string;
   limiter: UpstreamAccessPolicy;
   fetchFn?: typeof fetch;
   now?: () => Date;
   retryBaseDelayMs?: number;
   retryJitterRatio?: number;
+}
+
+export interface IgraSoundingArchive {
+  url: string;
+  recent: boolean;
 }
 
 export class NceiIgraSource {
@@ -64,99 +63,43 @@ export class NceiIgraSource {
   }
 
   async listStations(): Promise<IgraStation[]> {
-    const response = await this.fetchCached(
-      NCEI_IGRA_STATION_LIST_URL,
-      "igra2-station-list.txt",
-      DAY_MS,
-      "text",
-    );
-    return parseIgraStationList(response.text!);
+    return parseIgraStationList(await this.fetchStationListText());
   }
 
   async getSounding(stationId: string, nominalTime: Date): Promise<IgraSounding> {
-    const year = nominalTime.getUTCFullYear();
-    const currentYear = this.now().getUTCFullYear();
-    const recent = year === currentYear;
-    const filename = recent
-      ? `${stationId}-data-beg${currentYear}.txt.zip`
-      : `${stationId}-data.txt.zip`;
-    const folder = recent ? "data-y2d" : "data-por";
-    const url = `${NCEI_IGRA_DATA_BASE_URL}/${folder}/${filename}`;
-    const ttlMs = recent ? 6 * 60 * 60 * 1_000 : 30 * DAY_MS;
-    const cacheName = `${createHash("sha256").update(url).digest("hex")}.zip`;
-    const response = await this.fetchCached(url, cacheName, ttlMs, "binary");
-    const text = extractSingleTextFileZip(response.bytes!);
-
-    const parsed = parseIgraSounding(text, stationId, nominalTime);
+    const archive = resolveIgraSoundingArchive(stationId, nominalTime, this.now());
+    const text = this.extractSoundingArchive(await this.fetchSoundingArchive(archive.url));
     return {
-      ...parsed,
-      sourceFile: url,
-      cacheHit: response.cacheHit,
+      ...parseIgraSounding(text, stationId, nominalTime),
+      sourceFile: archive.url,
+      cacheHit: false,
     };
   }
 
-  private async fetchCached(
-    url: string,
-    cacheName: string,
-    ttlMs: number,
-    kind: "text" | "binary",
-  ): Promise<{ text?: string; bytes?: Uint8Array; cacheHit: boolean }> {
-    await mkdir(this.options.cacheDir, { recursive: true });
-    const cachePath = join(this.options.cacheDir, cacheName);
+  fetchStationListText(): Promise<string> {
+    return this.fetchText(NCEI_IGRA_STATION_LIST_URL);
+  }
 
-    if (await isFresh(cachePath, ttlMs)) {
-      return kind === "text"
-        ? { text: await readFile(cachePath, "utf8"), cacheHit: true }
-        : { bytes: new Uint8Array(await readFile(cachePath)), cacheHit: true };
-    }
+  fetchSoundingArchive(url: string): Promise<Uint8Array> {
+    return this.fetchBytes(url);
+  }
 
+  extractSoundingArchive(bytes: Uint8Array): string {
+    return extractSingleTextFileZip(bytes);
+  }
+
+  private async fetchText(url: string): Promise<string> {
     const result = await runWithHttpRetry(
       () => this.options.limiter.run(async () => {
-        if (await isFresh(cachePath, ttlMs)) {
-          return kind === "text"
-            ? {
-                status: 200,
-                retryAfter: null,
-                statusText: "cache-hit",
-                text: await readFile(cachePath, "utf8"),
-                cacheHit: true,
-              }
-            : {
-                status: 200,
-                retryAfter: null,
-                statusText: "cache-hit",
-                bytes: new Uint8Array(await readFile(cachePath)),
-                cacheHit: true,
-              };
-        }
-
         const response = await this.fetchFn(url, {
           headers: { "user-agent": WFG_USER_AGENT },
         });
-        if (!response.ok) {
-          return {
-            status: response.status,
-            retryAfter: response.headers.get("retry-after"),
-            statusText: response.statusText,
-            cacheHit: false,
-          };
-        }
-
-        return kind === "text"
-          ? {
-              status: response.status,
-              retryAfter: response.headers.get("retry-after"),
-              statusText: response.statusText,
-              text: await response.text(),
-              cacheHit: false,
-            }
-          : {
-              status: response.status,
-              retryAfter: response.headers.get("retry-after"),
-              statusText: response.statusText,
-              bytes: new Uint8Array(await response.arrayBuffer()),
-              cacheHit: false,
-            };
+        return {
+          status: response.status,
+          retryAfter: response.headers.get("retry-after"),
+          statusText: response.statusText,
+          text: response.ok ? await response.text() : undefined,
+        };
       }),
       {
         ...(this.options.retryBaseDelayMs === undefined
@@ -168,33 +111,64 @@ export class NceiIgraSource {
       },
     );
 
-    if (result.cacheHit) {
-      if (kind === "text") {
-        if (result.text === undefined) throw new Error("NOAA IGRA cached text response was empty");
-        return { text: result.text, cacheHit: true };
-      }
-      if (result.bytes === undefined) throw new Error("NOAA IGRA cached binary response was empty");
-      return { bytes: result.bytes, cacheHit: true };
-    }
     if (result.status < 200 || result.status >= 300) {
       throw new Error(
         `NOAA IGRA request failed: HTTP ${result.status} ${result.statusText} (${url})`,
       );
     }
-
-    const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
-    if (kind === "text") {
-      if (result.text === undefined) throw new Error("NOAA IGRA text response was empty");
-      await writeFile(tempPath, result.text, "utf8");
-      await rename(tempPath, cachePath);
-      return { text: result.text, cacheHit: false };
-    }
-
-    if (result.bytes === undefined) throw new Error("NOAA IGRA binary response was empty");
-    await writeFile(tempPath, result.bytes);
-    await rename(tempPath, cachePath);
-    return { bytes: result.bytes, cacheHit: false };
+    if (result.text === undefined) throw new Error("NOAA IGRA text response was empty");
+    return result.text;
   }
+
+  private async fetchBytes(url: string): Promise<Uint8Array> {
+    const result = await runWithHttpRetry(
+      () => this.options.limiter.run(async () => {
+        const response = await this.fetchFn(url, {
+          headers: { "user-agent": WFG_USER_AGENT },
+        });
+        return {
+          status: response.status,
+          retryAfter: response.headers.get("retry-after"),
+          statusText: response.statusText,
+          bytes: response.ok ? new Uint8Array(await response.arrayBuffer()) : undefined,
+        };
+      }),
+      {
+        ...(this.options.retryBaseDelayMs === undefined
+          ? {}
+          : { baseDelayMs: this.options.retryBaseDelayMs }),
+        ...(this.options.retryJitterRatio === undefined
+          ? {}
+          : { jitterRatio: this.options.retryJitterRatio }),
+      },
+    );
+
+    if (result.status < 200 || result.status >= 300) {
+      throw new Error(
+        `NOAA IGRA request failed: HTTP ${result.status} ${result.statusText} (${url})`,
+      );
+    }
+    if (result.bytes === undefined) throw new Error("NOAA IGRA binary response was empty");
+    return result.bytes;
+  }
+}
+
+export function resolveIgraSoundingArchive(
+  stationId: string,
+  nominalTime: Date,
+  now: Date,
+): IgraSoundingArchive {
+  const year = nominalTime.getUTCFullYear();
+  const currentYear = now.getUTCFullYear();
+  const recent = year === currentYear;
+  const filename = recent
+    ? `${stationId}-data-beg${currentYear}.txt.zip`
+    : `${stationId}-data.txt.zip`;
+  const folder = recent ? "data-y2d" : "data-por";
+  return {
+    url: `${NCEI_IGRA_DATA_BASE_URL}/${folder}/${filename}`,
+    recent,
+  };
 }
 
 export function parseIgraStationList(text: string): IgraStation[] {
@@ -382,12 +356,3 @@ function integerField(value: string): number | undefined {
   return parsed;
 }
 
-async function isFresh(path: string, ttlMs: number): Promise<boolean> {
-  try {
-    await access(path);
-    const info = await stat(path);
-    return Date.now() - info.mtimeMs <= ttlMs;
-  } catch {
-    return false;
-  }
-}
