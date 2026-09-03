@@ -171,6 +171,24 @@ describe("architecture boundaries", () => {
     }
   });
 
+  it("keeps lower layers independent of core orchestration", async () => {
+    const directories = [
+      "src/access",
+      "src/cache",
+      "src/catalog",
+      "src/derived",
+      "src/grib",
+      "src/schema",
+      "src/sources",
+    ];
+    const files = (await Promise.all(directories.map(tsFiles))).flat();
+
+    for (const path of files) {
+      const source = await readFile(path, "utf8");
+      expect(source, path).not.toMatch(/from ["'](?:\.\.\/)+core\//);
+    }
+  });
+
   it("keeps the public unified API module as a composition barrel", async () => {
     const api = await readFile("src/core/unified-atmosphere-api.ts", "utf8");
     expect(api).toContain("./unified-atmosphere-query.js");
