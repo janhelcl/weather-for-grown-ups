@@ -1,3 +1,4 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -164,7 +165,7 @@ export class AigfsNomadsSubsetCache implements AigfsSubsetCache {
     await mkdir(this.rootDir, { recursive: true });
     const response = await fetchWithRetry(
       url,
-      { headers: { "user-agent": "weather-for-grown-ups/0.3" } },
+      { headers: { "user-agent": WFG_USER_AGENT } },
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (!response.ok) {
@@ -189,7 +190,7 @@ export class AigfsNomadsSubsetCache implements AigfsSubsetCache {
     await mkdir(this.rootDir, { recursive: true });
     const response = await fetchWithRetry(
       url,
-      { headers: { "user-agent": "weather-for-grown-ups/0.3" } },
+      { headers: { "user-agent": WFG_USER_AGENT } },
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (response.status === 404) return false;
@@ -210,7 +211,7 @@ export class AigfsNomadsSubsetCache implements AigfsSubsetCache {
       {
         headers: {
           range: rangeValue,
-          "user-agent": "weather-for-grown-ups/0.3",
+          "user-agent": WFG_USER_AGENT,
         },
       },
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
