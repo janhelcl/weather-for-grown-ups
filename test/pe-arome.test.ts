@@ -18,9 +18,9 @@ import {
   parsePeAromeRun,
   peAromeForecastHour,
   peAromeValidTime,
-  resolveMeteoFranceBearerToken,
   resolvePeAromeWcsEndpoint,
 } from "../src/sources/pe-arome.js";
+import { resolveMeteoFranceBearerToken } from "../src/access/meteo-france-auth.js";
 
 const roots: string[] = [];
 
