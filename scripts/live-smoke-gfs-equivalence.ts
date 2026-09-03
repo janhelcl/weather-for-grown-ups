@@ -26,6 +26,11 @@ type ComparisonPlan =
     };
 
 const HOUR_MS = 3_600_000;
+// Operational and archived GRIB copies can differ by float32-scale source
+// precision. Raw profiles are checked much more tightly below; parcel
+// interpolation can amplify those tiny input differences into centimetre-scale
+// LFC/EL height movement, so keep a separate strict derived-diagnostic bound.
+const DERIVED_PARCEL_ABSOLUTE_TOLERANCE = 5e-2;
 const POINT = { latitude: 50, longitude: 14 };
 const SECOND_POINT = { latitude: 49.5, longitude: 14.5 };
 const PRESSURE_LEVELS = [925, 850, 700, 500] as const;
@@ -244,7 +249,7 @@ async function verifyGrid(
       stripParcelPath(operationalParcel.parcel),
       stripParcelPath(archivedParcel.parcel),
       `${grid}.parcel`,
-      1e-2,
+      DERIVED_PARCEL_ABSOLUTE_TOLERANCE,
     );
   } else {
     // Grid 4 does not expose native isobaric specific humidity in the historical
