@@ -153,6 +153,16 @@ describe("architecture boundaries", () => {
     }
   });
 
+  it("keeps provider credentials in the access layer", async () => {
+    const [source, access] = await Promise.all([
+      readFile("src/sources/pe-arome.ts", "utf8"),
+      readFile("src/access/meteo-france-auth.ts", "utf8"),
+    ]);
+
+    expect(source).not.toContain("WFG_METEO_FRANCE_TOKEN");
+    expect(access).toContain("WFG_METEO_FRANCE_TOKEN");
+  });
+
   it("keeps transport identity centrally versioned", async () => {
     const files = [
       ...await tsFiles("src/sources"),
