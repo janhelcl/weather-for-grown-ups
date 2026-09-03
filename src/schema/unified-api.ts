@@ -28,6 +28,8 @@ import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "aigfs", "aigefs", "hgefs", "icon-d2", "icon-d2-eps", "arome", "pe-arome", "gefs", "ifs", "aifs", "aifs-ens", "ifs-ens", "gfs-analysis"] as const;
 export const publicAtmosphericDatasetSchema = z.enum(PUBLIC_ATMOSPHERIC_DATASET_IDS);
 export type PublicAtmosphericDataset = z.infer<typeof publicAtmosphericDatasetSchema>;
+export type PublicForecastKind = "operational" | "reforecast";
+
 interface PublicForecastKindCapabilityOverride {
   runSelectors: readonly AtmosphericRunSelectorId[];
   operations: readonly string[];
@@ -46,16 +48,18 @@ function datasetMetadata<Id extends AtmosphericDatasetId>(
   forecastKindOverrides: Partial<Record<PublicForecastKind, PublicForecastKindCapabilityOverride>>;
 } {
   const dataset = ATMOSPHERIC_DATASET_CATALOG[internalDatasetId];
+  const additionalForecastKinds = (Object.keys(forecastKindOverrides) as PublicForecastKind[])
+    .filter((kind) => kind !== "operational");
   const forecastKinds: readonly PublicForecastKind[] = dataset.role === "analysis"
     ? []
-    : ["operational", ...Object.keys(forecastKindOverrides).filter((kind) => kind !== "operational") as PublicForecastKind[]];
+    : ["operational", ...additionalForecastKinds];
   return {
     internalDatasetId,
     role: dataset.role,
     kind: dataset.kind,
     modelClass: dataset.modelClass,
     provider: dataset.provider,
-    forecastKinds: [...metadata.forecastKinds],
+    forecastKinds,
     forecastKindOverrides,
   };
 }
@@ -345,8 +349,6 @@ export function publicDatasetCoversGeometry(
     geometry,
   );
 }
-
-export type PublicForecastKind = "operational" | "reforecast";
 
 export interface PublicAtmosphericDatasetCapabilities {
   dataset: PublicAtmosphericDataset;
