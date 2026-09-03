@@ -130,6 +130,7 @@ describe("architecture boundaries", () => {
       /AIGFS_PRESSURE_|AIGEFS_MEMBERS|AIFS_PRESSURE_|AIFS_ENS_MEMBERS|HGEFS_MEMBERS|HGEFS_AREA_PRESSURE_|GEFS_REFORECAST_(?:EXTENDED_MEMBERS|FIELD_IDS|PRESSURE_VARIABLE_IDS)/,
     );
     expect(schema).not.toMatch(/request\.dataset\s*(?:===|!==)/);
+    expect(schema).not.toMatch(/\bdataset\s*===\s*["']gefs["']/);
     expect(schema).not.toContain("datasetSupportsRunSelector");
     expect(datasetValidation).toContain("DATASET_CAPABILITY_VALIDATORS");
     expect(datasetValidation).toContain("validateGfsModifiers");
