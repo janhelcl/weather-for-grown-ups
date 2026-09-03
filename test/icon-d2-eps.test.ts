@@ -233,6 +233,7 @@ describe("ICON-D2-EPS source defensive branches", () => {
         NON_ISOBARIC_FIELD_CATALOG.wind_gust,
         NON_ISOBARIC_FIELD_CATALOG.mean_layer_cape,
         NON_ISOBARIC_FIELD_CATALOG.mean_layer_cin,
+        NON_ISOBARIC_FIELD_CATALOG.updraft_helicity_max_2_8km,
         NON_ISOBARIC_FIELD_CATALOG.mean_sea_level_pressure,
         NON_ISOBARIC_FIELD_CATALOG.total_precipitation,
         NON_ISOBARIC_FIELD_CATALOG.convective_rain,
@@ -245,7 +246,7 @@ describe("ICON-D2-EPS source defensive branches", () => {
       ] as RawNonIsobaricFieldDefinition[],
     });
 
-    expect(fetchFn).toHaveBeenCalledTimes(21);
+    expect(fetchFn).toHaveBeenCalledTimes(22);
     const urls = fetchFn.mock.calls.map((call) => String(call[0]));
     for (const parameter of [
       "/t/",
@@ -260,6 +261,7 @@ describe("ICON-D2-EPS source defensive branches", () => {
       "/vmax_10m/",
       "/cape_ml/",
       "/cin_ml/",
+      "/uh_max/",
       "/pmsl/",
       "/tot_prec/",
       "/rain_con/",
@@ -528,6 +530,7 @@ describe("ICON-D2-EPS adaptive member remapping", () => {
         NON_ISOBARIC_FIELD_CATALOG.temperature_2m,
         NON_ISOBARIC_FIELD_CATALOG.convective_rain,
         NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity,
+        NON_ISOBARIC_FIELD_CATALOG.updraft_helicity_max_2_8km,
       ] as RawNonIsobaricFieldDefinition[],
     };
     expect(iconD2EpsRequiresMemberFirstRemap(mixed)).toBe(true);
@@ -539,7 +542,7 @@ describe("ICON-D2-EPS adaptive member remapping", () => {
     expect(source.fetch.mock.calls.map(([request]: any[]) =>
       request.fields.map((field: any) => field.id))).toEqual(expect.arrayContaining([
       ["temperature_2m", "convective_rain"],
-      ["column_maximum_reflectivity"],
+      ["column_maximum_reflectivity", "updraft_helicity_max_2_8km"],
     ]));
     expect(remapper.remap).toHaveBeenCalledWith(
       "/raw/temperature_2m+convective_rain.grib2",
@@ -549,11 +552,11 @@ describe("ICON-D2-EPS adaptive member remapping", () => {
       "p02",
     );
     expect(filter.filter).toHaveBeenCalledWith(
-      "/raw/column_maximum_reflectivity.grib2",
+      "/raw/column_maximum_reflectivity+updraft_helicity_max_2_8km.grib2",
       "p02",
     );
     expect(remapper.remap).toHaveBeenCalledWith(
-      "/raw/column_maximum_reflectivity.grib2.p02",
+      "/raw/column_maximum_reflectivity+updraft_helicity_max_2_8km.grib2.p02",
     );
     expect(combiner.combine).toHaveBeenCalledWith([
       {
@@ -561,7 +564,7 @@ describe("ICON-D2-EPS adaptive member remapping", () => {
         cacheHit: true,
       },
       {
-        path: "/raw/column_maximum_reflectivity.grib2.p02.remapped",
+        path: "/raw/column_maximum_reflectivity+updraft_helicity_max_2_8km.grib2.p02.remapped",
         cacheHit: true,
       },
     ]);
@@ -577,6 +580,27 @@ describe("ICON-D2-EPS adaptive member remapping", () => {
       path: "/raw/column_maximum_reflectivity.grib2.p02.remapped",
       cacheHit: true,
     });
+    expect(combiner.combine).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    const updraftHelicityOnly = {
+      ...baseRequest,
+      fields: [
+        NON_ISOBARIC_FIELD_CATALOG.updraft_helicity_max_2_8km,
+      ] as RawNonIsobaricFieldDefinition[],
+    };
+    expect(iconD2EpsRequiresMemberFirstRemap(updraftHelicityOnly)).toBe(true);
+    await expect(cache.fetch(updraftHelicityOnly)).resolves.toEqual({
+      path: "/raw/updraft_helicity_max_2_8km.grib2.p02.remapped",
+      cacheHit: true,
+    });
+    expect(filter.filter).toHaveBeenCalledWith(
+      "/raw/updraft_helicity_max_2_8km.grib2",
+      "p02",
+    );
+    expect(remapper.remap).toHaveBeenCalledWith(
+      "/raw/updraft_helicity_max_2_8km.grib2.p02",
+    );
     expect(combiner.combine).not.toHaveBeenCalled();
   });
 });
@@ -743,6 +767,18 @@ describe("ICON-D2-EPS member-first aggregation", () => {
                 values: { temperatureC: 12 + offset },
               },
               {
+                id: "updraft_helicity_max_2_8km",
+                level: { type: "named_layer", id: "height_layer_2_8km_msl" },
+                temporal: {
+                  type: "maximum",
+                  startForecastHour: 5,
+                  endForecastHour: 6,
+                  startTime: "2026-08-31T05:00:00.000Z",
+                  endTime: "2026-08-31T06:00:00.000Z",
+                },
+                values: { updraftHelicityM2S2: 150 + offset * 10 },
+              },
+              {
                 id: "visibility",
                 level: { type: "surface" },
                 temporal: { type: "instantaneous" },
@@ -788,6 +824,7 @@ describe("ICON-D2-EPS member-first aggregation", () => {
         pressureLevelsHpa: [850],
         fields: [
           "temperature_2m",
+          "updraft_helicity_max_2_8km",
           "visibility",
           "cloud_ceiling_height_msl",
           "shallow_convective_cloud_base_height_msl",
@@ -813,6 +850,22 @@ describe("ICON-D2-EPS member-first aggregation", () => {
     });
     expect(result.fieldSummaries.find((summary: any) => summary.field === "temperature_2m")
       .outputs[0].distribution.mean).toBe(13);
+    expect(result.fieldSummaries.find(
+      (summary: any) => summary.field === "updraft_helicity_max_2_8km",
+    )).toMatchObject({
+      level: { type: "named_layer", id: "height_layer_2_8km_msl" },
+      temporal: {
+        type: "maximum",
+        startForecastHour: 5,
+        endForecastHour: 6,
+        startTime: "2026-08-31T05:00:00.000Z",
+        endTime: "2026-08-31T06:00:00.000Z",
+      },
+      outputs: [expect.objectContaining({
+        field: "updraftHelicityM2S2",
+        distribution: expect.objectContaining({ mean: 160 }),
+      })],
+    });
     expect(result.fieldSummaries.find((summary: any) => summary.field === "visibility"))
       .toMatchObject({
         level: { type: "surface" },

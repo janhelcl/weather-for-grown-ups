@@ -155,6 +155,43 @@ describe("non-isobaric wgrib2 decoding", () => {
     });
   });
 
+  it("preserves DWD 2-8 km updraft helicity hourly maxima", () => {
+    expect(parseWgrib2PointLine(
+      "8:56:d=2026090200:UH_MAX:2000-8000 m above mean sea level:5-6 hour max fcst:lon=14.5,lat=50,val=165",
+      "DWD",
+    )).toEqual({
+      code: "UH_MAX",
+      namedVertical: "2-8 km above mean sea level",
+      maximum: { startForecastHour: 5, endForecastHour: 6 },
+      value: 165,
+      gridPoint: { longitude: 14.5, latitude: 50 },
+    });
+  });
+
+  it("recognizes DWD UH_MAX from the standard WMO tuple after generic GRIB processing", () => {
+    expect(parseWgrib2PointLine(
+      "8:56:d=2026090200:var discipline=0 master_table=19 parmcat=7 parm=15:2000-8000 m above mean sea level:5-6 hour max fcst:lon=14.5,lat=50,val=165",
+      "DWD",
+    )).toEqual({
+      code: "UH_MAX",
+      namedVertical: "2-8 km above mean sea level",
+      maximum: { startForecastHour: 5, endForecastHour: 6 },
+      value: 165,
+      gridPoint: { longitude: 14.5, latitude: 50 },
+    });
+  });
+
+  it("normalizes DWD's native UPHL short name to shared UH_MAX identity", () => {
+    expect(parseWgrib2PointLine(
+      "8:56:d=2026090200:UPHL:2000-8000 m above mean sea level:5-6 hour max fcst:lon=14.5,lat=50,val=165",
+      "DWD",
+    )).toMatchObject({
+      code: "UH_MAX",
+      namedVertical: "2-8 km above mean sea level",
+      maximum: { startForecastHour: 5, endForecastHour: 6 },
+    });
+  });
+
   it("normalizes native surface-to-top column layers", () => {
     expect(parseWgrib2PointLine(
       "10:72:d=2026081906:BREF:surface - top of atmosphere:6 hour fcst:lon=14.5,lat=50,val=32",

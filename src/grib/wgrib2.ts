@@ -24,6 +24,7 @@ const ALL_SUPPORTED_CODES = [...new Set([
   "HTOP_DC",
   "CAPE_ML",
   "CIN_ML",
+  "UH_MAX",
   "GP",
   "VMAX_10M",
   "U_RAF",
@@ -145,9 +146,16 @@ export function parseWgrib2PointLine(
   const dwdCloudHeightMatch = line.match(
     /:var discipline=0 center=78 local_table=\d+ parmcat=6 parm=(192|193|196):/i,
   );
+  const dwdUpdraftHelicityMatch = names === "DWD"
+    ? line.match(/:var discipline=0[^:]*\bparmcat=7\s+parm=15:/i)
+    : null;
   const dwdCloudHeightCode = names === "DWD"
     ? conventionCode ?? dwdCloudHeightCodeFromParameter(dwdCloudHeightMatch?.[1])
     : undefined;
+  const dwdUpdraftHelicityCode = names === "DWD"
+    && (conventionCode === "UH_MAX" || dwdUpdraftHelicityMatch)
+      ? "UH_MAX"
+      : undefined;
   const pressureMatch = gribLevel.match(/^(\d+(?:\.\d+)?) mb$/);
   const surfaceMatch = gribLevel === "surface";
   const heightMatch = gribLevel.match(/^(\d+(?:\.\d+)?) m above ground$/);
@@ -158,6 +166,7 @@ export function parseWgrib2PointLine(
     || dwdCloudHeightCode === "HTOP_SC"
     || dwdCloudHeightCode === "HTOP_DC";
   const dwdMeanLayerLevel = conventionCode === "CAPE_ML" || conventionCode === "CIN_ML";
+  const dwdUpdraftHelicityLevel = dwdUpdraftHelicityCode === "UH_MAX";
   const modelNamedVertical = /^(?:atmos col|surface\s*-\s*top of atmosphere)$/i.test(gribLevel)
     ? "entire atmosphere"
     : dwdCeilingLevel
@@ -166,7 +175,9 @@ export function parseWgrib2PointLine(
         ? "mean sea level"
         : dwdMeanLayerLevel
           ? "mean layer"
-          : gfsNamedLevel?.gribLevel
+          : dwdUpdraftHelicityLevel
+            ? "2-8 km above mean sea level"
+            : gfsNamedLevel?.gribLevel
         ?? (GEFS_NAMED_VERTICALS.has(gribLevel) ? gribLevel : undefined);
   const pointMatch = line.match(/lon=([-+\d.eE]+),lat=([-+\d.eE]+)/);
   const valueMatch = line.match(/val=([-+\d.eE]+)/);
@@ -176,7 +187,8 @@ export function parseWgrib2PointLine(
       && conventionCode === undefined
       && !aromeReflectivityMatch
       && !dwdConvectivePrecipitationMatch
-      && !dwdCloudHeightMatch)
+      && !dwdCloudHeightMatch
+      && !dwdUpdraftHelicityMatch)
     || (!pressureMatch && !surfaceMatch && !heightMatch && !modelNamedVertical)
     || !pointMatch
     || !valueMatch
@@ -186,6 +198,7 @@ export function parseWgrib2PointLine(
 
   const dwdRawParameter = dwdConvectivePrecipitationMatch?.[1];
   const rawCode = conventionCode
+    ?? dwdUpdraftHelicityCode
     ?? codeMatch?.[1]
     ?? dwdCloudHeightCode
     ?? (dwdRawParameter === "76"
@@ -285,6 +298,8 @@ export function canonicalDwdIconCode(code: string): string | undefined {
     case "HTOP_DC": return "HTOP_DC";
     case "CAPE_ML": return "CAPE_ML";
     case "CIN_ML": return "CIN_ML";
+    case "UH_MAX": return "UH_MAX";
+    case "UPHL": return "UH_MAX";
     case "DBZ": return "BREF";
     default: return undefined;
   }

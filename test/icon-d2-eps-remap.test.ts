@@ -308,6 +308,47 @@ describe("ICON-D2-EPS CDO remap cache", () => {
     ]);
   });
 
+  it("restores DWD UH_MAX provider identity after CDO", async () => {
+    const sourcePath = join(rootDir, "native-uh-max.grib2");
+    const targetGridPath = join(rootDir, "target-uh-max.txt");
+    const weightsPath = join(rootDir, "weights-uh-max.nc");
+    await Promise.all([
+      writeFile(sourcePath, minimalDwdUpdraftHelicityGrib2()),
+      writeFile(targetGridPath, "grid"),
+      writeFile(weightsPath, "weights"),
+    ]);
+    const runner = vi.fn(async (_executable: string, args: string[]) => {
+      const prepared = Uint8Array.from(await readFile(args.at(-2)!));
+      const chunk = scanGrib2Messages(prepared)[0]!;
+      expect(chunk).toMatchObject({
+        center: 78,
+        category: 7,
+        parameter: 15,
+        firstFixedSurfaceType: 102,
+      });
+      writeUint16Be(prepared, chunk.centerOffset!, 255);
+      prepared[chunk.localTableOffset!] = 0;
+      prepared[chunk.firstFixedSurfaceTypeOffset!] = 1;
+      await writeFile(args.at(-1)!, prepared);
+      return { stdout: "processed UH_MAX" };
+    });
+    const remapper = new IconD2EpsCdoRemapper(
+      join(rootDir, "remapped-uh-max"),
+      { paths: async () => ({ targetGridPath, weightsPath }) },
+      "cdo-test",
+      runner,
+    );
+
+    const result = await remapper.remap(sourcePath);
+    expect(scanGrib2Messages(await readFile(result.path))[0]).toMatchObject({
+      center: 78,
+      localTable: 1,
+      category: 7,
+      parameter: 15,
+      firstFixedSurfaceType: 102,
+    });
+  });
+
   it("deduplicates concurrent remaps and reports the waiter as a cache hit", async () => {
     const sourcePath = join(rootDir, "native-concurrent.grib2");
     const targetGridPath = join(rootDir, "target-concurrent.txt");
@@ -486,6 +527,34 @@ function minimalDwdMeanLayerGrib2(parameter: 6 | 7): Uint8Array {
   section4[9] = 7;
   section4[10] = parameter;
   section4[22] = 192;
+
+  const totalLength = 16 + section1.length + section4.length + 4;
+  const message = new Uint8Array(totalLength);
+  message.set(encoder.encode("GRIB"), 0);
+  message[6] = 0;
+  message[7] = 2;
+  writeUint64Be(message, 8, totalLength);
+  message.set(section1, 16);
+  message.set(section4, 16 + section1.length);
+  message.set(encoder.encode("7777"), totalLength - 4);
+  return message;
+}
+
+function minimalDwdUpdraftHelicityGrib2(): Uint8Array {
+  const section1 = new Uint8Array(21);
+  writeUint32Be(section1, 0, section1.length);
+  section1[4] = 1;
+  writeUint16Be(section1, 5, 78);
+  writeUint16Be(section1, 7, 0);
+  section1[9] = 34;
+  section1[10] = 1;
+
+  const section4 = new Uint8Array(23);
+  writeUint32Be(section4, 0, section4.length);
+  section4[4] = 4;
+  section4[9] = 7;
+  section4[10] = 15;
+  section4[22] = 102;
 
   const totalLength = 16 + section1.length + section4.length + 4;
   const message = new Uint8Array(totalLength);

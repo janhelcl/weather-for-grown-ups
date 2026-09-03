@@ -5,7 +5,8 @@ export type DwdLocalGribCode =
   | "HTOP_SC"
   | "HTOP_DC"
   | "CAPE_ML"
-  | "CIN_ML";
+  | "CIN_ML"
+  | "UH_MAX";
 
 export interface Grib2MessageSlice {
   start: number;
@@ -105,6 +106,14 @@ const DWD_LOCAL_PARAMETERS = [
     genericProcessing: true,
     firstFixedSurfaceType: 192,
   },
+  {
+    alias: "UH_MAX",
+    category: 7,
+    localParameter: 15,
+    surrogate: [7, 15],
+    genericProcessing: true,
+    firstFixedSurfaceType: 102,
+  },
 ] as const satisfies readonly DwdLocalParameterDefinition[];
 
 export function knownDwdLocalParameter(
@@ -132,7 +141,10 @@ export function knownDwdLocalParameter(
  * to WMO-defined surrogates. Mean-layer CAPE/CIN already use standard
  * parameter numbers, but their DWD fixed-surface type 192 is still recorded so
  * tools such as CDO cannot silently collapse them into another CAPE/CIN parcel
- * definition. Values, grid definitions, ensemble metadata, reference/valid
+ * definition. UH_MAX is also a standard parameter, so its identity surrogate
+ * keeps the same category/number while recording DWD identification and layer
+ * metadata for restoration after CDO. Values, grid definitions, ensemble
+ * metadata, reference/valid
  * times, and statistical intervals stay untouched.
  */
 export function prepareDwdLocalParametersForGenericProcessing(

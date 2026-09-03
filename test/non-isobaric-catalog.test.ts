@@ -56,6 +56,13 @@ describe("non-isobaric field catalog", () => {
       temporalSemantics: "instantaneous",
       outputs: [{ field: "dryConvectionTopHeightMslM", unit: "m" }],
     });
+    expect(NON_ISOBARIC_FIELD_CATALOG.updraft_helicity_max_2_8km).toMatchObject({
+      kind: "raw",
+      gfsCode: "UH_MAX",
+      level: { type: "named_layer", id: "height_layer_2_8km_msl" },
+      temporalSemantics: "maximum",
+      outputs: [{ field: "updraftHelicityM2S2", unit: "m^2/s^2" }],
+    });
   });
 
   it("expands derived winds at multiple heights to exact U/V dependencies", () => {
@@ -78,6 +85,7 @@ describe("non-isobaric field catalog", () => {
       "shallow_convective_cloud_top_height_msl",
       "dry_convection_top_height_msl",
       "column_maximum_reflectivity",
+      "updraft_helicity_max_2_8km",
     ] as const) {
       expect(supported.has(NON_ISOBARIC_FIELD_CATALOG[id].gfsCode)).toBe(false);
     }
@@ -96,5 +104,6 @@ describe("non-isobaric field catalog", () => {
     expect(catalog.fields.some((field) => field.id === "shallow_convective_cloud_base_height_msl")).toBe(false);
     expect(catalog.fields.some((field) => field.id === "shallow_convective_cloud_top_height_msl")).toBe(false);
     expect(catalog.fields.some((field) => field.id === "dry_convection_top_height_msl")).toBe(false);
+    expect(catalog.fields.some((field) => field.id === "updraft_helicity_max_2_8km")).toBe(false);
   });
 });

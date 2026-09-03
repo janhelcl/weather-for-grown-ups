@@ -212,7 +212,7 @@ Point comparison can be relatively direct. Spatial comparison requires much stri
 
 ## 7. Regional and convective meteorology
 
-**In progress.** Native regional gust semantics and column-maximum reflectivity are already exposed where the current provider products substantiate them. DWD ICON-D2 and ICON-D2-EPS now also expose phase-explicit convective rain and convective snowfall water-equivalent accumulations, near-surface visibility, provider-native aviation ceiling height above mean sea level, provider-native mean-layer CAPE/CIN, and shallow-convection cloud-base/cloud-top heights above mean sea level. Deterministic ICON-D2 additionally exposes the provider-native top of dry convection above mean sea level; ICON-D2-EPS does not advertise that field because it is absent from the current public ensemble product inventory. Visibility is available for scalar area summaries; the provider-specific mean-layer and height diagnostics remain point/range/multi-point/transect only until their vertical selectors are normalized for area extraction. AROME and PE-AROME do not advertise equivalent convective-precipitation, aviation, cloud-structure, or mean-layer CAPE/CIN fields until current public product or coverage identities are verified rather than inferred.
+**In progress.** Native regional gust semantics and column-maximum reflectivity are already exposed where the current provider products substantiate them. DWD ICON-D2 and ICON-D2-EPS now also expose phase-explicit convective rain and convective snowfall water-equivalent accumulations, near-surface visibility, provider-native aviation ceiling height above mean sea level, provider-native mean-layer CAPE/CIN, provider-native 2–8 km updraft-helicity maxima over the previous one-hour interval, and shallow-convection cloud-base/cloud-top heights above mean sea level. Deterministic ICON-D2 additionally exposes the provider-native top of dry convection above mean sea level; ICON-D2-EPS does not advertise that field because it is absent from the current public ensemble product inventory. Visibility is available for scalar area summaries; the provider-specific mean-layer and height diagnostics remain point/range/multi-point/transect only until their vertical selectors are normalized for area extraction. AROME and PE-AROME do not advertise equivalent convective-precipitation, aviation, cloud-structure, mean-layer CAPE/CIN, or updraft-helicity fields until current public product or coverage identities are verified rather than inferred.
 
 Once the core regional datasets are stable, expand the shared meteorological vocabulary where the source products justify it.
 
@@ -223,7 +223,7 @@ High-value candidates include:
 - visibility and near-surface aviation fields;
 - broader cloud-base/cloud-top structure beyond the currently exposed DWD shallow-convection diagnostics;
 - reflectivity-related fields where operationally available and scientifically interpretable;
-- broader severe-convection ingredients beyond native mean-layer CAPE/CIN and existing pressure-layer diagnostics.
+- broader severe-convection ingredients beyond native mean-layer CAPE/CIN, 2–8 km updraft helicity, and existing pressure-layer diagnostics.
 
 These remain atmospheric fields and diagnostics behind the existing query/diagnostic surfaces. Do not turn the core into an activity-specific forecast or safety layer.
 

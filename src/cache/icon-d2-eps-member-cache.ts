@@ -20,14 +20,15 @@ import { IconD2EpsCdoRemapper } from "./icon-d2-eps-remap-cache.js";
 
 /**
  * Most ICON-D2-EPS parameters are remapped once as an all-members object and
- * split afterward. DWD DBZ_CMAX is an exception: CDO drops its perturbation
- * metadata when remapping the all-members object, so that parameter must be
- * split by member first and only then remapped.
+ * split afterward. Two provider fields need member-first handling:
+ * DWD DBZ_CMAX loses perturbation metadata during all-member CDO remapping,
+ * while UH_MAX has its native one-hour maximum interval widened to run-to-lead
+ * during that path. Splitting the native object first preserves both semantics.
  *
- * A request may contain both kinds. Keep the exceptional field isolated
- * instead of forcing unrelated parameters through the member-first path:
- * ordinary variables/fields use remap -> member split, DBZ_CMAX uses member
- * split -> remap, and the two per-member GRIBs are combined afterward.
+ * A request may contain both kinds. Keep exceptional fields isolated instead
+ * of forcing unrelated parameters through the member-first path:
+ * ordinary variables/fields use remap -> member split; exceptional fields use
+ * member split -> remap. The per-member GRIBs are combined afterward.
  */
 export class IconD2EpsAdaptiveMemberSubsetCache implements IconD2SubsetCache {
   constructor(
@@ -40,10 +41,12 @@ export class IconD2EpsAdaptiveMemberSubsetCache implements IconD2SubsetCache {
 
   async fetch(request: IconD2DataRequest): Promise<IconD2SourceFile> {
     const memberFirstFields = request.fields.filter(
-      (field) => field.id === "column_maximum_reflectivity",
+      (field) => field.id === "column_maximum_reflectivity"
+        || field.id === "updraft_helicity_max_2_8km",
     );
     const ordinaryFields = request.fields.filter(
-      (field) => field.id !== "column_maximum_reflectivity",
+      (field) => field.id !== "column_maximum_reflectivity"
+        && field.id !== "updraft_helicity_max_2_8km",
     );
     const hasOrdinary = request.variables.length > 0 || ordinaryFields.length > 0;
     const hasMemberFirst = memberFirstFields.length > 0;
@@ -162,7 +165,9 @@ export class IconD2EpsMemberFileCombiner {
 export function iconD2EpsRequiresMemberFirstRemap(
   request: IconD2DataRequest,
 ): boolean {
-  return request.fields.some((field) => field.id === "column_maximum_reflectivity");
+  return request.fields.some((field) =>
+    field.id === "column_maximum_reflectivity"
+      || field.id === "updraft_helicity_max_2_8km");
 }
 
 async function exists(path: string): Promise<boolean> {
