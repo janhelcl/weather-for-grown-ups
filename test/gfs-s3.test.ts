@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { WFG_USER_AGENT } from "../src/access/user-agent.js";
 import { expandRequestedFields } from "../src/catalog/non-isobaric-fields.js";
 import {
   buildGfsS3ForecastIndexUrl,
@@ -30,7 +31,7 @@ describe("GFS S3 run discovery", () => {
     await expect(probe.isRunComplete(run)).resolves.toBe(true);
     expect(fetchFn).toHaveBeenCalledWith(buildGfsS3RunMarkerUrl(run), {
       method: "HEAD",
-      headers: { "user-agent": "weather-for-grown-ups/0.1" },
+      headers: { "user-agent": WFG_USER_AGENT },
     });
   });
 
@@ -56,7 +57,7 @@ describe("GFS S3 run discovery", () => {
       fields: expandRequestedFields(["low_cloud_cover_average"]),
     })).resolves.toBe(true);
     expect(fetchFn).toHaveBeenCalledWith(buildGfsS3ForecastIndexUrl(run, 6), {
-      headers: { "user-agent": "weather-for-grown-ups/0.1" },
+      headers: { "user-agent": WFG_USER_AGENT },
     });
   });
 

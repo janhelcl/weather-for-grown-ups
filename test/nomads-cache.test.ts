@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { WFG_USER_AGENT } from "../src/access/user-agent.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -49,7 +50,7 @@ describe("NomadsCache", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(url);
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
-      headers: { "user-agent": "weather-for-grown-ups/0.1" },
+      headers: { "user-agent": WFG_USER_AGENT },
     });
     expect((await readFile(first.path)).subarray(0, 4).toString()).toBe("GRIB");
     expect((await readdir(cacheDir)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
