@@ -1,3 +1,4 @@
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -96,7 +97,7 @@ export class GfsS3SubsetCache {
 
     const response = await fetchWithRetry(
       url,
-      { headers: { "user-agent": "weather-for-grown-ups/0.1" } },
+      { headers: { "user-agent": WFG_USER_AGENT } },
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (!response.ok) {
@@ -114,7 +115,7 @@ export class GfsS3SubsetCache {
       {
         headers: {
           range: rangeValue,
-          "user-agent": "weather-for-grown-ups/0.1",
+          "user-agent": WFG_USER_AGENT,
         },
       },
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
