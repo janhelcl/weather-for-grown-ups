@@ -9,6 +9,7 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
+import { CachedNceiGfsHistorySource } from "../cache/historical-gfs-cache.js";
 import { deriveWind } from "../derived/wind.js";
 import {
   historicalFieldsQuerySchema,
