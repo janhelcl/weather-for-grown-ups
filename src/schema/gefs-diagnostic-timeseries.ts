@@ -1,6 +1,8 @@
 import * as z from "zod/v4";
-import { GEFS_MEMBERS } from "../catalog/gefs.js";
-import { GEFS_TOTAL_NATIVE_FORECAST_STEPS } from "../core/gefs-time.js";
+import {
+  GEFS_MEMBERS,
+  GEFS_TOTAL_NATIVE_FORECAST_STEPS,
+} from "../catalog/gefs.js";
 import { gefsMemberSchema, gefsRunSelectorSchema } from "./gefs-ensemble.js";
 import { gefsLayerDiagnosticsQuerySchema, gefsLayerDiagnosticsResultSchema } from "./gefs-layer-diagnostics.js";
 import {
