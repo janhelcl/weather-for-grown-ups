@@ -413,7 +413,7 @@ export function publicDatasetCapabilities(
     ...(definition.nativeForecastIntervalHours === undefined ? {} : { nativeForecastIntervalHours: definition.nativeForecastIntervalHours }),
     ...(definition.members === undefined ? {} : { members: definition.members }),
     ...(definition.constituents === undefined ? {} : { constituents: definition.constituents.map((constituent) => ({ ...constituent })) }),
-    forecastKinds,
+    forecastKinds: [...metadata.forecastKinds],
     runSelectors,
     operations,
   };
