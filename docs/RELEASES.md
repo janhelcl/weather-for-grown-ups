@@ -1,5 +1,78 @@
 # Releases
 
+## v0.5.0 — 2026-09-03
+
+v0.5.0 completes WFG's regional/convection-permitting architecture while preserving the same public atmospheric query language.
+
+### Regional deterministic and ensemble families
+
+Four limited-area forecast populations are now first-class datasets behind the existing `dataset × geometry × time × selection` contract:
+
+- DWD `icon-d2` — deterministic convection-permitting forecast with native ~2.1 km model-grid semantics;
+- DWD `icon-d2-eps` — native 20-member regional ensemble with member-first diagnostics;
+- Météo-France `arome` — deterministic AROME using the explicit 0.01° EURW1S100 public product while retaining the distinct ~1.3 km native-model mesh;
+- Météo-France `pe-arome` — 25-member control/perturbed regional ensemble using authenticated targeted WCS access.
+
+The public API does not gain model-specific geometry or transport namespaces. Dataset-native domain, grid, cadence, horizon, member population and source provenance remain explicit.
+
+### Spatial domain and native-grid architecture
+
+Limited-area coverage is now a first-class capability rather than an implicit source detail.
+
+The dataset registry carries:
+
+- global versus limited-area scope;
+- conservative geographic coverage;
+- native horizontal-grid type and nominal resolution;
+- forecast horizon and native cadence;
+- dataset/provider/model-class/result-kind metadata.
+
+Catalog discovery can filter by coverage, and execution rejects out-of-domain requests with a distinct `OUT_OF_DOMAIN` failure before source access. Regular delivery grids are not silently presented as native model meshes.
+
+### Restrictive global↔regional comparisons
+
+`compare_datasets` now has explicit cross-scale strategies for:
+
+- IFS ↔ ICON-D2;
+- IFS ↔ AROME;
+- GFS ↔ ICON-D2;
+- IFS ENS ↔ ICON-D2-EPS;
+- IFS ENS ↔ PE-AROME.
+
+These strategies require a shared explicit initialization, compare only declared field/pressure intersections, sample each dataset independently at the requested point, preserve native-resolution provenance and perform no generic cross-grid subtraction or member pairing.
+
+### Regional and convective meteorology
+
+The regional vocabulary now includes a bounded set of provider-substantiated mesoscale fields, including where available:
+
+- native wind gusts;
+- column-maximum reflectivity;
+- convective rain and convective snowfall water-equivalent accumulation;
+- near-surface visibility and aviation ceiling;
+- shallow-convection cloud-base/cloud-top structure;
+- mean-layer CAPE/CIN;
+- 2–8 km updraft-helicity maxima.
+
+ICON-D2 also exposes provider-native top of dry convection. WFG deliberately does not manufacture equivalent AROME/PE-AROME capabilities where current public product identities do not substantiate the same quantity.
+
+### Source and runtime boundaries
+
+DWD and Météo-France transport specifics remain below the unified application boundary.
+
+`icon-d2-eps` uses DWD's native all-member GRIB packaging and the official remapping/member-extraction path, requiring CDO plus native `wgrib2`. The Docker image supplies those dependencies. `pe-arome` keeps bearer credentials and targeted WCS request packaging in the source/access layer; normal anonymous datasets remain credential-free.
+
+### Architecture and roadmap closeout
+
+The regional roadmap now satisfies its definition of done: two providers, two deterministic regional models, two regional ensemble families, first-class domain/grid semantics, explicit out-of-domain behavior, restrictive cross-scale comparisons, source-policy isolation and shared CLI/MCP application services.
+
+The next major roadmap line is **forecast verification and model skill**: generalizing the existing GFS verification corpus and bias/MAE/RMSE summaries into same-sample multi-model skill comparison and proper ensemble verification without pretending historical archives exist where they do not.
+
+### Release validation
+
+The release candidate uses the existing Node.js 20/24 typecheck, offline tests, coverage gates, build, CLI/package smoke tests, packed-package validation and Docker checks. Live regional checks cover ICON-D2, ICON-D2-EPS and AROME; PE-AROME remains credential-gated by design.
+
+No existing public operation name or dataset ID is removed in this release.
+
 ## v0.4.0 — 2026-08-31
 
 v0.4.0 completes WFG's first full physics/AI/hybrid model matrix while preserving the same public atmospheric query language.
