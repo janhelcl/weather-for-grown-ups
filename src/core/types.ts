@@ -1,5 +1,4 @@
 import type { DecodedValue, ForecastInterval, GribDecoderName, GridPoint } from "../types/decoded.js";
-export type { DecodedValue, ForecastInterval, GribDecoderName, GridPoint } from "../types/decoded.js";
 import type { LayerDiagnosticId } from "../catalog/layer-diagnostics.js";
 import type {
   NonIsobaricFieldId,
