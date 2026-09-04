@@ -5,6 +5,11 @@ import {
 import { isRetryableHttpStatus } from "../access/http-retry.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import {
+  DataUnavailableError,
+  RateLimitedError,
+  UpstreamUnavailableError,
+} from "../failure.js";
+import {
   IFS_OPEN_DATA_MIRRORS,
   parseIfsOpenDataIndex,
   selectIfsIndexEntries,
@@ -50,6 +55,9 @@ export class AifsOpenDataRunProbe implements AifsAvailabilityProbe {
     forecastHour: number,
     selectors: readonly IfsIndexSelector[],
   ): Promise<boolean> {
+    let confirmedUnavailable = false;
+    const transientFailures: Array<{ mirror: string; status: number }> = [];
+
     for (const mirror of IFS_OPEN_DATA_MIRRORS) {
       const url = buildAifsOpenDataForecastIndexUrl(run, forecastHour, mirror.baseUrl);
       const result = await runIfsHttpWithRetry(() =>
@@ -65,27 +73,51 @@ export class AifsOpenDataRunProbe implements AifsAvailabilityProbe {
           };
         }),
       );
-      if (result.status === 404 || isRetryableHttpStatus(result.status)) continue;
+      if (result.status === 404) {
+        confirmedUnavailable = true;
+        continue;
+      }
+      if (isRetryableHttpStatus(result.status)) {
+        transientFailures.push({ mirror: mirror.id, status: result.status });
+        continue;
+      }
       if (result.status < 200 || result.status >= 300) {
-        throw new Error(
-          `ECMWF AIFS run discovery failed: HTTP ${result.status} ${result.statusText} for ${url}`,
+        throw new UpstreamUnavailableError(
+          `ECMWF AIFS run discovery failed (HTTP ${result.status} ${result.statusText})`,
+          {
+            retryable: false,
+            details: { provider: "ECMWF Open Data", mirror: mirror.id, status: result.status },
+          },
         );
       }
       if (result.value === undefined) {
-        throw new Error(`ECMWF AIFS run discovery returned an empty index for ${url}`);
+        throw new UpstreamUnavailableError("ECMWF AIFS run discovery returned an empty index", {
+          retryable: false,
+          details: { provider: "ECMWF Open Data", mirror: mirror.id },
+        });
       }
       try {
         selectIfsIndexEntries(parseIfsOpenDataIndex(result.value), selectors);
         return true;
       } catch (error) {
-        if (
-          error instanceof Error
-          && error.message.startsWith("ECMWF IFS index is missing requested fields:")
-        ) {
+        if (error instanceof DataUnavailableError) {
+          confirmedUnavailable = true;
           continue;
         }
         throw error;
       }
+    }
+
+    if (confirmedUnavailable) return false;
+    if (transientFailures.length > 0) {
+      if (transientFailures.every((failure) => failure.status === 429)) {
+        throw new RateLimitedError("ECMWF AIFS discovery was rate-limited across all mirrors", {
+          details: { provider: "ECMWF Open Data", mirrors: transientFailures },
+        });
+      }
+      throw new UpstreamUnavailableError("ECMWF AIFS mirrors were unavailable after retries", {
+        details: { provider: "ECMWF Open Data", mirrors: transientFailures },
+      });
     }
     return false;
   }
