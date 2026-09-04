@@ -5,6 +5,11 @@ import { WFG_USER_AGENT } from "../access/user-agent.js";
 import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
 import type { RawVariableDefinition } from "../catalog/variables.js";
 import type { GfsGrid } from "../catalog/gfs-grid.js";
+import {
+  DataUnavailableError,
+  RateLimitedError,
+  UpstreamUnavailableError,
+} from "../failure.js";
 
 export interface NomadsPointRequest {
   run: Date;
@@ -65,14 +70,38 @@ export class NomadsSource implements NomadsPointGribSource, NomadsAreaGribSource
         ...(this.accessPolicy === undefined ? {} : { accessPolicy: this.accessPolicy }),
       },
     );
+    if (response.status === 404) {
+      throw new DataUnavailableError("NOMADS has no data for the requested GFS run and forecast hour", {
+        details: { provider: "NOAA NOMADS", status: response.status },
+      });
+    }
+    if (response.status === 429) {
+      throw new RateLimitedError("NOAA NOMADS rate limit remained exhausted after retries", {
+        details: { provider: "NOAA NOMADS", status: response.status },
+      });
+    }
+    if (response.status >= 500 && response.status <= 599) {
+      throw new UpstreamUnavailableError(
+        `NOAA NOMADS is unavailable after retries (HTTP ${response.status} ${response.statusText})`,
+        { details: { provider: "NOAA NOMADS", status: response.status } },
+      );
+    }
     if (!response.ok) {
-      throw new Error(`NOMADS request failed: HTTP ${response.status} ${response.statusText}`);
+      throw new UpstreamUnavailableError(
+        `NOAA NOMADS rejected the request (HTTP ${response.status} ${response.statusText})`,
+        {
+          retryable: false,
+          details: { provider: "NOAA NOMADS", status: response.status },
+        },
+      );
     }
 
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
-      const preview = new TextDecoder().decode(bytes.slice(0, 240));
-      throw new Error(`NOMADS returned non-GRIB content: ${preview}`);
+      throw new UpstreamUnavailableError("NOAA NOMADS returned invalid non-GRIB content", {
+        retryable: true,
+        details: { provider: "NOAA NOMADS" },
+      });
     }
     return bytes;
   }
