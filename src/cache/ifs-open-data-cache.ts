@@ -1,18 +1,18 @@
 import { WFG_USER_AGENT } from "../access/user-agent.js";
+import {
+  type IfsHttpAccessPolicy,
+  runIfsHttpWithRetry,
+} from "../access/ifs-open-data.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { UpstreamAccessPolicy } from "../access/access-policy.js";
-import { IfsOpenDataAccessPolicy } from "../sources/ifs-open-data-access-policy.js";
 import {
   buildIfsOpenDataForecastIndexUrl,
   buildIfsOpenDataForecastUrl,
   IFS_OPEN_DATA_MIRRORS,
   parseIfsOpenDataIndex,
-  runIfsHttpWithRetry,
   selectIfsIndexEntries,
   type IfsIndexSelector,
-  type IfsHttpAccessPolicy,
   type IfsOpenDataProduct,
 } from "../sources/ifs-open-data.js";
 
@@ -35,21 +35,13 @@ export interface IfsSelectionSource {
 export class IfsOpenDataSubsetCache implements IfsSelectionSource {
   private readonly inFlight = new Map<string, Promise<IfsSubsetFile>>();
   private readonly indexInFlight = new Map<string, Promise<string>>();
-  private readonly accessPolicy: IfsHttpAccessPolicy;
 
   constructor(
     private readonly rootDir: string,
+    private readonly accessPolicy: IfsHttpAccessPolicy,
     private readonly fetchFn: typeof fetch = globalThis.fetch,
     private readonly rangeConcurrency = 3,
-    cloudAccessPolicy?: UpstreamAccessPolicy,
-    directAccessPolicy?: UpstreamAccessPolicy,
-  ) {
-    this.accessPolicy = new IfsOpenDataAccessPolicy(
-      join(rootDir, "access-state"),
-      cloudAccessPolicy,
-      directAccessPolicy,
-    );
-  }
+  ) {}
 
   async fetchSelection(request: IfsSelectionRequest): Promise<IfsSubsetFile> {
     if (request.selectors.length === 0) throw new Error("IFS subset request selected no fields");
