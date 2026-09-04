@@ -3,13 +3,15 @@ import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
-import { IfsOpenDataAccessPolicy } from "../sources/ifs-open-data-access-policy.js";
+import {
+  IfsOpenDataAccessPolicy,
+  runIfsHttpWithRetry,
+  type IfsHttpAccessPolicy,
+} from "../access/ifs-open-data.js";
 import {
   IFS_OPEN_DATA_MIRRORS,
   parseIfsOpenDataIndex,
-  runIfsHttpWithRetry,
   selectIfsIndexEntries,
-  type IfsHttpAccessPolicy,
   type IfsIndexSelector,
 } from "../sources/ifs-open-data.js";
 import {
