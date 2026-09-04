@@ -1,9 +1,15 @@
 import { formatPublicFailure, toPublicFailure } from "../failure.js";
 import { createCliProgram } from "./program.js";
 
-export async function runCli(args: readonly string[] = process.argv): Promise<void> {
+export async function runCli(
+  args: readonly string[] = process.argv,
+  programName?: string,
+): Promise<void> {
+  const program = createCliProgram();
+  if (programName !== undefined) program.name(programName);
+
   try {
-    await createCliProgram().parseAsync([...args]);
+    await program.parseAsync([...args]);
   } catch (error) {
     const failure = toPublicFailure(error);
     if (args.includes("--json")) {
