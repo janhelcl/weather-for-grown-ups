@@ -18,7 +18,7 @@ export class AtmosphericOutOfDomainError extends WfgError {
       retryable: false,
       details: {
         dataset,
-        domain: domain.name,
+        domain: domain.scope === "global" ? "global" : domain.name,
       },
     });
     this.name = "AtmosphericOutOfDomainError";
