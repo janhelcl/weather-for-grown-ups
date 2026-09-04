@@ -89,7 +89,7 @@ describe("MCP failure result", () => {
         details: { dataset: "gfs-analysis" },
       },
     });
-    expect(result.structuredContent).toEqual(JSON.parse(text!));
+    expect(result).not.toHaveProperty("structuredContent");
     expect(result.isError).toBe(true);
   });
 });
