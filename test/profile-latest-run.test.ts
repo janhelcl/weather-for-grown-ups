@@ -1,18 +1,28 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProfileService } from "../src/core/profile.js";
 import type { DecodedValue } from "../src/types/decoded.js";
+import type { ProfileDataRequest, ProfileDataSource } from "../src/sources/types.js";
 
 const gridPoint = { latitude: 50, longitude: 14.5 };
 const values: DecodedValue[] = [
   { code: "TMP", pressureHpa: 850, value: 285.15, gridPoint },
 ];
 
+function source(fetch: (request: ProfileDataRequest) => Promise<{ path: string; cacheHit: boolean }>): ProfileDataSource {
+  return {
+    id: "nomads",
+    provider: "NOAA NOMADS",
+    access: "nomads_grib_filter",
+    fetch,
+  };
+}
+
 function harness(resolvedRun = new Date("2026-08-19T06:00:00Z")) {
-  const fetchMock = vi.fn(async (_url: string) => ({ path: "/cache/field.grib2", cacheHit: false }));
+  const fetchMock = vi.fn(async (_request: ProfileDataRequest) => ({ path: "/cache/field.grib2", cacheHit: false }));
   const decodeMock = vi.fn(async () => values);
   const resolveLatestRun = vi.fn(async () => resolvedRun);
   const service = new ProfileService({
-    cache: { fetch: fetchMock },
+    sources: { nomads: source(fetchMock) },
     decoder: { extractPoint: decodeMock },
     latestRunProvider: { resolveLatestRun },
   });
@@ -44,9 +54,12 @@ describe("ProfileService latest-run selection", () => {
     });
     expect(result.run).toBe("2026-08-19T06:00:00.000Z");
     expect(result.forecastHour).toBe(6);
-    expect(new URL(fetchMock.mock.calls[0]?.[0] ?? "").searchParams.get("file")).toBe(
-      "gfs.t06z.pgrb2.0p25.f006",
-    );
+    expect(fetchMock.mock.calls[0]?.[0]).toMatchObject({
+      run: new Date("2026-08-19T06:00:00Z"),
+      forecastHour: 6,
+      latitude: 50.08,
+      longitude: 14.43,
+    });
   });
 
   it("uses query-aware latest when run is omitted", async () => {
@@ -57,7 +70,7 @@ describe("ProfileService latest-run selection", () => {
     expect(result.run).toBe("2026-08-19T06:00:00.000Z");
   });
 
-  it("propagates explicit 0.5 grid through latest-run discovery and NOMADS access", async () => {
+  it("propagates explicit 0.5 grid through latest-run discovery and the canonical source request", async () => {
     const { service, fetchMock, resolveLatestRun } = harness();
     const result = await service.getProfile({ ...base, run: "latest", grid: "0p50" });
 
@@ -66,9 +79,7 @@ describe("ProfileService latest-run selection", () => {
       "0p50",
     );
     expect(result.model).toBe("gfs_0p50");
-    const url = new URL(fetchMock.mock.calls[0]?.[0] ?? "");
-    expect(url.pathname).toBe("/cgi-bin/filter_gfs_0p50.pl");
-    expect(url.searchParams.get("file")).toBe("gfs.t06z.pgrb2full.0p50.f006");
+    expect(fetchMock.mock.calls[0]?.[0].grid).toBe("0p50");
   });
 
   it("uses grid-aware complete-run discovery for 0.5", async () => {
@@ -90,10 +101,10 @@ describe("ProfileService latest-run selection", () => {
     expect(result.forecastHour).toBe(12);
   });
 
-  it("fails before NOMADS access if latest-run discovery fails", async () => {
-    const fetchMock = vi.fn(async (_url: string) => ({ path: "/cache/field.grib2", cacheHit: false }));
+  it("fails before source access if latest-run discovery fails", async () => {
+    const fetchMock = vi.fn(async (_request: ProfileDataRequest) => ({ path: "/cache/field.grib2", cacheHit: false }));
     const service = new ProfileService({
-      cache: { fetch: fetchMock },
+      sources: { nomads: source(fetchMock) },
       decoder: { extractPoint: vi.fn(async () => values) },
       latestRunProvider: {
         resolveLatestRun: vi.fn(async () => {

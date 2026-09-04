@@ -1,106 +1,101 @@
-import { WFG_USER_AGENT } from "../access/user-agent.js";
-import { createHash, randomUUID } from "node:crypto";
-import { access, mkdir, rename, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import type { UpstreamAccessPolicy } from "../access/access-policy.js";
-import {
-  runWithHttpRetry,
-  type HttpRetryExecutionOptions,
-} from "../access/http-retry.js";
-
-export interface CachedFile {
-  path: string;
-  cacheHit: boolean;
-}
-
-type NomadsFetchAttempt =
-  | {
-      status: 200;
-      retryAfter: null;
-      cacheHit: true;
-      stored: true;
-    }
-  | {
-      status: number;
-      retryAfter: string | null;
-      statusText: string;
-      cacheHit: false;
-      stored: boolean;
-    };
+import { createHash } from "node:crypto";
+import { FileArtifactCache } from "./artifact-cache.js";
+import type {
+  NomadsAreaGribSource,
+  NomadsAreaRequest,
+  NomadsPointGribSource,
+} from "../sources/nomads.js";
+import type { ProfileDataRequest, ProfileSourceFile } from "../sources/types.js";
 
 export class NomadsCache {
+  private readonly artifacts: FileArtifactCache;
+
   constructor(
-    private readonly rootDir: string,
-    private readonly accessPolicy: UpstreamAccessPolicy,
-    private readonly fetchFn: typeof fetch = globalThis.fetch,
-    private readonly retryOptions: HttpRetryExecutionOptions = {},
-  ) {}
+    rootDir: string,
+    private readonly source: NomadsPointGribSource,
+  ) {
+    this.artifacts = new FileArtifactCache(rootDir);
+  }
 
-  async fetch(url: string): Promise<CachedFile> {
-    await mkdir(this.rootDir, { recursive: true });
-    const key = createHash("sha256").update(url).digest("hex");
-    const path = join(this.rootDir, `${key}.grib2`);
-
-    if (await exists(path)) return { path, cacheHit: true };
-
-    const result = await runWithHttpRetry(
-      () => this.accessPolicy.run(async (): Promise<NomadsFetchAttempt> => {
-        if (await exists(path)) {
-          return {
-            status: 200,
-            retryAfter: null,
-            cacheHit: true,
-            stored: true,
-          };
-        }
-
-        const response = await this.fetchFn(url, {
-          headers: { "user-agent": WFG_USER_AGENT },
-        });
-        const retryAfter = response.headers.get("retry-after");
-        if (!response.ok) {
-          return {
-            status: response.status,
-            retryAfter,
-            statusText: response.statusText,
-            cacheHit: false,
-            stored: false,
-          };
-        }
-
-        const bytes = new Uint8Array(await response.arrayBuffer());
-        if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
-          const preview = new TextDecoder().decode(bytes.slice(0, 240));
-          throw new Error(`NOMADS returned non-GRIB content: ${preview}`);
-        }
-
-        const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
-        await writeFile(tempPath, bytes);
-        await rename(tempPath, path);
-        return {
-          status: response.status,
-          retryAfter,
-          statusText: response.statusText,
-          cacheHit: false,
-          stored: true,
-        };
-      }),
-      this.retryOptions,
+  fetch(request: ProfileDataRequest): Promise<ProfileSourceFile> {
+    return this.artifacts.getOrCreateFile(
+      `${pointRequestKey(request)}.grib2`,
+      () => this.source.fetchPoint(request),
     );
-
-    if (result.cacheHit) return { path, cacheHit: true };
-    if (!result.stored) {
-      throw new Error(`NOMADS request failed: HTTP ${result.status} ${result.statusText}`);
-    }
-    return { path, cacheHit: false };
   }
 }
 
-async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
+export class NomadsAreaCache {
+  private readonly artifacts: FileArtifactCache;
+
+  constructor(
+    rootDir: string,
+    private readonly source: NomadsAreaGribSource,
+  ) {
+    this.artifacts = new FileArtifactCache(rootDir);
   }
+
+  fetch(request: NomadsAreaRequest): Promise<ProfileSourceFile> {
+    return this.artifacts.getOrCreateFile(
+      `${areaRequestKey(request)}.grib2`,
+      () => this.source.fetchArea(request),
+    );
+  }
+}
+
+function pointRequestKey(request: ProfileDataRequest): string {
+  return hashRequest({
+    kind: "point",
+    run: request.run.toISOString(),
+    forecastHour: request.forecastHour,
+    grid: request.grid ?? "0p25",
+    latitude: request.latitude,
+    longitude: request.longitude,
+    variables: canonicalVariableCodes(request.variables),
+    pressureLevelsHpa: canonicalPressureLevels(request.pressureLevelsHpa),
+    fields: canonicalFields(request.fields ?? []),
+  });
+}
+
+function areaRequestKey(request: NomadsAreaRequest): string {
+  return hashRequest({
+    kind: "area",
+    run: request.run.toISOString(),
+    forecastHour: request.forecastHour,
+    grid: request.grid ?? "0p25",
+    westLongitude: request.westLongitude,
+    eastLongitude: request.eastLongitude,
+    southLatitude: request.southLatitude,
+    northLatitude: request.northLatitude,
+    variables: canonicalVariableCodes(request.variables),
+    pressureLevelsHpa: canonicalPressureLevels(request.pressureLevelsHpa),
+    fields: canonicalFields(request.fields ?? []),
+  });
+}
+
+function hashRequest(canonical: object): string {
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
+
+function canonicalVariableCodes(variables: readonly { gfsCode: string }[]): string[] {
+  return [...new Set(variables.map((variable) => variable.gfsCode))].sort();
+}
+
+function canonicalPressureLevels(levels: readonly number[]): number[] {
+  return [...new Set(levels)].sort((a, b) => b - a);
+}
+
+function canonicalFields(fields: readonly {
+  id: string;
+  gfsCode: string;
+  level: { gribLevel: string; nomadsLevel: string };
+  temporalSemantics: string;
+}[]): string[] {
+  return [...new Set(fields.map((field) => JSON.stringify({
+    id: field.id,
+    gfsCode: field.gfsCode,
+    gribLevel: field.level.gribLevel,
+    nomadsLevel: field.level.nomadsLevel,
+    temporalSemantics: field.temporalSemantics,
+  })))].sort();
 }

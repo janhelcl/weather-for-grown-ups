@@ -1,135 +1,39 @@
-import { WFG_USER_AGENT } from "../access/user-agent.js";
-import { createHash, randomUUID } from "node:crypto";
-import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import {
-  FileAccessPolicy,
-  UPSTREAM_ACCESS_POLICIES,
-  type UpstreamAccessPolicy,
-} from "../access/access-policy.js";
-import {
-  mergeByteRanges,
-  parseGribIndex,
-  selectNonIsobaricByteRanges,
-  selectPressureByteRanges,
-  type ByteRange,
-} from "../grib/index.js";
-import { buildGfsS3ForecastIndexUrl, buildGfsS3ForecastUrl } from "../sources/gfs-s3.js";
-import { fetchWithRetry } from "../access/http-fetch.js";
+import { createHash } from "node:crypto";
+import { FileArtifactCache } from "./artifact-cache.js";
+import type { GfsS3SubsetSource } from "../sources/gfs-s3.js";
 import type { ProfileDataRequest, ProfileSourceFile } from "../sources/types.js";
 
 export class GfsS3SubsetCache {
-  private readonly inFlight = new Map<string, Promise<ProfileSourceFile>>();
+  private readonly artifacts: FileArtifactCache;
 
   constructor(
-    private readonly rootDir: string,
-    private readonly fetchFn: typeof fetch = globalThis.fetch,
-    private readonly rangeConcurrency: number = UPSTREAM_ACCESS_POLICIES.noaaAws.maxConcurrency,
-    private readonly accessPolicy: UpstreamAccessPolicy = new FileAccessPolicy(
-      join(rootDir, "access-state"),
-      UPSTREAM_ACCESS_POLICIES.noaaAws,
-    ),
-  ) {}
+    rootDir: string,
+    private readonly source: GfsS3SubsetSource,
+  ) {
+    this.artifacts = new FileArtifactCache(rootDir);
+  }
 
   async fetch(request: ProfileDataRequest): Promise<ProfileSourceFile> {
-    await mkdir(this.rootDir, { recursive: true });
-    const key = subsetKey(request);
-    const path = join(this.rootDir, `${key}.grib2`);
-    if (await exists(path)) return { path, cacheHit: true };
-
-    const pending = this.inFlight.get(key);
-    if (pending) {
-      const result = await pending;
-      return { ...result, cacheHit: true };
-    }
-
-    const operation = this.download(request, path).finally(() => this.inFlight.delete(key));
-    this.inFlight.set(key, operation);
-    return operation;
-  }
-
-  private async download(request: ProfileDataRequest, path: string): Promise<ProfileSourceFile> {
-    const grid = request.grid ?? "0p25";
-    const gribUrl = buildGfsS3ForecastUrl(request.run, request.forecastHour, grid);
-    const indexUrl = buildGfsS3ForecastIndexUrl(request.run, request.forecastHour, grid);
-    const indexText = await this.fetchIndex(indexUrl);
-    const records = parseGribIndex(indexText);
-    const pressureRanges = selectPressureByteRanges(
-      records,
-      request.variables.map((variable) => variable.gfsCode),
-      request.pressureLevelsHpa,
-    );
-    const fieldRanges = selectNonIsobaricByteRanges(records, request.fields ?? []);
-    const ranges = mergeByteRanges(pressureRanges, fieldRanges);
-
-    const chunks = await mapConcurrent(
-      ranges,
-      this.rangeConcurrency,
-      (range) => this.fetchRange(gribUrl, range),
-    );
-    const totalBytes = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-    const combined = new Uint8Array(totalBytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      combined.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-
-    const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(tempPath, combined);
-      await rename(tempPath, path);
-    } catch (error) {
-      await rm(tempPath, { force: true });
-      throw error;
-    }
-    return { path, cacheHit: false };
-  }
-
-  private async fetchIndex(url: string): Promise<string> {
-    const key = createHash("sha256").update(url).digest("hex");
-    const path = join(this.rootDir, `${key}.idx`);
-    try {
-      return await readFile(path, "utf8");
-    } catch {
-      // Forecast inventories are immutable after publication and can be reused indefinitely.
-    }
-
-    const response = await fetchWithRetry(
-      url,
-      { headers: { "user-agent": WFG_USER_AGENT } },
-      { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
-    );
-    if (!response.ok) {
-      throw new Error(`NOAA AWS index request failed: HTTP ${response.status} ${response.statusText}`);
-    }
-    const text = await response.text();
-    await writeFile(path, text, "utf8");
-    return text;
-  }
-
-  private async fetchRange(url: string, range: ByteRange): Promise<Uint8Array> {
-    const rangeValue = `bytes=${range.start}-${range.end ?? ""}`;
-    const response = await fetchWithRetry(
-      url,
-      {
-        headers: {
-          range: rangeValue,
-          "user-agent": WFG_USER_AGENT,
-        },
+    return this.artifacts.getOrCreateFile(
+      `${subsetKey(request)}.grib2`,
+      async () => {
+        const index = await this.artifacts.getOrCreateText(
+          `${forecastKey(request)}.idx`,
+          () => this.source.fetchIndex(request),
+        );
+        return this.source.fetchSubset(request, index.value);
       },
-      { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
-    if (response.status !== 206) {
-      throw new Error(`NOAA AWS range request failed: HTTP ${response.status} ${response.statusText}`);
-    }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
-      throw new Error(`NOAA AWS range did not start with a GRIB message (${rangeValue})`);
-    }
-    return bytes;
   }
+}
 
+function forecastKey(request: ProfileDataRequest): string {
+  const canonical = JSON.stringify({
+    run: request.run.toISOString(),
+    forecastHour: request.forecastHour,
+    grid: request.grid ?? "0p25",
+  });
+  return createHash("sha256").update(canonical).digest("hex");
 }
 
 function subsetKey(request: ProfileDataRequest): string {
@@ -139,41 +43,16 @@ function subsetKey(request: ProfileDataRequest): string {
     grid: request.grid ?? "0p25",
     variables: [...new Set(request.variables.map((variable) => variable.gfsCode))].sort(),
     pressureLevelsHpa: [...new Set(request.pressureLevelsHpa)].sort((a, b) => b - a),
-    fields: [...new Set((request.fields ?? []).map((field) => field.id))].sort(),
+    fields: canonicalFields(request),
   });
   return createHash("sha256").update(canonical).digest("hex");
 }
 
-async function mapConcurrent<T, U>(
-  values: readonly T[],
-  concurrency: number,
-  fn: (value: T) => Promise<U>,
-): Promise<U[]> {
-  if (!Number.isInteger(concurrency) || concurrency < 1) {
-    throw new Error("NOAA AWS range concurrency must be a positive integer");
-  }
-  const result = new Array<U>(values.length);
-  let next = 0;
-
-  async function worker(): Promise<void> {
-    for (;;) {
-      const index = next;
-      next += 1;
-      if (index >= values.length) return;
-      result[index] = await fn(values[index]!);
-    }
-  }
-
-  const workerCount = Math.min(concurrency, values.length);
-  await Promise.all(Array.from({ length: workerCount }, () => worker()));
-  return result;
-}
-
-async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
+function canonicalFields(request: ProfileDataRequest): string[] {
+  return [...new Set((request.fields ?? []).map((field) => JSON.stringify({
+    id: field.id,
+    gfsCode: field.gfsCode,
+    gribLevel: field.level.gribLevel,
+    temporalSemantics: field.temporalSemantics,
+  })))].sort();
 }

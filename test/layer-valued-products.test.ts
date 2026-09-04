@@ -10,9 +10,27 @@ import { parseGribIndex, selectNonIsobaricByteRanges } from "../src/grib/index.j
 import { parseWgrib2PointLine } from "../src/grib/wgrib2.js";
 import { profileQuerySchema } from "../src/schema/query.js";
 import { buildNomadsPointUrl } from "../src/sources/nomads.js";
+import type { ProfileDataRequest, ProfileDataSource } from "../src/sources/types.js";
 
 const gridPoint = { latitude: 50, longitude: 14.5 };
 const run = "2026-08-20T06:00:00Z";
+
+function profileHarness(values: DecodedValue[]) {
+  const fetchMock = vi.fn(async (_request: ProfileDataRequest) => ({ path: "/cache/layers.grib2", cacheHit: false }));
+  const source: ProfileDataSource = {
+    id: "nomads",
+    provider: "NOAA NOMADS",
+    access: "nomads_grib_filter",
+    fetch: fetchMock,
+  };
+  return {
+    service: new ProfileService({
+      sources: { nomads: source },
+      decoder: { extractPoint: vi.fn(async () => values) },
+    }),
+    fetchMock,
+  };
+}
 
 describe("layer-valued field catalog", () => {
   it("models cloud layers, named cloud boundaries, atmospheric columns and averages explicitly", () => {
@@ -162,9 +180,7 @@ describe("ProfileService layer-valued fields", () => {
         gridPoint,
       },
     ];
-    const fetchMock = vi.fn(async (_url: string) => ({ path: "/cache/layers.grib2", cacheHit: false }));
-    const decoder = { extractPoint: vi.fn(async () => values) };
-    const service = new ProfileService({ cache: { fetch: fetchMock }, decoder });
+    const { service, fetchMock } = profileHarness(values);
 
     const result = await service.getProfile({
       latitude: 50.08,
@@ -179,6 +195,12 @@ describe("ProfileService layer-valued fields", () => {
       ],
     });
 
+    expect(fetchMock.mock.calls[0]?.[0].fields?.map((field) => field.id)).toEqual([
+      "low_cloud_cover",
+      "low_cloud_base_pressure",
+      "low_cloud_top_temperature",
+      "precipitable_water",
+    ]);
     expect(result.fields).toEqual([
       {
         id: "low_cloud_cover",
@@ -220,13 +242,9 @@ describe("ProfileService layer-valued fields", () => {
   });
 
   it("rejects an averaged field decoded as instantaneous", async () => {
-    const fetchMock = vi.fn(async (_url: string) => ({ path: "/cache/layers.grib2", cacheHit: false }));
-    const decoder = {
-      extractPoint: vi.fn(async (): Promise<DecodedValue[]> => [
-        { code: "PRES", namedVertical: "low cloud bottom level", value: 81200, gridPoint },
-      ]),
-    };
-    const service = new ProfileService({ cache: { fetch: fetchMock }, decoder });
+    const { service } = profileHarness([
+      { code: "PRES", namedVertical: "low cloud bottom level", value: 81200, gridPoint },
+    ]);
 
     await expect(service.getProfile({
       latitude: 50.08,

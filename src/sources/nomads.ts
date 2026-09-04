@@ -1,3 +1,7 @@
+import type { UpstreamAccessPolicy } from "../access/access-policy.js";
+import { fetchWithRetry } from "../access/http-fetch.js";
+import type { HttpRetryExecutionOptions } from "../access/http-retry.js";
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
 import type { RawVariableDefinition } from "../catalog/variables.js";
 import type { GfsGrid } from "../catalog/gfs-grid.js";
@@ -26,7 +30,53 @@ export interface NomadsAreaRequest {
   fields?: RawNonIsobaricFieldDefinition[];
 }
 
+export interface NomadsPointGribSource {
+  fetchPoint(request: NomadsPointRequest): Promise<Uint8Array>;
+}
+
+export interface NomadsAreaGribSource {
+  fetchArea(request: NomadsAreaRequest): Promise<Uint8Array>;
+}
+
 type NomadsRequest = NomadsAreaRequest;
+
+export class NomadsSource implements NomadsPointGribSource, NomadsAreaGribSource {
+  constructor(
+    private readonly accessPolicy?: UpstreamAccessPolicy,
+    private readonly fetchFn: typeof fetch = globalThis.fetch,
+    private readonly retryOptions: HttpRetryExecutionOptions = {},
+  ) {}
+
+  fetchPoint(request: NomadsPointRequest): Promise<Uint8Array> {
+    return this.fetchGrib(buildNomadsPointUrl(request));
+  }
+
+  fetchArea(request: NomadsAreaRequest): Promise<Uint8Array> {
+    return this.fetchGrib(buildNomadsAreaUrl(request));
+  }
+
+  private async fetchGrib(url: string): Promise<Uint8Array> {
+    const response = await fetchWithRetry(
+      url,
+      { headers: { "user-agent": WFG_USER_AGENT } },
+      {
+        ...this.retryOptions,
+        fetchFn: this.fetchFn,
+        ...(this.accessPolicy === undefined ? {} : { accessPolicy: this.accessPolicy }),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`NOMADS request failed: HTTP ${response.status} ${response.statusText}`);
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
+      const preview = new TextDecoder().decode(bytes.slice(0, 240));
+      throw new Error(`NOMADS returned non-GRIB content: ${preview}`);
+    }
+    return bytes;
+  }
+}
 
 export function buildNomadsPointUrl(request: NomadsPointRequest): string {
   return buildNomadsUrl({

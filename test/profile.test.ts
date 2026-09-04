@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProfileService } from "../src/core/profile.js";
 import type { DecodedValue } from "../src/types/decoded.js";
+import type { ProfileDataRequest, ProfileDataSource } from "../src/sources/types.js";
 
 const query = {
   latitude: 50.08, longitude: 14.43, run: "2026-08-19T06:00:00Z",
@@ -16,9 +17,18 @@ const fullValues: DecodedValue[] = [
 ];
 
 function harness(values: DecodedValue[], cacheHit = false) {
-  const fetchMock = vi.fn(async (_url: string) => ({ path: "/cache/field.grib2", cacheHit }));
+  const fetchMock = vi.fn(async (_request: ProfileDataRequest) => ({ path: "/cache/field.grib2", cacheHit }));
   const decodeMock = vi.fn(async () => values);
-  const service = new ProfileService({ cache: { fetch: fetchMock }, decoder: { extractPoint: decodeMock } });
+  const nomadsSource: ProfileDataSource = {
+    id: "nomads",
+    provider: "NOAA NOMADS",
+    access: "nomads_grib_filter",
+    fetch: fetchMock,
+  };
+  const service = new ProfileService({
+    sources: { nomads: nomadsSource },
+    decoder: { extractPoint: decodeMock },
+  });
   return { service, fetchMock, decodeMock };
 }
 
@@ -37,8 +47,16 @@ describe("ProfileService", () => {
     expect(result.levels[1]?.temperatureC).toBeCloseTo(0);
     expect(result.levels[1]?.windDirectionDeg).toBeCloseTo(90);
     expect(decodeMock).toHaveBeenCalledWith("/cache/field.grib2", 14.43, 50.08);
-    const url = new URL(fetchMock.mock.calls[0]?.[0] ?? "");
-    for (const code of ["TMP", "RH", "UGRD", "VGRD"]) expect(url.searchParams.get(`var_${code}`)).toBe("on");
+    expect(fetchMock.mock.calls[0]?.[0]).toMatchObject({
+      run: new Date("2026-08-19T06:00:00Z"),
+      forecastHour: 6,
+      latitude: 50.08,
+      longitude: 14.43,
+      pressureLevelsHpa: [700, 850],
+    });
+    expect(fetchMock.mock.calls[0]?.[0].variables.map((variable) => variable.gfsCode)).toEqual([
+      "TMP", "RH", "UGRD", "VGRD",
+    ]);
   });
 
   it("derives thermodynamic pressure-level diagnostics from the minimum raw GFS dependencies", async () => {
@@ -66,9 +84,9 @@ describe("ProfileService", () => {
     expect(result.levels[0]?.virtualTemperatureC).toBeCloseTo(13.0397, 4);
     expect(result.levels[0]?.airDensityKgM3).toBeCloseTo(1.03468, 5);
 
-    const url = new URL(fetchMock.mock.calls[0]?.[0] ?? "");
-    for (const code of ["TMP", "RH", "SPFH"]) expect(url.searchParams.get(`var_${code}`)).toBe("on");
-    for (const code of ["UGRD", "VGRD", "HGT"]) expect(url.searchParams.get(`var_${code}`)).not.toBe("on");
+    expect(fetchMock.mock.calls[0]?.[0].variables.map((variable) => variable.gfsCode)).toEqual([
+      "TMP", "RH", "SPFH",
+    ]);
   });
 
   it("maps every expanded raw variable into canonical output fields", async () => {
@@ -168,7 +186,7 @@ describe("ProfileService", () => {
     await expect(harness([]).service.getProfile(query)).rejects.toThrow(/No values decoded/);
   });
 
-  it("validates input before touching cache or decoder dependencies", async () => {
+  it("validates input before touching source or decoder dependencies", async () => {
     const { service, fetchMock, decodeMock } = harness(fullValues);
     await expect(service.getProfile({ ...query, pressureLevelsHpa: [842] })).rejects.toThrow();
     expect(fetchMock).not.toHaveBeenCalled();
