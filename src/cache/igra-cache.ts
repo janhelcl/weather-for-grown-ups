@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import {
-  NceiIgraSource,
   parseIgraSounding,
   parseIgraStationList,
   resolveIgraSoundingArchive,
@@ -11,12 +10,18 @@ import { FileArtifactCache } from "./artifact-cache.js";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
+export interface IgraArchiveSource {
+  fetchStationListText(): Promise<string>;
+  fetchSoundingArchive(url: string): Promise<Uint8Array>;
+  extractSoundingArchive(bytes: Uint8Array): string;
+}
+
 export class CachedNceiIgraSource {
   private readonly cache: FileArtifactCache;
 
   constructor(
     rootDir: string,
-    private readonly source: NceiIgraSource,
+    private readonly source: IgraArchiveSource,
     private readonly now: () => Date = () => new Date(),
   ) {
     this.cache = new FileArtifactCache(rootDir);
