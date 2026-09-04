@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AreaSummaryService, estimateGridPoints } from "../src/core/area-summary.js";
+import type { NomadsAreaRequest } from "../src/sources/nomads.js";
 
 const base = {
   westLongitude: 12, eastLongitude: 18, southLatitude: 48, northLatitude: 51,
@@ -13,7 +14,7 @@ function harness(
   cacheHit = false,
   selectedStats = { ...rawStats, temporal: { type: "instantaneous" as const } },
 ) {
-  const fetch = vi.fn(async (_url: string) => ({ path: "/cache/area.grib2", cacheHit }));
+  const fetch = vi.fn(async (_request: NomadsAreaRequest) => ({ path: "/cache/area.grib2", cacheHit }));
   const summarizeBox = vi.fn(async () => stats);
   const summarizeSelectedMessage = vi.fn(async () => selectedStats);
   const resolveLatestRun = vi.fn(async () => new Date("2026-08-19T06:00:00Z"));
@@ -34,7 +35,7 @@ describe("estimateGridPoints", () => {
 });
 
 describe("AreaSummaryService", () => {
-  it("fetches one NOMADS subset, computes pressure stats, converts temperature to Celsius, and reports provenance", async () => {
+  it("fetches one canonical NOMADS area request, computes pressure stats, converts temperature to Celsius, and reports provenance", async () => {
     const { service, fetch, summarizeBox, resolveLatestRun } = harness();
     const result = await service.summarize(base);
     expect(resolveLatestRun).not.toHaveBeenCalled();
@@ -45,19 +46,25 @@ describe("AreaSummaryService", () => {
       statistics: { definedGridPoints: 300, mean: 12, min: 2, max: 22, meanKind: "unweighted_grid_point_mean" },
       source: { provider: "NOAA NOMADS", access: "nomads_grib_filter", decoder: "wgrib2", cacheHit: false },
     });
-    const url = new URL(fetch.mock.calls[0]?.[0] ?? "");
-    expect(url.searchParams.get("var_TMP")).toBe("on");
-    expect(url.searchParams.get("lev_850_mb")).toBe("on");
+    const request = fetch.mock.calls[0]?.[0];
+    expect(request).toMatchObject({
+      run: new Date("2026-08-19T06:00:00Z"),
+      forecastHour: 6,
+      westLongitude: 12,
+      eastLongitude: 18,
+      southLatitude: 48,
+      northLatitude: 51,
+      pressureLevelsHpa: [850],
+    });
+    expect(request?.variables.map((variable) => variable.gfsCode)).toEqual(["TMP"]);
     expect(summarizeBox).toHaveBeenCalledWith("/cache/area.grib2", result.bbox);
   });
 
-  it("uses the 0.5 NOMADS product and model identity when explicitly selected", async () => {
+  it("passes the 0.5 grid through the canonical area request and model identity", async () => {
     const { service, fetch } = harness();
     const result = await service.summarize({ ...base, grid: "0p50" });
     expect(result.model).toBe("gfs_0p50");
-    const url = new URL(fetch.mock.calls[0]?.[0] ?? "");
-    expect(url.pathname).toBe("/cgi-bin/filter_gfs_0p50.pl");
-    expect(url.searchParams.get("file")).toBe("gfs.t06z.pgrb2full.0p50.f006");
+    expect(fetch.mock.calls[0]?.[0].grid).toBe("0p50");
   });
 
   it("passes 0.5 through query-aware and complete latest-run discovery", async () => {
@@ -113,10 +120,15 @@ describe("AreaSummaryService", () => {
       result.bbox,
       { code: "TMP", gribLevel: "2 m above ground", temporalSemantics: "instantaneous" },
     );
-    const url = new URL(fetch.mock.calls[0]?.[0] ?? "");
-    expect(url.searchParams.get("var_TMP")).toBe("on");
-    expect(url.searchParams.get("lev_2_m_above_ground")).toBe("on");
-    expect(url.searchParams.has("lev_850_mb")).toBe(false);
+    const request = fetch.mock.calls[0]?.[0];
+    expect(request?.variables).toEqual([]);
+    expect(request?.pressureLevelsHpa).toEqual([]);
+    expect(request?.fields).toHaveLength(1);
+    expect(request?.fields?.[0]).toMatchObject({
+      gfsCode: "TMP",
+      temporalSemantics: "instantaneous",
+      level: { nomadsLevel: "2_m_above_ground" },
+    });
   });
 
   it("preserves average temporal semantics with absolute UTC interval times", async () => {

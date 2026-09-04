@@ -5,7 +5,7 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
-import { NomadsCache } from "../cache/nomads-cache.js";
+import { NomadsAreaCache } from "../cache/nomads-cache.js";
 import {
   NON_ISOBARIC_FIELD_CATALOG,
   type NonIsobaricLevel,
@@ -34,7 +34,8 @@ import {
   gfsGridSpacingDegrees,
   type RawVariableId,
 } from "../schema/query.js";
-import { buildNomadsAreaUrl } from "../sources/nomads.js";
+import { NomadsSource, type NomadsAreaRequest } from "../sources/nomads.js";
+import type { GribDecoderName } from "../types/decoded.js";
 import { computeAreaDistribution } from "./area-distribution.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
 import {
@@ -43,12 +44,13 @@ import {
   resolveLatestRunForGrid,
   type LatestRunProvider,
 } from "./latest-run.js";
-import type { GribDecoderName } from "../types/decoded.js";
 import type { FieldTemporalResult, NonIsobaricFieldLevelResult } from "./types.js";
 
 const HOUR_MS = 3_600_000;
 
-export interface AreaFileCache { fetch(url: string): Promise<{ path: string; cacheHit: boolean }>; }
+export interface AreaFileCache {
+  fetch(request: NomadsAreaRequest): Promise<{ path: string; cacheHit: boolean }>;
+}
 export interface AreaStatsDecoder {
   readonly engine?: GribDecoderName;
   summarizeBox(path: string, box: AreaBox): Promise<GridStatistics>;
@@ -87,7 +89,10 @@ export class AreaSummaryService {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
     const nomadsAccessPolicy = options.nomadsAccessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nomads);
-    this.cache = options.cache ?? new NomadsCache(join(cacheDir, "grib"), nomadsAccessPolicy);
+    this.cache = options.cache ?? new NomadsAreaCache(
+      join(cacheDir, "grib"),
+      new NomadsSource(nomadsAccessPolicy),
+    );
     this.decoder = options.decoder ?? new Wgrib2StatsDecoder(options.wgrib2Path);
     this.gridDecoder = options.gridDecoder ?? new Wgrib2GridDecoder(options.wgrib2Path);
     this.latestRunProvider = options.latestRunProvider ?? new LatestRunResolver();
@@ -125,7 +130,7 @@ export class AreaSummaryService {
     const variable = VARIABLE_CATALOG[variableId] as RawVariableDefinition;
     const run = await this.resolveRun(query.run, validTime, [variable], [pressureLevelHpa], [], query.grid);
     const fh = forecastHour(run, validTime, query.grid ?? "0p25");
-    const url = buildNomadsAreaUrl({
+    const cached = await this.cache.fetch({
       run,
       ...(query.grid === undefined ? {} : { grid: query.grid }),
       forecastHour: fh,
@@ -133,7 +138,6 @@ export class AreaSummaryService {
       variables: [variable],
       pressureLevelsHpa: [pressureLevelHpa],
     });
-    const cached = await this.cache.fetch(url);
     const output = variable.outputs[0];
     const distributionRequested = wantsDistribution(query);
 
@@ -183,7 +187,7 @@ export class AreaSummaryService {
     const validTime = new Date(query.validTime);
     const run = await this.resolveRun(query.run, validTime, [], [], [definition], query.grid);
     const fh = forecastHour(run, validTime, query.grid ?? "0p25");
-    const url = buildNomadsAreaUrl({
+    const cached = await this.cache.fetch({
       run,
       ...(query.grid === undefined ? {} : { grid: query.grid }),
       forecastHour: fh,
@@ -192,7 +196,6 @@ export class AreaSummaryService {
       pressureLevelsHpa: [],
       fields: [definition],
     });
-    const cached = await this.cache.fetch(url);
     const selector = fieldSelector(definition);
     const output = definition.outputs[0];
     const distributionRequested = wantsDistribution(query);

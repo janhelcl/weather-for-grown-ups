@@ -1,13 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProfileService } from "../src/core/profile.js";
 import type { DecodedValue } from "../src/types/decoded.js";
+import type { ProfileDataRequest, ProfileDataSource } from "../src/sources/types.js";
 
 const gridPoint = { latitude: 50, longitude: 14.5 };
 
 function serviceFor(values: DecodedValue[]) {
-  const fetchMock = vi.fn(async (_url: string) => ({ path: "/cache/fields.grib2", cacheHit: false }));
+  const fetchMock = vi.fn(async (_request: ProfileDataRequest) => ({ path: "/cache/fields.grib2", cacheHit: false }));
   const decoder = { extractPoint: vi.fn(async () => values) };
-  return { service: new ProfileService({ cache: { fetch: fetchMock }, decoder }), fetchMock };
+  const nomadsSource: ProfileDataSource = {
+    id: "nomads",
+    provider: "NOAA NOMADS",
+    access: "nomads_grib_filter",
+    fetch: fetchMock,
+  };
+  return {
+    service: new ProfileService({ sources: { nomads: nomadsSource }, decoder }),
+    fetchMock,
+  };
 }
 
 const baseQuery = {
@@ -82,7 +92,7 @@ describe("ProfileService non-isobaric fields", () => {
     ]);
   });
 
-  it("can mix pressure-level and non-isobaric fields in one fetch", async () => {
+  it("can mix pressure-level and non-isobaric fields in one source request", async () => {
     const values: DecodedValue[] = [
       { code: "TMP", pressureHpa: 850, value: 283.15, gridPoint },
       { code: "CAPE", surface: true, value: 1200, gridPoint },
@@ -96,11 +106,10 @@ describe("ProfileService non-isobaric fields", () => {
     });
     expect(result.levels[0]).toEqual({ pressureHpa: 850, temperatureC: 10 });
     expect(result.fields?.[0]).toMatchObject({ id: "surface_cape", values: { capeJkg: 1200 } });
-    const url = new URL(fetchMock.mock.calls[0]?.[0] ?? "");
-    expect(url.searchParams.get("lev_850_mb")).toBe("on");
-    expect(url.searchParams.get("lev_surface")).toBe("on");
-    expect(url.searchParams.get("var_TMP")).toBe("on");
-    expect(url.searchParams.get("var_CAPE")).toBe("on");
+    const request = fetchMock.mock.calls[0]?.[0];
+    expect(request?.pressureLevelsHpa).toEqual([850]);
+    expect(request?.variables.map((variable) => variable.gfsCode)).toEqual(["TMP"]);
+    expect(request?.fields?.map((field) => field.gfsCode)).toContain("CAPE");
   });
 
   it("rejects a decoded accumulation field without accumulation time metadata", async () => {

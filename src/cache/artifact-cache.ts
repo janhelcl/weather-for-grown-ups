@@ -7,6 +7,11 @@ export interface CachedArtifact<T> {
   cacheHit: boolean;
 }
 
+export interface CachedFileArtifact {
+  path: string;
+  cacheHit: boolean;
+}
+
 /**
  * Filesystem-backed artifact persistence only. Provider access, retries and
  * upstream etiquette stay outside this class.
@@ -14,6 +19,7 @@ export interface CachedArtifact<T> {
 export class FileArtifactCache {
   private readonly textInFlight = new Map<string, Promise<string>>();
   private readonly bytesInFlight = new Map<string, Promise<Uint8Array>>();
+  private readonly fileInFlight = new Map<string, Promise<void>>();
 
   constructor(private readonly rootDir: string) {}
 
@@ -59,6 +65,29 @@ export class FileArtifactCache {
     return { value: await operation, cacheHit: false };
   }
 
+  async getOrCreateFile(
+    name: string,
+    loader: () => Promise<Uint8Array>,
+    ttlMs = Number.POSITIVE_INFINITY,
+  ): Promise<CachedFileArtifact> {
+    const path = this.path(name);
+    if (await isFresh(path, ttlMs)) {
+      return { path, cacheHit: true };
+    }
+
+    const pending = this.fileInFlight.get(name);
+    if (pending !== undefined) {
+      await pending;
+      return { path, cacheHit: true };
+    }
+
+    const operation = this.loadAndStoreFile(path, loader)
+      .finally(() => this.fileInFlight.delete(name));
+    this.fileInFlight.set(name, operation);
+    await operation;
+    return { path, cacheHit: false };
+  }
+
   private async loadAndStoreText(path: string, loader: () => Promise<string>): Promise<string> {
     await mkdir(this.rootDir, { recursive: true });
     const value = await loader();
@@ -74,6 +103,11 @@ export class FileArtifactCache {
     const value = await loader();
     await writeAtomically(path, value);
     return value;
+  }
+
+  private async loadAndStoreFile(path: string, loader: () => Promise<Uint8Array>): Promise<void> {
+    await mkdir(this.rootDir, { recursive: true });
+    await writeAtomically(path, await loader());
   }
 
   private path(name: string): string {

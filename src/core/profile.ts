@@ -5,7 +5,7 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
-import { NomadsCache, type CachedFile } from "../cache/nomads-cache.js";
+import { NomadsCache } from "../cache/nomads-cache.js";
 import { GfsS3SubsetCache } from "../cache/s3-subset-cache.js";
 import {
   expandRequestedFields,
@@ -33,8 +33,11 @@ import {
   type ProfileSourceId,
   type VariableId,
 } from "../schema/query.js";
-import { NomadsProfileSource, S3ProfileSource } from "./gfs-profile-sources.js";
+import { GfsS3Source } from "../sources/gfs-s3.js";
+import { NomadsSource } from "../sources/nomads.js";
 import type { ProfileDataSource } from "../sources/types.js";
+import type { DecodedValue, ForecastInterval, GribDecoderName } from "../types/decoded.js";
+import { NomadsProfileSource, S3ProfileSource } from "./gfs-profile-sources.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
 import {
   LatestRunResolver,
@@ -42,17 +45,12 @@ import {
   resolveLatestRunForGrid,
   type LatestRunProvider,
 } from "./latest-run.js";
-import type { DecodedValue, ForecastInterval, GribDecoderName } from "../types/decoded.js";
 import type {
   FieldTemporalResult,
   NonIsobaricFieldResult,
   ProfileLevel,
   ProfileResult,
 } from "./types.js";
-
-export interface ProfileCache {
-  fetch(url: string): Promise<CachedFile>;
-}
 
 export interface PointDecoder {
   readonly engine?: GribDecoderName;
@@ -62,8 +60,8 @@ export interface PointDecoder {
 export interface ProfileServiceOptions {
   cacheDir?: string;
   nomadsAccessPolicy?: UpstreamAccessPolicy;
+  s3AccessPolicy?: UpstreamAccessPolicy;
   wgrib2Path?: string;
-  cache?: ProfileCache;
   decoder?: PointDecoder;
   latestRunProvider?: LatestRunProvider;
   sources?: Partial<Record<ProfileSourceId, ProfileDataSource>>;
@@ -78,12 +76,16 @@ export class ProfileService {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
     const nomadsAccessPolicy = options.nomadsAccessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nomads);
-    const nomadsCache = options.cache
-      ?? new NomadsCache(join(cacheDir, "grib"), nomadsAccessPolicy);
+    const s3AccessPolicy = options.s3AccessPolicy
+      ?? new FileAccessPolicy(join(cacheDir, "s3", "access-state"), UPSTREAM_ACCESS_POLICIES.noaaAws);
 
     this.sources = {
-      nomads: new NomadsProfileSource(nomadsCache as NomadsCache),
-      s3: new S3ProfileSource(new GfsS3SubsetCache(join(cacheDir, "s3"))),
+      nomads: new NomadsProfileSource(
+        new NomadsCache(join(cacheDir, "grib"), new NomadsSource(nomadsAccessPolicy)),
+      ),
+      s3: new S3ProfileSource(
+        new GfsS3SubsetCache(join(cacheDir, "s3"), new GfsS3Source(s3AccessPolicy)),
+      ),
       ...options.sources,
     };
     this.decoder = options.decoder ?? new Wgrib2Decoder(options.wgrib2Path);

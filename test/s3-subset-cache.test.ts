@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GfsS3SubsetCache } from "../src/cache/s3-subset-cache.js";
 import { expandRequestedVariables } from "../src/catalog/variables.js";
+import { GfsS3Source } from "../src/sources/gfs-s3.js";
 import type { ProfileDataRequest } from "../src/sources/types.js";
 
 const indexText = [
@@ -43,10 +44,22 @@ function makeFetch() {
   });
 }
 
+function makeCache(fetchFn: typeof fetch, rangeConcurrency?: number): GfsS3SubsetCache {
+  return new GfsS3SubsetCache(
+    rootDir,
+    new GfsS3Source(
+      undefined,
+      fetchFn,
+      rangeConcurrency,
+      { baseDelayMs: 0, jitterRatio: 0 },
+    ),
+  );
+}
+
 describe("GfsS3SubsetCache", () => {
-  it("fetches the index, downloads only selected GRIB byte ranges, and concatenates messages", async () => {
+  it("persists an index fetched by the source and materializes only selected GRIB ranges", async () => {
     const fetchFn = makeFetch();
-    const cache = new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch);
+    const cache = makeCache(fetchFn as typeof fetch);
     const result = await cache.fetch(request());
     expect(result.cacheHit).toBe(false);
     expect(Buffer.from(await readFile(result.path)).toString()).toBe("GRIB0000GRIB1111");
@@ -61,7 +74,7 @@ describe("GfsS3SubsetCache", () => {
 
   it("returns a disk cache hit without any upstream requests", async () => {
     const fetchFn = makeFetch();
-    const cache = new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch);
+    const cache = makeCache(fetchFn as typeof fetch);
     const first = await cache.fetch(request());
     const callCount = fetchFn.mock.calls.length;
     expect(await cache.fetch(request())).toEqual({ path: first.path, cacheHit: true });
@@ -70,7 +83,7 @@ describe("GfsS3SubsetCache", () => {
 
   it("canonicalizes variable and level ordering in the subset cache key", async () => {
     const fetchFn = makeFetch();
-    const cache = new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch);
+    const cache = makeCache(fetchFn as typeof fetch);
     const first = await cache.fetch(request(["temperature", "relative_humidity"], [850, 700]));
     const callCount = fetchFn.mock.calls.length;
     const second = await cache.fetch(request(["relative_humidity", "temperature"], [700, 850, 850]));
@@ -79,27 +92,27 @@ describe("GfsS3SubsetCache", () => {
     expect(fetchFn).toHaveBeenCalledTimes(callCount);
   });
 
-  it("reuses the immutable index file across different subsets of the same forecast file", async () => {
+  it("reuses the immutable index artifact across different subsets of the same forecast file", async () => {
     const fetchFn = makeFetch();
-    const cache = new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch);
+    const cache = makeCache(fetchFn as typeof fetch);
     await cache.fetch(request(["temperature"], [850]));
     await cache.fetch(request(["relative_humidity"], [850]));
     expect(fetchFn.mock.calls.filter(([input]) => String(input).endsWith(".idx"))).toHaveLength(1);
   });
 
-  it("deduplicates concurrent identical subset downloads in-process", async () => {
+  it("deduplicates concurrent identical subset materialization in-process", async () => {
     const fetchFn = makeFetch();
-    const cache = new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch);
+    const cache = makeCache(fetchFn as typeof fetch);
     const [first, second] = await Promise.all([cache.fetch(request()), cache.fetch(request())]);
     expect(first.path).toBe(second.path);
     expect([first.cacheHit, second.cacheHit].sort()).toEqual([false, true]);
     expect(fetchFn.mock.calls.filter(([, init]) => new Headers(init?.headers).has("range"))).toHaveLength(2);
   });
 
-  it("writes safely when separate cache instances download the same subset concurrently", async () => {
+  it("writes safely when separate cache instances materialize the same subset concurrently", async () => {
     const fetchFn = makeFetch();
-    const firstCache = new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch);
-    const secondCache = new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch);
+    const firstCache = makeCache(fetchFn as typeof fetch);
+    const secondCache = makeCache(fetchFn as typeof fetch);
 
     const [first, second] = await Promise.all([
       firstCache.fetch(request()),
@@ -110,7 +123,7 @@ describe("GfsS3SubsetCache", () => {
     expect(Buffer.from(await readFile(first.path)).toString()).toBe("GRIB0000GRIB1111");
   });
 
-  it("bounds concurrent range requests", async () => {
+  it("bounds concurrent provider range requests", async () => {
     let active = 0;
     let maxActive = 0;
     const fetchFn = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -124,20 +137,20 @@ describe("GfsS3SubsetCache", () => {
       active -= 1;
       return new Response(new TextEncoder().encode(body), { status: 206 });
     });
-    const cache = new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch, 2);
+    const cache = makeCache(fetchFn as typeof fetch, 2);
 
     await cache.fetch(request(["temperature", "relative_humidity"], [850, 700]));
 
     expect(maxActive).toBe(2);
   });
 
-  it("fails on an unavailable index", async () => {
+  it("fails on an unavailable index after source retries", async () => {
     const fetchFn = vi.fn(async () => new Response("no", {
       status: 503,
       statusText: "Unavailable",
       headers: { "retry-after": "0" },
     }));
-    await expect(new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch).fetch(request()))
+    await expect(makeCache(fetchFn as typeof fetch).fetch(request()))
       .rejects.toThrow(/index request failed: HTTP 503/);
     expect(fetchFn).toHaveBeenCalledTimes(3);
   });
@@ -145,18 +158,18 @@ describe("GfsS3SubsetCache", () => {
   it("fails rather than accepting a server that ignores the Range header", async () => {
     const fetchFn = vi.fn(async (input: string | URL | Request) =>
       String(input).endsWith(".idx") ? new Response(indexText, { status: 200 }) : new Response(new TextEncoder().encode("GRIB0000"), { status: 200 }));
-    await expect(new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch).fetch(request(["temperature"], [850]))).rejects.toThrow(/range request failed: HTTP 200/);
+    await expect(makeCache(fetchFn as typeof fetch).fetch(request(["temperature"], [850]))).rejects.toThrow(/range request failed: HTTP 200/);
   });
 
   it("rejects byte ranges that do not begin with a GRIB message", async () => {
     const fetchFn = vi.fn(async (input: string | URL | Request) =>
       String(input).endsWith(".idx") ? new Response(indexText, { status: 200 }) : new Response(new TextEncoder().encode("NOPE0000"), { status: 206 }));
-    await expect(new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch).fetch(request(["temperature"], [850]))).rejects.toThrow(/did not start with a GRIB message/);
+    await expect(makeCache(fetchFn as typeof fetch).fetch(request(["temperature"], [850]))).rejects.toThrow(/did not start with a GRIB message/);
   });
 
   it("fails before range downloads when the index lacks any requested variable-level combination", async () => {
     const fetchFn = makeFetch();
-    const cache = new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch);
+    const cache = makeCache(fetchFn as typeof fetch);
     await expect(cache.fetch(request(["temperature"], [925]))).rejects.toThrow(/TMP@925mb/);
     expect(fetchFn.mock.calls.filter(([, init]) => new Headers(init?.headers).has("range"))).toHaveLength(0);
   });

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GfsS3SubsetCache } from "../src/cache/s3-subset-cache.js";
 import { expandRequestedVariables } from "../src/catalog/variables.js";
+import { GfsS3Source } from "../src/sources/gfs-s3.js";
 import type { ProfileDataRequest } from "../src/sources/types.js";
 
 let rootDir: string;
@@ -30,7 +31,10 @@ describe("S3 subset reuse for multi-point sampling", () => {
       expect(new Headers(init?.headers).get("range")).toBe("bytes=0-");
       return new Response(new TextEncoder().encode("GRIB0000"), { status: 206 });
     });
-    const cache = new GfsS3SubsetCache(rootDir, fetchFn as typeof fetch);
+    const cache = new GfsS3SubsetCache(
+      rootDir,
+      new GfsS3Source(undefined, fetchFn as typeof fetch, undefined, { baseDelayMs: 0, jitterRatio: 0 }),
+    );
 
     const [prague, bassano, meduno] = await Promise.all([
       cache.fetch(request(50.08, 14.43)),

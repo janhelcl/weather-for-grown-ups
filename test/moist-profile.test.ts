@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProfileService } from "../src/core/profile.js";
 import type { DecodedValue } from "../src/types/decoded.js";
+import type { ProfileDataRequest, ProfileDataSource } from "../src/sources/types.js";
 
 const gridPoint = { latitude: 50, longitude: 14.5 };
 const query = {
@@ -12,9 +13,15 @@ const query = {
 };
 
 function harness(values: DecodedValue[]) {
-  const fetchMock = vi.fn(async (_url: string) => ({ path: "/cache/field.grib2", cacheHit: false }));
+  const fetchMock = vi.fn(async (_request: ProfileDataRequest) => ({ path: "/cache/field.grib2", cacheHit: false }));
   const decodeMock = vi.fn(async () => values);
-  const service = new ProfileService({ cache: { fetch: fetchMock }, decoder: { extractPoint: decodeMock } });
+  const source: ProfileDataSource = {
+    id: "nomads",
+    provider: "NOAA NOMADS",
+    access: "nomads_grib_filter",
+    fetch: fetchMock,
+  };
+  const service = new ProfileService({ sources: { nomads: source }, decoder: { extractPoint: decodeMock } });
   return { service, fetchMock };
 }
 
@@ -37,12 +44,7 @@ describe("ProfileService moist thermodynamics", () => {
     expect(result.levels[0]?.wetBulbTemperatureC).toBeCloseTo(7.691, 3);
     expect(result.levels[0]?.equivalentPotentialTemperatureK).toBeCloseTo(316.758, 3);
 
-    const url = new URL(fetchMock.mock.calls[0]?.[0] ?? "");
-    expect(url.searchParams.get("var_TMP")).toBe("on");
-    expect(url.searchParams.get("var_SPFH")).toBe("on");
-    for (const code of ["RH", "UGRD", "VGRD", "HGT"]) {
-      expect(url.searchParams.get(`var_${code}`)).not.toBe("on");
-    }
+    expect(fetchMock.mock.calls[0]?.[0].variables.map((variable) => variable.gfsCode)).toEqual(["TMP", "SPFH"]);
   });
 
   it("does not materialize moist derived outputs when only raw dependencies are requested", async () => {

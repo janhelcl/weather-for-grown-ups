@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProfileService } from "../src/core/profile.js";
 import type { DecodedValue } from "../src/types/decoded.js";
-import type { ProfileDataSource } from "../src/sources/types.js";
+import type { ProfileDataRequest, ProfileDataSource } from "../src/sources/types.js";
 
 const gridPoint = { latitude: 50, longitude: 14.5 };
 const values: DecodedValue[] = [
@@ -10,17 +10,20 @@ const values: DecodedValue[] = [
   { code: "VGRD", pressureHpa: 850, value: 4, gridPoint },
 ];
 
-describe("ProfileService S3 source selection", () => {
+function source(
+  id: "nomads" | "s3",
+  fetch: (request: ProfileDataRequest) => Promise<{ path: string; cacheHit: boolean }>,
+): ProfileDataSource {
+  return id === "s3"
+    ? { id, provider: "NOAA AWS Open Data", access: "s3_range", fetch }
+    : { id, provider: "NOAA NOMADS", access: "nomads_grib_filter", fetch };
+}
+
+describe("ProfileService source selection", () => {
   it("routes an S3 query through the S3 source and reports provenance", async () => {
-    const fetch = vi.fn(async () => ({ path: "/cache/s3-fragment.grib2", cacheHit: false }));
-    const s3Source: ProfileDataSource = {
-      id: "s3",
-      provider: "NOAA AWS Open Data",
-      access: "s3_range",
-      fetch,
-    };
+    const fetch = vi.fn(async (_request: ProfileDataRequest) => ({ path: "/cache/s3-fragment.grib2", cacheHit: false }));
     const decoder = { extractPoint: vi.fn(async () => values) };
-    const service = new ProfileService({ sources: { s3: s3Source }, decoder });
+    const service = new ProfileService({ sources: { s3: source("s3", fetch) }, decoder });
 
     const result = await service.getProfile({
       latitude: 50.08,
@@ -51,10 +54,10 @@ describe("ProfileService S3 source selection", () => {
     expect(result.levels[0]).toMatchObject({ temperatureC: 12, windSpeedMs: 5 });
   });
 
-  it("keeps NOMADS as the default source for compatibility and smaller geographic transfers", async () => {
-    const nomadsFetch = vi.fn(async () => ({ path: "/cache/nomads.grib2", cacheHit: true }));
+  it("uses NOMADS when no source override is requested", async () => {
+    const nomadsFetch = vi.fn(async (_request: ProfileDataRequest) => ({ path: "/cache/nomads.grib2", cacheHit: true }));
     const service = new ProfileService({
-      cache: { fetch: nomadsFetch },
+      sources: { nomads: source("nomads", nomadsFetch) },
       decoder: { extractPoint: vi.fn(async () => values) },
     });
 
