@@ -6,6 +6,10 @@ import {
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
 import {
+  CachedNceiGfsForecastHistorySource,
+  CachedRdaGfsForecastHistorySource,
+} from "../cache/historical-gfs-cache.js";
+import {
   historicalAnalysisTimeSchema,
   type HistoricalGfsVariableId,
 } from "../schema/history.js";
@@ -82,14 +86,14 @@ export class ArchivedGfsForecastProfileService {
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
     const gdexAccessPolicy = options.gdexAccessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.gdex);
-    this.nceiSource = options.source ?? new NceiGfsForecastHistorySource({
-      cacheDir: join(cacheDir, "ncei-forecast-history"),
-      limiter: nceiAccessPolicy,
-    });
-    this.rdaSource = options.rdaSource ?? new RdaGfsForecastHistorySource({
-      cacheDir: join(cacheDir, "rda-forecast-history"),
-      limiter: gdexAccessPolicy,
-    });
+    this.nceiSource = options.source ?? new CachedNceiGfsForecastHistorySource(
+      join(cacheDir, "ncei-forecast-history"),
+      new NceiGfsForecastHistorySource({ limiter: nceiAccessPolicy }),
+    );
+    this.rdaSource = options.rdaSource ?? new CachedRdaGfsForecastHistorySource(
+      join(cacheDir, "rda-forecast-history"),
+      new RdaGfsForecastHistorySource({ limiter: gdexAccessPolicy }),
+    );
     this.now = options.now ?? (() => new Date());
   }
 

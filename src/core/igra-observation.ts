@@ -5,6 +5,7 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
+import { CachedNceiIgraSource } from "../cache/igra-cache.js";
 import { deriveSaturationVaporPressureHpa } from "../derived/thermodynamics.js";
 import type { IgraVerificationVariable } from "../schema/igra-verification.js";
 import type { ProfileLevel } from "./types.js";
@@ -65,12 +66,16 @@ export class IgraObservationProfileService {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
     const accessPolicy = options.accessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiIgra);
-    this.source = options.source ?? new NceiIgraSource({
-      cacheDir: join(cacheDir, "igra"),
-      limiter: accessPolicy,
-      ...(options.now === undefined ? {} : { now: options.now }),
-    });
-    this.now = options.now ?? (() => new Date());
+    const now = options.now ?? (() => new Date());
+    this.source = options.source ?? new CachedNceiIgraSource(
+      join(cacheDir, "igra"),
+      new NceiIgraSource({
+        limiter: accessPolicy,
+        now,
+      }),
+      now,
+    );
+    this.now = now;
   }
 
   async getProfile(query: IgraObservationProfileQuery): Promise<IgraObservationProfileResult> {

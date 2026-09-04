@@ -9,6 +9,7 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
+import { CachedNceiGfsHistorySource } from "../cache/historical-gfs-cache.js";
 import { deriveWind } from "../derived/wind.js";
 import {
   historicalFieldsQuerySchema,
@@ -104,10 +105,10 @@ export class HistoricalFieldsService {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
     const accessPolicy = options.accessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
-    this.source = options.source ?? new NceiGfsHistorySource({
-      cacheDir: join(cacheDir, "ncei-history"),
-      limiter: accessPolicy,
-    });
+    this.source = options.source ?? new CachedNceiGfsHistorySource(
+      join(cacheDir, "ncei-history"),
+      new NceiGfsHistorySource({ limiter: accessPolicy }),
+    );
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
     this.minimumTime = options.minimumTime ?? NCEI_GFS_GRID4_ANALYSIS_START;

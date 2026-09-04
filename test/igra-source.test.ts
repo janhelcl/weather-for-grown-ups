@@ -1,6 +1,3 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { deflateRawSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -11,47 +8,41 @@ import {
 } from "../src/sources/ncei-igra.js";
 
 describe("IGRA transport retry", () => {
-  it("retries a transient socket close before caching a successful response", async () => {
-    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-igra-retry-"));
-    try {
-      const fetchFn = vi.fn(async () => {
-        if (fetchFn.mock.calls.length === 1) {
-          const error = new TypeError("fetch failed") as TypeError & { cause?: unknown };
-          error.cause = { code: "UND_ERR_SOCKET" };
-          throw error;
-        }
-        return new Response(stationLine({
-          id: "EZM00011520",
-          latitude: "50.0078",
-          longitude: "14.4469",
-          elevation: "302.0",
-          name: "PRAHA-LIBUS",
-          firstYear: "1969",
-          lastYear: "2026",
-          observations: "70000",
-        }), { status: 200 });
-      });
-      const limiter = {
-        run: async <T>(operation: () => Promise<T>): Promise<T> => operation(),
-      };
-      const source = new NceiIgraSource({
-        cacheDir,
-        limiter: limiter as any,
-        fetchFn: fetchFn as any,
-        retryBaseDelayMs: 0,
-        retryJitterRatio: 0,
-      });
-
-      const stations = await source.listStations();
-
-      expect(fetchFn).toHaveBeenCalledTimes(2);
-      expect(stations[0]).toMatchObject({
+  it("retries a transient socket close before returning a successful response", async () => {
+    const fetchFn = vi.fn(async () => {
+      if (fetchFn.mock.calls.length === 1) {
+        const error = new TypeError("fetch failed") as TypeError & { cause?: unknown };
+        error.cause = { code: "UND_ERR_SOCKET" };
+        throw error;
+      }
+      return new Response(stationLine({
         id: "EZM00011520",
+        latitude: "50.0078",
+        longitude: "14.4469",
+        elevation: "302.0",
         name: "PRAHA-LIBUS",
-      });
-    } finally {
-      await rm(cacheDir, { recursive: true, force: true });
-    }
+        firstYear: "1969",
+        lastYear: "2026",
+        observations: "70000",
+      }), { status: 200 });
+    });
+    const limiter = {
+      run: async <T>(operation: () => Promise<T>): Promise<T> => operation(),
+    };
+    const source = new NceiIgraSource({
+      limiter: limiter as any,
+      fetchFn: fetchFn as any,
+      retryBaseDelayMs: 0,
+      retryJitterRatio: 0,
+    });
+
+    const stations = await source.listStations();
+
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(stations[0]).toMatchObject({
+      id: "EZM00011520",
+      name: "PRAHA-LIBUS",
+    });
   });
 });
 

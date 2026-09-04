@@ -1,7 +1,4 @@
 import { WFG_USER_AGENT } from "../access/user-agent.js";
-import { createHash, randomUUID } from "node:crypto";
-import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
 import { runWithHttpRetry } from "../access/http-retry.js";
 import { NCEI_GFS_HISTORY_BASE_URL } from "./ncei-gfs-history.js";
@@ -44,7 +41,6 @@ export interface ArchivedGfsForecastAreaDataSource {
 }
 
 export interface NceiGfsForecastHistorySourceOptions {
-  cacheDir: string;
   limiter: UpstreamAccessPolicy;
   fetchFn?: typeof fetch;
   retryBaseDelayMs?: number;
@@ -74,28 +70,8 @@ export class NceiGfsForecastHistorySource implements ArchivedGfsForecastDataSour
     runTime: Date,
     forecastHour: number,
   ): Promise<ArchivedGfsForecastResponse> {
-    await mkdir(this.options.cacheDir, { recursive: true });
-    const cachePath = join(
-      this.options.cacheDir,
-      `${createHash("sha256").update(url).digest("hex")}.csv`,
-    );
-
-    if (await exists(cachePath)) {
-      return { csv: await readFile(cachePath, "utf8"), dataset, cacheHit: true };
-    }
-
     const result = await runWithHttpRetry(
       () => this.options.limiter.run(async () => {
-        if (await exists(cachePath)) {
-          return {
-            status: 200,
-            statusText: "cache-hit",
-            retryAfter: null,
-            csv: await readFile(cachePath, "utf8"),
-            cacheHit: true,
-          };
-        }
-
         const response = await this.fetchFn(url, {
           headers: { "user-agent": WFG_USER_AGENT },
         });
@@ -104,7 +80,6 @@ export class NceiGfsForecastHistorySource implements ArchivedGfsForecastDataSour
           statusText: response.statusText,
           retryAfter: response.headers.get("retry-after"),
           csv: response.ok ? await response.text() : undefined,
-          cacheHit: false,
         };
       }),
       {
@@ -117,9 +92,6 @@ export class NceiGfsForecastHistorySource implements ArchivedGfsForecastDataSour
       },
     );
 
-    if (result.cacheHit && result.csv !== undefined) {
-      return { csv: result.csv, dataset, cacheHit: true };
-    }
     if (result.status === 404) {
       throw new Error(
         `NCEI archived GFS forecast is not available online for run ${runTime.toISOString()} f${formatForecastHour(forecastHour)} (${dataset}). Older forecast data may require NCEI HAS retrieval.`,
@@ -136,11 +108,9 @@ export class NceiGfsForecastHistorySource implements ArchivedGfsForecastDataSour
       );
     }
 
-    const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
-    await writeFile(tempPath, result.csv, "utf8");
-    await rename(tempPath, cachePath);
     return { csv: result.csv, dataset, cacheHit: false };
   }
+
 }
 
 export function buildNceiGfsForecastPointUrl(request: ArchivedGfsForecastRequest): string {
@@ -201,11 +171,3 @@ function yyyymmdd(date: Date): string {
   return `${year}${month}${day}`;
 }
 
-async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}

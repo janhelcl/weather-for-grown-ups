@@ -1,7 +1,4 @@
 import { WFG_USER_AGENT } from "../access/user-agent.js";
-import { createHash, randomUUID } from "node:crypto";
-import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { NetCDFReader } from "netcdfjs";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
 import { runWithHttpRetry } from "../access/http-retry.js";
@@ -25,7 +22,6 @@ export interface RdaAreaNetcdfReader {
 }
 
 export interface RdaGfsForecastHistorySourceOptions {
-  cacheDir: string;
   limiter: UpstreamAccessPolicy;
   fetchFn?: typeof fetch;
   netcdfReaderFactory?: (data: Uint8Array) => RdaAreaNetcdfReader;
@@ -63,16 +59,6 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
     dataset: string,
     request: ArchivedGfsForecastAreaRequest,
   ): Promise<ArchivedGfsForecastResponse> {
-    await mkdir(this.options.cacheDir, { recursive: true });
-    const cachePath = join(
-      this.options.cacheDir,
-      `${createHash("sha256").update(url).digest("hex")}.csv`,
-    );
-
-    if (await exists(cachePath)) {
-      return { csv: await readFile(cachePath, "utf8"), dataset, cacheHit: true };
-    }
-
     const result = await runWithHttpRetry(
       () => this.options.limiter.run(async () => {
         const response = await this.fetchFn(url, {
@@ -119,9 +105,6 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
       );
     }
 
-    const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
-    await writeFile(tempPath, csv, "utf8");
-    await rename(tempPath, cachePath);
     return { csv, dataset, cacheHit: false };
   }
 
@@ -131,13 +114,6 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
     runTime: Date,
     forecastHour: number,
   ): Promise<ArchivedGfsForecastResponse> {
-    await mkdir(this.options.cacheDir, { recursive: true });
-    const cachePath = join(this.options.cacheDir, `${createHash("sha256").update(url).digest("hex")}.csv`);
-
-    if (await exists(cachePath)) {
-      return { csv: await readFile(cachePath, "utf8"), dataset, cacheHit: true };
-    }
-
     const result = await runWithHttpRetry(
       () => this.options.limiter.run(async () => {
         const response = await this.fetchFn(url, {
@@ -176,11 +152,9 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
       );
     }
 
-    const tempPath = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
-    await writeFile(tempPath, result.csv, "utf8");
-    await rename(tempPath, cachePath);
     return { csv: result.csv, dataset, cacheHit: false };
   }
+
 }
 
 export function convertRdaGfs025AreaNetcdfToCsv(
@@ -331,11 +305,3 @@ function yyyymmdd(date: Date): string {
   return `${year}${month}${day}`;
 }
 
-async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}

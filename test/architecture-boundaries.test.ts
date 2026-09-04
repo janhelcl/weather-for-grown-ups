@@ -149,6 +149,8 @@ describe("architecture boundaries", () => {
       expect(source, path).not.toMatch(
         /from ["']\.\.\/(?:core|cli|schema|cache|derived)\//,
       );
+      expect(source, path).not.toMatch(/from ["']node:(?:fs|path)(?:\/[^"']*)?["']/);
+      expect(source, path).not.toContain("cacheDir");
       expect(source, path).not.toMatch(/from ["'][^"']*mcp[^"']*["']/);
     }
   });

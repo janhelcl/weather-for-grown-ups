@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deflateRawSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CachedNceiIgraSource } from "../src/cache/igra-cache.js";
 import { IgraObservationProfileService, selectIgraStation } from "../src/core/igra-observation.js";
 import { IgraForecastVerificationService } from "../src/core/igra-verification.js";
 import {
@@ -28,12 +29,15 @@ const prague: IgraStation = {
   observations: 70000,
 };
 
-describe("NceiIgraSource cache and transport branches", () => {
+describe("IGRA cache and transport boundaries", () => {
   it("caches the station list and bypasses a second network request", async () => {
     const dir = await tempDir();
     const fetchFn = vi.fn(async () => new Response(stationLine(prague), { status: 200 }));
     const limiter = { run: vi.fn(async <T>(operation: () => Promise<T>) => operation()) };
-    const source = new NceiIgraSource({ cacheDir: dir, limiter, fetchFn });
+    const source = new CachedNceiIgraSource(
+      dir,
+      new NceiIgraSource({ limiter, fetchFn }),
+    );
 
     expect((await source.listStations())[0]?.id).toBe(prague.id);
     expect((await source.listStations())[0]?.name).toBe("PRAHA-LIBUS");
@@ -55,18 +59,17 @@ describe("NceiIgraSource cache and transport branches", () => {
     });
     const limiter = { run: async <T>(operation: () => Promise<T>) => operation() };
 
-    const current = new NceiIgraSource({
-      cacheDir: currentDir,
-      limiter,
-      fetchFn: currentFetch,
-      now: () => new Date("2026-08-27T00:00:00Z"),
-    });
-    const old = new NceiIgraSource({
-      cacheDir: oldDir,
-      limiter,
-      fetchFn: oldFetch,
-      now: () => new Date("2026-08-27T00:00:00Z"),
-    });
+    const now = () => new Date("2026-08-27T00:00:00Z");
+    const current = new CachedNceiIgraSource(
+      currentDir,
+      new NceiIgraSource({ limiter, fetchFn: currentFetch, now }),
+      now,
+    );
+    const old = new CachedNceiIgraSource(
+      oldDir,
+      new NceiIgraSource({ limiter, fetchFn: oldFetch, now }),
+      now,
+    );
 
     expect((await current.getSounding(prague.id, new Date("2026-08-24T12:00:00Z"))).cacheHit)
       .toBe(false);
@@ -80,12 +83,16 @@ describe("NceiIgraSource cache and transport branches", () => {
       soundingZip("EZM00011520", 2026, 8, 24, 12),
       { status: 200 },
     ));
-    const source = new NceiIgraSource({
-      cacheDir: dir,
-      limiter: { run: async <T>(operation: () => Promise<T>) => operation() },
-      fetchFn,
-      now: () => new Date("2026-08-27T00:00:00Z"),
-    });
+    const now = () => new Date("2026-08-27T00:00:00Z");
+    const source = new CachedNceiIgraSource(
+      dir,
+      new NceiIgraSource({
+        limiter: { run: async <T>(operation: () => Promise<T>) => operation() },
+        fetchFn,
+        now,
+      }),
+      now,
+    );
 
     expect((await source.getSounding(prague.id, new Date("2026-08-24T12:00:00Z"))).cacheHit)
       .toBe(false);
@@ -95,11 +102,11 @@ describe("NceiIgraSource cache and transport branches", () => {
   });
 
   it("surfaces NOAA HTTP failures with the requested URL", async () => {
-    const dir = await tempDir();
     const source = new NceiIgraSource({
-      cacheDir: dir,
       limiter: { run: async <T>(operation: () => Promise<T>) => operation() },
       fetchFn: vi.fn(async () => new Response("nope", { status: 503, statusText: "Unavailable" })),
+      retryBaseDelayMs: 0,
+      retryJitterRatio: 0,
     });
 
     await expect(source.listStations()).rejects.toThrow(/HTTP 503 Unavailable/);

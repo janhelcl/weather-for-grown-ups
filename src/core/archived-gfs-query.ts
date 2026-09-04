@@ -5,6 +5,10 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
+import {
+  CachedNceiGfsForecastHistorySource,
+  CachedRdaGfsForecastHistorySource,
+} from "../cache/historical-gfs-cache.js";
 import type { HistoricalGfsFieldId } from "../schema/history-fields.js";
 import {
   archivedGfsModelId,
@@ -95,16 +99,20 @@ export class ArchivedGfsForecastQueryService {
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
     const gdexAccessPolicy = options.gdexAccessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.gdex);
-    this.nceiSource = options.source ?? new NceiGfsForecastHistorySource({
-      cacheDir: join(cacheDir, "ncei-forecast-history"),
-      limiter: nceiAccessPolicy,
-      ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),
-    });
-    this.rdaSource = options.rdaSource ?? new RdaGfsForecastHistorySource({
-      cacheDir: join(cacheDir, "rda-forecast-history"),
-      limiter: gdexAccessPolicy,
-      ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),
-    });
+    this.nceiSource = options.source ?? new CachedNceiGfsForecastHistorySource(
+      join(cacheDir, "ncei-forecast-history"),
+      new NceiGfsForecastHistorySource({
+        limiter: nceiAccessPolicy,
+        ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),
+      }),
+    );
+    this.rdaSource = options.rdaSource ?? new CachedRdaGfsForecastHistorySource(
+      join(cacheDir, "rda-forecast-history"),
+      new RdaGfsForecastHistorySource({
+        limiter: gdexAccessPolicy,
+        ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),
+      }),
+    );
     this.now = options.now ?? (() => new Date());
     this.profile = options.profile ?? new ArchivedGfsForecastProfileService({
       source: this.nceiSource,
