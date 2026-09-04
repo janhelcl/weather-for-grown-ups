@@ -1,9 +1,13 @@
+import {
+  type IfsHttpAccessPolicy,
+  runIfsHttpWithRetry,
+} from "../access/ifs-open-data.js";
+import { isRetryableHttpStatus } from "../access/http-retry.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import {
   parseGribIndex,
   type GribIndexEntry,
 } from "@mattnucc/gribberish";
-import { isRetryableHttpStatus, runWithHttpRetry } from "../access/http-retry.js";
 
 export const IFS_OPEN_DATA_BASE_URL = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com";
 export const IFS_OPEN_DATA_MIRRORS = [
@@ -25,49 +29,6 @@ export interface IfsIndexSelector {
   number?: number;
   /** Override the requested forecast step for run-static/source-special fields. */
   sourceForecastHour?: number;
-}
-
-export const IFS_HTTP_MAX_ATTEMPTS = 4;
-export const IFS_HTTP_INITIAL_BACKOFF_MS = 750;
-
-export interface IfsHttpAccessPolicy {
-  run<T>(url: string, operation: () => Promise<T>): Promise<T>;
-}
-
-export interface IfsHttpAttemptResult<T> {
-  status: number;
-  statusText: string;
-  retryAfter: string | null;
-  value?: T;
-}
-
-export function runIfsHttpWithRetry<T>(
-  operation: () => Promise<IfsHttpAttemptResult<T>>,
-): Promise<IfsHttpAttemptResult<T>> {
-  return runWithHttpRetry(operation, {
-    maxAttempts: IFS_HTTP_MAX_ATTEMPTS,
-    baseDelayMs: IFS_HTTP_INITIAL_BACKOFF_MS,
-  });
-}
-
-export async function fetchIfsWithRetry(
-  fetchFn: typeof fetch,
-  input: string | URL | Request,
-  init?: RequestInit,
-): Promise<Response> {
-  const result = await runIfsHttpWithRetry(async () => {
-    const response = await fetchFn(input, init);
-    return {
-      status: response.status,
-      statusText: response.statusText,
-      retryAfter: response.headers.get("retry-after"),
-      value: response,
-    };
-  });
-  if (result.value === undefined) {
-    throw new Error("ECMWF IFS retry loop returned no response");
-  }
-  return result.value;
 }
 
 export interface IfsAvailabilityProbe {
