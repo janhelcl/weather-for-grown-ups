@@ -1,5 +1,5 @@
 import { execa } from "execa";
-import type { GribDecoderName } from "../core/types.js";
+import type { GribDecoderName } from "../types/decoded.js";
 import {
   wgrib2NamesArgs,
   type Wgrib2NameConvention,

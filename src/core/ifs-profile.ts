@@ -38,12 +38,8 @@ import {
   type IfsPointQueryInput,
   type IfsProfileResult,
 } from "../schema/ifs.js";
-import type {
-  DecodedValue,
-  GribDecoderName,
-  NonIsobaricFieldResult,
-  ProfileLevel,
-} from "./types.js";
+import type { DecodedValue, GribDecoderName } from "../types/decoded.js";
+import type { NonIsobaricFieldResult, ProfileLevel } from "./types.js";
 import type { IfsIndexSelector } from "../sources/ifs-open-data.js";
 import { IfsLatestRunResolver, type IfsLatestRunProvider } from "./ifs-latest-run.js";
 import { ifsForecastHour, parseIfsRun } from "./ifs-time.js";

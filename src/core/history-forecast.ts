@@ -30,7 +30,7 @@ import {
 } from "../sources/rda-gfs-forecast-history.js";
 import type { HistoricalAnalysisDataSource } from "../sources/ncei-gfs-history.js";
 import { HistoricalProfileService } from "./history.js";
-import type { GridPoint } from "./types.js";
+import type { GridPoint } from "../types/decoded.js";
 
 export interface ArchivedGfsForecastProfileQuery {
   runTime: Date;

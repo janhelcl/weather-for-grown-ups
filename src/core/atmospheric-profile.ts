@@ -1,7 +1,8 @@
 import type { GefsMember, GefsProfileVariableId } from "../catalog/gefs.js";
 import type { AtmosphericModelId } from "../catalog/models.js";
 import type { GefsEnsembleProfileResult } from "../schema/gefs-ensemble-profile.js";
-import type { GridPoint, ProfileLevel, ProfileResult } from "./types.js";
+import type { GridPoint } from "../types/decoded.js";
+import type { ProfileLevel, ProfileResult } from "./types.js";
 
 export interface AtmosphericProfileSnapshot {
   model: AtmosphericModelId;

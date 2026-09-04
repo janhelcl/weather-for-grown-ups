@@ -42,11 +42,9 @@ import {
   resolveLatestRunForGrid,
   type LatestRunProvider,
 } from "./latest-run.js";
+import type { DecodedValue, ForecastInterval, GribDecoderName } from "../types/decoded.js";
 import type {
-  DecodedValue,
   FieldTemporalResult,
-  ForecastInterval,
-  GribDecoderName,
   NonIsobaricFieldResult,
   ProfileLevel,
   ProfileResult,

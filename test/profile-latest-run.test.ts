@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProfileService } from "../src/core/profile.js";
-import type { DecodedValue } from "../src/core/types.js";
+import type { DecodedValue } from "../src/types/decoded.js";
 
 const gridPoint = { latitude: 50, longitude: 14.5 };
 const values: DecodedValue[] = [

@@ -24,7 +24,7 @@ import {
 } from "../schema/gefs-area-summary.js";
 import type { GefsFieldTemporalResult } from "../schema/gefs-member-bundle.js";
 import { computeAreaDistribution } from "./area-distribution.js";
-import type { GribDecoderName } from "./types.js";
+import type { GribDecoderName } from "../types/decoded.js";
 import { mapConcurrent } from "./concurrency.js";
 import { summarizeNumericDistribution } from "./ensemble-statistics.js";
 import { DEFAULT_GEFS_MEMBER_CONCURRENCY } from "./gefs-ensemble.js";

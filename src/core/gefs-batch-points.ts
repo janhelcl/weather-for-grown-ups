@@ -14,7 +14,7 @@ import {
   type GefsBatchPointsResult,
 } from "../schema/gefs-batch-points.js";
 import type { PointCoordinate } from "../schema/query.js";
-import type { DecodedValue } from "./types.js";
+import type { DecodedValue } from "../types/decoded.js";
 import { mapConcurrent } from "./concurrency.js";
 import { summarizeNumericDistribution, thresholdGteSummary } from "./ensemble-statistics.js";
 import { DEFAULT_GEFS_MEMBER_CONCURRENCY, type GefsPointDecoder } from "./gefs-ensemble.js";

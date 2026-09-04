@@ -28,21 +28,39 @@ import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
 export const PUBLIC_ATMOSPHERIC_DATASET_IDS = ["gfs", "aigfs", "aigefs", "hgefs", "icon-d2", "icon-d2-eps", "arome", "pe-arome", "gefs", "ifs", "aifs", "aifs-ens", "ifs-ens", "gfs-analysis"] as const;
 export const publicAtmosphericDatasetSchema = z.enum(PUBLIC_ATMOSPHERIC_DATASET_IDS);
 export type PublicAtmosphericDataset = z.infer<typeof publicAtmosphericDatasetSchema>;
+export type PublicForecastKind = "operational" | "reforecast";
 
-function datasetMetadata<Id extends AtmosphericDatasetId>(internalDatasetId: Id): {
+interface PublicForecastKindCapabilityOverride {
+  runSelectors: readonly AtmosphericRunSelectorId[];
+  operations: readonly string[];
+}
+
+function datasetMetadata<Id extends AtmosphericDatasetId>(
+  internalDatasetId: Id,
+  forecastKindOverrides: Partial<Record<PublicForecastKind, PublicForecastKindCapabilityOverride>> = {},
+): {
   internalDatasetId: Id;
   role: AtmosphericDatasetRole;
   kind: AtmosphericDatasetKind;
   modelClass: AtmosphericModelClass;
   provider: AtmosphericProvider;
+  forecastKinds: readonly PublicForecastKind[];
+  forecastKindOverrides: Partial<Record<PublicForecastKind, PublicForecastKindCapabilityOverride>>;
 } {
   const dataset = ATMOSPHERIC_DATASET_CATALOG[internalDatasetId];
+  const additionalForecastKinds = (Object.keys(forecastKindOverrides) as PublicForecastKind[])
+    .filter((kind) => kind !== "operational");
+  const forecastKinds: readonly PublicForecastKind[] = dataset.role === "analysis"
+    ? []
+    : ["operational", ...additionalForecastKinds];
   return {
     internalDatasetId,
     role: dataset.role,
     kind: dataset.kind,
     modelClass: dataset.modelClass,
     provider: dataset.provider,
+    forecastKinds,
+    forecastKindOverrides,
   };
 }
 
@@ -55,7 +73,12 @@ export const PUBLIC_DATASET_METADATA = {
   "icon-d2-eps": datasetMetadata("icon_d2_eps_2p1km"),
   arome: datasetMetadata("arome_0p01"),
   "pe-arome": datasetMetadata("pe_arome_0p025"),
-  gefs: datasetMetadata("gefs_0p50"),
+  gefs: datasetMetadata("gefs_0p50", {
+    reforecast: {
+      runSelectors: GEFS_REFORECAST_RUN_SELECTOR_IDS,
+      operations: GEFS_REFORECAST_OPERATION_IDS,
+    },
+  }),
   ifs: datasetMetadata("ifs_0p25"),
   aifs: datasetMetadata("aifs_0p25"),
   "aifs-ens": datasetMetadata("aifs_ens_0p25"),
@@ -327,8 +350,6 @@ export function publicDatasetCoversGeometry(
   );
 }
 
-export type PublicForecastKind = "operational" | "reforecast";
-
 export interface PublicAtmosphericDatasetCapabilities {
   dataset: PublicAtmosphericDataset;
   role: AtmosphericDatasetRole;
@@ -358,18 +379,12 @@ export function publicDatasetCapabilities(
 ): PublicAtmosphericDatasetCapabilities {
   const metadata = publicDatasetMetadata(dataset);
   const definition = ATMOSPHERIC_DATASET_CATALOG[metadata.internalDatasetId];
-  const forecastKinds: readonly PublicForecastKind[] = metadata.role === "analysis"
-    ? []
-    : dataset === "gefs"
-      ? ["operational", "reforecast"]
-      : ["operational"];
-  const isGefsReforecast = forecastKind === "reforecast" && dataset === "gefs";
-  const runSelectors: readonly AtmosphericRunSelectorId[] = isGefsReforecast
-    ? GEFS_REFORECAST_RUN_SELECTOR_IDS
-    : definition.runSelectors;
-  const operations = isGefsReforecast
-    ? GEFS_REFORECAST_OPERATION_IDS
-    : definition.operations;
+  const forecastKindOverride = forecastKind === undefined
+    ? undefined
+    : metadata.forecastKindOverrides[forecastKind];
+  const runSelectors: readonly AtmosphericRunSelectorId[] = forecastKindOverride?.runSelectors
+    ?? definition.runSelectors;
+  const operations = forecastKindOverride?.operations ?? definition.operations;
 
   return {
     dataset,
@@ -398,7 +413,7 @@ export function publicDatasetCapabilities(
     ...(definition.nativeForecastIntervalHours === undefined ? {} : { nativeForecastIntervalHours: definition.nativeForecastIntervalHours }),
     ...(definition.members === undefined ? {} : { members: definition.members }),
     ...(definition.constituents === undefined ? {} : { constituents: definition.constituents.map((constituent) => ({ ...constituent })) }),
-    forecastKinds,
+    forecastKinds: [...metadata.forecastKinds],
     runSelectors,
     operations,
   };

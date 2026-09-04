@@ -68,12 +68,8 @@ import {
   greatCircleDistanceKm,
   interpolateGreatCircle,
 } from "./transect.js";
-import type {
-  DecodedValue,
-  GribDecoderName,
-  NonIsobaricFieldResult,
-  ProfileLevel,
-} from "./types.js";
+import type { DecodedValue, GribDecoderName } from "../types/decoded.js";
+import type { NonIsobaricFieldResult, ProfileLevel } from "./types.js";
 
 const MODEL = "aigfs_0p25" as const;
 const MAX_NATIVE_STEPS = 65;

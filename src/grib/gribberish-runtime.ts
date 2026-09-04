@@ -3,7 +3,7 @@ import {
   parseMessagesFromBuffer,
   type GribMessage,
 } from "@mattnucc/gribberish";
-import type { DecodedValue, ForecastInterval } from "../core/types.js";
+import type { DecodedValue, ForecastInterval } from "../types/decoded.js";
 import {
   knownDwdLocalParameter,
   scanGrib2Messages,

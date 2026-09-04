@@ -72,8 +72,10 @@ export function isAtmosphericDatasetComparisonPair(
   );
 }
 
+export const ATMOSPHERIC_RUN_COMPARISON_DATASET_IDS = ["gfs", "gefs", "ifs", "ifs-ens"] as const;
+
 export const compareAtmosphericRunsSchema = z.object({
-  dataset: z.enum(["gfs", "gefs", "ifs", "ifs-ens"]),
+  dataset: z.enum(ATMOSPHERIC_RUN_COMPARISON_DATASET_IDS),
   geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
   time: z.object({ at: isoDateTimeSchema }),
   selection: atmosphericSelectionSchema,

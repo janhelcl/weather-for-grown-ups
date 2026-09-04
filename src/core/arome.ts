@@ -49,11 +49,8 @@ import {
   greatCircleDistanceKm,
   interpolateGreatCircle,
 } from "./transect.js";
-import type {
-  DecodedValue,
-  GribDecoderName,
-  NonIsobaricFieldResult,
-} from "./types.js";
+import type { DecodedValue, GribDecoderName } from "../types/decoded.js";
+import type { NonIsobaricFieldResult } from "./types.js";
 
 const MODEL = "arome_0p01" as const;
 const MAX_NATIVE_STEPS = 52;

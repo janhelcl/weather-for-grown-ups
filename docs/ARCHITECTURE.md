@@ -46,7 +46,7 @@ The implementation is split by responsibility rather than by whichever dataset w
 - `sources/` owns provider/product semantics: URLs, object naming, upstream inventories, archive endpoints and ECMWF mirror selection. Source modules do not depend on public schemas, cache implementations or derived meteorological physics; source-safe domain identities such as GFS grid IDs live in `catalog/`.
 - `access/` owns transport policy: provider concurrency/pacing, retry/backoff and shared transport identity such as the package-versioned user agent. Cache code and meteorology code do not invent their own provider etiquette.
 - `cache/` owns local immutable artifact reuse for expensive upstream products. Cache hits must bypass upstream access policy; cache misses still pass through the source/provider policy.
-- `grib/` owns decoding and byte/index interpretation.
+- `grib/` owns decoding and byte/index interpretation. Decoder-facing value contracts live in the neutral lower-level `types/` boundary so decoding never depends upward on application orchestration.
 - `derived/` owns model-independent physical transformations.
 - `cli/` and MCP are presentation/transport adapters over the same schemas and application services. Dataset and comparison discovery text is derived from the same public registries, and specialized CLI builders validate through the canonical schemas rather than maintaining a second supported-pair switch.
 
@@ -56,7 +56,7 @@ A practical rule for new datasets is: **add capabilities to the catalog and the 
 
 ## Atmospheric dataset capability boundary
 
-`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `aigfs`, `aigefs`, `hgefs`, `icon-d2`, `icon-d2-eps`, `arome`, `pe-arome`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth.
+`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `aigfs`, `aigefs`, `hgefs`, `icon-d2`, `icon-d2-eps`, `arome`, `pe-arome`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth. Public forecast-population variants such as operational GEFS versus GEFSv12 reforecast are declared as capability overrides alongside the public dataset mapping; shared capability discovery reads those declarations instead of branching on model names.
 
 | Dataset | Model class | Result kind | Shared query/diagnostic role | Run comparison | Registered dataset comparisons |
 | --- | --- | --- | --- | --- | --- |

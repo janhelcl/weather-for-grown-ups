@@ -69,12 +69,8 @@ import {
 } from "./aifs-time.js";
 import { deriveLayerDiagnosticsFromLevels, deriveProfileDiagnosticsFromLevels } from "./pressure-diagnostics.js";
 import { greatCircleDistanceKm, interpolateGreatCircle } from "./transect.js";
-import type {
-  DecodedValue,
-  GribDecoderName,
-  NonIsobaricFieldResult,
-  ProfileLevel,
-} from "./types.js";
+import type { DecodedValue, GribDecoderName } from "../types/decoded.js";
+import type { NonIsobaricFieldResult, ProfileLevel } from "./types.js";
 
 const MODEL = "aifs_0p25" as const;
 const MAX_NATIVE_STEPS = 61;

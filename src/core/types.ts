@@ -1,3 +1,4 @@
+import type { DecodedValue, ForecastInterval, GribDecoderName, GridPoint } from "../types/decoded.js";
 import type { LayerDiagnosticId } from "../catalog/layer-diagnostics.js";
 import type {
   NonIsobaricFieldId,
@@ -13,27 +14,7 @@ import type { OperationalGfsModelId } from "../schema/gfs-grid.js";
 import type { RawVariableId } from "../schema/query.js";
 import type { ProfileAccessMethod, ProfileProvider } from "../sources/types.js";
 
-export interface GridPoint { latitude: number; longitude: number; }
 export interface BoundingBox { westLongitude: number; eastLongitude: number; southLatitude: number; northLatitude: number; }
-
-export interface ForecastInterval {
-  startForecastHour: number;
-  endForecastHour: number;
-}
-
-export interface DecodedValue {
-  /** Raw GRIB short name. Kept model-neutral because GFS and GEFS publish overlapping but non-identical code sets. */
-  code: string;
-  pressureHpa?: number;
-  surface?: true;
-  heightAboveGroundM?: number;
-  namedVertical?: string;
-  accumulation?: ForecastInterval;
-  average?: ForecastInterval;
-  maximum?: ForecastInterval;
-  value: number;
-  gridPoint: GridPoint;
-}
 
 export interface ProfileLevel {
   pressureHpa: number;
@@ -97,8 +78,6 @@ export interface NonIsobaricFieldResult {
   temporal: FieldTemporalResult;
   values: Record<string, number>;
 }
-
-export type GribDecoderName = "gribberish" | "wgrib2";
 
 export interface SourceProvenance {
   provider: ProfileProvider;

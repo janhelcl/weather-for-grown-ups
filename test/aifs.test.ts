@@ -19,7 +19,7 @@ import {
   isSupportedAifsPressureSelection,
 } from "../src/catalog/aifs.js";
 import { queryAtmosphereSchema } from "../src/schema/unified-api.js";
-import type { DecodedValue } from "../src/core/types.js";
+import type { DecodedValue } from "../src/types/decoded.js";
 
 const run = new Date("2026-08-31T00:00:00Z");
 const gridPoint = { latitude: 50, longitude: 14.5 };

@@ -33,8 +33,8 @@ import {
 } from "./latest-run.js";
 import { ParcelDiagnosticsService } from "./parcel-diagnostics.js";
 import { ProfileDiagnosticsService } from "./profile-diagnostics.js";
+import type { GridPoint } from "../types/decoded.js";
 import type {
-  GridPoint,
   LayerDiagnosticsResult,
   ParcelDiagnosticsResult,
   ProfileDiagnosticsResult,

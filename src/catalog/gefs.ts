@@ -1,5 +1,10 @@
 import type { RawVariableId, VariableId } from "../schema/query.js";
 
+export const GEFS_MAX_FORECAST_HOUR = 384;
+export const GEFS_FORECAST_STEP_HOURS = 3;
+export const GEFS_TOTAL_NATIVE_FORECAST_STEPS =
+  GEFS_MAX_FORECAST_HOUR / GEFS_FORECAST_STEP_HOURS + 1;
+
 export const GEFS_MEMBERS = [
   "c00",
   "p01", "p02", "p03", "p04", "p05", "p06", "p07", "p08", "p09", "p10",

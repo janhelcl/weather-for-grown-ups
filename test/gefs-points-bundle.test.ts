@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { GefsPointsBundleService } from "../src/core/gefs-points-bundle.js";
-import type { DecodedValue } from "../src/core/types.js";
+import type { DecodedValue } from "../src/types/decoded.js";
 
 const run = new Date("2026-08-24T00:00:00Z");
 const validTime = new Date("2026-08-24T03:00:00Z");

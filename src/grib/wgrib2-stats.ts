@@ -1,6 +1,6 @@
 import { execa } from "execa";
 import type { FieldTemporalSemantics } from "../catalog/non-isobaric-fields.js";
-import type { ForecastInterval, GribDecoderName } from "../core/types.js";
+import type { ForecastInterval, GribDecoderName } from "../types/decoded.js";
 import {
   canonicalWgrib2Code,
   wgrib2NamesArgs,
