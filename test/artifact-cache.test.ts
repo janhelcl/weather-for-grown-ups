@@ -85,9 +85,11 @@ describe("FileArtifactCache", () => {
     const root = await tempRoot();
     const cache = new FileArtifactCache(root);
 
-    await expect(cache.getOrCreateText("../escape", async () => "x")).rejects.toThrow(
-      /single path segment/,
-    );
+    for (const name of [".", "..", "../escape"]) {
+      await expect(cache.getOrCreateText(name, async () => "x")).rejects.toThrow(
+        /single non-dot path segment/,
+      );
+    }
     await expect(cache.getOrCreateText("x", async () => "x", -1)).rejects.toThrow(
       /ttlMs must be non-negative/,
     );
