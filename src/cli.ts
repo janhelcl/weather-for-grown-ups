@@ -1,4 +1,4 @@
 #!/usr/bin/env node
-import { createCliProgram } from "./cli/program.js";
+import { runCli } from "./cli/run.js";
 
-await createCliProgram().parseAsync();
+await runCli();
