@@ -54,7 +54,7 @@ npx weather-for-grown-ups mcp-http
 
 The MCP endpoint is `/mcp`; `GET /healthz` is a small process health check. Browser callers that send an `Origin` header must also configure `WFG_MCP_ALLOWED_ORIGINS` as a comma-separated hostname allowlist.
 
-WFG deliberately refuses a non-loopback HTTP bind without `WFG_MCP_ALLOWED_HOSTS`. The HTTP transport itself does not authenticate callers; put public deployments behind an authentication-capable reverse proxy/platform boundary rather than exposing an unrestricted NOAA-backed endpoint directly.
+WFG deliberately refuses a non-loopback HTTP bind without `WFG_MCP_ALLOWED_HOSTS`. The HTTP transport itself does not authenticate callers; put public deployments behind an authentication-capable reverse proxy/platform boundary rather than exposing an unrestricted weather-data endpoint directly.
 
 HTTP configuration:
 
@@ -72,7 +72,7 @@ npm install -g weather-for-grown-ups
 weather-for-grown-ups --help
 ```
 
-The shorter compatibility executables remain available:
+The package also exposes shorter executable aliases:
 
 ```bash
 wfg --help
@@ -112,10 +112,10 @@ WFG intentionally does not embed or guess the subscription-specific PE-AROME end
 
 Docker remains useful for pinned/reproducible deployments. The image contains Node.js 24, CDO and native `wgrib2 3.8.0` from conda-forge.
 
-The release workflow publishes both an exact semver image and a moving minor-version alias. The examples below use the current `0.4` alias:
+The release workflow publishes both an exact semver image and a moving minor-version alias. The examples below use the current `0.5` alias:
 
 ```bash
-docker run --rm ghcr.io/janhelcl/weather-for-grown-ups:0.4 catalog --search cloud --json
+docker run --rm ghcr.io/janhelcl/weather-for-grown-ups:0.5 catalog --search cloud --json
 ```
 
 The image entrypoint runs the `wfg` CLI by default, so all normal CLI arguments follow the image name.
@@ -123,7 +123,7 @@ The image entrypoint runs the `wfg` CLI by default, so all normal CLI arguments 
 For the stdio MCP surface:
 
 ```bash
-docker run -i --rm ghcr.io/janhelcl/weather-for-grown-ups:0.4 mcp
+docker run -i --rm ghcr.io/janhelcl/weather-for-grown-ups:0.5 mcp
 ```
 
 Example stdio MCP client configuration:
@@ -135,7 +135,7 @@ Example stdio MCP client configuration:
     "run",
     "-i",
     "--rm",
-    "ghcr.io/janhelcl/weather-for-grown-ups:0.4",
+    "ghcr.io/janhelcl/weather-for-grown-ups:0.5",
     "mcp"
   ]
 }
@@ -147,7 +147,7 @@ For Streamable HTTP:
 docker run --rm -p 3000:3000 \
   -e WFG_MCP_HOST=0.0.0.0 \
   -e WFG_MCP_ALLOWED_HOSTS=localhost,127.0.0.1 \
-  ghcr.io/janhelcl/weather-for-grown-ups:0.4 mcp-http
+  ghcr.io/janhelcl/weather-for-grown-ups:0.5 mcp-http
 ```
 
 ## Publishing

@@ -1,55 +1,72 @@
-# Documentation
+# WFG documentation
 
-The root [README](../README.md) explains **why Weather for Grown Ups exists**. This directory explains how to use it, how the model semantics differ, and how the implementation stays true to one query language across multiple sources.
+The root [README](../README.md) explains the product and gets you to a first query. This index points to the source of truth once you need exact behavior, model-specific semantics or implementation detail.
 
-## Start here
+The organizing rule is simple:
 
-| If you want to… | Read |
+> **One public atmospheric language. Model-specific documents explain differences; they do not create model-specific APIs.**
+
+## Start with the job
+
+| You need to… | Read |
 | --- | --- |
-| run WFG locally or host MCP | [INSTALL.md](INSTALL.md) |
-| understand the public query language | [UNIFIED_API.md](UNIFIED_API.md) |
-| understand the layering and design rules | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| discover fields and capabilities | [CATALOG_SEARCH.md](CATALOG_SEARCH.md) |
+| install WFG or run CLI/MCP | [INSTALL.md](INSTALL.md) |
+| understand the exact public query contract | [UNIFIED_API.md](UNIFIED_API.md) |
+| discover fields, geometry and dataset capabilities | [CATALOG_SEARCH.md](CATALOG_SEARCH.md) |
+| understand layers, dependency direction and adapter boundaries | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| work with historical forecasts, analyses or verification | [HISTORY.md](HISTORY.md) |
 | contribute or debug tests | [TESTING.md](TESTING.md) |
 | understand physical/numerical validation | [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md) |
-| see release-level compatibility changes | [RELEASES.md](RELEASES.md) |
+| see release-level changes | [RELEASES.md](RELEASES.md) |
 | see what WFG is building next | [ROADMAP.md](ROADMAP.md) |
 
-## Dataset and source semantics
+## Dataset semantics
 
-These documents describe **what the upstream model/archive actually means**. They are intentionally separate from the model-neutral public query vocabulary.
+These documents describe what each upstream model or archive actually means: cadence, grids, members, field inventory, source access and capability boundaries. The public request vocabulary remains the one defined in [UNIFIED_API.md](UNIFIED_API.md).
 
-- [AIGFS.md](AIGFS.md) — NOAA's deterministic AI forecast, native 6-hour cadence, operational field inventory and NOMADS partial-range access.
-- [AIGEFS.md](AIGEFS.md) — NOAA's 31-member AI ensemble, member mapping, member-first diagnostics and EAGLE AWS access.
-- [HGEFS.md](HGEFS.md) — NOAA's 62-member GEFS + AIGEFS hybrid, population-qualified members, capability intersection and native-grid provenance.
-- [AIFS_ENS.md](AIFS_ENS.md) — ECMWF's 51-member stochastic AI ensemble, dedicated control semantics and indexed `cf`/`pf` Open Data access.
-- [AROME.md](AROME.md) — Météo-France regional deterministic AROME, 1.3 km native-model versus 0.01° public-product grid semantics, field inventory and Open Data package access.
-- [PE_AROME.md](PE_AROME.md) — Météo-France 25-member regional ensemble, member-first field distributions, 0.025° WCS delivery grid and authenticated targeted-API access.
-- [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — operational GEFS plus the explicit GEFSv12 reforecast population, member sets, products, grids, cadence and member-first semantics.
-- [IFS.md](IFS.md) — deterministic IFS and IFS ENS Open Data products, cadence, 50-perturbation semantics and ECMWF access behavior.
-- [HISTORY.md](HISTORY.md) — historical GFS Grid 4 analysis, archived GFS forecasts, analog workflows and verification semantics.
+### NOAA: physics, AI and hybrid
+
+- [AIGFS.md](AIGFS.md) — deterministic AI forecast, native 6-hour cadence, field inventory and NOMADS partial-range access.
+- [AIGEFS.md](AIGEFS.md) — 31-member AI ensemble, member mapping, member-first diagnostics and EAGLE AWS access.
+- [HGEFS.md](HGEFS.md) — 62-member GEFS + AIGEFS hybrid, constituent identity, capability intersection and native-grid provenance.
+- [GEFS_ENSEMBLE.md](GEFS_ENSEMBLE.md) — operational GEFS plus explicit GEFSv12 reforecast semantics, members, grids and cadence.
+
+Operational deterministic GFS routing is documented in [ARCHITECTURE.md](ARCHITECTURE.md#data-access-and-caching); its public grid/archive behavior is part of [UNIFIED_API.md](UNIFIED_API.md).
+
+### ECMWF: physics and AI
+
+- [IFS.md](IFS.md) — deterministic IFS and IFS ENS Open Data products, cadence, ensemble semantics and access behavior.
+- [AIFS.md](AIFS.md) — deterministic AIFS Single semantics and capability boundaries.
+- [AIFS_ENS.md](AIFS_ENS.md) — 51-member stochastic AIFS ensemble, dedicated control semantics and indexed `cf`/`pf` access.
+
+### Météo-France regional models
+
+- [AROME.md](AROME.md) — deterministic AROME, native-model versus public-delivery grid semantics, field inventory and Open Data package access.
+- [PE_AROME.md](PE_AROME.md) — 25-member PE-AROME ensemble, member-first field distributions, WCS delivery grid and authenticated targeted access.
+
+### History and verification
+
+- [HISTORY.md](HISTORY.md) — archived GFS forecasts, GFS Grid 4 analysis, analog workflows and verification semantics.
 - [HISTORY_FIELDS.md](HISTORY_FIELDS.md) — historical field availability and archive-specific constraints.
 - [HISTORY_PARCEL.md](HISTORY_PARCEL.md) — parcel diagnostics over historical GFS analysis.
 
-Operational GFS source routing is described in [ARCHITECTURE.md](ARCHITECTURE.md#data-access-and-caching) and the public grid/archive behavior in [UNIFIED_API.md](UNIFIED_API.md).
+`gfs-analysis` is historical model analysis, not observations or homogeneous reanalysis. NOAA IGRA is a verification reference rather than a fake gridded WFG dataset.
 
-## Shared operation deep dives
+## Operation deep dives
 
-Use these when the unified API contract is clear but the meteorological/statistical semantics of a composed operation need more detail.
+Use these when the unified contract is clear but a composed meteorological/statistical operation needs more detail.
 
 - [RUN_COMPARISON.md](RUN_COMPARISON.md) — deterministic run-to-run deltas.
-- [DIAGNOSTIC_TIME_SERIES.md](DIAGNOSTIC_TIME_SERIES.md) — deterministic diagnostics through time.
+- [DIAGNOSTIC_TIME_SERIES.md](DIAGNOSTIC_TIME_SERIES.md) — diagnostics through time.
 - [TRANSECT.md](TRANSECT.md) — great-circle transect semantics.
 - [AREA_SUMMARY.md](AREA_SUMMARY.md) and [AREA_DISTRIBUTION.md](AREA_DISTRIBUTION.md) — bounded spatial statistics.
 - [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md) — deterministic forecast positioned in an aligned ensemble.
 - [GFS_IFS_COMPARISON.md](GFS_IFS_COMPARISON.md) — aligned deterministic cross-model differences.
 - [GEFS_IFS_ENS_COMPARISON.md](GEFS_IFS_ENS_COMPARISON.md) — ensemble-distribution shifts without cross-center member pairing.
-- [IFS_IFS_ENS_COMPARISON.md](IFS_IFS_ENS_COMPARISON.md) — deterministic IFS control positioned in its 50-perturbation ENS distribution.
-- [CROSS_SCALE_COMPARISON.md](CROSS_SCALE_COMPARISON.md) — restrictive global↔regional point comparison, shared-cycle rules, field/pressure intersections and native-grid provenance.
+- [IFS_IFS_ENS_COMPARISON.md](IFS_IFS_ENS_COMPARISON.md) — deterministic IFS positioned in its ENS distribution.
+- [CROSS_SCALE_COMPARISON.md](CROSS_SCALE_COMPARISON.md) — restrictive global↔regional point comparison, shared-cycle rules and native-grid provenance.
 
-## GEFS ensemble deep dives
-
-The files below document ensemble-specific composition details. They should not redefine the public API; [UNIFIED_API.md](UNIFIED_API.md) remains the public contract.
+### GEFS-specific operation detail
 
 - [GEFS_FIELD_BUNDLES.md](GEFS_FIELD_BUNDLES.md) — mixed pressure/non-isobaric field bundles.
 - [GEFS_MULTI_POINT.md](GEFS_MULTI_POINT.md) — member-first multi-point distributions.
@@ -63,19 +80,20 @@ The files below document ensemble-specific composition details. They should not 
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — dependency direction, adapter registries, source/access/cache boundaries and CLI/MCP parity.
 - [TESTING.md](TESTING.md) — deterministic unit/integration coverage and test organization.
-- [LIVE_SMOKE.md](LIVE_SMOKE.md) — bounded live-source checks across NOAA and ECMWF.
+- [LIVE_SMOKE.md](LIVE_SMOKE.md) — bounded live-source checks.
 - [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md) — physical invariants and numerical expectations.
 - [RELEASES.md](RELEASES.md) — release history and public compatibility notes.
-- [ROADMAP.md](ROADMAP.md) — the completed regional/convection-permitting line and the next forecast-verification/model-skill roadmap, followed by waves and extended-range axes.
+- [ROADMAP.md](ROADMAP.md) — planned capability work.
 
-## Documentation rules
+## Documentation contract
 
-A few rules keep the documentation from drifting back into model-by-model API silos:
+Documentation has ownership boundaries just like code:
 
-1. **The root README sells the product; it is not the reference manual.**
-2. **UNIFIED_API.md owns the public vocabulary.** Dataset documents explain capability/source differences, not alternative public APIs.
-3. **ARCHITECTURE.md owns layering decisions.** Source etiquette, cache policy and decoder choices should not be re-explained differently in every feature document.
-4. **Model-specific documents preserve native semantics.** Do not manufacture symmetry that the upstream datasets do not have.
-5. **Examples distinguish WFG output from agent interpretation.** WFG returns structured model evidence; downstream domain judgment stays downstream.
+1. **`README.md` owns the product story and first success.** It should stay short enough to read before using WFG.
+2. **`UNIFIED_API.md` owns the public vocabulary and exact request semantics.** Do not duplicate large canonical API tables elsewhere.
+3. **Dataset documents own model/source differences.** They describe native capabilities and caveats, never an alternative public API.
+4. **`ARCHITECTURE.md` owns layering and dependency rules.** Provider etiquette, caching and decoder choices belong there rather than leaking into every feature document.
+5. **Operation deep dives own composed meteorological/statistical semantics.** They should build on the unified contract rather than restating it.
+6. **Examples keep interpretation downstream.** WFG returns structured model evidence; domain decisions stay with the consuming application or agent.
 
-For ensembles, member fractions and spread are raw ensemble evidence unless an explicitly validated calibration layer says otherwise.
+For ensembles, member fractions and spread are raw model evidence unless an explicitly validated calibration layer says otherwise.
