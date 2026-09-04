@@ -1,11 +1,13 @@
-import { WFG_USER_AGENT } from "../access/user-agent.js";
+import {
+  type IfsHttpAccessPolicy,
+  runIfsHttpWithRetry,
+} from "../access/ifs-open-data.js";
 import { isRetryableHttpStatus } from "../access/http-retry.js";
+import { WFG_USER_AGENT } from "../access/user-agent.js";
 import {
   IFS_OPEN_DATA_MIRRORS,
   parseIfsOpenDataIndex,
-  runIfsHttpWithRetry,
   selectIfsIndexEntries,
-  type IfsHttpAccessPolicy,
   type IfsIndexSelector,
 } from "./ifs-open-data.js";
 
