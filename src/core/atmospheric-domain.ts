@@ -5,17 +5,22 @@ import {
   type AtmosphericDatasetId,
   type AtmosphericSpatialDomain,
 } from "../catalog/models.js";
+import { WfgError } from "../failure.js";
 
-export class AtmosphericOutOfDomainError extends Error {
-  readonly code = "OUT_OF_DOMAIN" as const;
-
+export class AtmosphericOutOfDomainError extends WfgError {
   constructor(
     readonly dataset: string,
     readonly internalDatasetId: AtmosphericDatasetId,
     readonly domain: AtmosphericSpatialDomain,
     readonly geometry: AtmosphericCoverageGeometry,
   ) {
-    super(outOfDomainMessage(dataset, domain));
+    super("OUT_OF_DOMAIN", outOfDomainMessage(dataset, domain), {
+      retryable: false,
+      details: {
+        dataset,
+        domain: domain.name,
+      },
+    });
     this.name = "AtmosphericOutOfDomainError";
   }
 }
@@ -44,11 +49,11 @@ function outOfDomainMessage(
   domain: AtmosphericSpatialDomain,
 ): string {
   if (domain.scope === "global") {
-    return `OUT_OF_DOMAIN: dataset=${dataset} does not cover the requested geometry`;
+    return `Dataset ${dataset} does not cover the requested geometry`;
   }
   const bounds = domain.bounds;
   return [
-    `OUT_OF_DOMAIN: dataset=${dataset} does not cover the requested geometry`,
+    `Dataset ${dataset} does not cover the requested geometry`,
     `declared domain=${domain.name}`,
     `bounds=[${bounds.westLongitude},${bounds.eastLongitude}] lon × [${bounds.southLatitude},${bounds.northLatitude}] lat`,
   ].join("; ");
