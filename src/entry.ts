@@ -10,5 +10,5 @@ if (mode === "mcp") {
   await import("./mcp-http.js");
 } else {
   const { runCli } = await import("./cli/run.js");
-  await runCli(process.argv);
+  await runCli(process.argv, "weather-for-grown-ups");
 }
