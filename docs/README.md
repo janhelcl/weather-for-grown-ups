@@ -15,7 +15,6 @@ The organizing rule is simple:
 | discover fields, geometry and dataset capabilities | [CATALOG_SEARCH.md](CATALOG_SEARCH.md) |
 | understand layers, dependency direction and adapter boundaries | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | work with historical forecasts, analyses or verification | [HISTORY.md](HISTORY.md) |
-| understand errors and unsupported capability boundaries | [ERRORS.md](ERRORS.md) |
 | contribute or debug tests | [TESTING.md](TESTING.md) |
 | understand physical/numerical validation | [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md) |
 | see release-level changes | [RELEASES.md](RELEASES.md) |
