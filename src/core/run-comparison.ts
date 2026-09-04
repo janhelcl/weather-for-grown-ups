@@ -15,10 +15,9 @@ import {
   type LatestRunProvider,
 } from "./latest-run.js";
 import { ProfileService } from "./profile.js";
+import type { GribDecoderName, GridPoint } from "../types/decoded.js";
 import type {
   FieldTemporalResult,
-  GribDecoderName,
-  GridPoint,
   NonIsobaricFieldResult,
   ProfileLevel,
   ProfileResult,

@@ -5,7 +5,7 @@ import {
 } from "../src/catalog/non-isobaric-fields.js";
 import { ALL_SUPPORTED_GFS_CODES } from "../src/catalog/variables.js";
 import { ProfileService } from "../src/core/profile.js";
-import type { DecodedValue } from "../src/core/types.js";
+import type { DecodedValue } from "../src/types/decoded.js";
 import { parseGribIndex, selectNonIsobaricByteRanges } from "../src/grib/index.js";
 import { parseWgrib2PointLine } from "../src/grib/wgrib2.js";
 import { profileQuerySchema } from "../src/schema/query.js";

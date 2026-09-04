@@ -26,7 +26,7 @@ import {
   summarizeNumericDistribution,
 } from "./ensemble-statistics.js";
 import { deriveGefsProfileValue, gefsRawPressureKey } from "./gefs-profile-derivation.js";
-import type { DecodedValue } from "./types.js";
+import type { DecodedValue } from "../types/decoded.js";
 
 export interface PreparedGefsBundleSelection {
   variables: GefsProfileVariableId[];

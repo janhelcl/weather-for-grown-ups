@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
 import { ifsEnsForecastHour } from "../src/core/ifs-time.js";
-import type { DecodedValue } from "../src/core/types.js";
+import type { DecodedValue } from "../src/types/decoded.js";
 
 const gridPoint = { latitude: 50, longitude: 14.5 };
 

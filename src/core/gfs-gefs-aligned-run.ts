@@ -2,12 +2,8 @@ import type { GefsMember } from "../catalog/gefs.js";
 import type { GfsGrid } from "../schema/gfs-grid.js";
 import { GfsS3RunProbe, type RunAvailabilityProbe } from "../sources/gfs-s3.js";
 import { GefsS3RunProbe, type GefsAvailabilityProbe } from "../sources/gefs-s3.js";
-import {
-  GEFS_MAX_FORECAST_HOUR,
-  gefsForecastHour,
-  latestGefsCycleAtOrBefore,
-  previousGefsCycle,
-} from "./gefs-time.js";
+import { GEFS_MAX_FORECAST_HOUR } from "../catalog/gefs.js";
+import { gefsForecastHour, latestGefsCycleAtOrBefore, previousGefsCycle } from "./gefs-time.js";
 
 export interface GfsGefsAlignedRunProvider {
   resolveLatestAlignedRun(

@@ -31,7 +31,7 @@ import {
   parseAigfsRun,
 } from "../src/sources/aigfs.js";
 import { diagnoseAtmosphereSchema, queryAtmosphereSchema } from "../src/schema/unified-api.js";
-import type { DecodedValue } from "../src/core/types.js";
+import type { DecodedValue } from "../src/types/decoded.js";
 
 const passthroughPolicy: UpstreamAccessPolicy = {
   run: async <T>(operation: () => Promise<T>) => operation(),

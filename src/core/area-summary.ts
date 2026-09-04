@@ -43,11 +43,8 @@ import {
   resolveLatestRunForGrid,
   type LatestRunProvider,
 } from "./latest-run.js";
-import type {
-  FieldTemporalResult,
-  GribDecoderName,
-  NonIsobaricFieldLevelResult,
-} from "./types.js";
+import type { GribDecoderName } from "../types/decoded.js";
+import type { FieldTemporalResult, NonIsobaricFieldLevelResult } from "./types.js";
 
 const HOUR_MS = 3_600_000;
 

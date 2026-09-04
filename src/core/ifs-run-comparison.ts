@@ -10,12 +10,8 @@ import {
   type IfsRunComparisonResult,
 } from "../schema/ifs-run-comparison.js";
 import type { IfsPointQueryInput, IfsProfileResult } from "../schema/ifs.js";
-import type {
-  FieldTemporalResult,
-  GridPoint,
-  NonIsobaricFieldResult,
-  ProfileLevel,
-} from "./types.js";
+import type { GridPoint } from "../types/decoded.js";
+import type { FieldTemporalResult, NonIsobaricFieldResult, ProfileLevel } from "./types.js";
 
 const IFS_CYCLE_MS = 6 * 60 * 60 * 1000;
 export const DEFAULT_IFS_RUN_COMPARISON_CONCURRENCY = 3;

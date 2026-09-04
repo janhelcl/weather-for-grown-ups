@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProfileService } from "../src/core/profile.js";
-import type { DecodedValue } from "../src/core/types.js";
+import type { DecodedValue } from "../src/types/decoded.js";
 
 const query = {
   latitude: 50.08, longitude: 14.43, run: "2026-08-19T06:00:00Z",

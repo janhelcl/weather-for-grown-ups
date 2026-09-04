@@ -1,11 +1,7 @@
 import type { GefsMember } from "../catalog/gefs.js";
 import { GefsS3RunProbe, type GefsAvailabilityProbe } from "../sources/gefs-s3.js";
-import {
-  GEFS_MAX_FORECAST_HOUR,
-  gefsForecastHour,
-  latestGefsCycleAtOrBefore,
-  previousGefsCycle,
-} from "./gefs-time.js";
+import { GEFS_MAX_FORECAST_HOUR } from "../catalog/gefs.js";
+import { gefsForecastHour, latestGefsCycleAtOrBefore, previousGefsCycle } from "./gefs-time.js";
 
 const HOUR_MS = 3_600_000;
 

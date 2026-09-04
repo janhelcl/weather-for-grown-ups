@@ -26,7 +26,8 @@ import {
   type GefsParcelDiagnosticsQueryInput,
   type GefsParcelDiagnosticsResult,
 } from "../schema/gefs-parcel-diagnostics.js";
-import type { DecodedValue, ProfileLevel } from "./types.js";
+import type { DecodedValue } from "../types/decoded.js";
+import type { ProfileLevel } from "./types.js";
 import { mapConcurrent } from "./concurrency.js";
 import { summarizeEnsembleParcels } from "./ensemble-diagnostic-summaries.js";
 import { DEFAULT_GEFS_MEMBER_CONCURRENCY, type GefsPointDecoder } from "./gefs-ensemble.js";

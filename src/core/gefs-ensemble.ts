@@ -18,7 +18,8 @@ import {
   type GefsEnsembleQueryInput,
   type GefsEnsembleResult,
 } from "../schema/gefs-ensemble.js";
-import type { DecodedValue, FieldTemporalResult, GribDecoderName } from "./types.js";
+import type { DecodedValue, GribDecoderName } from "../types/decoded.js";
+import type { FieldTemporalResult } from "./types.js";
 import { mapConcurrent } from "./concurrency.js";
 import { summarizeNumericDistribution, thresholdGteSummary } from "./ensemble-statistics.js";
 import { GefsLatestRunResolver, type GefsLatestRunProvider } from "./gefs-latest-run.js";

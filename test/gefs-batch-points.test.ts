@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GefsMember } from "../src/catalog/gefs.js";
 import type { GefsMemberDataRequest } from "../src/cache/gefs-s3-subset-cache.js";
 import { GefsBatchPointsService } from "../src/core/gefs-batch-points.js";
-import type { DecodedValue } from "../src/core/types.js";
+import type { DecodedValue } from "../src/types/decoded.js";
 
 const run = new Date("2026-08-24T00:00:00.000Z");
 const validTime = "2026-08-24T06:00:00.000Z";
