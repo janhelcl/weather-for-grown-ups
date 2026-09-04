@@ -147,7 +147,6 @@ export function toolError(error: unknown) {
       type: "text" as const,
       text: JSON.stringify({ error: failure }),
     }],
-    structuredContent: { error: failure },
     isError: true as const,
   };
 }
