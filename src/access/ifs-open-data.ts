@@ -5,6 +5,8 @@ import {
 } from "./access-policy.js";
 import { runWithHttpRetry } from "./http-retry.js";
 
+const ECMWF_DIRECT_OPEN_DATA_BASE_URL = "https://data.ecmwf.int/forecasts";
+
 export const IFS_HTTP_MAX_ATTEMPTS = 4;
 export const IFS_HTTP_INITIAL_BACKOFF_MS = 750;
 
@@ -19,24 +21,19 @@ export interface IfsHttpAttemptResult<T> {
   value?: T;
 }
 
-export interface IfsOpenDataAccessPolicyOptions {
-  stateDir: string;
-  directBaseUrl: string;
-  cloudPolicy?: UpstreamAccessPolicy;
-  directPolicy?: UpstreamAccessPolicy;
-}
-
 export class IfsOpenDataAccessPolicy implements IfsHttpAccessPolicy {
   private readonly cloudPolicy: UpstreamAccessPolicy;
   private readonly directPolicy: UpstreamAccessPolicy;
-  private readonly directBaseUrl: string;
 
-  constructor(options: IfsOpenDataAccessPolicyOptions) {
-    this.directBaseUrl = options.directBaseUrl;
-    this.cloudPolicy = options.cloudPolicy
-      ?? new FileAccessPolicy(options.stateDir, UPSTREAM_ACCESS_POLICIES.ecmwfCloud);
-    this.directPolicy = options.directPolicy
-      ?? new FileAccessPolicy(options.stateDir, UPSTREAM_ACCESS_POLICIES.ecmwfDirect);
+  constructor(
+    stateDir: string,
+    cloudPolicy?: UpstreamAccessPolicy,
+    directPolicy?: UpstreamAccessPolicy,
+  ) {
+    this.cloudPolicy = cloudPolicy
+      ?? new FileAccessPolicy(stateDir, UPSTREAM_ACCESS_POLICIES.ecmwfCloud);
+    this.directPolicy = directPolicy
+      ?? new FileAccessPolicy(stateDir, UPSTREAM_ACCESS_POLICIES.ecmwfDirect);
   }
 
   run<T>(url: string, operation: () => Promise<T>): Promise<T> {
@@ -44,7 +41,9 @@ export class IfsOpenDataAccessPolicy implements IfsHttpAccessPolicy {
   }
 
   private policyForUrl(url: string): UpstreamAccessPolicy {
-    return url.startsWith(this.directBaseUrl) ? this.directPolicy : this.cloudPolicy;
+    return url.startsWith(ECMWF_DIRECT_OPEN_DATA_BASE_URL)
+      ? this.directPolicy
+      : this.cloudPolicy;
   }
 }
 
