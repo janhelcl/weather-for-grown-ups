@@ -1,12 +1,6 @@
 import {
   GEFS_FORECAST_STEP_HOURS,
   GEFS_MAX_FORECAST_HOUR,
-  GEFS_TOTAL_NATIVE_FORECAST_STEPS,
-} from "../catalog/gefs.js";
-export {
-  GEFS_FORECAST_STEP_HOURS,
-  GEFS_MAX_FORECAST_HOUR,
-  GEFS_TOTAL_NATIVE_FORECAST_STEPS,
 } from "../catalog/gefs.js";
 
 const GEFS_RUN_HOURS = new Set([0, 6, 12, 18]);
