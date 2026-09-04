@@ -77,8 +77,14 @@ export class FileArtifactCache {
   }
 
   private path(name: string): string {
-    if (name.length === 0 || name.includes("/") || name.includes("\\")) {
-      throw new Error("artifact cache name must be a single path segment");
+    if (
+      name.length === 0
+      || name === "."
+      || name === ".."
+      || name.includes("/")
+      || name.includes("\\")
+    ) {
+      throw new Error("artifact cache name must be a single non-dot path segment");
     }
     return join(this.rootDir, name);
   }
