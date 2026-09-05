@@ -7,62 +7,29 @@ import {
   RateLimitedError,
   UpstreamUnavailableError,
 } from "../failure.js";
+import type {
+  HistoricalAnalysisAreaDataSource,
+  HistoricalAnalysisAreaRequest,
+  HistoricalAnalysisAreaResponse,
+  HistoricalAnalysisDataSource,
+  HistoricalAnalysisPointResponse,
+  HistoricalAnalysisRequest,
+} from "./gfs-analysis.js";
+import {
+  historicalAnalysisSelector,
+  ncssNamesForHistoricalAnalysisVariables,
+  parseHistoricalNcssAreaCsv,
+  parseHistoricalNcssPointCsv,
+} from "./gfs-analysis-grib.js";
 
 export const NCEI_GFS_HISTORY_BASE_URL = "https://www.ncei.noaa.gov/thredds/ncss/grid";
 export const NCEI_GFS_GRID4_ANALYSIS_START = new Date("2007-01-01T00:00:00Z");
 const NCEI_GFS_GRID4_NAMING_TRANSITION = new Date("2020-06-01T00:00:00Z");
 
-export interface HistoricalAnalysisRequest {
-  analysisTime: Date;
-  latitude: number;
-  longitude: number;
-  variables: readonly string[];
-}
-
-export interface HistoricalAnalysisAreaRequest {
-  analysisTime: Date;
-  westLongitude: number;
-  eastLongitude: number;
-  southLatitude: number;
-  northLatitude: number;
-  variables: readonly string[];
-  verticalCoordinate?: number;
-  horizontalStride?: number;
-}
-
-export interface HistoricalAnalysisResponse {
-  csv: string;
-  dataset: string;
-  cacheHit: boolean;
-  provider: HistoricalAnalysisProvider;
-  access: HistoricalAnalysisAccess;
-}
-
-export const HISTORICAL_ANALYSIS_PROVIDERS = [
-  "NOAA NCEI",
-  "NOAA AWS Open Data",
-] as const;
-export type HistoricalAnalysisProvider = (typeof HISTORICAL_ANALYSIS_PROVIDERS)[number];
-
-export const HISTORICAL_ANALYSIS_ACCESS = [
-  "ncei_thredds_ncss",
-  "ncei_thredds_fileserver",
-  "s3_range",
-] as const;
-export type HistoricalAnalysisAccess = (typeof HISTORICAL_ANALYSIS_ACCESS)[number];
-
 export const NCEI_NCSS_PROVENANCE = {
   provider: "NOAA NCEI",
   access: "ncei_thredds_ncss",
-} as const satisfies Pick<HistoricalAnalysisResponse, "provider" | "access">;
-
-export interface HistoricalAnalysisDataSource {
-  fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisResponse>;
-}
-
-export interface HistoricalAnalysisAreaDataSource {
-  fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisResponse>;
-}
+} as const;
 
 export interface NceiGfsHistorySourceOptions {
   limiter: UpstreamAccessPolicy;
@@ -71,6 +38,10 @@ export interface NceiGfsHistorySourceOptions {
   retryJitterRatio?: number;
 }
 
+/**
+ * NCEI NCSS transport adapter. Canonical WFG historical-analysis IDs enter
+ * here; NCSS variable names and CSV parsing do not escape this module.
+ */
 export class NceiGfsHistorySource implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
   private readonly fetchFn: typeof fetch;
 
@@ -78,23 +49,42 @@ export class NceiGfsHistorySource implements HistoricalAnalysisDataSource, Histo
     this.fetchFn = options.fetchFn ?? globalThis.fetch;
   }
 
-  async fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisResponse> {
+  async fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisPointResponse> {
     const dataset = buildNceiGfsAnalysisDatasetPath(request.analysisTime);
     const url = buildNceiGfsAnalysisPointUrl(request);
-    return this.fetchCsv(url, dataset, request.analysisTime);
+    const csv = await this.fetchCsv(url, dataset, request.analysisTime);
+    return {
+      rows: parseHistoricalNcssPointCsv(csv, request.variables, {
+        latitude: request.latitude,
+        longitude: request.longitude,
+      }),
+      dataset,
+      cacheHit: false,
+      ...NCEI_NCSS_PROVENANCE,
+    };
   }
 
-  async fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisResponse> {
+  async fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisAreaResponse> {
     const dataset = buildNceiGfsAnalysisDatasetPath(request.analysisTime);
     const url = buildNceiGfsAnalysisAreaUrl(request);
-    return this.fetchCsv(url, dataset, request.analysisTime);
+    const csv = await this.fetchCsv(url, dataset, request.analysisTime);
+    return {
+      variable: request.variable,
+      points: parseHistoricalNcssAreaCsv(csv, request.variable, request.verticalCoordinate),
+      ...(request.verticalCoordinate === undefined
+        ? {}
+        : { verticalCoordinate: request.verticalCoordinate }),
+      dataset,
+      cacheHit: false,
+      ...NCEI_NCSS_PROVENANCE,
+    };
   }
 
   private async fetchCsv(
     url: string,
     dataset: string,
     analysisTime: Date,
-  ): Promise<HistoricalAnalysisResponse> {
+  ): Promise<string> {
     const result = await runWithHttpRetry(
       () => this.options.limiter.run(async () => {
         const response = await this.fetchFn(url, {
@@ -150,21 +140,14 @@ export class NceiGfsHistorySource implements HistoricalAnalysisDataSource, Histo
         { retryable: false, details: { provider: "NOAA NCEI" } },
       );
     }
-
-    return {
-      csv: result.csv,
-      dataset,
-      cacheHit: false,
-      ...NCEI_NCSS_PROVENANCE,
-    };
+    return result.csv;
   }
-
 }
 
 export function buildNceiGfsAnalysisPointUrl(request: HistoricalAnalysisRequest): string {
   const dataset = buildNceiGfsAnalysisDatasetPath(request.analysisTime);
   const query = new URLSearchParams({
-    var: request.variables.join(","),
+    var: ncssNamesForHistoricalAnalysisVariables(request.variables).join(","),
     latitude: String(request.latitude),
     longitude: String(request.longitude),
     time: "all",
@@ -176,7 +159,7 @@ export function buildNceiGfsAnalysisPointUrl(request: HistoricalAnalysisRequest)
 export function buildNceiGfsAnalysisAreaUrl(request: HistoricalAnalysisAreaRequest): string {
   const dataset = buildNceiGfsAnalysisDatasetPath(request.analysisTime);
   const query = new URLSearchParams({
-    var: request.variables.join(","),
+    var: historicalAnalysisSelector(request.variable).ncssName,
     north: String(request.northLatitude),
     south: String(request.southLatitude),
     east: String(request.eastLongitude),

@@ -19,27 +19,27 @@ import {
   gridPointsInBox,
   readGribMessagesFromBytes,
 } from "../grib/gribberish-runtime.js";
+import type {
+  HistoricalAnalysisAccess,
+  HistoricalAnalysisAreaDataSource,
+  HistoricalAnalysisAreaRequest,
+  HistoricalAnalysisAreaResponse,
+  HistoricalAnalysisDataSource,
+  HistoricalAnalysisPointResponse,
+  HistoricalAnalysisProvider,
+  HistoricalAnalysisRequest,
+} from "./gfs-analysis.js";
 import {
-  formatHistoricalAreaCsv,
-  formatHistoricalPointCsv,
-  historicalNcssSelectors,
-  heightMetresFromGribLevel,
+  historicalAnalysisSelector,
+  historicalAnalysisSelectors,
   rowsFromDecodedPointValues,
+  type HistoricalAnalysisSelector,
 } from "./gfs-analysis-grib.js";
 import {
   GFS_S3_ARCHIVE_START,
   buildGfsS3ForecastIndexUrl,
   buildGfsS3ForecastUrl,
 } from "./gfs-s3.js";
-import type {
-  HistoricalAnalysisAccess,
-  HistoricalAnalysisAreaDataSource,
-  HistoricalAnalysisAreaRequest,
-  HistoricalAnalysisDataSource,
-  HistoricalAnalysisProvider,
-  HistoricalAnalysisRequest,
-  HistoricalAnalysisResponse,
-} from "./ncei-gfs-history.js";
 
 const AWS_ANALYSIS_PROVENANCE = {
   provider: "NOAA AWS Open Data",
@@ -55,8 +55,8 @@ export interface AwsGfsAnalysisSourceOptions {
 
 /**
  * GFS Grid 4 analysis via NOAA AWS Open Data (`noaa-gfs-bdp-pds`) 0.50°
- * `f000` products with `.idx` byte-range subsetting. Emits NCSS-shaped CSV so
- * the existing historical parsers and services keep working unchanged.
+ * `f000` products with `.idx` byte-range subsetting. GRIB is decoded directly
+ * into WFG's provider-neutral historical-analysis representation.
  */
 export class AwsGfsAnalysisSource
 implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
@@ -73,9 +73,9 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
     this.retryOptions = options.retryOptions ?? {};
   }
 
-  async fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisResponse> {
+  async fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisPointResponse> {
     this.assertAwsEra(request.analysisTime);
-    const selectors = historicalNcssSelectors(request.variables);
+    const selectors = historicalAnalysisSelectors(request.variables);
     const { dataset, bytes } = await this.materializeSubset(request.analysisTime, selectors);
     const messages = readGribMessagesFromBytes(bytes);
     const decoded = decodePointMessages(messages, request.longitude, request.latitude);
@@ -86,21 +86,16 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
       );
     }
     return {
-      csv: formatHistoricalPointCsv(rows),
+      rows,
       dataset,
       cacheHit: false,
       ...AWS_ANALYSIS_PROVENANCE,
     };
   }
 
-  async fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisResponse> {
+  async fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisAreaResponse> {
     this.assertAwsEra(request.analysisTime);
-    if (request.variables.length !== 1) {
-      throw new Error("AWS GFS analysis area requests must select exactly one NCSS variable");
-    }
-    const ncssName = request.variables[0]!;
-    const selectors = historicalNcssSelectors([ncssName]);
-    const selector = selectors[0]!;
+    const selector = historicalAnalysisSelector(request.variable);
     const narrowed = this.narrowAreaSelector(selector, request.verticalCoordinate);
     const { dataset, bytes } = await this.materializeSubset(
       request.analysisTime,
@@ -124,16 +119,11 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
       northLatitude: request.northLatitude,
     });
     return {
-      csv: formatHistoricalAreaCsv(ncssName, points, {
-        ...(request.verticalCoordinate !== undefined && narrowed.kind === "isobaric"
-          ? { pressurePa: request.verticalCoordinate }
-          : {}),
-        ...(request.verticalCoordinate !== undefined && narrowed.kind === "surface_or_column"
-          && narrowed.gribLevel !== undefined
-          && heightMetresFromGribLevel(narrowed.gribLevel) !== undefined
-          ? { heightAboveGroundM: request.verticalCoordinate }
-          : {}),
-      }),
+      variable: request.variable,
+      points,
+      ...(request.verticalCoordinate === undefined
+        ? {}
+        : { verticalCoordinate: request.verticalCoordinate }),
       dataset,
       cacheHit: false,
       ...AWS_ANALYSIS_PROVENANCE,
@@ -149,9 +139,9 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
   }
 
   private narrowAreaSelector(
-    selector: ReturnType<typeof historicalNcssSelectors>[number],
+    selector: HistoricalAnalysisSelector,
     verticalCoordinate: number | undefined,
-  ): ReturnType<typeof historicalNcssSelectors>[number] {
+  ): HistoricalAnalysisSelector {
     if (verticalCoordinate === undefined || selector.kind === "isobaric") return selector;
     if (selector.gribLevel !== undefined) return selector;
     return {
@@ -162,7 +152,7 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
 
   private async materializeSubset(
     analysisTime: Date,
-    selectors: ReturnType<typeof historicalNcssSelectors>,
+    selectors: readonly HistoricalAnalysisSelector[],
     options: { pressureHpa?: number } = {},
   ): Promise<{ dataset: string; bytes: Uint8Array }> {
     const gribUrl = buildGfsS3ForecastUrl(analysisTime, 0, "0p50");

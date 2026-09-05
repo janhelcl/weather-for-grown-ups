@@ -40,6 +40,7 @@ const PUBLIC_DATASET_DESCRIPTION = PUBLIC_ATMOSPHERIC_DATASET_IDS.join(", ");
 const DATASET_COMPARISON_DESCRIPTION = ATMOSPHERIC_DATASET_COMPARISON_PAIRS
   .map(([left, right]) => `${left}↔${right}`)
   .join(", ");
+const MCP_INTERNAL_ERROR_MESSAGE = "Unexpected internal error while handling the request";
 
 export function registerUnifiedAtmosphereTools(server: McpServer): void {
   const queryService = new UnifiedAtmosphereQueryService();
@@ -150,10 +151,13 @@ function toolResult(output: object) {
 
 export function toolError(error: unknown) {
   const failure = toPublicFailure(error);
+  const publicFailure = failure.code === "INTERNAL_ERROR"
+    ? { ...failure, message: MCP_INTERNAL_ERROR_MESSAGE }
+    : failure;
   return {
     content: [{
       type: "text" as const,
-      text: JSON.stringify({ error: failure }),
+      text: JSON.stringify({ error: publicFailure }),
     }],
     isError: true as const,
   };

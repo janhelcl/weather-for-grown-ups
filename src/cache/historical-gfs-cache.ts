@@ -1,17 +1,16 @@
 import { createHash } from "node:crypto";
-import {
-  buildNceiGfsAnalysisAreaUrl,
-  buildNceiGfsAnalysisDatasetPath,
-  buildNceiGfsAnalysisPointUrl,
-  NCEI_NCSS_PROVENANCE,
-  type HistoricalAnalysisAccess,
-  type HistoricalAnalysisAreaDataSource,
-  type HistoricalAnalysisAreaRequest,
-  type HistoricalAnalysisDataSource,
-  type HistoricalAnalysisProvider,
-  type HistoricalAnalysisRequest,
-  type HistoricalAnalysisResponse,
-} from "../sources/ncei-gfs-history.js";
+import type { GfsAnalysisFileStore } from "../sources/gfs-analysis-fileserver.js";
+import type {
+  HistoricalAnalysisAccess,
+  HistoricalAnalysisAreaDataSource,
+  HistoricalAnalysisAreaRequest,
+  HistoricalAnalysisAreaResponse,
+  HistoricalAnalysisDataSource,
+  HistoricalAnalysisPointResponse,
+  HistoricalAnalysisProvider,
+  HistoricalAnalysisRequest,
+  HistoricalAnalysisSource,
+} from "../sources/gfs-analysis.js";
 import {
   buildNceiGfsForecastAreaUrl,
   buildNceiGfsForecastDatasetPath,
@@ -28,7 +27,6 @@ import {
   buildRdaGfs025ForecastPointUrl,
 } from "../sources/rda-gfs-forecast-history.js";
 import { FileArtifactCache } from "./artifact-cache.js";
-import type { GfsAnalysisFileStore } from "../sources/gfs-analysis-fileserver.js";
 
 export class CachedGfsAnalysisFileStore implements GfsAnalysisFileStore {
   private readonly cache: FileArtifactCache;
@@ -47,13 +45,15 @@ export class CachedGfsAnalysisFileStore implements GfsAnalysisFileStore {
   }
 }
 
-
-type HistoricalAnalysisSource =
-  HistoricalAnalysisDataSource & HistoricalAnalysisAreaDataSource;
 type ArchivedForecastSource =
   ArchivedGfsForecastDataSource & ArchivedGfsForecastAreaDataSource;
 
-export class CachedNceiGfsHistorySource
+/**
+ * Provider-neutral cache for the public gfs-analysis contract. Cache identity
+ * is derived from canonical WFG selections, never from a provider URL or NCSS
+ * field name. Cached payloads are the typed interchange returned by adapters.
+ */
+export class CachedGfsAnalysisSource
 implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
   private readonly cache: FileArtifactCache;
 
@@ -64,71 +64,95 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
     this.cache = new FileArtifactCache(rootDir);
   }
 
-  fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisResponse> {
-    return this.fetchCached(
-      buildNceiGfsAnalysisPointUrl(request),
-      buildNceiGfsAnalysisDatasetPath(request.analysisTime),
-      () => this.source.fetch(request),
+  async fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisPointResponse> {
+    const cached = await this.cache.getOrCreateText(
+      analysisCacheName(analysisRequestKey("point", request)),
+      async () => JSON.stringify(toPointPayload(await this.source.fetch(request))),
     );
+    const payload = JSON.parse(cached.value) as CachedHistoricalAnalysisPointPayload;
+    return { ...payload, cacheHit: cached.cacheHit };
   }
 
-  fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisResponse> {
-    return this.fetchCached(
-      buildNceiGfsAnalysisAreaUrl(request),
-      buildNceiGfsAnalysisDatasetPath(request.analysisTime),
-      () => this.source.fetchArea(request),
+  async fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisAreaResponse> {
+    const cached = await this.cache.getOrCreateText(
+      analysisCacheName(analysisRequestKey("area", request)),
+      async () => JSON.stringify(toAreaPayload(await this.source.fetchArea(request))),
     );
-  }
-
-  private async fetchCached(
-    url: string,
-    dataset: string,
-    loader: () => Promise<HistoricalAnalysisResponse>,
-  ): Promise<HistoricalAnalysisResponse> {
-    const cached = await this.cache.getOrCreateText(analysisCacheName(url), async () => {
-      const response = await loader();
-      return JSON.stringify({
-        csv: response.csv,
-        dataset: response.dataset,
-        provider: response.provider,
-        access: response.access,
-      } satisfies CachedHistoricalAnalysisPayload);
-    });
-    if (cached.cacheHit) {
-      const payload = parseCachedHistoricalAnalysis(cached.value, dataset);
-      return { ...payload, cacheHit: true };
-    }
-    const payload = JSON.parse(cached.value) as CachedHistoricalAnalysisPayload;
-    return { ...payload, cacheHit: false };
+    const payload = JSON.parse(cached.value) as CachedHistoricalAnalysisAreaPayload;
+    return { ...payload, cacheHit: cached.cacheHit };
   }
 }
 
-interface CachedHistoricalAnalysisPayload {
-  csv: string;
+interface CachedHistoricalAnalysisProvenance {
   dataset: string;
   provider: HistoricalAnalysisProvider;
   access: HistoricalAnalysisAccess;
 }
 
-function parseCachedHistoricalAnalysis(
-  raw: string,
-  fallbackDataset: string,
-): Omit<HistoricalAnalysisResponse, "cacheHit"> {
-  // Legacy plain-CSV cache entries from the NCSS-only era remain readable.
-  if (!raw.startsWith("{")) {
-    return { csv: raw, dataset: fallbackDataset, ...NCEI_NCSS_PROVENANCE };
-  }
-  const payload = JSON.parse(raw) as CachedHistoricalAnalysisPayload;
+interface CachedHistoricalAnalysisPointPayload extends CachedHistoricalAnalysisProvenance {
+  rows: HistoricalAnalysisPointResponse["rows"];
+}
+
+interface CachedHistoricalAnalysisAreaPayload extends CachedHistoricalAnalysisProvenance {
+  variable: HistoricalAnalysisAreaResponse["variable"];
+  points: HistoricalAnalysisAreaResponse["points"];
+  verticalCoordinate?: number;
+}
+
+function toPointPayload(response: HistoricalAnalysisPointResponse): CachedHistoricalAnalysisPointPayload {
   return {
-    csv: payload.csv,
-    dataset: payload.dataset,
-    provider: payload.provider,
-    access: payload.access,
+    rows: response.rows,
+    dataset: response.dataset,
+    provider: response.provider,
+    access: response.access,
   };
 }
 
-function analysisCacheName(url: string): string {
-  return `${createHash("sha256").update(`historical-analysis-v2\0${url}`).digest("hex")}.json`;
+function toAreaPayload(response: HistoricalAnalysisAreaResponse): CachedHistoricalAnalysisAreaPayload {
+  return {
+    variable: response.variable,
+    points: response.points,
+    ...(response.verticalCoordinate === undefined
+      ? {}
+      : { verticalCoordinate: response.verticalCoordinate }),
+    dataset: response.dataset,
+    provider: response.provider,
+    access: response.access,
+  };
+}
+
+function analysisRequestKey(
+  kind: "point" | "area",
+  request: HistoricalAnalysisRequest | HistoricalAnalysisAreaRequest,
+): string {
+  if (kind === "point") {
+    const point = request as HistoricalAnalysisRequest;
+    return JSON.stringify({
+      version: 4,
+      kind,
+      analysisTime: point.analysisTime.toISOString(),
+      latitude: point.latitude,
+      longitude: point.longitude,
+      variables: [...point.variables],
+    });
+  }
+  const area = request as HistoricalAnalysisAreaRequest;
+  return JSON.stringify({
+    version: 4,
+    kind,
+    analysisTime: area.analysisTime.toISOString(),
+    westLongitude: area.westLongitude,
+    eastLongitude: area.eastLongitude,
+    southLatitude: area.southLatitude,
+    northLatitude: area.northLatitude,
+    variable: area.variable,
+    verticalCoordinate: area.verticalCoordinate ?? null,
+    horizontalStride: area.horizontalStride ?? null,
+  });
+}
+
+function analysisCacheName(requestKey: string): string {
+  return `${createHash("sha256").update(`gfs-analysis-v4\0${requestKey}`).digest("hex")}.json`;
 }
 
 export class CachedNceiGfsForecastHistorySource

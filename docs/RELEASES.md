@@ -12,7 +12,7 @@ Post-0.5.0 QA found that many actionable failures reached the CLI and MCP as an 
 - GEFSv12 reforecast run validation (2000–2019, daily 00Z, native cadence) is `INVALID_REQUEST` with `supportedYears` in `details`.
 - Missing environment prerequisites are `UNSUPPORTED_OPERATION` with `details` naming the fix: `WFG_METEO_FRANCE_TOKEN`, `WFG_PEAROME_WCS_URL_TEMPLATE`/`WFG_PEAROME_WCS_ENDPOINTS` for `pe-arome`.
 - `find_analogs`/`analogs --no-fetch-target` with an unmaterialized target is `DATA_UNAVAILABLE` and reports the index path.
-- Any remaining plain `Error` is still `INTERNAL_ERROR`, but its message is now preserved (single line, bounded to 600 characters, bearer tokens/API keys/env secrets redacted) instead of being replaced by generic text. Non-`Error` throwables stay generic.
+- Any remaining plain `Error` is still `INTERNAL_ERROR`. The CLI preserves a single-line, bounded (600-character), credential-redacted message for local diagnosis; MCP deliberately returns the generic internal-error message so arbitrary library paths or implementation details do not become a remote contract. Non-`Error` throwables stay generic everywhere.
 
 The public failure contract is documented in [UNIFIED_API.md](UNIFIED_API.md#public-failure-contract).
 
@@ -23,6 +23,7 @@ A second pass over the CLI and MCP boundaries removed the remaining places where
 - Commander usage errors (unknown option/command, missing required option) are `INVALID_REQUEST` with a pointer to the relevant `--help`; the CLI no longer prints Commander's `error:` text or exits through Commander. `--help`/`--version` are unaffected.
 - Every numeric CLI flag rejects non-numeric input by flag name (`Expected --lat to be a number, received: abc`) instead of passing `NaN` into the schema.
 - MCP argument validation runs inside each tool handler (`describedSchema` keeps the full JSON Schema for `tools/list`), so invalid arguments return the `isError` envelope instead of a JSON-RPC `Input validation error` protocol error.
+- Typed MCP failures keep the same actionable message/details as CLI failures; only unclassified `INTERNAL_ERROR` text is reduced to `Unexpected internal error while handling the request`, so anything an agent is expected to act on must be classified before the MCP boundary.
 - `compare_datasets` and `verify_forecast` dispatch to the selected pair/time-form contract before validating. Errors name the field under that contract (`at pressureLevelHpa: … (gfs↔gefs comparison)`); reversed or unregistered pairs report the registered list. The union-wide `Invalid input` is gone.
 - Request schemas are strict: unknown keys (`pressureLevelHpa` for `pressureLevelsHpa`, `dataset` for `datasets`) are `INVALID_REQUEST` instead of silently ignored. Geometry is a `type`-discriminated union, so `geometry.latitude` failures are reported at that path.
 - Schema failure messages lead with the field path (`Request validation failed at time.at: …`), count further issues, and flatten residual unions to the closest branch.
@@ -43,13 +44,15 @@ A second pass over the CLI and MCP boundaries removed the remaining places where
 
 ### GFS analysis without broken NCEI NCSS
 
-NCEI moved the Grid 4 GFS archive behind THREDDS onto S3 and broke NCSS/OPeNDAP with an IAM 403. `dataset: "gfs-analysis"` now routes by era:
+NCEI moved the Grid 4 GFS archive behind THREDDS onto S3 and broke NCSS/OPeNDAP with an IAM 403. `dataset: "gfs-analysis"` now has a provider-neutral source/cache contract and routes by era and source capability:
 
 - ≥ 2021-01-01 → NOAA AWS Open Data `noaa-gfs-bdp-pds` 0.50° `f000` with `.idx` byte-range subsetting (`access: "s3_range"`, `provider: "NOAA AWS Open Data"`). Pre-/post-`atmos` S3 layouts around the 2021-03-22 GFS v16 change are handled.
-- 2007–2020 → NCEI THREDDS fileServer full-file download, immutable local cache, local decode (`access: "ncei_thredds_fileserver"`). Point queries are supported; area subsets for that era fall through.
-- NCSS remains the tertiary fallback for both eras so a repaired NCEI IAM policy comes back automatically (`access: "ncei_thredds_ncss"`).
+- 2007–2020 point queries → NCEI THREDDS fileServer full-file download, immutable local cache, local decode (`access: "ncei_thredds_fileserver"`). The fileServer adapter is point-only rather than pretending area subsetting is a retryable transport operation.
+- 2007–2020 area queries → NCEI NCSS directly. If NCSS remains broken, its actual terminal failure is surfaced rather than an artificial fileServer error.
+- For operations with a primary AWS/fileServer route, NCSS remains the fallback so a repaired NCEI IAM policy comes back automatically (`access: "ncei_thredds_ncss"`).
+- The analysis response cache is keyed by the canonical `gfs-analysis` request, not an NCSS/AWS/fileServer URL; old NCSS-only cache entries are intentionally not carried forward.
 
-Public CSV parsers and result shapes are unchanged; provenance `provider`/`access` are widened to report the path that actually served the request.
+The historical parser interchange and public result shapes are unchanged; provenance `provider`/`access` report the path that actually served the request.
 
 ### stdio MCP smoke coverage
 
