@@ -23,7 +23,6 @@ import {
 } from "./gfs-analysis-ncss.js";
 
 export const NCEI_GFS_HISTORY_BASE_URL = "https://www.ncei.noaa.gov/thredds/ncss/grid";
-export const NCEI_GFS_GRID4_ANALYSIS_START = new Date("2007-01-01T00:00:00Z");
 const NCEI_GFS_GRID4_NAMING_TRANSITION = new Date("2020-06-01T00:00:00Z");
 
 export const NCEI_NCSS_PROVENANCE = {
