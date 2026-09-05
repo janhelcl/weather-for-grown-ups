@@ -3,7 +3,7 @@ import { HistoricalFieldsService } from "../src/core/history-fields.js";
 import type { HistoricalProfileResult } from "../src/schema/history-result.js";
 import { HISTORICAL_GFS_FIELD_IDS } from "../src/schema/history-fields.js";
 import type { HistoricalAnalysisDataSource } from "../src/sources/gfs-analysis.js";
-import { parseHistoricalNcssPointCsv } from "../src/sources/gfs-analysis-grib.js";
+import { parseHistoricalNcssPointCsv } from "../src/sources/gfs-analysis-ncss.js";
 import { NCEI_NCSS_PROVENANCE } from "../src/sources/ncei-gfs-history.js";
 
 const dataset = "model-gfs-g4-anl-files-old/201705/20170509/gfsanl_4_20170509_1200_000.grb2";
