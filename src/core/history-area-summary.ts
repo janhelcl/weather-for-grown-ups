@@ -68,7 +68,7 @@ export interface HistoricalAreaLoadOptions {
   verticalCoordinate?: number;
   percentiles?: HistoricalAreaSummaryQueryInput["percentiles"];
   thresholds?: HistoricalAreaSummaryQueryInput["thresholds"];
-  includeExtremaLocations?: boolean;
+  includeExtremaLocations?: boolean | undefined;
 }
 
 export interface HistoricalAreaLoadResult {
