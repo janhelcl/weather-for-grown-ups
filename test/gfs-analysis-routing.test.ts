@@ -2,7 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CachedGfsAnalysisFileStore } from "../src/cache/historical-gfs-cache.js";
+import {
+  CachedGfsAnalysisFileStore,
+  CachedGfsAnalysisSource,
+} from "../src/cache/historical-gfs-cache.js";
 import {
   DataUnavailableError,
   RateLimitedError,
@@ -256,7 +259,7 @@ describe("GFS analysis routing", () => {
       }),
       fetchArea: vi.fn(),
     };
-    const fileServer = { fetch: vi.fn(), fetchArea: vi.fn() };
+    const fileServer = { fetch: vi.fn() };
     const ncss = {
       fetch: vi.fn(async () => ({
         csv: "latitude,longitude,Temperature_isobaric\n50,14.5,285.15\n",
@@ -299,7 +302,7 @@ describe("GFS analysis routing", () => {
     };
     const routed = new RoutedGfsAnalysisSource({
       aws,
-      fileServer: { fetch: vi.fn(), fetchArea: vi.fn() },
+      fileServer: { fetch: vi.fn() },
       ncss,
     });
     await expect(routed.fetch({
@@ -320,7 +323,7 @@ describe("GFS analysis routing", () => {
     const ncss = { fetch: vi.fn(), fetchArea: vi.fn() };
     const routed = new RoutedGfsAnalysisSource({
       aws,
-      fileServer: { fetch: vi.fn(), fetchArea: vi.fn() },
+      fileServer: { fetch: vi.fn() },
       ncss,
     });
     await expect(routed.fetch({
@@ -336,12 +339,11 @@ describe("GFS analysis routing", () => {
     const aws = { fetch: vi.fn(), fetchArea: vi.fn() };
     const fileServer = {
       fetch: vi.fn(async () => {
-        throw new UpstreamUnavailableError("fileServer area unsupported", {
+        throw new UpstreamUnavailableError("fileServer unavailable", {
           retryable: true,
           details: { provider: "NOAA NCEI" },
         });
       }),
-      fetchArea: vi.fn(),
     };
     const ncss = {
       fetch: vi.fn(async () => ({
@@ -365,16 +367,8 @@ describe("GFS analysis routing", () => {
     expect(ncss.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("routes pre-2021 area requests through fileServer then NCSS", async () => {
-    const fileServer = {
-      fetch: vi.fn(),
-      fetchArea: vi.fn(async () => {
-        throw new UpstreamUnavailableError("no area idx", {
-          retryable: true,
-          details: { provider: "NOAA NCEI" },
-        });
-      }),
-    };
+  it("routes pre-2021 area requests directly to NCSS", async () => {
+    const fileServer = { fetch: vi.fn() };
     const ncss = {
       fetch: vi.fn(),
       fetchArea: vi.fn(async () => ({
@@ -399,8 +393,32 @@ describe("GFS analysis routing", () => {
       verticalCoordinate: 85000,
     });
     expect(result.dataset).toBe("ncss-area");
-    expect(fileServer.fetchArea).toHaveBeenCalledTimes(1);
+    expect(fileServer.fetch).not.toHaveBeenCalled();
     expect(ncss.fetchArea).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces the actual NCSS error for pre-2021 area requests", async () => {
+    const terminal = new UpstreamUnavailableError("NCSS IAM failure", {
+      retryable: false,
+      details: { provider: "NOAA NCEI", status: 403 },
+    });
+    const ncss = {
+      fetch: vi.fn(),
+      fetchArea: vi.fn(async () => { throw terminal; }),
+    };
+    const routed = new RoutedGfsAnalysisSource({
+      aws: { fetch: vi.fn(), fetchArea: vi.fn() },
+      fileServer: { fetch: vi.fn() },
+      ncss,
+    });
+    await expect(routed.fetchArea({
+      analysisTime: new Date("2017-05-09T00:00:00Z"),
+      westLongitude: 13,
+      eastLongitude: 15,
+      southLatitude: 49,
+      northLatitude: 51,
+      variables: ["Temperature_isobaric"],
+    })).rejects.toBe(terminal);
   });
 
   it("refuses AWS requests before the Open Data archive start", async () => {
@@ -444,7 +462,7 @@ describe("GFS analysis routing", () => {
     };
     const routed = new RoutedGfsAnalysisSource({
       aws,
-      fileServer: { fetch: vi.fn(), fetchArea: vi.fn() },
+      fileServer: { fetch: vi.fn() },
       ncss,
     });
     await expect(routed.fetch({
@@ -472,7 +490,7 @@ describe("GFS analysis routing", () => {
     };
     const routed = new RoutedGfsAnalysisSource({
       aws,
-      fileServer: { fetch: vi.fn(), fetchArea: vi.fn() },
+      fileServer: { fetch: vi.fn() },
       ncss,
     });
     await expect(routed.fetch({
@@ -682,6 +700,47 @@ describe("AwsGfsAnalysisSource decode path", () => {
   });
 });
 
+describe("GFS analysis cache", () => {
+  let cacheRoots: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(cacheRoots.map((root) => rm(root, { recursive: true, force: true })));
+    cacheRoots = [];
+  });
+
+  it("keys by canonical request rather than provider URL and preserves provenance", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wfg-gfs-analysis-cache-"));
+    cacheRoots.push(root);
+    const source = {
+      fetch: vi.fn(async () => ({
+        csv: "latitude,longitude,Temperature_isobaric\n50,14,285\n",
+        dataset: "aws-object",
+        cacheHit: false,
+        provider: "NOAA AWS Open Data" as const,
+        access: "s3_range" as const,
+      })),
+      fetchArea: vi.fn(),
+    };
+    const cache = new CachedGfsAnalysisSource(root, source);
+    const request = {
+      analysisTime: new Date("2024-06-01T00:00:00Z"),
+      latitude: 50,
+      longitude: 14,
+      variables: ["Temperature_isobaric"] as const,
+    };
+    const first = await cache.fetch(request);
+    const second = await cache.fetch(request);
+    expect(first.cacheHit).toBe(false);
+    expect(second).toMatchObject({
+      cacheHit: true,
+      provider: "NOAA AWS Open Data",
+      access: "s3_range",
+      dataset: "aws-object",
+    });
+    expect(source.fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("NceiGfsFileServerAnalysisSource decode path", () => {
   const analysisTime = new Date("2017-05-09T00:00:00Z");
   const point = { latitude: 50.25, longitude: 10.5 };
@@ -748,21 +807,12 @@ describe("NceiGfsFileServerAnalysisSource decode path", () => {
     expect(second.csv).toBe(first.csv);
   });
 
-  it("refuses area subsets and AWS-era / pre-history analysis times", async () => {
+  it("refuses AWS-era and pre-history analysis times", async () => {
     const source = new NceiGfsFileServerAnalysisSource({
       accessPolicy: passthroughPolicy,
       fetchFn: vi.fn() as unknown as typeof fetch,
       retryOptions: fastRetry,
     });
-    await expect(source.fetchArea({
-      analysisTime,
-      westLongitude: 10,
-      eastLongitude: 11,
-      southLatitude: 50,
-      northLatitude: 51,
-      variables: ["Temperature_isobaric"],
-    })).rejects.toBeInstanceOf(UpstreamUnavailableError);
-
     await expect(source.fetch({
       analysisTime: new Date("2000-01-01T00:00:00Z"),
       ...point,
