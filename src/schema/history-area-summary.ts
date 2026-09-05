@@ -170,8 +170,11 @@ export const historicalAreaSummaryResultSchema = z.object({
   }
 });
 
-export function historicalAreaFieldLevel(fieldId: z.infer<typeof historicalAreaFieldSchema>) {
-  const level = NON_ISOBARIC_FIELD_CATALOG[fieldId].level;
+export function historicalAreaFieldLevel(fieldId: string) {
+  if (!HISTORICAL_AREA_FIELD_IDS.includes(fieldId as z.infer<typeof historicalAreaFieldSchema>)) {
+    throw new Error(`Historical area does not support field ${fieldId}`);
+  }
+  const level = NON_ISOBARIC_FIELD_CATALOG[fieldId as z.infer<typeof historicalAreaFieldSchema>].level;
   if (level.type === "surface") return { type: "surface" as const };
   if (level.type === "height_above_ground_m") {
     return { type: "height_above_ground_m" as const, heightM: level.heightM };
