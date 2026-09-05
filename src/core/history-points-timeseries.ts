@@ -5,7 +5,7 @@ import {
   type HistoricalPointsTimeSeriesResult,
 } from "../schema/history-points-timeseries.js";
 import type { HistoricalPointsQueryInput, HistoricalPointsResult } from "../schema/history-points.js";
-import { NCEI_GFS_GRID4_ANALYSIS_START } from "../sources/ncei-gfs-history.js";
+import { GFS_ANALYSIS_START } from "../sources/gfs-analysis.js";
 import { HistoricalPointsService } from "./history-points.js";
 import { historicalAnalysisTimesInRange } from "./history-time-series.js";
 import { InvalidRequestError } from "../failure.js";
@@ -37,9 +37,9 @@ export class HistoricalPointsTimeSeriesService {
     const startTime = new Date(query.startTime);
     const endTime = new Date(query.endTime);
 
-    if (startTime < NCEI_GFS_GRID4_ANALYSIS_START) {
+    if (startTime < GFS_ANALYSIS_START) {
       throw new Error(
-        `NCEI GFS Grid 4 analysis history begins at ${NCEI_GFS_GRID4_ANALYSIS_START.toISOString()}`,
+        `GFS Grid 4 analysis history begins at ${GFS_ANALYSIS_START.toISOString()}`,
       );
     }
     if (endTime > this.now()) throw new Error("Historical GFS endTime must not be in the future");

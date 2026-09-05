@@ -13,22 +13,19 @@ import {
   readGribMessagesFromBytes,
 } from "../grib/gribberish-runtime.js";
 import {
-  formatHistoricalPointCsv,
-  historicalNcssSelectors,
+  GFS_ANALYSIS_START,
+  type HistoricalAnalysisAccess,
+  type HistoricalAnalysisDataSource,
+  type HistoricalAnalysisPointResponse,
+  type HistoricalAnalysisProvider,
+  type HistoricalAnalysisRequest,
+} from "./gfs-analysis.js";
+import {
+  historicalAnalysisSelectors,
   rowsFromDecodedPointValues,
 } from "./gfs-analysis-grib.js";
 import { GFS_S3_ARCHIVE_START } from "./gfs-s3.js";
-import {
-  NCEI_GFS_GRID4_ANALYSIS_START,
-  buildNceiGfsAnalysisDatasetPath,
-  type HistoricalAnalysisAccess,
-  type HistoricalAnalysisAreaDataSource,
-  type HistoricalAnalysisAreaRequest,
-  type HistoricalAnalysisDataSource,
-  type HistoricalAnalysisProvider,
-  type HistoricalAnalysisRequest,
-  type HistoricalAnalysisResponse,
-} from "./ncei-gfs-history.js";
+import { buildNceiGfsAnalysisDatasetPath } from "./ncei-gfs-history.js";
 
 export const NCEI_GFS_FILESERVER_BASE_URL = "https://www.ncei.noaa.gov/thredds/fileServer";
 
@@ -56,12 +53,11 @@ export interface NceiGfsFileServerAnalysisSourceOptions {
 }
 
 /**
- * Pre-AWS Grid 4 analysis access: download the full ~150 MB GRIB2 object from
- * NCEI's THREDDS fileServer and decode locally. This is the free path for
- * 2007–early-2021 while NCSS is broken behind S3 IAM.
+ * Pre-AWS Grid 4 point access: download the full ~150 MB GRIB2 object from
+ * NCEI's THREDDS fileServer and decode locally. Area subsetting is not a
+ * capability of this source and therefore is not part of its interface.
  */
-export class NceiGfsFileServerAnalysisSource
-implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
+export class NceiGfsFileServerAnalysisSource implements HistoricalAnalysisDataSource {
   private readonly fetchFn: typeof fetch;
   private readonly retryOptions: HttpRetryExecutionOptions;
   private readonly fileStore: GfsAnalysisFileStore | undefined;
@@ -72,9 +68,9 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
     this.fileStore = options.fileStore;
   }
 
-  async fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisResponse> {
+  async fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisPointResponse> {
     this.assertEra(request.analysisTime);
-    const selectors = historicalNcssSelectors(request.variables);
+    const selectors = historicalAnalysisSelectors(request.variables);
     const { bytes, dataset, cacheHit } = await this.loadGrib(request.analysisTime);
     const decoded = decodePointMessages(
       readGribMessagesFromBytes(bytes),
@@ -88,35 +84,17 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
       );
     }
     return {
-      csv: formatHistoricalPointCsv(rows),
+      rows,
       dataset,
       cacheHit,
       ...FILESERVER_PROVENANCE,
     };
   }
 
-  async fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisResponse> {
-    this.assertEra(request.analysisTime);
-    // Full Grid 4 objects are multi-message (~150 MB). Area sampling needs a
-    // single selected message; without an .idx that selection is not free.
-    // Route area queries for this era through NCSS (tertiary) instead.
-    throw new UpstreamUnavailableError(
-      "NCEI fileServer GFS analysis does not serve area subsets; use NCSS or AWS Open Data",
-      {
-        retryable: true,
-        details: {
-          provider: "NOAA NCEI",
-          access: "ncei_thredds_fileserver",
-          analysisTime: request.analysisTime.toISOString(),
-        },
-      },
-    );
-  }
-
   private assertEra(analysisTime: Date): void {
-    if (analysisTime < NCEI_GFS_GRID4_ANALYSIS_START) {
+    if (analysisTime < GFS_ANALYSIS_START) {
       throw new Error(
-        `NCEI GFS Grid 4 history begins at ${NCEI_GFS_GRID4_ANALYSIS_START.toISOString()}`,
+        `GFS Grid 4 history begins at ${GFS_ANALYSIS_START.toISOString()}`,
       );
     }
     if (analysisTime >= GFS_S3_ARCHIVE_START) {

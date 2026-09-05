@@ -1,63 +1,72 @@
 import { describe, expect, it, vi } from "vitest";
-import { NCEI_NCSS_PROVENANCE } from "../src/sources/ncei-gfs-history.js";
-import { HistoricalFieldsService, parseHistoricalFieldsCsv } from "../src/core/history-fields.js";
+import { HistoricalFieldsService } from "../src/core/history-fields.js";
 import type { HistoricalProfileResult } from "../src/schema/history-result.js";
 import { HISTORICAL_GFS_FIELD_IDS } from "../src/schema/history-fields.js";
-import type { HistoricalAnalysisDataSource } from "../src/sources/ncei-gfs-history.js";
+import type { HistoricalAnalysisDataSource } from "../src/sources/gfs-analysis.js";
+import { parseHistoricalNcssPointCsv } from "../src/sources/gfs-analysis-ncss.js";
+import { NCEI_NCSS_PROVENANCE } from "../src/sources/ncei-gfs-history.js";
 
 const dataset = "model-gfs-g4-anl-files-old/201705/20170509/gfsanl_4_20170509_1200_000.grb2";
 
-const scalarCsv = [
-  'station_name,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,Pressure_surface[unit="Pa"],Geopotential_height_surface[unit="gpm"],Temperature_surface[unit="K"],Convective_available_potential_energy_surface[unit="J/kg"],Convective_inhibition_surface[unit="J/kg"],Precipitable_water_entire_atmosphere_single_layer[unit="kg.m-2"],Cloud_water_entire_atmosphere_single_layer[unit="kg.m-2"],Relative_humidity_entire_atmosphere_single_layer[unit="%"],Total_ozone_entire_atmosphere_single_layer[unit="DU"]',
-  'point,50,14.5,2017-05-09T12:00:00Z,100100,301,289.15,800,-25,20,0.35,61,320',
-].join("\n");
-
-const temperatureCsv = [
-  'station_name,latitude,longitude,time,height_above_ground1[unit="m"],Temperature_height_above_ground[unit="K"]',
-  'point,50,14.5,t,2,288.15',
-  'point,50,14.5,t,80,286.15',
-  'point,50,14.5,t,100,285.65',
-].join("\n");
-
-const moistureCsv = [
-  'station_name,latitude,longitude,time,height_above_ground2[unit="m"],Relative_humidity_height_above_ground[unit="%"],Dewpoint_temperature_height_above_ground[unit="K"]',
-  'point,50,14.5,t,2,72,283.15',
-].join("\n");
-
-const specificHumidityCsv = [
-  'station_name,latitude,longitude,time,height_above_ground3[unit="m"],Specific_humidity_height_above_ground[unit="kg/kg"]',
-  'point,50,14.5,t,2,0.007',
-  'point,50,14.5,t,80,0.0065',
-].join("\n");
-
-const pressureCsv = [
-  'station_name,latitude,longitude,time,height_above_ground[unit="m"],Pressure_height_above_ground[unit="Pa"]',
-  'point,50,14.5,t,80,99100',
-].join("\n");
-
-const windCsv = [
-  'station_name,latitude,longitude,time,height_above_ground4[unit="m"],u-component_of_wind_height_above_ground[unit="m/s"],v-component_of_wind_height_above_ground[unit="m/s"]',
-  'point,50,14.5,t,10,3,4',
-  'point,50,14.5,t,80,6,8',
-  'point,50,14.5,t,100,0,-5',
-].join("\n");
+const scalarValues = {
+  surface_pressure: 100100,
+  surface_geopotential_height: 301,
+  surface_temperature: 289.15,
+  surface_cape: 800,
+  surface_cin: -25,
+  precipitable_water: 20,
+  total_column_cloud_water: 0.35,
+  column_relative_humidity: 61,
+  total_column_ozone: 320,
+} as const;
 
 function source(): HistoricalAnalysisDataSource {
   return {
     fetch: vi.fn(async (request) => {
       const first = request.variables[0];
-      if (first === "Temperature_height_above_ground") return { csv: temperatureCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
-      if (first === "Relative_humidity_height_above_ground" || first === "Dewpoint_temperature_height_above_ground") {
-        return { csv: moistureCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
+      if (first === "temperature_2m" || first === "temperature_80m" || first === "temperature_100m") {
+        return response([
+          { latitude: 50, longitude: 14.5, heightAboveGroundM: 2, values: { temperature_2m: 288.15 } },
+          { latitude: 50, longitude: 14.5, heightAboveGroundM: 80, values: { temperature_80m: 286.15 } },
+          { latitude: 50, longitude: 14.5, heightAboveGroundM: 100, values: { temperature_100m: 285.65 } },
+        ]);
       }
-      if (first === "Specific_humidity_height_above_ground") return { csv: specificHumidityCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
-      if (first === "Pressure_height_above_ground") return { csv: pressureCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
-      if (first === "u-component_of_wind_height_above_ground" || first === "v-component_of_wind_height_above_ground") {
-        return { csv: windCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
+      if (first === "relative_humidity_2m" || first === "dew_point_2m") {
+        return response([{
+          latitude: 50,
+          longitude: 14.5,
+          heightAboveGroundM: 2,
+          values: { relative_humidity_2m: 72, dew_point_2m: 283.15 },
+        }]);
       }
-      return { csv: scalarCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
+      if (first === "specific_humidity_2m" || first === "specific_humidity_80m") {
+        return response([
+          { latitude: 50, longitude: 14.5, heightAboveGroundM: 2, values: { specific_humidity_2m: 0.007 } },
+          { latitude: 50, longitude: 14.5, heightAboveGroundM: 80, values: { specific_humidity_80m: 0.0065 } },
+        ]);
+      }
+      if (first === "pressure_80m") {
+        return response([{
+          latitude: 50,
+          longitude: 14.5,
+          heightAboveGroundM: 80,
+          values: { pressure_80m: 99100 },
+        }]);
+      }
+      if (first === "u_wind_10m" || first === "v_wind_10m") {
+        return response([
+          { latitude: 50, longitude: 14.5, heightAboveGroundM: 10, values: { u_wind_10m: 3, v_wind_10m: 4 } },
+          { latitude: 50, longitude: 14.5, heightAboveGroundM: 80, values: { u_wind_80m: 6, v_wind_80m: 8 } },
+          { latitude: 50, longitude: 14.5, heightAboveGroundM: 100, values: { u_wind_100m: 0, v_wind_100m: -5 } },
+        ]);
+      }
+      return response([{ latitude: 50, longitude: 14.5, values: scalarValues }]);
     }),
   };
+}
+
+function response(rows: any[]) {
+  return { rows, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
 }
 
 function profile(): HistoricalProfileResult {
@@ -83,7 +92,7 @@ describe("historical mixed fields", () => {
     expect(HISTORICAL_GFS_FIELD_IDS).not.toContain("u_wind_20m");
   });
 
-  it("parses shared height axes and derives vector winds", async () => {
+  it("reads typed height rows and derives vector winds", async () => {
     const dataSource = source();
     const service = new HistoricalFieldsService({ source: dataSource });
     const result = await service.getHistoricalFields({
@@ -112,37 +121,35 @@ describe("historical mixed fields", () => {
     expect(dataSource.fetch).toHaveBeenCalledTimes(6);
   });
 
-  it("accepts the generic GDEX alt axis for height-above-ground point fields", () => {
+  it("accepts the generic GDEX alt axis inside the NCSS adapter", () => {
     const gdexTemperatureCsv = [
       'time,alt[unit="m"],station,latitude[unit="degrees_north"],longitude[unit="degrees_east"],Temperature_height_above_ground[unit="K"]',
       '2026-08-24T06:00:00Z,2,GridPointRequestedAt[50.000N_14.000E],50.000,14.000,288.15',
       '2026-08-24T06:00:00Z,80,GridPointRequestedAt[50.000N_14.000E],50.000,14.000,286.15',
     ].join("\n");
-    const parsed = parseHistoricalFieldsCsv(
+    expect(parseHistoricalNcssPointCsv(
       gdexTemperatureCsv,
-      [{
-        id: "temperature_2m",
-        ncssName: "Temperature_height_above_ground",
-        group: "temperature_hag",
-        heightM: 2,
-        transform: (value: number) => value - 273.15,
-      }] as never,
+      ["temperature_2m"],
       { latitude: 50.08, longitude: 14.43 },
-    );
-    expect(parsed.gridPoint).toEqual({ latitude: 50, longitude: 14 });
-    expect(parsed.values.get("temperature_2m")).toBeCloseTo(15, 8);
+    )).toEqual([{
+      latitude: 50,
+      longitude: 14,
+      heightAboveGroundM: 2,
+      values: { temperature_2m: 288.15 },
+    }]);
   });
 
   it("propagates native-specific-humidity capability to mixed pressure profiles", async () => {
-    const pressureCsv = [
-      'time,alt[unit="Pa"],station,latitude[unit="degrees_north"],longitude[unit="degrees_east"],Specific_humidity_isobaric[unit="kg/kg"],Temperature_isobaric[unit="K"]',
-      '2026-08-24T06:00:00Z,85000,GridPointRequestedAt[50.000N_14.000E],50.000,14.000,0.01,285.15',
-    ].join("\n");
     const fetch = vi.fn(async (request: any) => {
-      if (request.variables.includes("Pressure_surface")) {
-        return { csv: scalarCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
+      if (request.variables.includes("surface_pressure")) {
+        return response([{ latitude: 50, longitude: 14, values: { surface_pressure: 100100 } }]);
       }
-      return { csv: pressureCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
+      return response([{
+        latitude: 50,
+        longitude: 14,
+        pressureHpa: 850,
+        values: { specific_humidity: 0.01 },
+      }]);
     });
     const service = new HistoricalFieldsService({
       source: { fetch },
@@ -161,7 +168,7 @@ describe("historical mixed fields", () => {
     });
     expect(result.levels?.[0]?.specificHumidityKgKg).toBe(0.01);
     expect(fetch).toHaveBeenCalledWith(expect.objectContaining({
-      variables: ["Specific_humidity_isobaric"],
+      variables: ["specific_humidity"],
     }));
   });
 
@@ -187,17 +194,22 @@ describe("historical mixed fields", () => {
     }));
   });
 
-  it("fails clearly when a requested height is absent instead of interpolating", () => {
-    expect(() => parseHistoricalFieldsCsv(
+  it("maps only the exact requested height at the NCSS adapter boundary", () => {
+    const windCsv = [
+      'station_name,latitude,longitude,time,height_above_ground4[unit="m"],u-component_of_wind_height_above_ground[unit="m/s"]',
+      'point,50,14.5,t,10,3',
+      'point,50,14.5,t,80,6',
+      'point,50,14.5,t,100,0',
+    ].join("\n");
+    expect(parseHistoricalNcssPointCsv(
       windCsv,
-      [{
-        id: "u_wind_10m",
-        ncssName: "u-component_of_wind_height_above_ground",
-        group: "wind_hag",
-        heightM: 50,
-        transform: (value) => value,
-      }] as never,
+      ["u_wind_10m"],
       { latitude: 50.08, longitude: 14.43 },
-    )).not.toThrow();
+    )).toEqual([{
+      latitude: 50,
+      longitude: 14.5,
+      heightAboveGroundM: 10,
+      values: { u_wind_10m: 3 },
+    }]);
   });
 });

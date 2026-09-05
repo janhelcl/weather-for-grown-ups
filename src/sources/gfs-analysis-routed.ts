@@ -8,20 +8,22 @@ import {
   NceiGfsFileServerAnalysisSource,
   type GfsAnalysisFileStore,
 } from "./gfs-analysis-fileserver.js";
+import type {
+  HistoricalAnalysisAreaDataSource,
+  HistoricalAnalysisAreaRequest,
+  HistoricalAnalysisAreaResponse,
+  HistoricalAnalysisDataSource,
+  HistoricalAnalysisPointResponse,
+  HistoricalAnalysisRequest,
+  HistoricalAnalysisSource,
+} from "./gfs-analysis.js";
 import { GFS_S3_ARCHIVE_START } from "./gfs-s3.js";
-import {
-  NceiGfsHistorySource,
-  type HistoricalAnalysisAreaDataSource,
-  type HistoricalAnalysisAreaRequest,
-  type HistoricalAnalysisDataSource,
-  type HistoricalAnalysisRequest,
-  type HistoricalAnalysisResponse,
-} from "./ncei-gfs-history.js";
+import { NceiGfsHistorySource } from "./ncei-gfs-history.js";
 
 export interface RoutedGfsAnalysisSourceOptions {
-  aws?: HistoricalAnalysisDataSource & HistoricalAnalysisAreaDataSource;
-  fileServer?: HistoricalAnalysisDataSource & HistoricalAnalysisAreaDataSource;
-  ncss?: HistoricalAnalysisDataSource & HistoricalAnalysisAreaDataSource;
+  aws?: HistoricalAnalysisSource;
+  fileServer?: HistoricalAnalysisDataSource;
+  ncss?: HistoricalAnalysisSource;
   /** Required unless `aws` / `fileServer` / `ncss` are all injected. */
   awsAccessPolicy?: UpstreamAccessPolicy;
   nceiAccessPolicy?: UpstreamAccessPolicy;
@@ -30,19 +32,22 @@ export interface RoutedGfsAnalysisSourceOptions {
 }
 
 /**
- * Route gfs-analysis requests onto the working upstream for the analysis era:
+ * Route gfs-analysis requests onto a source that actually supports the requested
+ * operation:
  *
- * 1. ≥ 2021-01-01 → NOAA AWS Open Data 0.50° `f000` with `.idx` subsetting
- * 2. 2007–2020 → NCEI THREDDS fileServer full-file download + local decode
- * 3. NCSS retained as tertiary fallback when the primary path fails with an
- *    upstream/data-unavailable error (so a repaired NCEI IAM policy comes
- *    back automatically)
+ * - point, ≥ 2021-01-01 → NOAA AWS Open Data 0.50° `f000` + NCSS fallback;
+ * - point, 2007–2020 → NCEI THREDDS fileServer + NCSS fallback;
+ * - area, ≥ 2021-01-01 → NOAA AWS Open Data + NCSS fallback;
+ * - area, 2007–2020 → NCSS directly because fileServer has no subset/index API.
+ *
+ * The router never represents a source capability gap as a retryable upstream
+ * failure merely to trigger another source.
  */
 export class RoutedGfsAnalysisSource
 implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
-  private readonly aws: HistoricalAnalysisDataSource & HistoricalAnalysisAreaDataSource;
-  private readonly fileServer: HistoricalAnalysisDataSource & HistoricalAnalysisAreaDataSource;
-  private readonly ncss: HistoricalAnalysisDataSource & HistoricalAnalysisAreaDataSource;
+  private readonly aws: HistoricalAnalysisSource;
+  private readonly fileServer: HistoricalAnalysisDataSource;
+  private readonly ncss: HistoricalAnalysisSource;
 
   constructor(options: RoutedGfsAnalysisSourceOptions = {}) {
     this.aws = options.aws ?? new AwsGfsAnalysisSource({
@@ -74,30 +79,37 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
     }
   }
 
-  fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisResponse> {
-    return this.route(request.analysisTime, (source) => source.fetch(request));
+  fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisPointResponse> {
+    const primary = request.analysisTime >= GFS_S3_ARCHIVE_START ? this.aws : this.fileServer;
+    return this.withFallback(
+      () => primary.fetch(request),
+      () => this.ncss.fetch(request),
+    );
   }
 
-  fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisResponse> {
-    return this.route(request.analysisTime, (source) => source.fetchArea(request));
+  fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisAreaResponse> {
+    if (request.analysisTime < GFS_S3_ARCHIVE_START) {
+      return this.ncss.fetchArea(request);
+    }
+    return this.withFallback(
+      () => this.aws.fetchArea(request),
+      () => this.ncss.fetchArea(request),
+    );
   }
 
-  private async route(
-    analysisTime: Date,
-    operation: (
-      source: HistoricalAnalysisDataSource & HistoricalAnalysisAreaDataSource,
-    ) => Promise<HistoricalAnalysisResponse>,
-  ): Promise<HistoricalAnalysisResponse> {
-    const primary = analysisTime >= GFS_S3_ARCHIVE_START ? this.aws : this.fileServer;
+  private async withFallback<T>(
+    primary: () => Promise<T>,
+    fallback: () => Promise<T>,
+  ): Promise<T> {
     try {
-      return await operation(primary);
+      return await primary();
     } catch (primaryError) {
       if (!isFallbackEligible(primaryError)) throw primaryError;
       try {
-        return await operation(this.ncss);
-      } catch (ncssError) {
-        if (isFallbackEligible(ncssError)) throw primaryError;
-        throw ncssError;
+        return await fallback();
+      } catch (fallbackError) {
+        if (isFallbackEligible(fallbackError)) throw primaryError;
+        throw fallbackError;
       }
     }
   }

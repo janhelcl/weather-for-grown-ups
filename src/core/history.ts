@@ -5,8 +5,14 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
-import { CachedGfsAnalysisFileStore, CachedNceiGfsHistorySource } from "../cache/historical-gfs-cache.js";
+import { CachedGfsAnalysisFileStore, CachedGfsAnalysisSource } from "../cache/historical-gfs-cache.js";
 import { RoutedGfsAnalysisSource } from "../sources/gfs-analysis-routed.js";
+import {
+  GFS_ANALYSIS_START,
+  type HistoricalAnalysisDataSource,
+  type HistoricalAnalysisPointResponse,
+  type HistoricalAnalysisPointRow,
+} from "../sources/gfs-analysis.js";
 import {
   deriveAirDensityKgM3,
   deriveDewPointC,
@@ -26,11 +32,6 @@ import {
 } from "../schema/history.js";
 import type { HistoricalProfileResult } from "../schema/history-result.js";
 import { isoDateTimeSchema } from "../schema/query.js";
-import {
-  NCEI_GFS_GRID4_ANALYSIS_START,
-  type HistoricalAnalysisDataSource,
-  type HistoricalAnalysisResponse,
-} from "../sources/ncei-gfs-history.js";
 import type { ProfileLevel } from "./types.js";
 
 const CAVEAT = "GFS model analysis; not a direct observation or homogeneous climatological reanalysis" as const;
@@ -56,59 +57,48 @@ type HistoricalPressureAxisGroup =
   | "ozone_mixing_ratio";
 
 interface RawHistoryVariable {
-  ncssName: string;
   pressureAxisGroup: HistoricalPressureAxisGroup;
   apply(level: ProfileLevel, value: number): void;
 }
 
 const RAW_HISTORY_VARIABLES: Record<HistoricalRawVariableId, RawHistoryVariable> = {
   temperature: {
-    ncssName: "Temperature_isobaric",
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.temperatureC = value - 273.15; },
   },
   relative_humidity: {
-    ncssName: "Relative_humidity_isobaric",
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.relativeHumidityPct = value; },
   },
   u_wind: {
-    ncssName: "u-component_of_wind_isobaric",
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.uWindMs = value; },
   },
   v_wind: {
-    ncssName: "v-component_of_wind_isobaric",
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.vWindMs = value; },
   },
   geopotential_height: {
-    ncssName: "Geopotential_height_isobaric",
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.geopotentialHeightGpm = value; },
   },
   specific_humidity: {
-    ncssName: "Specific_humidity_isobaric",
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.specificHumidityKgKg = value; },
   },
   vertical_velocity: {
-    ncssName: "Vertical_velocity_pressure_isobaric",
     pressureAxisGroup: "vertical_velocity",
     apply: (level, value) => { level.verticalVelocityPaS = value; },
   },
   absolute_vorticity: {
-    ncssName: "Absolute_vorticity_isobaric",
     pressureAxisGroup: "absolute_vorticity",
     apply: (level, value) => { level.absoluteVorticityS1 = value; },
   },
   cloud_water_mixing_ratio: {
-    ncssName: "Cloud_mixing_ratio_isobaric",
     pressureAxisGroup: "cloud_mixing_ratio",
     apply: (level, value) => { level.cloudWaterMixingRatioKgKg = value; },
   },
   ozone_mixing_ratio: {
-    ncssName: "Ozone_Mixing_Ratio_isobaric",
     pressureAxisGroup: "ozone_mixing_ratio",
     apply: (level, value) => { level.ozoneMixingRatioKgKg = value; },
   },
@@ -146,6 +136,22 @@ export interface HistoricalProfileServiceOptions {
   nativeSpecificHumidity?: boolean;
 }
 
+export interface HistoricalProfileLoadOptions {
+  source: HistoricalAnalysisDataSource;
+  analysisTime: Date;
+  latitude: number;
+  longitude: number;
+  variables: readonly HistoricalGfsVariableId[];
+  pressureLevelsHpa: readonly number[];
+  nativeSpecificHumidity: boolean;
+}
+
+export interface HistoricalProfileLoadResult {
+  gridPoint: { latitude: number; longitude: number };
+  levels: ProfileLevel[];
+  responses: HistoricalAnalysisPointResponse[];
+}
+
 export class HistoricalProfileService {
   private readonly source: HistoricalAnalysisDataSource;
   private readonly now: () => Date;
@@ -158,17 +164,17 @@ export class HistoricalProfileService {
     const accessPolicy = options.accessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
     const awsAccessPolicy = new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.noaaAws);
-    this.source = options.source ?? new CachedNceiGfsHistorySource(
-      join(cacheDir, "ncei-history"),
+    this.source = options.source ?? new CachedGfsAnalysisSource(
+      join(cacheDir, "gfs-analysis"),
       new RoutedGfsAnalysisSource({
         nceiAccessPolicy: accessPolicy,
         awsAccessPolicy,
-        fileStore: new CachedGfsAnalysisFileStore(join(cacheDir, "ncei-gfs-analysis-fileserver")),
+        fileStore: new CachedGfsAnalysisFileStore(join(cacheDir, "gfs-analysis-fileserver")),
       }),
     );
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
-    this.minimumTime = options.minimumTime ?? NCEI_GFS_GRID4_ANALYSIS_START;
+    this.minimumTime = options.minimumTime ?? GFS_ANALYSIS_START;
     this.nativeSpecificHumidity = options.nativeSpecificHumidity ?? false;
   }
 
@@ -179,68 +185,92 @@ export class HistoricalProfileService {
     const analysisTime = new Date(query.analysisTime);
     if (analysisTime < this.minimumTime) {
       throw new Error(
-        `NCEI GFS Grid 4 history begins at ${this.minimumTime.toISOString()} for this data source`,
+        `GFS Grid 4 history begins at ${this.minimumTime.toISOString()} for this data source`,
       );
     }
     if (analysisTime > this.now()) {
       throw new Error("Historical GFS analysisTime must not be in the future");
     }
 
-    const rawVariables = expandHistoricalVariables(query.variables, this.nativeSpecificHumidity);
-    const groups = groupHistoricalVariablesByPressureAxis(rawVariables);
-    const responses: HistoricalAnalysisResponse[] = [];
-    const mergedLevels = new Map<number, ProfileLevel>();
-    for (const pressureHpa of query.pressureLevelsHpa) {
-      mergedLevels.set(levelKey(pressureHpa), { pressureHpa });
-    }
-    let gridPoint = { latitude: query.latitude, longitude: query.longitude };
-
-    for (const group of groups) {
-      const response = await this.source.fetch({
-        analysisTime,
-        latitude: query.latitude,
-        longitude: query.longitude,
-        variables: group.map((id) => RAW_HISTORY_VARIABLES[id].ncssName),
-      });
-      responses.push(response);
-      const parsed = parseHistoricalProfileCsv(
-        response.csv,
-        group,
-        query.pressureLevelsHpa,
-        { latitude: query.latitude, longitude: query.longitude },
-      );
-      gridPoint = parsed.gridPoint;
-      mergeHistoricalLevels(mergedLevels, parsed.levels);
-    }
-
-    const levels = [...mergedLevels.values()].sort((a, b) => b.pressureHpa - a.pressureHpa);
-    for (const level of levels) {
-      applyHistoricalDerivedValues(level, query.variables);
-    }
-    assertRequestedVariablesComplete(levels, query.variables);
-
-    const firstResponse = responses[0];
+    const loaded = await loadHistoricalProfileData({
+      source: this.source,
+      analysisTime,
+      latitude: query.latitude,
+      longitude: query.longitude,
+      variables: query.variables,
+      pressureLevelsHpa: query.pressureLevelsHpa,
+      nativeSpecificHumidity: this.nativeSpecificHumidity,
+    });
+    const firstResponse = loaded.responses[0];
     if (!firstResponse) throw new Error("Historical GFS query resolved no source variables");
+    const publicSource = publicHistoricalSource(firstResponse);
 
     return {
       model: "gfs_grid4_analysis_0p5",
       analysisTime: analysisTime.toISOString(),
       requestedPoint: { latitude: query.latitude, longitude: query.longitude },
-      gridPoint,
+      gridPoint: loaded.gridPoint,
       selection: {
         variables: query.variables,
         pressureLevelsHpa: query.pressureLevelsHpa,
       },
-      levels,
+      levels: loaded.levels,
       source: {
-        provider: firstResponse.provider,
-        access: firstResponse.access,
+        ...publicSource,
         dataset: firstResponse.dataset,
-        cacheHit: responses.every((response) => response.cacheHit),
+        cacheHit: loaded.responses.every((response) => response.cacheHit),
       },
       caveat: CAVEAT,
     };
   }
+}
+
+export async function loadHistoricalProfileData(
+  options: HistoricalProfileLoadOptions,
+): Promise<HistoricalProfileLoadResult> {
+  const rawVariables = expandHistoricalVariables(options.variables, options.nativeSpecificHumidity);
+  const groups = groupHistoricalVariablesByPressureAxis(rawVariables);
+  const responses: HistoricalAnalysisPointResponse[] = [];
+  const mergedLevels = new Map<number, ProfileLevel>();
+  for (const pressureHpa of options.pressureLevelsHpa) {
+    mergedLevels.set(levelKey(pressureHpa), { pressureHpa });
+  }
+  let gridPoint = { latitude: options.latitude, longitude: options.longitude };
+
+  for (const group of groups) {
+    const response = await options.source.fetch({
+      analysisTime: options.analysisTime,
+      latitude: options.latitude,
+      longitude: options.longitude,
+      variables: group,
+    });
+    responses.push(response);
+    const parsed = parseHistoricalProfileRows(
+      response.rows,
+      group,
+      options.pressureLevelsHpa,
+      { latitude: options.latitude, longitude: options.longitude },
+    );
+    gridPoint = parsed.gridPoint;
+    mergeHistoricalLevels(mergedLevels, parsed.levels);
+  }
+
+  const levels = [...mergedLevels.values()].sort((a, b) => b.pressureHpa - a.pressureHpa);
+  for (const level of levels) {
+    applyHistoricalDerivedValues(level, options.variables);
+  }
+  assertRequestedVariablesComplete(levels, options.variables);
+
+  return { gridPoint, levels, responses };
+}
+
+function publicHistoricalSource(
+  response: HistoricalAnalysisPointResponse,
+): Pick<HistoricalProfileResult["source"], "provider" | "access"> {
+  if (response.provider === "NCAR GDEX" || response.access === "gdex_thredds_ncss") {
+    throw new Error("gfs-analysis source returned archive-only GDEX provenance");
+  }
+  return { provider: response.provider, access: response.access };
 }
 
 function expandHistoricalVariables(
@@ -295,80 +325,29 @@ interface ParsedHistoricalProfile {
   levels: ProfileLevel[];
 }
 
-export function parseHistoricalProfileCsv(
-  csv: string,
+export function parseHistoricalProfileRows(
+  rows: readonly HistoricalAnalysisPointRow[],
   rawVariables: readonly HistoricalRawVariableId[],
   pressureLevelsHpa: readonly number[],
   requestedPoint: { latitude: number; longitude: number },
 ): ParsedHistoricalProfile {
-  const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
-  if (lines.length < 2) throw new Error("NCEI historical GFS response contains no data rows");
-
-  const rawHeaders = parseCsvLine(lines[0]!);
-  const headers = rawHeaders.map(normalizeHeader);
-  const pressureIndex = findHeaderIndex(headers, [
-    "vertCoord",
-    "alt",
-    "isobaric",
-    "isobaric1",
-    "isobaric2",
-    "isobaric3",
-    "isobaric4",
-    "isobaric5",
-    "isobaric6",
-    "isobaric7",
-  ]);
-  if (pressureIndex < 0) throw new Error("NCEI historical GFS response is missing a pressure coordinate");
-  const pressureInPa = /\[unit\s*=\s*"?Pa"?\]/i.test(rawHeaders[pressureIndex] ?? "");
-
-  const latitudeIndex = findHeaderIndex(headers, ["latitude", "lat"]);
-  const longitudeIndex = findHeaderIndex(headers, ["longitude", "lon"]);
-  const variableIndexes = new Map<HistoricalRawVariableId, number>();
-  for (const id of rawVariables) {
-    const name = RAW_HISTORY_VARIABLES[id].ncssName;
-    const aliases = name.startsWith("u-component") || name.startsWith("v-component")
-      ? [name, name.replace("-component", "component")]
-      : [name];
-    const index = findHeaderIndex(headers, aliases);
-    if (index < 0) throw new Error(`NCEI historical GFS response is missing variable ${name}`);
-    variableIndexes.set(id, index);
-  }
-
   const requested = new Set(pressureLevelsHpa.map(levelKey));
   const levelMap = new Map<number, ProfileLevel>();
   for (const pressureHpa of pressureLevelsHpa) levelMap.set(levelKey(pressureHpa), { pressureHpa });
 
   let gridPoint = requestedPoint;
-  for (const line of lines.slice(1)) {
-    const cells = parseCsvLine(line);
-    const rawPressure = numericCell(cells[pressureIndex]);
-    if (rawPressure === undefined) continue;
-    // Prefer an explicit Pa unit from the CSV header. The old >2000 heuristic
-    // misreads upper-air levels such as 7 hPa (700 Pa) as 700 hPa when AWS
-    // returns the full isobaric stack.
-    const pressureHpa = pressureInPa || rawPressure > 2_000
-      ? rawPressure / 100
-      : rawPressure;
-    const key = levelKey(pressureHpa);
+  for (const row of rows) {
+    if (row.pressureHpa === undefined) continue;
+    const key = levelKey(row.pressureHpa);
     if (!requested.has(key)) continue;
     const level = levelMap.get(key);
     if (!level) continue;
 
     for (const id of rawVariables) {
-      const index = variableIndexes.get(id);
-      if (index === undefined) continue;
-      const value = numericCell(cells[index]);
+      const value = row.values[id];
       if (value !== undefined) RAW_HISTORY_VARIABLES[id].apply(level, value);
     }
-
-    const latitude = latitudeIndex < 0 ? undefined : numericCell(cells[latitudeIndex]);
-    const longitude = longitudeIndex < 0 ? undefined : numericCell(cells[longitudeIndex]);
-    if (latitude !== undefined && longitude !== undefined) {
-      gridPoint = {
-        latitude,
-        longitude: longitude > 180 ? longitude - 360 : longitude,
-      };
-    }
+    gridPoint = { latitude: row.latitude, longitude: row.longitude };
   }
 
   return {
@@ -485,46 +464,6 @@ function hasHistoricalValue(level: ProfileLevel, id: HistoricalGfsVariableId): b
   }
 }
 
-function normalizeHeader(header: string): string {
-  return header.replace(/^\uFEFF/, "").replace(/\[.*$/, "").trim();
-}
-
-function findHeaderIndex(headers: readonly string[], aliases: readonly string[]): number {
-  return headers.findIndex((header) => aliases.includes(header));
-}
-
-function numericCell(value: string | undefined): number | undefined {
-  if (value === undefined || value.trim() === "" || value.trim().toLowerCase() === "nan") return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
 function levelKey(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-function parseCsvLine(line: string): string[] {
-  const cells: string[] = [];
-  let value = "";
-  let quoted = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    if (char === '"') {
-      if (quoted && line[index + 1] === '"') {
-        value += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-      continue;
-    }
-    if (char === "," && !quoted) {
-      cells.push(value);
-      value = "";
-      continue;
-    }
-    value += char;
-  }
-  cells.push(value);
-  return cells;
 }

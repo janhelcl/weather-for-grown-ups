@@ -1,194 +1,132 @@
 import type { DecodedValue } from "../types/decoded.js";
-import type { GridValuePoint } from "../grib/wgrib2-grid.js";
+import type {
+  HistoricalAnalysisPointRow,
+  HistoricalAnalysisVariableId,
+} from "./gfs-analysis.js";
 
-/**
- * Map NCSS Grid 4 analysis variable names (as requested by
- * HistoricalProfileService / HistoricalFieldsService /
- * HistoricalAreaSummaryService) onto GFS GRIB2 index selectors.
- */
-export interface HistoricalNcssGribSelector {
-  ncssName: string;
+export interface HistoricalAnalysisSelector {
+  id: HistoricalAnalysisVariableId;
   gfsCode: string;
-  /** Exact GRIB level string, or omit for every non-isobaric level of `gfsCode`. */
+  /** Exact GRIB level string, or omit for the variable's non-isobaric column. */
   gribLevel?: string;
   kind: "isobaric" | "surface_or_column";
 }
 
-const ISOBARIC_NCSS_TO_GFS: Readonly<Record<string, string>> = {
-  Temperature_isobaric: "TMP",
-  Relative_humidity_isobaric: "RH",
-  "u-component_of_wind_isobaric": "UGRD",
-  "v-component_of_wind_isobaric": "VGRD",
-  Geopotential_height_isobaric: "HGT",
-  Specific_humidity_isobaric: "SPFH",
-  Vertical_velocity_pressure_isobaric: "VVEL",
-  Absolute_vorticity_isobaric: "ABSV",
-  Cloud_mixing_ratio_isobaric: "CLWMR",
-  Ozone_Mixing_Ratio_isobaric: "O3MR",
+const SELECTORS: Record<HistoricalAnalysisVariableId, HistoricalAnalysisSelector> = {
+  temperature: isobaric("temperature", "TMP"),
+  relative_humidity: isobaric("relative_humidity", "RH"),
+  u_wind: isobaric("u_wind", "UGRD"),
+  v_wind: isobaric("v_wind", "VGRD"),
+  geopotential_height: isobaric("geopotential_height", "HGT"),
+  specific_humidity: isobaric("specific_humidity", "SPFH"),
+  vertical_velocity: isobaric("vertical_velocity", "VVEL"),
+  absolute_vorticity: isobaric("absolute_vorticity", "ABSV"),
+  cloud_water_mixing_ratio: isobaric("cloud_water_mixing_ratio", "CLWMR"),
+  ozone_mixing_ratio: isobaric("ozone_mixing_ratio", "O3MR"),
+  surface_pressure: named("surface_pressure", "PRES", "surface"),
+  surface_geopotential_height: named("surface_geopotential_height", "HGT", "surface"),
+  surface_temperature: named("surface_temperature", "TMP", "surface"),
+  surface_cape: named("surface_cape", "CAPE", "surface"),
+  surface_cin: named("surface_cin", "CIN", "surface"),
+  temperature_2m: named("temperature_2m", "TMP", "2 m above ground"),
+  relative_humidity_2m: named("relative_humidity_2m", "RH", "2 m above ground"),
+  specific_humidity_2m: named("specific_humidity_2m", "SPFH", "2 m above ground"),
+  dew_point_2m: named("dew_point_2m", "DPT", "2 m above ground"),
+  u_wind_10m: named("u_wind_10m", "UGRD", "10 m above ground"),
+  v_wind_10m: named("v_wind_10m", "VGRD", "10 m above ground"),
+  temperature_80m: named("temperature_80m", "TMP", "80 m above ground"),
+  specific_humidity_80m: named("specific_humidity_80m", "SPFH", "80 m above ground"),
+  pressure_80m: named("pressure_80m", "PRES", "80 m above ground"),
+  u_wind_80m: named("u_wind_80m", "UGRD", "80 m above ground"),
+  v_wind_80m: named("v_wind_80m", "VGRD", "80 m above ground"),
+  temperature_100m: named("temperature_100m", "TMP", "100 m above ground"),
+  u_wind_100m: named("u_wind_100m", "UGRD", "100 m above ground"),
+  v_wind_100m: named("v_wind_100m", "VGRD", "100 m above ground"),
+  precipitable_water: named(
+    "precipitable_water",
+    "PWAT",
+    "entire atmosphere (considered as a single layer)",
+  ),
+  total_column_cloud_water: named(
+    "total_column_cloud_water",
+    "CWAT",
+    "entire atmosphere (considered as a single layer)",
+  ),
+  column_relative_humidity: named(
+    "column_relative_humidity",
+    "RH",
+    "entire atmosphere (considered as a single layer)",
+  ),
+  total_column_ozone: named(
+    "total_column_ozone",
+    "TOZNE",
+    "entire atmosphere (considered as a single layer)",
+  ),
 };
 
-const FIELD_NCSS_TO_GFS: Readonly<Record<string, { gfsCode: string; gribLevel?: string }>> = {
-  Pressure_surface: { gfsCode: "PRES", gribLevel: "surface" },
-  Geopotential_height_surface: { gfsCode: "HGT", gribLevel: "surface" },
-  Temperature_surface: { gfsCode: "TMP", gribLevel: "surface" },
-  Convective_available_potential_energy_surface: { gfsCode: "CAPE", gribLevel: "surface" },
-  Convective_inhibition_surface: { gfsCode: "CIN", gribLevel: "surface" },
-  Temperature_height_above_ground: { gfsCode: "TMP" },
-  Relative_humidity_height_above_ground: { gfsCode: "RH" },
-  Specific_humidity_height_above_ground: { gfsCode: "SPFH" },
-  Dewpoint_temperature_height_above_ground: { gfsCode: "DPT" },
-  "u-component_of_wind_height_above_ground": { gfsCode: "UGRD" },
-  "v-component_of_wind_height_above_ground": { gfsCode: "VGRD" },
-  Pressure_height_above_ground: { gfsCode: "PRES" },
-  Precipitable_water_entire_atmosphere_single_layer: {
-    gfsCode: "PWAT",
-    gribLevel: "entire atmosphere (considered as a single layer)",
-  },
-  Cloud_water_entire_atmosphere_single_layer: {
-    gfsCode: "CWAT",
-    gribLevel: "entire atmosphere (considered as a single layer)",
-  },
-  Relative_humidity_entire_atmosphere_single_layer: {
-    gfsCode: "RH",
-    gribLevel: "entire atmosphere (considered as a single layer)",
-  },
-  Total_ozone_entire_atmosphere_single_layer: {
-    gfsCode: "TOZNE",
-    gribLevel: "entire atmosphere (considered as a single layer)",
-  },
-};
+export function historicalAnalysisSelectors(
+  ids: readonly HistoricalAnalysisVariableId[],
+): HistoricalAnalysisSelector[] {
+  return ids.map((id) => SELECTORS[id]);
+}
 
-export function historicalNcssSelectors(
-  ncssNames: readonly string[],
-): HistoricalNcssGribSelector[] {
-  return ncssNames.map((ncssName) => {
-    const isobaric = ISOBARIC_NCSS_TO_GFS[ncssName];
-    if (isobaric !== undefined) {
-      return { ncssName, gfsCode: isobaric, kind: "isobaric" };
-    }
-    const field = FIELD_NCSS_TO_GFS[ncssName];
-    if (field === undefined) {
-      throw new Error(`No GFS GRIB mapping for historical NCSS variable ${ncssName}`);
-    }
-    return {
-      ncssName,
-      gfsCode: field.gfsCode,
-      ...(field.gribLevel === undefined ? {} : { gribLevel: field.gribLevel }),
-      kind: "surface_or_column",
+export function historicalAnalysisSelector(id: HistoricalAnalysisVariableId): HistoricalAnalysisSelector {
+  return SELECTORS[id];
+}
+
+export function rowsFromDecodedPointValues(
+  values: readonly DecodedValue[],
+  selectors: readonly HistoricalAnalysisSelector[],
+): HistoricalAnalysisPointRow[] {
+  const rows = new Map<string, HistoricalAnalysisPointRow>();
+  for (const value of values) {
+    const id = idForDecodedValue(value, selectors);
+    if (id === undefined || !Number.isFinite(value.value)) continue;
+    const key = [
+      value.gridPoint.latitude,
+      value.gridPoint.longitude,
+      value.pressureHpa ?? "",
+      value.heightAboveGroundM ?? "",
+    ].join("\0");
+    const row = rows.get(key) ?? {
+      latitude: value.gridPoint.latitude,
+      longitude: normalizeLongitude(value.gridPoint.longitude),
+      ...(value.pressureHpa === undefined ? {} : { pressureHpa: value.pressureHpa }),
+      ...(value.heightAboveGroundM === undefined ? {} : { heightAboveGroundM: value.heightAboveGroundM }),
+      values: {},
     };
-  });
-}
-
-export interface HistoricalPointCsvRow {
-  latitude: number;
-  longitude: number;
-  /** Pressure in Pa when the row is isobaric; otherwise undefined. */
-  pressurePa?: number;
-  /** Height above ground in metres when the row is a HAG field. */
-  heightAboveGroundM?: number;
-  values: Readonly<Record<string, number>>;
-}
-
-/**
- * Build an NCSS-shaped point CSV that the historical parsers accept. Headers
- * keep the optional `[unit=...]` suffix the parsers strip, and pressure is
- * emitted in Pa so the Pa→hPa conversion path stays exercised.
- */
-export function formatHistoricalPointCsv(rows: readonly HistoricalPointCsvRow[]): string {
-  if (rows.length === 0) throw new Error("Cannot format an empty historical analysis CSV");
-  const ncssNames = [...new Set(rows.flatMap((row) => Object.keys(row.values)))].sort();
-  const hasPressure = rows.some((row) => row.pressurePa !== undefined);
-  const hasHeight = rows.some((row) => row.heightAboveGroundM !== undefined);
-  const headers = [
-    "latitude",
-    "longitude",
-    ...(hasPressure ? ['vertCoord[unit="Pa"]'] : []),
-    ...(hasHeight ? ['height_above_ground[unit="m"]'] : []),
-    ...ncssNames.map((name) => `${name}[unit="1"]`),
-  ];
-  const lines = [headers.join(",")];
-  for (const row of rows) {
-    const cells = [
-      String(row.latitude),
-      String(row.longitude),
-      ...(hasPressure ? [row.pressurePa === undefined ? "" : String(row.pressurePa)] : []),
-      ...(hasHeight ? [row.heightAboveGroundM === undefined ? "" : String(row.heightAboveGroundM)] : []),
-      ...ncssNames.map((name) => {
-        const value = row.values[name];
-        return value === undefined || !Number.isFinite(value) ? "" : String(value);
-      }),
-    ];
-    lines.push(cells.join(","));
+    rows.set(key, { ...row, values: { ...row.values, [id]: value.value } });
   }
-  return `${lines.join("\n")}\n`;
+  return [...rows.values()].sort((left, right) =>
+    (right.pressureHpa ?? 0) - (left.pressureHpa ?? 0)
+    || (left.heightAboveGroundM ?? 0) - (right.heightAboveGroundM ?? 0));
 }
 
-/**
- * Build an NCSS-shaped area CSV for one variable. Area summary requests one
- * NCSS name at a time; pressure/height columns are included when provided.
- */
-export function formatHistoricalAreaCsv(
-  ncssName: string,
-  points: readonly GridValuePoint[],
-  options: { pressurePa?: number; heightAboveGroundM?: number } = {},
-): string {
-  if (points.length === 0) throw new Error("Cannot format an empty historical area CSV");
-  const hasPressure = options.pressurePa !== undefined;
-  const hasHeight = options.heightAboveGroundM !== undefined;
-  const headers = [
-    "latitude",
-    "longitude",
-    ...(hasPressure ? ['isobaric[unit="Pa"]'] : []),
-    ...(hasHeight ? ['height_above_ground[unit="m"]'] : []),
-    `${ncssName}[unit="1"]`,
-  ];
-  const lines = [headers.join(",")];
-  for (const point of points) {
-    if (!Number.isFinite(point.value)) continue;
-    lines.push([
-      String(point.latitude),
-      String(point.longitude),
-      ...(hasPressure ? [String(options.pressurePa)] : []),
-      ...(hasHeight ? [String(options.heightAboveGroundM)] : []),
-      String(point.value),
-    ].join(","));
-  }
-  if (lines.length === 1) throw new Error("Historical area CSV has no defined grid points");
-  return `${lines.join("\n")}\n`;
-}
-
-/** Match a decoded GRIB point value to an NCSS name via code + vertical. */
-export function ncssNameForDecodedValue(
+export function idForDecodedValue(
   value: DecodedValue,
-  selectors: readonly HistoricalNcssGribSelector[],
-): string | undefined {
+  selectors: readonly HistoricalAnalysisSelector[],
+): HistoricalAnalysisVariableId | undefined {
   for (const selector of selectors) {
     if (value.code !== selector.gfsCode) continue;
     if (selector.kind === "isobaric") {
-      if (value.pressureHpa !== undefined) return selector.ncssName;
+      if (value.pressureHpa !== undefined) return selector.id;
       continue;
     }
     if (selector.gribLevel === "surface") {
-      if (value.surface) return selector.ncssName;
+      if (value.surface) return selector.id;
+      continue;
+    }
+    const height = heightMetresFromGribLevel(selector.gribLevel);
+    if (height !== undefined) {
+      if (value.heightAboveGroundM === height) return selector.id;
       continue;
     }
     if (selector.gribLevel?.includes("entire atmosphere")) {
-      if (value.namedVertical?.includes("entire atmosphere") || value.namedVertical === "entire atmosphere") {
-        return selector.ncssName;
-      }
-      // Bundled decoder may surface PWAT/CWAT/TOZNE without a namedVertical.
+      if (value.namedVertical?.includes("entire atmosphere")) return selector.id;
       if (value.pressureHpa === undefined && value.heightAboveGroundM === undefined && !value.surface) {
-        return selector.ncssName;
+        return selector.id;
       }
-      continue;
     }
-    if (selector.gribLevel !== undefined) {
-      const height = heightMetresFromGribLevel(selector.gribLevel);
-      if (height !== undefined && value.heightAboveGroundM === height) return selector.ncssName;
-      continue;
-    }
-    // Shared NCSS names that span multiple heights: any non-isobaric match.
-    if (value.pressureHpa === undefined) return selector.ncssName;
   }
   return undefined;
 }
@@ -199,33 +137,21 @@ export function heightMetresFromGribLevel(level: string | undefined): number | u
   return match?.[1] === undefined ? undefined : Number(match[1]);
 }
 
-export function rowsFromDecodedPointValues(
-  values: readonly DecodedValue[],
-  selectors: readonly HistoricalNcssGribSelector[],
-): HistoricalPointCsvRow[] {
-  const rows = new Map<string, HistoricalPointCsvRow>();
-  for (const value of values) {
-    const ncssName = ncssNameForDecodedValue(value, selectors);
-    if (ncssName === undefined || !Number.isFinite(value.value)) continue;
-    const key = [
-      value.gridPoint.latitude,
-      value.gridPoint.longitude,
-      value.pressureHpa ?? "",
-      value.heightAboveGroundM ?? "",
-    ].join("\0");
-    const row = rows.get(key) ?? {
-      latitude: value.gridPoint.latitude,
-      longitude: value.gridPoint.longitude,
-      ...(value.pressureHpa === undefined ? {} : { pressurePa: value.pressureHpa * 100 }),
-      ...(value.heightAboveGroundM === undefined ? {} : { heightAboveGroundM: value.heightAboveGroundM }),
-      values: {},
-    };
-    rows.set(key, {
-      ...row,
-      values: { ...row.values, [ncssName]: value.value },
-    });
-  }
-  return [...rows.values()].sort((left, right) =>
-    (right.pressurePa ?? 0) - (left.pressurePa ?? 0)
-    || (left.heightAboveGroundM ?? 0) - (right.heightAboveGroundM ?? 0));
+function isobaric(
+  id: HistoricalAnalysisVariableId,
+  gfsCode: string,
+): HistoricalAnalysisSelector {
+  return { id, gfsCode, kind: "isobaric" };
+}
+
+function named(
+  id: HistoricalAnalysisVariableId,
+  gfsCode: string,
+  gribLevel: string,
+): HistoricalAnalysisSelector {
+  return { id, gfsCode, gribLevel, kind: "surface_or_column" };
+}
+
+function normalizeLongitude(longitude: number): number {
+  return longitude > 180 ? longitude - 360 : longitude;
 }

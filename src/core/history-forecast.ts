@@ -23,17 +23,17 @@ import {
   type ArchivedGfsModelId,
   type GfsGrid,
 } from "../schema/gfs-grid.js";
+import { ArchivedGfsForecastAnalysisAdapter } from "../sources/archived-gfs-analysis-adapter.js";
+import type { ArchivedGfsForecastDataSource } from "../sources/archived-gfs-forecast.js";
 import {
   NCEI_GFS_GRID4_FORECAST_START,
   NceiGfsForecastHistorySource,
-  type ArchivedGfsForecastDataSource,
 } from "../sources/ncei-gfs-forecast-history.js";
 import {
   RDA_GFS_0P25_FORECAST_START,
   RdaGfsForecastHistorySource,
 } from "../sources/rda-gfs-forecast-history.js";
-import type { HistoricalAnalysisDataSource } from "../sources/ncei-gfs-history.js";
-import { HistoricalProfileService } from "./history.js";
+import { loadHistoricalProfileData } from "./history.js";
 import type { GridPoint } from "../types/decoded.js";
 
 export interface ArchivedGfsForecastProfileQuery {
@@ -112,56 +112,48 @@ export class ArchivedGfsForecastProfileService {
       );
     }
     const source = grid === "0p50" ? this.nceiSource : this.rdaSource;
+    const provenance = grid === "0p50"
+      ? { provider: "NOAA NCEI" as const, access: "ncei_thredds_ncss" as const }
+      : { provider: "NCAR GDEX" as const, access: "gdex_thredds_ncss" as const };
 
     const validTime = new Date(query.runTime.getTime() + forecastHour * 60 * 60 * 1_000);
     if (validTime > this.now()) throw new Error("Archived GFS forecast validTime must not be in the future");
 
-    const adapter: HistoricalAnalysisDataSource = {
-      fetch: async (request) => {
-        const response = await source.fetch({
-          runTime: query.runTime,
-          forecastHour,
-          latitude: request.latitude,
-          longitude: request.longitude,
-          variables: request.variables,
-        });
-        // Provenance is rewritten below for the archive product; the analysis
-        // normalizer only needs a typed HistoricalAnalysisResponse here.
-        return { ...response, provider: "NOAA NCEI", access: "ncei_thredds_ncss" };
-      },
-    };
-    const normalizer = new HistoricalProfileService({
-      source: adapter,
-      now: this.now,
-      allowNonAnalysisCycle: true,
-      minimumTime,
-      nativeSpecificHumidity: grid === "0p25",
+    const adapter = new ArchivedGfsForecastAnalysisAdapter({
+      source,
+      runTime: query.runTime,
+      forecastHour,
+      validTime,
+      ...provenance,
     });
-    const profile = await normalizer.getHistoricalProfile({
+    const loaded = await loadHistoricalProfileData({
+      source: adapter,
+      analysisTime: validTime,
       latitude: query.latitude,
       longitude: query.longitude,
-      analysisTime: validTime.toISOString(),
-      variables: [...query.variables],
-      pressureLevelsHpa: [...query.pressureLevelsHpa],
+      variables: query.variables,
+      pressureLevelsHpa: query.pressureLevelsHpa,
+      nativeSpecificHumidity: grid === "0p25",
     });
+    const firstResponse = loaded.responses[0];
+    if (!firstResponse) throw new Error("Archived GFS profile resolved no source variables");
 
     return {
       model: archivedGfsModelId(grid),
       runTime: query.runTime.toISOString(),
       forecastHour,
       validTime: validTime.toISOString(),
-      requestedPoint: profile.requestedPoint,
-      gridPoint: profile.gridPoint,
+      requestedPoint: { latitude: query.latitude, longitude: query.longitude },
+      gridPoint: loaded.gridPoint,
       selection: {
         variables: [...query.variables],
         pressureLevelsHpa: [...query.pressureLevelsHpa],
       },
-      levels: profile.levels,
+      levels: loaded.levels,
       source: {
-        provider: grid === "0p50" ? "NOAA NCEI" : "NCAR GDEX",
-        access: grid === "0p50" ? "ncei_thredds_ncss" : "gdex_thredds_ncss",
-        dataset: profile.source.dataset,
-        cacheHit: profile.source.cacheHit,
+        ...provenance,
+        dataset: firstResponse.dataset,
+        cacheHit: loaded.responses.every((response) => response.cacheHit),
       },
     };
   }

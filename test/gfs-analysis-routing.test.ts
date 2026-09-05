@@ -2,27 +2,32 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CachedGfsAnalysisFileStore } from "../src/cache/historical-gfs-cache.js";
+import {
+  CachedGfsAnalysisFileStore,
+  CachedGfsAnalysisSource,
+} from "../src/cache/historical-gfs-cache.js";
 import {
   DataUnavailableError,
   RateLimitedError,
   UpstreamUnavailableError,
 } from "../src/failure.js";
 import { remapGrib2Message } from "../src/grib/icon-d2-remap.js";
-import {
-  formatHistoricalAreaCsv,
-  formatHistoricalPointCsv,
-  heightMetresFromGribLevel,
-  historicalNcssSelectors,
-  ncssNameForDecodedValue,
-  rowsFromDecodedPointValues,
-} from "../src/sources/gfs-analysis-grib.js";
 import { AwsGfsAnalysisSource } from "../src/sources/gfs-analysis-aws.js";
 import {
   NceiGfsFileServerAnalysisSource,
   buildNceiGfsAnalysisFileServerUrl,
 } from "../src/sources/gfs-analysis-fileserver.js";
+import {
+  heightMetresFromGribLevel,
+  historicalAnalysisSelectors,
+  idForDecodedValue,
+  rowsFromDecodedPointValues,
+} from "../src/sources/gfs-analysis-grib.js";
 import { RoutedGfsAnalysisSource } from "../src/sources/gfs-analysis-routed.js";
+import type {
+  HistoricalAnalysisAreaResponse,
+  HistoricalAnalysisPointResponse,
+} from "../src/sources/gfs-analysis.js";
 import { NCEI_NCSS_PROVENANCE } from "../src/sources/ncei-gfs-history.js";
 import { buildGfsS3ForecastIndexUrl } from "../src/sources/gfs-s3.js";
 import { concat, nativeIconMessage, NATIVE_CELLS, TARGET_GRID } from "./icon-d2-fixtures.js";
@@ -44,7 +49,6 @@ const packing = {
   bitsPerValue: 16,
 } as const;
 
-/** Remap a native ICON fixture onto a regular 2×3 grid that gribberish can decode. */
 function analysisMessage(options: {
   values?: readonly number[];
   category?: number;
@@ -95,68 +99,61 @@ function mockAwsFetch(gribBytes: Uint8Array, indexLines: readonly string[]): typ
   }) as unknown as typeof fetch;
 }
 
+function ncssPointResponse(cacheHit = false): HistoricalAnalysisPointResponse {
+  return {
+    rows: [{
+      latitude: 50,
+      longitude: 14.5,
+      pressureHpa: 850,
+      values: { temperature: 285.15 },
+    }],
+    dataset: "ncss-dataset",
+    cacheHit,
+    ...NCEI_NCSS_PROVENANCE,
+  };
+}
+
+function ncssAreaResponse(): HistoricalAnalysisAreaResponse {
+  return {
+    variable: "temperature",
+    points: [{ latitude: 50, longitude: 14, value: 285.15 }],
+    verticalCoordinate: 85000,
+    dataset: "ncss-area",
+    cacheHit: false,
+    ...NCEI_NCSS_PROVENANCE,
+  };
+}
+
 const fastRetry = { maxAttempts: 1 as const, baseDelayMs: 0, jitterRatio: 0 };
 
-describe("historical NCSS ↔ GRIB mapping", () => {
-  it("maps isobaric and surface NCSS names onto GFS index selectors", () => {
-    expect(historicalNcssSelectors([
-      "Temperature_isobaric",
-      "Pressure_surface",
-      "Temperature_height_above_ground",
-      "Precipitable_water_entire_atmosphere_single_layer",
+describe("historical analysis GRIB mapping", () => {
+  it("maps canonical IDs onto provider-neutral GRIB selectors", () => {
+    expect(historicalAnalysisSelectors([
+      "temperature",
+      "surface_pressure",
+      "temperature_2m",
+      "precipitable_water",
     ])).toEqual([
-      { ncssName: "Temperature_isobaric", gfsCode: "TMP", kind: "isobaric" },
-      { ncssName: "Pressure_surface", gfsCode: "PRES", gribLevel: "surface", kind: "surface_or_column" },
-      { ncssName: "Temperature_height_above_ground", gfsCode: "TMP", kind: "surface_or_column" },
+      { id: "temperature", gfsCode: "TMP", kind: "isobaric" },
       {
-        ncssName: "Precipitable_water_entire_atmosphere_single_layer",
+        id: "surface_pressure",
+        gfsCode: "PRES",
+        gribLevel: "surface",
+        kind: "surface_or_column",
+      },
+      {
+        id: "temperature_2m",
+        gfsCode: "TMP",
+        gribLevel: "2 m above ground",
+        kind: "surface_or_column",
+      },
+      {
+        id: "precipitable_water",
         gfsCode: "PWAT",
         gribLevel: "entire atmosphere (considered as a single layer)",
         kind: "surface_or_column",
       },
     ]);
-    expect(() => historicalNcssSelectors(["not_a_real_ncss_name"]))
-      .toThrow("No GFS GRIB mapping");
-  });
-
-  it("formats NCSS-shaped point and area CSV that the historical parsers accept", () => {
-    const pointCsv = formatHistoricalPointCsv([
-      {
-        latitude: 50,
-        longitude: 14.5,
-        pressurePa: 85000,
-        values: { Temperature_isobaric: 285.15, Relative_humidity_isobaric: 65 },
-      },
-      {
-        latitude: 50,
-        longitude: 14.5,
-        pressurePa: 70000,
-        values: { Temperature_isobaric: 273.15, Relative_humidity_isobaric: 40 },
-      },
-    ]);
-    expect(pointCsv).toContain('vertCoord[unit="Pa"]');
-    expect(pointCsv).toContain("Temperature_isobaric[unit=\"1\"]");
-    expect(pointCsv).toContain("85000");
-
-    const areaCsv = formatHistoricalAreaCsv(
-      "Temperature_isobaric",
-      [
-        { latitude: 50, longitude: 14, value: 283.15 },
-        { latitude: 50, longitude: 14.5, value: 285.15 },
-      ],
-      { pressurePa: 85000 },
-    );
-    expect(areaCsv.split("\n").filter(Boolean)).toHaveLength(3);
-  });
-
-  it("rejects empty CSV payloads", () => {
-    expect(() => formatHistoricalPointCsv([])).toThrow(/empty historical analysis CSV/);
-    expect(() => formatHistoricalAreaCsv("Temperature_isobaric", [])).toThrow(
-      /empty historical area CSV/,
-    );
-    expect(() => formatHistoricalAreaCsv("Temperature_isobaric", [
-      { latitude: 50, longitude: 14, value: Number.NaN },
-    ])).toThrow(/no defined grid points/);
   });
 
   it("parses height metres from GRIB level strings", () => {
@@ -166,11 +163,8 @@ describe("historical NCSS ↔ GRIB mapping", () => {
     expect(heightMetresFromGribLevel(undefined)).toBeUndefined();
   });
 
-  it("groups decoded point values into NCSS rows by vertical coordinate", () => {
-    const heightSelectors = historicalNcssSelectors([
-      "Temperature_isobaric",
-      "Temperature_height_above_ground",
-    ]);
+  it("groups decoded point values into canonical rows by vertical coordinate", () => {
+    const selectors = historicalAnalysisSelectors(["temperature", "temperature_2m"]);
     const rows = rowsFromDecodedPointValues([
       {
         code: "TMP",
@@ -184,56 +178,53 @@ describe("historical NCSS ↔ GRIB mapping", () => {
         value: 290,
         gridPoint: { latitude: 50, longitude: 14.5 },
       },
-    ], heightSelectors);
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({
-      pressurePa: 85000,
-      values: { Temperature_isobaric: 285.15 },
-    });
-    expect(rows[1]).toMatchObject({
-      heightAboveGroundM: 2,
-      values: { Temperature_height_above_ground: 290 },
-    });
+    ], selectors);
+    expect(rows).toEqual([
+      {
+        latitude: 50,
+        longitude: 14.5,
+        pressureHpa: 850,
+        values: { temperature: 285.15 },
+      },
+      {
+        latitude: 50,
+        longitude: 14.5,
+        heightAboveGroundM: 2,
+        values: { temperature_2m: 290 },
+      },
+    ]);
   });
 
-  it("matches surface and entire-atmosphere decoded values onto NCSS names", () => {
-    const selectors = historicalNcssSelectors([
-      "Pressure_surface",
-      "Precipitable_water_entire_atmosphere_single_layer",
+  it("matches surface, entire-atmosphere, and exact HAG decoded values onto canonical IDs", () => {
+    const selectors = historicalAnalysisSelectors([
+      "surface_pressure",
+      "precipitable_water",
+      "temperature_2m",
     ]);
-    expect(ncssNameForDecodedValue({
+    expect(idForDecodedValue({
       code: "PRES",
       surface: true,
       value: 101_325,
       gridPoint: { latitude: 50, longitude: 14.5 },
-    }, selectors)).toBe("Pressure_surface");
-    expect(ncssNameForDecodedValue({
+    }, selectors)).toBe("surface_pressure");
+    expect(idForDecodedValue({
       code: "PWAT",
       namedVertical: "entire atmosphere",
       value: 22,
       gridPoint: { latitude: 50, longitude: 14.5 },
-    }, selectors)).toBe("Precipitable_water_entire_atmosphere_single_layer");
-    expect(ncssNameForDecodedValue({
+    }, selectors)).toBe("precipitable_water");
+    expect(idForDecodedValue({
       code: "PWAT",
       value: 18,
       gridPoint: { latitude: 50, longitude: 14.5 },
-    }, selectors)).toBe("Precipitable_water_entire_atmosphere_single_layer");
-  });
-
-  it("matches an explicit height GRIB level onto the shared HAG NCSS name", () => {
-    const selectors = [{
-      ncssName: "Temperature_height_above_ground",
-      gfsCode: "TMP",
-      gribLevel: "2 m above ground",
-      kind: "surface_or_column" as const,
-    }];
-    expect(ncssNameForDecodedValue({
+    }, selectors)).toBe("precipitable_water");
+    expect(idForDecodedValue({
       code: "TMP",
       heightAboveGroundM: 2,
       value: 291,
       gridPoint: { latitude: 50, longitude: 14.5 },
-    }, selectors)).toBe("Temperature_height_above_ground");
-    expect(ncssNameForDecodedValue({
+    }, selectors)).toBe("temperature_2m");
+    expect(idForDecodedValue({
       code: "TMP",
       heightAboveGroundM: 80,
       value: 290,
@@ -256,14 +247,9 @@ describe("GFS analysis routing", () => {
       }),
       fetchArea: vi.fn(),
     };
-    const fileServer = { fetch: vi.fn(), fetchArea: vi.fn() };
+    const fileServer = { fetch: vi.fn() };
     const ncss = {
-      fetch: vi.fn(async () => ({
-        csv: "latitude,longitude,Temperature_isobaric\n50,14.5,285.15\n",
-        dataset: "ncss-dataset",
-        cacheHit: false,
-        ...NCEI_NCSS_PROVENANCE,
-      })),
+      fetch: vi.fn(async () => ncssPointResponse()),
       fetchArea: vi.fn(),
     };
     const routed = new RoutedGfsAnalysisSource({ aws, fileServer, ncss });
@@ -271,9 +257,10 @@ describe("GFS analysis routing", () => {
       analysisTime: new Date("2024-06-01T00:00:00Z"),
       latitude: 50,
       longitude: 14.5,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     });
     expect(result.access).toBe("ncei_thredds_ncss");
+    expect(result.rows[0]?.values.temperature).toBe(285.15);
     expect(aws.fetch).toHaveBeenCalledTimes(1);
     expect(fileServer.fetch).not.toHaveBeenCalled();
     expect(ncss.fetch).toHaveBeenCalledTimes(1);
@@ -289,45 +276,38 @@ describe("GFS analysis routing", () => {
       fetchArea: vi.fn(),
     };
     const ncss = {
-      fetch: vi.fn(async () => ({
-        csv: "latitude,longitude,Temperature_isobaric\n50,14.5,285.15\n",
-        dataset: "ncss",
-        cacheHit: false,
-        ...NCEI_NCSS_PROVENANCE,
-      })),
+      fetch: vi.fn(async () => ncssPointResponse()),
       fetchArea: vi.fn(),
     };
     const routed = new RoutedGfsAnalysisSource({
       aws,
-      fileServer: { fetch: vi.fn(), fetchArea: vi.fn() },
+      fileServer: { fetch: vi.fn() },
       ncss,
     });
     await expect(routed.fetch({
       analysisTime: new Date("2024-06-01T00:00:00Z"),
       latitude: 50,
       longitude: 14.5,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).resolves.toMatchObject({ access: "ncei_thredds_ncss" });
   });
 
   it("does not fall back when the primary fails with a non-upstream error", async () => {
     const aws = {
-      fetch: vi.fn(async () => {
-        throw new Error("contract bug");
-      }),
+      fetch: vi.fn(async () => { throw new Error("contract bug"); }),
       fetchArea: vi.fn(),
     };
     const ncss = { fetch: vi.fn(), fetchArea: vi.fn() };
     const routed = new RoutedGfsAnalysisSource({
       aws,
-      fileServer: { fetch: vi.fn(), fetchArea: vi.fn() },
+      fileServer: { fetch: vi.fn() },
       ncss,
     });
     await expect(routed.fetch({
       analysisTime: new Date("2024-06-01T00:00:00Z"),
       latitude: 50,
       longitude: 14.5,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toThrow(/contract bug/);
     expect(ncss.fetch).not.toHaveBeenCalled();
   });
@@ -336,20 +316,14 @@ describe("GFS analysis routing", () => {
     const aws = { fetch: vi.fn(), fetchArea: vi.fn() };
     const fileServer = {
       fetch: vi.fn(async () => {
-        throw new UpstreamUnavailableError("fileServer area unsupported", {
+        throw new UpstreamUnavailableError("fileServer unavailable", {
           retryable: true,
           details: { provider: "NOAA NCEI" },
         });
       }),
-      fetchArea: vi.fn(),
     };
     const ncss = {
-      fetch: vi.fn(async () => ({
-        csv: "latitude,longitude,Temperature_isobaric\n50,14.5,285.15\n",
-        dataset: "legacy",
-        cacheHit: true,
-        ...NCEI_NCSS_PROVENANCE,
-      })),
+      fetch: vi.fn(async () => ncssPointResponse(true)),
       fetchArea: vi.fn(),
     };
     const routed = new RoutedGfsAnalysisSource({ aws, fileServer, ncss });
@@ -357,7 +331,7 @@ describe("GFS analysis routing", () => {
       analysisTime: new Date("2017-05-09T00:00:00Z"),
       latitude: 50,
       longitude: 14.5,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     });
     expect(result.cacheHit).toBe(true);
     expect(aws.fetch).not.toHaveBeenCalled();
@@ -365,24 +339,11 @@ describe("GFS analysis routing", () => {
     expect(ncss.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("routes pre-2021 area requests through fileServer then NCSS", async () => {
-    const fileServer = {
-      fetch: vi.fn(),
-      fetchArea: vi.fn(async () => {
-        throw new UpstreamUnavailableError("no area idx", {
-          retryable: true,
-          details: { provider: "NOAA NCEI" },
-        });
-      }),
-    };
+  it("routes pre-2021 area requests directly to NCSS", async () => {
+    const fileServer = { fetch: vi.fn() };
     const ncss = {
       fetch: vi.fn(),
-      fetchArea: vi.fn(async () => ({
-        csv: "latitude,longitude,Temperature_isobaric\n50,14,285\n",
-        dataset: "ncss-area",
-        cacheHit: false,
-        ...NCEI_NCSS_PROVENANCE,
-      })),
+      fetchArea: vi.fn(async () => ncssAreaResponse()),
     };
     const routed = new RoutedGfsAnalysisSource({
       aws: { fetch: vi.fn(), fetchArea: vi.fn() },
@@ -395,12 +356,37 @@ describe("GFS analysis routing", () => {
       eastLongitude: 15,
       southLatitude: 49,
       northLatitude: 51,
-      variables: ["Temperature_isobaric"],
+      variable: "temperature",
       verticalCoordinate: 85000,
     });
     expect(result.dataset).toBe("ncss-area");
-    expect(fileServer.fetchArea).toHaveBeenCalledTimes(1);
+    expect(result.points).toHaveLength(1);
+    expect(fileServer.fetch).not.toHaveBeenCalled();
     expect(ncss.fetchArea).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces the actual NCSS error for pre-2021 area requests", async () => {
+    const terminal = new UpstreamUnavailableError("NCSS IAM failure", {
+      retryable: false,
+      details: { provider: "NOAA NCEI", status: 403 },
+    });
+    const ncss = {
+      fetch: vi.fn(),
+      fetchArea: vi.fn(async () => { throw terminal; }),
+    };
+    const routed = new RoutedGfsAnalysisSource({
+      aws: { fetch: vi.fn(), fetchArea: vi.fn() },
+      fileServer: { fetch: vi.fn() },
+      ncss,
+    });
+    await expect(routed.fetchArea({
+      analysisTime: new Date("2017-05-09T00:00:00Z"),
+      westLongitude: 13,
+      eastLongitude: 15,
+      southLatitude: 49,
+      northLatitude: 51,
+      variable: "temperature",
+    })).rejects.toBe(terminal);
   });
 
   it("refuses AWS requests before the Open Data archive start", async () => {
@@ -411,7 +397,7 @@ describe("GFS analysis routing", () => {
       analysisTime: new Date("2017-05-09T00:00:00Z"),
       latitude: 50,
       longitude: 14.5,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toThrow("begins at 2021-01-01");
     expect(buildGfsS3ForecastIndexUrl(new Date("2024-06-01T00:00:00Z"), 0, "0p50"))
       .toContain("/atmos/gfs.t00z.pgrb2.0p50.f000.idx");
@@ -444,14 +430,14 @@ describe("GFS analysis routing", () => {
     };
     const routed = new RoutedGfsAnalysisSource({
       aws,
-      fileServer: { fetch: vi.fn(), fetchArea: vi.fn() },
+      fileServer: { fetch: vi.fn() },
       ncss,
     });
     await expect(routed.fetch({
       analysisTime: new Date("2024-06-01T00:00:00Z"),
       latitude: 50,
       longitude: 14.5,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toThrow(/aws primary/);
   });
 
@@ -465,21 +451,19 @@ describe("GFS analysis routing", () => {
       fetchArea: vi.fn(),
     };
     const ncss = {
-      fetch: vi.fn(async () => {
-        throw new Error("ncss contract bug");
-      }),
+      fetch: vi.fn(async () => { throw new Error("ncss contract bug"); }),
       fetchArea: vi.fn(),
     };
     const routed = new RoutedGfsAnalysisSource({
       aws,
-      fileServer: { fetch: vi.fn(), fetchArea: vi.fn() },
+      fileServer: { fetch: vi.fn() },
       ncss,
     });
     await expect(routed.fetch({
       analysisTime: new Date("2024-06-01T00:00:00Z"),
       latitude: 50,
       longitude: 14.5,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toThrow(/ncss contract bug/);
   });
 });
@@ -503,16 +487,16 @@ describe("AwsGfsAnalysisSource decode path", () => {
     const result = await source.fetch({
       analysisTime,
       ...point,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     });
     expect(result).toMatchObject({
       provider: "NOAA AWS Open Data",
       access: "s3_range",
       cacheHit: false,
     });
-    expect(result.csv).toContain("Temperature_isobaric");
-    expect(result.csv).toContain("85000");
-    expect(result.csv).toMatch(/281/);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]?.pressureHpa).toBe(850);
+    expect(result.rows[0]?.values.temperature).toBeDefined();
   });
 
   it("decodes surface, HAG, and PWAT point selectors from one index", async () => {
@@ -555,15 +539,11 @@ describe("AwsGfsAnalysisSource decode path", () => {
     const result = await source.fetch({
       analysisTime,
       ...point,
-      variables: [
-        "Pressure_surface",
-        "Temperature_height_above_ground",
-        "Precipitable_water_entire_atmosphere_single_layer",
-      ],
+      variables: ["surface_pressure", "temperature_2m", "precipitable_water"],
     });
-    expect(result.csv).toContain("Pressure_surface");
-    expect(result.csv).toContain("Temperature_height_above_ground");
-    expect(result.csv).toContain("Precipitable_water_entire_atmosphere_single_layer");
+    expect(result.rows.some((row) => row.values.surface_pressure !== undefined)).toBe(true);
+    expect(result.rows.some((row) => row.values.temperature_2m !== undefined)).toBe(true);
+    expect(result.rows.some((row) => row.values.precipitable_water !== undefined)).toBe(true);
     expect(result.access).toBe("s3_range");
   });
 
@@ -584,15 +564,16 @@ describe("AwsGfsAnalysisSource decode path", () => {
       eastLongitude: 11.1,
       southLatitude: 49.9,
       northLatitude: 50.6,
-      variables: ["Temperature_isobaric"],
+      variable: "temperature",
       verticalCoordinate: 85000,
     });
     expect(result.provider).toBe("NOAA AWS Open Data");
-    expect(result.csv.split("\n").filter(Boolean).length).toBeGreaterThan(2);
-    expect(result.csv).toContain("85000");
+    expect(result.variable).toBe("temperature");
+    expect(result.verticalCoordinate).toBe(85000);
+    expect(result.points.length).toBeGreaterThan(0);
   });
 
-  it("narrows multi-height HAG area requests to the requested metre level", async () => {
+  it("decodes an exact HAG area request", async () => {
     const hag = analysisMessage({
       category: 0,
       parameter: 0,
@@ -610,25 +591,12 @@ describe("AwsGfsAnalysisSource decode path", () => {
       eastLongitude: 11.1,
       southLatitude: 49.9,
       northLatitude: 50.6,
-      variables: ["Temperature_height_above_ground"],
+      variable: "temperature_2m",
       verticalCoordinate: 2,
     });
-    expect(result.csv).toContain("Temperature_height_above_ground");
-    expect(result.csv).toContain("height_above_ground");
-  });
-
-  it("rejects multi-variable area requests", async () => {
-    const source = new AwsGfsAnalysisSource({
-      fetchFn: vi.fn() as unknown as typeof fetch,
-    });
-    await expect(source.fetchArea({
-      analysisTime,
-      westLongitude: 10,
-      eastLongitude: 11,
-      southLatitude: 50,
-      northLatitude: 51,
-      variables: ["Temperature_isobaric", "Relative_humidity_isobaric"],
-    })).rejects.toThrow(/exactly one NCSS variable/);
+    expect(result.variable).toBe("temperature_2m");
+    expect(result.verticalCoordinate).toBe(2);
+    expect(result.points.length).toBeGreaterThan(0);
   });
 
   it("maps index and range HTTP failures into the public taxonomy", async () => {
@@ -639,7 +607,7 @@ describe("AwsGfsAnalysisSource decode path", () => {
     await expect(indexFail.fetch({
       analysisTime,
       ...point,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toBeInstanceOf(DataUnavailableError);
 
     const msg = analysisMessage({
@@ -660,7 +628,7 @@ describe("AwsGfsAnalysisSource decode path", () => {
     await expect(rangeFail.fetch({
       analysisTime,
       ...point,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toBeInstanceOf(UpstreamUnavailableError);
   });
 
@@ -677,8 +645,55 @@ describe("AwsGfsAnalysisSource decode path", () => {
     await expect(source.fetch({
       analysisTime,
       ...point,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toThrow(/did not start with a GRIB message/);
+  });
+});
+
+describe("GFS analysis cache", () => {
+  let cacheRoots: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(cacheRoots.map((root) => rm(root, { recursive: true, force: true })));
+    cacheRoots = [];
+  });
+
+  it("keys by canonical request rather than provider URL and preserves typed provenance", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wfg-gfs-analysis-cache-"));
+    cacheRoots.push(root);
+    const source = {
+      fetch: vi.fn(async () => ({
+        rows: [{
+          latitude: 50,
+          longitude: 14,
+          pressureHpa: 850,
+          values: { temperature: 285.15 },
+        }],
+        dataset: "aws-object",
+        cacheHit: false,
+        provider: "NOAA AWS Open Data" as const,
+        access: "s3_range" as const,
+      })),
+      fetchArea: vi.fn(),
+    };
+    const cache = new CachedGfsAnalysisSource(root, source);
+    const request = {
+      analysisTime: new Date("2024-06-01T00:00:00Z"),
+      latitude: 50,
+      longitude: 14,
+      variables: ["temperature"] as const,
+    };
+    const first = await cache.fetch(request);
+    const second = await cache.fetch(request);
+    expect(first.cacheHit).toBe(false);
+    expect(second).toMatchObject({
+      cacheHit: true,
+      provider: "NOAA AWS Open Data",
+      access: "s3_range",
+      dataset: "aws-object",
+    });
+    expect(second.rows[0]?.values.temperature).toBe(285.15);
+    expect(source.fetch).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -708,14 +723,14 @@ describe("NceiGfsFileServerAnalysisSource decode path", () => {
     const result = await source.fetch({
       analysisTime,
       ...point,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     });
     expect(result).toMatchObject({
       provider: "NOAA NCEI",
       access: "ncei_thredds_fileserver",
       cacheHit: false,
     });
-    expect(result.csv).toContain("Temperature_isobaric");
+    expect(result.rows[0]?.values.temperature).toBeDefined();
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
@@ -738,41 +753,32 @@ describe("NceiGfsFileServerAnalysisSource decode path", () => {
     const request = {
       analysisTime,
       ...point,
-      variables: ["Temperature_isobaric"] as const,
+      variables: ["temperature"] as const,
     };
     const first = await source.fetch(request);
     const second = await source.fetch(request);
     expect(first.cacheHit).toBe(false);
     expect(second.cacheHit).toBe(true);
     expect(fetchFn).toHaveBeenCalledTimes(1);
-    expect(second.csv).toBe(first.csv);
+    expect(second.rows).toEqual(first.rows);
   });
 
-  it("refuses area subsets and AWS-era / pre-history analysis times", async () => {
+  it("refuses AWS-era and pre-history analysis times", async () => {
     const source = new NceiGfsFileServerAnalysisSource({
       accessPolicy: passthroughPolicy,
       fetchFn: vi.fn() as unknown as typeof fetch,
       retryOptions: fastRetry,
     });
-    await expect(source.fetchArea({
-      analysisTime,
-      westLongitude: 10,
-      eastLongitude: 11,
-      southLatitude: 50,
-      northLatitude: 51,
-      variables: ["Temperature_isobaric"],
-    })).rejects.toBeInstanceOf(UpstreamUnavailableError);
-
     await expect(source.fetch({
       analysisTime: new Date("2000-01-01T00:00:00Z"),
       ...point,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toThrow(/begins at/);
 
     await expect(source.fetch({
       analysisTime: new Date("2024-06-01T00:00:00Z"),
       ...point,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toThrow(/reserved for cycles before/);
   });
 
@@ -789,7 +795,7 @@ describe("NceiGfsFileServerAnalysisSource decode path", () => {
     await expect(source.fetch({
       analysisTime,
       ...point,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toBeInstanceOf(ErrorType);
   });
 
@@ -802,7 +808,7 @@ describe("NceiGfsFileServerAnalysisSource decode path", () => {
     await expect(source.fetch({
       analysisTime,
       ...point,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toThrow(/non-GRIB/);
   });
 
@@ -815,11 +821,11 @@ describe("NceiGfsFileServerAnalysisSource decode path", () => {
     await expect(source.fetch({
       analysisTime,
       ...point,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toBeInstanceOf(UpstreamUnavailableError);
   });
 
-  it("fails when the GRIB file has no values matching the requested NCSS names", async () => {
+  it("fails when the GRIB file has no values matching the requested canonical IDs", async () => {
     const msg = analysisMessage({
       category: 0,
       parameter: 0,
@@ -834,7 +840,7 @@ describe("NceiGfsFileServerAnalysisSource decode path", () => {
     await expect(source.fetch({
       analysisTime,
       ...point,
-      variables: ["Pressure_surface"],
+      variables: ["surface_pressure"],
     })).rejects.toThrow(/decoded no values/);
   });
 });

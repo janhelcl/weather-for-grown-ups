@@ -9,8 +9,14 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
-import { CachedGfsAnalysisFileStore, CachedNceiGfsHistorySource } from "../cache/historical-gfs-cache.js";
+import { CachedGfsAnalysisFileStore, CachedGfsAnalysisSource } from "../cache/historical-gfs-cache.js";
 import { RoutedGfsAnalysisSource } from "../sources/gfs-analysis-routed.js";
+import {
+  GFS_ANALYSIS_START,
+  type HistoricalAnalysisDataSource,
+  type HistoricalAnalysisPointResponse,
+  type HistoricalAnalysisPointRow,
+} from "../sources/gfs-analysis.js";
 import { deriveWind } from "../derived/wind.js";
 import {
   historicalFieldsQuerySchema,
@@ -21,11 +27,6 @@ import {
 import type { HistoricalProfileQueryInput } from "../schema/history.js";
 import { isoDateTimeSchema } from "../schema/query.js";
 import type { HistoricalProfileResult } from "../schema/history-result.js";
-import {
-  NCEI_GFS_GRID4_ANALYSIS_START,
-  type HistoricalAnalysisDataSource,
-  type HistoricalAnalysisResponse,
-} from "../sources/ncei-gfs-history.js";
 import { HistoricalProfileService } from "./history.js";
 
 const CAVEAT = "GFS model analysis fields; not direct observations or homogeneous climatological reanalysis" as const;
@@ -38,7 +39,6 @@ type HistoricalFieldLevel = HistoricalFieldResult["level"];
 
 interface HistoricalRawFieldDefinition {
   id: HistoricalRawFieldId;
-  ncssName: string;
   group: HistoricalFieldGroup;
   heightM?: number;
   transform(value: number): number;
@@ -48,29 +48,29 @@ const identity = (value: number) => value;
 const kelvinToCelsius = (value: number) => value - 273.15;
 
 const RAW_FIELDS: Record<HistoricalRawFieldId, HistoricalRawFieldDefinition> = {
-  surface_pressure: raw("surface_pressure", "Pressure_surface", "scalar", identity),
-  surface_geopotential_height: raw("surface_geopotential_height", "Geopotential_height_surface", "scalar", identity),
-  surface_temperature: raw("surface_temperature", "Temperature_surface", "scalar", kelvinToCelsius),
-  surface_cape: raw("surface_cape", "Convective_available_potential_energy_surface", "scalar", identity),
-  surface_cin: raw("surface_cin", "Convective_inhibition_surface", "scalar", identity),
-  temperature_2m: rawHeight("temperature_2m", "Temperature_height_above_ground", "temperature_hag", 2, kelvinToCelsius),
-  relative_humidity_2m: rawHeight("relative_humidity_2m", "Relative_humidity_height_above_ground", "moisture_2m", 2, identity),
-  specific_humidity_2m: rawHeight("specific_humidity_2m", "Specific_humidity_height_above_ground", "specific_humidity_hag", 2, identity),
-  dew_point_2m: rawHeight("dew_point_2m", "Dewpoint_temperature_height_above_ground", "moisture_2m", 2, kelvinToCelsius),
-  u_wind_10m: rawHeight("u_wind_10m", "u-component_of_wind_height_above_ground", "wind_hag", 10, identity),
-  v_wind_10m: rawHeight("v_wind_10m", "v-component_of_wind_height_above_ground", "wind_hag", 10, identity),
-  temperature_80m: rawHeight("temperature_80m", "Temperature_height_above_ground", "temperature_hag", 80, kelvinToCelsius),
-  specific_humidity_80m: rawHeight("specific_humidity_80m", "Specific_humidity_height_above_ground", "specific_humidity_hag", 80, identity),
-  pressure_80m: rawHeight("pressure_80m", "Pressure_height_above_ground", "pressure_hag", 80, identity),
-  u_wind_80m: rawHeight("u_wind_80m", "u-component_of_wind_height_above_ground", "wind_hag", 80, identity),
-  v_wind_80m: rawHeight("v_wind_80m", "v-component_of_wind_height_above_ground", "wind_hag", 80, identity),
-  temperature_100m: rawHeight("temperature_100m", "Temperature_height_above_ground", "temperature_hag", 100, kelvinToCelsius),
-  u_wind_100m: rawHeight("u_wind_100m", "u-component_of_wind_height_above_ground", "wind_hag", 100, identity),
-  v_wind_100m: rawHeight("v_wind_100m", "v-component_of_wind_height_above_ground", "wind_hag", 100, identity),
-  precipitable_water: raw("precipitable_water", "Precipitable_water_entire_atmosphere_single_layer", "scalar", identity),
-  total_column_cloud_water: raw("total_column_cloud_water", "Cloud_water_entire_atmosphere_single_layer", "scalar", identity),
-  column_relative_humidity: raw("column_relative_humidity", "Relative_humidity_entire_atmosphere_single_layer", "scalar", identity),
-  total_column_ozone: raw("total_column_ozone", "Total_ozone_entire_atmosphere_single_layer", "scalar", identity),
+  surface_pressure: raw("surface_pressure", "scalar", identity),
+  surface_geopotential_height: raw("surface_geopotential_height", "scalar", identity),
+  surface_temperature: raw("surface_temperature", "scalar", kelvinToCelsius),
+  surface_cape: raw("surface_cape", "scalar", identity),
+  surface_cin: raw("surface_cin", "scalar", identity),
+  temperature_2m: rawHeight("temperature_2m", "temperature_hag", 2, kelvinToCelsius),
+  relative_humidity_2m: rawHeight("relative_humidity_2m", "moisture_2m", 2, identity),
+  specific_humidity_2m: rawHeight("specific_humidity_2m", "specific_humidity_hag", 2, identity),
+  dew_point_2m: rawHeight("dew_point_2m", "moisture_2m", 2, kelvinToCelsius),
+  u_wind_10m: rawHeight("u_wind_10m", "wind_hag", 10, identity),
+  v_wind_10m: rawHeight("v_wind_10m", "wind_hag", 10, identity),
+  temperature_80m: rawHeight("temperature_80m", "temperature_hag", 80, kelvinToCelsius),
+  specific_humidity_80m: rawHeight("specific_humidity_80m", "specific_humidity_hag", 80, identity),
+  pressure_80m: rawHeight("pressure_80m", "pressure_hag", 80, identity),
+  u_wind_80m: rawHeight("u_wind_80m", "wind_hag", 80, identity),
+  v_wind_80m: rawHeight("v_wind_80m", "wind_hag", 80, identity),
+  temperature_100m: rawHeight("temperature_100m", "temperature_hag", 100, kelvinToCelsius),
+  u_wind_100m: rawHeight("u_wind_100m", "wind_hag", 100, identity),
+  v_wind_100m: rawHeight("v_wind_100m", "wind_hag", 100, identity),
+  precipitable_water: raw("precipitable_water", "scalar", identity),
+  total_column_cloud_water: raw("total_column_cloud_water", "scalar", identity),
+  column_relative_humidity: raw("column_relative_humidity", "scalar", identity),
+  total_column_ozone: raw("total_column_ozone", "scalar", identity),
 };
 
 const WIND_DEPENDENCIES: Record<"wind_10m" | "wind_80m" | "wind_100m", readonly [HistoricalRawFieldId, HistoricalRawFieldId]> = {
@@ -94,6 +94,20 @@ export interface HistoricalFieldsServiceOptions {
   nativeSpecificHumidity?: boolean;
 }
 
+export interface HistoricalFieldsLoadOptions {
+  source: HistoricalAnalysisDataSource;
+  analysisTime: Date;
+  latitude: number;
+  longitude: number;
+  fields: readonly HistoricalGfsFieldId[];
+}
+
+export interface HistoricalFieldsLoadResult {
+  gridPoint: { latitude: number; longitude: number };
+  fields: HistoricalFieldResult[];
+  responses: HistoricalAnalysisPointResponse[];
+}
+
 export class HistoricalFieldsService {
   private readonly source: HistoricalAnalysisDataSource;
   private readonly profileGetter: HistoricalFieldsProfileGetter;
@@ -106,17 +120,17 @@ export class HistoricalFieldsService {
     const accessPolicy = options.accessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
     const awsAccessPolicy = new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.noaaAws);
-    this.source = options.source ?? new CachedNceiGfsHistorySource(
-      join(cacheDir, "ncei-history"),
+    this.source = options.source ?? new CachedGfsAnalysisSource(
+      join(cacheDir, "gfs-analysis"),
       new RoutedGfsAnalysisSource({
         nceiAccessPolicy: accessPolicy,
         awsAccessPolicy,
-        fileStore: new CachedGfsAnalysisFileStore(join(cacheDir, "ncei-gfs-analysis-fileserver")),
+        fileStore: new CachedGfsAnalysisFileStore(join(cacheDir, "gfs-analysis-fileserver")),
       }),
     );
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
-    this.minimumTime = options.minimumTime ?? NCEI_GFS_GRID4_ANALYSIS_START;
+    this.minimumTime = options.minimumTime ?? GFS_ANALYSIS_START;
     this.profileGetter = options.profileGetter ?? new HistoricalProfileService({
       source: this.source,
       now: this.now,
@@ -132,39 +146,18 @@ export class HistoricalFieldsService {
       : historicalFieldsQuerySchema.parse(input);
     const analysisTime = new Date(query.analysisTime);
     if (analysisTime < this.minimumTime) {
-      throw new Error(`NCEI GFS Grid 4 history begins at ${this.minimumTime.toISOString()} for this data source`);
+      throw new Error(`GFS Grid 4 history begins at ${this.minimumTime.toISOString()} for this data source`);
     }
     if (analysisTime > this.now()) throw new Error("Historical GFS analysisTime must not be in the future");
 
     const requestedFields = [...new Set(query.fields)];
-    const rawFields = expandHistoricalFieldDependencies(requestedFields);
-    const groups = groupRawFields(rawFields);
-    const rawValues = new Map<HistoricalRawFieldId, number>();
-    const responses: HistoricalAnalysisResponse[] = [];
-    let gridPoint = { latitude: query.latitude, longitude: query.longitude };
-
-    for (const group of groups) {
-      const response = await this.source.fetch({
-        analysisTime,
-        latitude: query.latitude,
-        longitude: query.longitude,
-        variables: [...new Set(group.map((definition) => definition.ncssName))],
-      });
-      responses.push(response);
-      const parsed = parseHistoricalFieldsCsv(response.csv, group, {
-        latitude: query.latitude,
-        longitude: query.longitude,
-      });
-      gridPoint = parsed.gridPoint;
-      for (const [id, value] of parsed.values) rawValues.set(id, value);
-    }
-
-    for (const definition of rawFields) {
-      if (!rawValues.has(definition.id)) {
-        throw new Error(`Historical GFS analysis is missing requested field ${definition.id}`);
-      }
-    }
-
+    const loaded = await loadHistoricalFieldsData({
+      source: this.source,
+      analysisTime,
+      latitude: query.latitude,
+      longitude: query.longitude,
+      fields: requestedFields,
+    });
     const profile = query.variables && query.pressureLevelsHpa
       ? await this.profileGetter.getHistoricalProfile({
           latitude: query.latitude,
@@ -174,32 +167,77 @@ export class HistoricalFieldsService {
           pressureLevelsHpa: query.pressureLevelsHpa,
         })
       : undefined;
-    if (profile) gridPoint = profile.gridPoint;
-
-    const firstResponse = responses[0];
+    const firstResponse = loaded.responses[0];
     if (!firstResponse) throw new Error("Historical GFS mixed-field query resolved no archive fields");
+    const publicSource = publicHistoricalFieldSource(firstResponse);
 
     return {
       model: "gfs_grid4_analysis_0p5",
       analysisTime: analysisTime.toISOString(),
       requestedPoint: { latitude: query.latitude, longitude: query.longitude },
-      gridPoint,
+      gridPoint: profile?.gridPoint ?? loaded.gridPoint,
       selection: {
         ...(query.variables ? { variables: query.variables } : {}),
         ...(query.pressureLevelsHpa ? { pressureLevelsHpa: query.pressureLevelsHpa } : {}),
         fields: requestedFields,
       },
       ...(profile ? { levels: profile.levels } : {}),
-      fields: requestedFields.map((id) => buildHistoricalFieldResult(id, rawValues)),
+      fields: loaded.fields,
       source: {
-        provider: firstResponse.provider,
-        access: firstResponse.access,
+        ...publicSource,
         dataset: firstResponse.dataset,
-        cacheHit: responses.every((response) => response.cacheHit) && (profile?.source.cacheHit ?? true),
+        cacheHit: loaded.responses.every((response) => response.cacheHit) && (profile?.source.cacheHit ?? true),
       },
       caveat: CAVEAT,
     };
   }
+}
+
+export async function loadHistoricalFieldsData(
+  options: HistoricalFieldsLoadOptions,
+): Promise<HistoricalFieldsLoadResult> {
+  const rawFields = expandHistoricalFieldDependencies(options.fields);
+  const groups = groupRawFields(rawFields);
+  const rawValues = new Map<HistoricalRawFieldId, number>();
+  const responses: HistoricalAnalysisPointResponse[] = [];
+  let gridPoint = { latitude: options.latitude, longitude: options.longitude };
+
+  for (const group of groups) {
+    const response = await options.source.fetch({
+      analysisTime: options.analysisTime,
+      latitude: options.latitude,
+      longitude: options.longitude,
+      variables: group.map((definition) => definition.id),
+    });
+    responses.push(response);
+    const parsed = parseHistoricalFieldRows(response.rows, group, {
+      latitude: options.latitude,
+      longitude: options.longitude,
+    });
+    gridPoint = parsed.gridPoint;
+    for (const [id, value] of parsed.values) rawValues.set(id, value);
+  }
+
+  for (const definition of rawFields) {
+    if (!rawValues.has(definition.id)) {
+      throw new Error(`Historical GFS analysis is missing requested field ${definition.id}`);
+    }
+  }
+
+  return {
+    gridPoint,
+    fields: options.fields.map((id) => buildHistoricalFieldResult(id, rawValues)),
+    responses,
+  };
+}
+
+function publicHistoricalFieldSource(
+  response: HistoricalAnalysisPointResponse,
+): Pick<HistoricalFieldsResult["source"], "provider" | "access"> {
+  if (response.provider === "NCAR GDEX" || response.access === "gdex_thredds_ncss") {
+    throw new Error("gfs-analysis field source returned archive-only GDEX provenance");
+  }
+  return { provider: response.provider, access: response.access };
 }
 
 interface ParsedFields {
@@ -207,44 +245,23 @@ interface ParsedFields {
   values: Map<HistoricalRawFieldId, number>;
 }
 
-export function parseHistoricalFieldsCsv(
-  csv: string,
+export function parseHistoricalFieldRows(
+  rows: readonly HistoricalAnalysisPointRow[],
   definitions: readonly HistoricalRawFieldDefinition[],
   requestedPoint: { latitude: number; longitude: number },
 ): ParsedFields {
-  const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
-  if (lines.length < 2) throw new Error("NCEI historical GFS field response contains no data rows");
-  const headers = parseCsvLine(lines[0]!).map(normalizeHeader);
-  const latitudeIndex = findHeaderIndex(headers, ["latitude", "lat"]);
-  const longitudeIndex = findHeaderIndex(headers, ["longitude", "lon"]);
-  const heightIndex = headers.findIndex(
-    (header) => header.startsWith("height_above_ground") || header === "alt",
-  );
-  const columnIndexes = new Map<string, number>();
-  for (const definition of definitions) {
-    if (columnIndexes.has(definition.ncssName)) continue;
-    const aliases = windAliases(definition.ncssName);
-    const index = findHeaderIndex(headers, aliases);
-    if (index < 0) throw new Error(`NCEI historical GFS field response is missing variable ${definition.ncssName}`);
-    columnIndexes.set(definition.ncssName, index);
-  }
-
   const values = new Map<HistoricalRawFieldId, number>();
   let gridPoint = requestedPoint;
-  for (const line of lines.slice(1)) {
-    const cells = parseCsvLine(line);
-    const rowHeight = heightIndex < 0 ? undefined : numericCell(cells[heightIndex]);
+  for (const row of rows) {
+    let matched = false;
     for (const definition of definitions) {
-      if (definition.heightM !== undefined && !sameHeight(rowHeight, definition.heightM)) continue;
-      const columnIndex = columnIndexes.get(definition.ncssName)!;
-      const value = numericCell(cells[columnIndex]);
-      if (value !== undefined) values.set(definition.id, definition.transform(value));
+      if (definition.heightM !== undefined && !sameHeight(row.heightAboveGroundM, definition.heightM)) continue;
+      const value = row.values[definition.id];
+      if (value === undefined) continue;
+      values.set(definition.id, definition.transform(value));
+      matched = true;
     }
-    const latitude = latitudeIndex < 0 ? undefined : numericCell(cells[latitudeIndex]);
-    const longitude = longitudeIndex < 0 ? undefined : numericCell(cells[longitudeIndex]);
-    if (latitude !== undefined && longitude !== undefined) {
-      gridPoint = { latitude, longitude: longitude > 180 ? longitude - 360 : longitude };
-    }
+    if (matched) gridPoint = { latitude: row.latitude, longitude: row.longitude };
   }
   return { gridPoint, values };
 }
@@ -310,21 +327,19 @@ function groupRawFields(definitions: readonly HistoricalRawFieldDefinition[]): H
 
 function raw(
   id: HistoricalRawFieldId,
-  ncssName: string,
   group: HistoricalFieldGroup,
   transform: (value: number) => number,
 ): HistoricalRawFieldDefinition {
-  return { id, ncssName, group, transform };
+  return { id, group, transform };
 }
 
 function rawHeight(
   id: HistoricalRawFieldId,
-  ncssName: string,
   group: HistoricalFieldGroup,
   heightM: number,
   transform: (value: number) => number,
 ): HistoricalRawFieldDefinition {
-  return { id, ncssName, group, heightM, transform };
+  return { id, group, heightM, transform };
 }
 
 function requiredRawValue(values: ReadonlyMap<HistoricalRawFieldId, number>, id: HistoricalRawFieldId): number {
@@ -335,50 +350,4 @@ function requiredRawValue(values: ReadonlyMap<HistoricalRawFieldId, number>, id:
 
 function sameHeight(value: number | undefined, expected: number): boolean {
   return value !== undefined && Math.abs(value - expected) < 1e-6;
-}
-
-function windAliases(name: string): string[] {
-  return name.startsWith("u-component") || name.startsWith("v-component")
-    ? [name, name.replace("-component", "component")]
-    : [name];
-}
-
-function normalizeHeader(header: string): string {
-  return header.replace(/^\uFEFF/, "").replace(/\[.*$/, "").trim();
-}
-
-function findHeaderIndex(headers: readonly string[], aliases: readonly string[]): number {
-  return headers.findIndex((header) => aliases.includes(header));
-}
-
-function numericCell(value: string | undefined): number | undefined {
-  if (value === undefined || value.trim() === "" || value.trim().toLowerCase() === "nan") return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function parseCsvLine(line: string): string[] {
-  const cells: string[] = [];
-  let value = "";
-  let quoted = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    if (char === '"') {
-      if (quoted && line[index + 1] === '"') {
-        value += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-      continue;
-    }
-    if (char === "," && !quoted) {
-      cells.push(value);
-      value = "";
-      continue;
-    }
-    value += char;
-  }
-  cells.push(value);
-  return cells;
 }

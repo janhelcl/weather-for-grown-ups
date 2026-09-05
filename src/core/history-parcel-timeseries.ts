@@ -5,7 +5,7 @@ import {
   type HistoricalParcelTimeSeriesQueryInput,
   type HistoricalParcelTimeSeriesResult,
 } from "../schema/history-parcel.js";
-import { NCEI_GFS_GRID4_ANALYSIS_START } from "../sources/ncei-gfs-history.js";
+import { GFS_ANALYSIS_START } from "../sources/gfs-analysis.js";
 import { historicalAnalysisTimesInRange } from "./history-time-series.js";
 import { HistoricalParcelService } from "./history-parcel.js";
 import { InvalidRequestError } from "../failure.js";
@@ -34,8 +34,8 @@ export class HistoricalParcelTimeSeriesService {
     const query = historicalParcelTimeSeriesQuerySchema.parse(input);
     const startTime = new Date(query.startTime);
     const endTime = new Date(query.endTime);
-    if (startTime < NCEI_GFS_GRID4_ANALYSIS_START) {
-      throw new Error(`NCEI GFS Grid 4 analysis history begins at ${NCEI_GFS_GRID4_ANALYSIS_START.toISOString()}`);
+    if (startTime < GFS_ANALYSIS_START) {
+      throw new Error(`GFS Grid 4 analysis history begins at ${GFS_ANALYSIS_START.toISOString()}`);
     }
     if (endTime > this.now()) throw new Error("Historical GFS endTime must not be in the future");
 
@@ -50,7 +50,7 @@ export class HistoricalParcelTimeSeriesService {
     }
 
     // Intentionally serial: each parcel uses one historical mixed-state request,
-    // whose underlying NCEI cache misses share WFG's file-backed NOAA limiter.
+    // whose underlying cache misses share WFG's file-backed NOAA limiter.
     const steps: HistoricalParcelResult[] = [];
     for (const analysisTime of analysisTimes) {
       steps.push(await this.parcelGetter.getHistoricalParcel({

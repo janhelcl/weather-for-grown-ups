@@ -1,34 +1,52 @@
 import { describe, expect, it, vi } from "vitest";
-import { HistoricalProfileService, parseHistoricalProfileCsv } from "../src/core/history.js";
-import { NCEI_NCSS_PROVENANCE, buildNceiGfsAnalysisAreaUrl,
+import {
+  HistoricalProfileService,
+  parseHistoricalProfileRows,
+} from "../src/core/history.js";
+import type {
+  HistoricalAnalysisDataSource,
+  HistoricalAnalysisPointRow,
+} from "../src/sources/gfs-analysis.js";
+import { parseHistoricalNcssPointCsv } from "../src/sources/gfs-analysis-ncss.js";
+import {
+  NCEI_NCSS_PROVENANCE,
+  buildNceiGfsAnalysisAreaUrl,
   buildNceiGfsAnalysisDatasetPath,
   buildNceiGfsAnalysisPointUrl,
-  type HistoricalAnalysisDataSource,
 } from "../src/sources/ncei-gfs-history.js";
 
 const dataset = "model-gfs-g4-anl-files-old/201705/20170509/gfsanl_4_20170509_0000_000.grb2";
-const csv = [
-  'station_name,station_description,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,vertCoord[unit="Pa"],Temperature_isobaric[unit="K"],Relative_humidity_isobaric[unit="%"],u-component_of_wind_isobaric[unit="m/s"],v-component_of_wind_isobaric[unit="m/s"],Geopotential_height_isobaric[unit="gpm"]',
-  'point,point,50,14.5,2017-05-09T00:00:00Z,85000,285.15,65,3,4,1500',
-  'point,point,50,14.5,2017-05-09T00:00:00Z,70000,273.15,40,-10,0,3100',
-].join("\n");
-
-const verticalVelocityCsv = [
-  'station_name,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,isobaric3[unit="Pa"],Vertical_velocity_pressure_isobaric[unit="Pa/s"]',
-  'point,50,14.5,2017-05-09T00:00:00Z,85000,-0.12',
-  'point,50,14.5,2017-05-09T00:00:00Z,70000,-0.08',
-].join("\n");
-
-const vorticityCsv = [
-  'station_name,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,isobaric2[unit="Pa"],Absolute_vorticity_isobaric[unit="1/s"]',
-  'point,50,14.5,2017-05-09T00:00:00Z,85000,0.00008',
-  'point,50,14.5,2017-05-09T00:00:00Z,70000,0.00010',
-].join("\n");
+const profileRows: HistoricalAnalysisPointRow[] = [
+  {
+    latitude: 50,
+    longitude: 14.5,
+    pressureHpa: 850,
+    values: {
+      temperature: 285.15,
+      relative_humidity: 65,
+      u_wind: 3,
+      v_wind: 4,
+      geopotential_height: 1500,
+    },
+  },
+  {
+    latitude: 50,
+    longitude: 14.5,
+    pressureHpa: 700,
+    values: {
+      temperature: 273.15,
+      relative_humidity: 40,
+      u_wind: -10,
+      v_wind: 0,
+      geopotential_height: 3100,
+    },
+  },
+];
 
 function mockSource(): HistoricalAnalysisDataSource {
   return {
     fetch: vi.fn(async () => ({
-      csv,
+      rows: profileRows,
       dataset,
       cacheHit: false,
       ...NCEI_NCSS_PROVENANCE,
@@ -84,24 +102,40 @@ describe("HistoricalProfileService", () => {
 
     expect(source.fetch).toHaveBeenCalledWith(expect.objectContaining({
       variables: [
-        "Temperature_isobaric",
-        "Relative_humidity_isobaric",
-        "u-component_of_wind_isobaric",
-        "v-component_of_wind_isobaric",
-        "Geopotential_height_isobaric",
+        "temperature",
+        "relative_humidity",
+        "u_wind",
+        "v_wind",
+        "geopotential_height",
       ],
     }));
   });
 
   it("splits variables with incompatible historical pressure axes and merges their levels", async () => {
     const fetch = vi.fn(async (request: { variables: readonly string[] }) => {
-      if (request.variables.includes("Vertical_velocity_pressure_isobaric")) {
-        return { csv: verticalVelocityCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
+      if (request.variables.includes("vertical_velocity")) {
+        return {
+          rows: [
+            { latitude: 50, longitude: 14.5, pressureHpa: 850, values: { vertical_velocity: -0.12 } },
+            { latitude: 50, longitude: 14.5, pressureHpa: 700, values: { vertical_velocity: -0.08 } },
+          ],
+          dataset,
+          cacheHit: true,
+          ...NCEI_NCSS_PROVENANCE,
+        };
       }
-      if (request.variables.includes("Absolute_vorticity_isobaric")) {
-        return { csv: vorticityCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
+      if (request.variables.includes("absolute_vorticity")) {
+        return {
+          rows: [
+            { latitude: 50, longitude: 14.5, pressureHpa: 850, values: { absolute_vorticity: 0.00008 } },
+            { latitude: 50, longitude: 14.5, pressureHpa: 700, values: { absolute_vorticity: 0.00010 } },
+          ],
+          dataset,
+          cacheHit: true,
+          ...NCEI_NCSS_PROVENANCE,
+        };
       }
-      return { csv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
+      return { rows: profileRows, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
     });
     const service = new HistoricalProfileService({ source: { fetch } });
 
@@ -115,9 +149,9 @@ describe("HistoricalProfileService", () => {
 
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(fetch.mock.calls.map(([request]) => request.variables)).toEqual([
-      ["Temperature_isobaric"],
-      ["Vertical_velocity_pressure_isobaric"],
-      ["Absolute_vorticity_isobaric"],
+      ["temperature"],
+      ["vertical_velocity"],
+      ["absolute_vorticity"],
     ]);
     expect(result.levels[0]).toMatchObject({
       pressureHpa: 850,
@@ -129,11 +163,17 @@ describe("HistoricalProfileService", () => {
   });
 
   it("uses native archive specific humidity when the source advertises it", async () => {
-    const nativeCsv = [
-      'time,alt[unit="Pa"],station,latitude[unit="degrees_north"],longitude[unit="degrees_east"],Specific_humidity_isobaric[unit="kg/kg"],Temperature_isobaric[unit="K"]',
-      '2026-08-24T06:00:00Z,85000,GridPointRequestedAt[50.000N_14.000E],50.000,14.000,0.010,285.15',
-    ].join("\n");
-    const fetch = vi.fn(async () => ({ csv: nativeCsv, dataset: "gdex", cacheHit: true, ...NCEI_NCSS_PROVENANCE }));
+    const fetch = vi.fn(async () => ({
+      rows: [{
+        latitude: 50,
+        longitude: 14,
+        pressureHpa: 850,
+        values: { specific_humidity: 0.01, temperature: 285.15 },
+      }],
+      dataset: "gdex",
+      cacheHit: true,
+      ...NCEI_NCSS_PROVENANCE,
+    }));
     const service = new HistoricalProfileService({
       source: { fetch },
       now: () => new Date("2026-08-27T12:00:00Z"),
@@ -149,7 +189,7 @@ describe("HistoricalProfileService", () => {
       pressureLevelsHpa: [850],
     });
     expect(fetch).toHaveBeenCalledWith(expect.objectContaining({
-      variables: ["Specific_humidity_isobaric", "Temperature_isobaric"],
+      variables: ["specific_humidity", "temperature"],
     }));
     expect(result.levels[0]?.specificHumidityKgKg).toBe(0.01);
     expect(result.levels[0]?.virtualTemperatureC).toBeCloseTo(13.728, 2);
@@ -166,7 +206,7 @@ describe("HistoricalProfileService", () => {
       pressureLevelsHpa: [850],
     });
     expect(source.fetch).toHaveBeenCalledWith(expect.objectContaining({
-      variables: ["Temperature_isobaric", "Relative_humidity_isobaric"],
+      variables: ["temperature", "relative_humidity"],
     }));
     expect(result.levels[0]?.specificHumidityKgKg).toBeGreaterThan(0);
   });
@@ -185,7 +225,7 @@ describe("HistoricalProfileService", () => {
       pressureLevelsHpa: [850],
     });
     expect(source.fetch).toHaveBeenCalledWith(expect.objectContaining({
-      variables: ["Temperature_isobaric", "Relative_humidity_isobaric"],
+      variables: ["temperature", "relative_humidity"],
     }));
     expect(result.levels[0]?.dewPointC).toBeDefined();
   });
@@ -238,12 +278,12 @@ describe("NCEI historical GFS access", () => {
     );
   });
 
-  it("builds one NCSS grid-as-point request for variables sharing a pressure axis", () => {
+  it("builds one NCSS grid-as-point request for canonical variables sharing a pressure axis", () => {
     const url = new URL(buildNceiGfsAnalysisPointUrl({
       analysisTime: new Date("2017-05-09T00:00:00Z"),
       latitude: 50.08,
       longitude: 14.43,
-      variables: ["Temperature_isobaric", "Relative_humidity_isobaric"],
+      variables: ["temperature", "relative_humidity"],
     }));
     expect(url.pathname).toContain("/thredds/ncss/grid/model-gfs-g4-anl-files-old/201705/20170509/");
     expect(url.searchParams.get("var")).toBe("Temperature_isobaric,Relative_humidity_isobaric");
@@ -260,7 +300,7 @@ describe("NCEI historical GFS access", () => {
       eastLongitude: 18,
       southLatitude: 48,
       northLatitude: 51,
-      variables: ["Temperature_isobaric"],
+      variable: "temperature",
       verticalCoordinate: 85000,
       horizontalStride: 2,
     }));
@@ -284,20 +324,25 @@ describe("NCEI historical GFS access", () => {
       eastLongitude: 18,
       southLatitude: 48,
       northLatitude: 51,
-      variables: ["Pressure_surface"],
+      variable: "surface_pressure",
     }));
     expect(url.searchParams.has("vertCoord")).toBe(false);
     expect(url.searchParams.has("horizStride")).toBe(false);
   });
 
-  it("parses the NCAR GDEX grid-as-point CSV pressure axis named alt", () => {
+  it("parses the NCAR GDEX grid-as-point CSV pressure axis named alt at the adapter boundary", () => {
     const gdexCsv = [
       'time,alt[unit="Pa"],station,latitude[unit="degrees_north"],longitude[unit="degrees_east"],Temperature_isobaric[unit="K"]',
       '2026-08-24T06:00:00Z,85000,GridPointRequestedAt[50.000N_14.000E],50.000,14.000,285.15',
       '2026-08-24T06:00:00Z,70000,GridPointRequestedAt[50.000N_14.000E],50.000,14.000,273.15',
     ].join("\n");
-    const parsed = parseHistoricalProfileCsv(
+    const rows = parseHistoricalNcssPointCsv(
       gdexCsv,
+      ["temperature"],
+      { latitude: 50.08, longitude: 14.43 },
+    );
+    const parsed = parseHistoricalProfileRows(
+      rows,
       ["temperature"],
       [850, 700],
       { latitude: 50.08, longitude: 14.43 },
@@ -309,42 +354,44 @@ describe("NCEI historical GFS access", () => {
     ]);
   });
 
-  it("rejects malformed profile CSVs without a pressure coordinate or requested variable", () => {
-    expect(() => parseHistoricalProfileCsv(
-      'time,latitude,longitude,Temperature_isobaric\n2026-08-24T06:00:00Z,50,14,285',
-      ["temperature"],
-      [850],
-      { latitude: 50, longitude: 14 },
-    )).toThrow("missing a pressure coordinate");
-
-    expect(() => parseHistoricalProfileCsv(
+  it("rejects malformed NCSS CSVs missing a requested variable", () => {
+    expect(() => parseHistoricalNcssPointCsv(
       'time,alt[unit="Pa"],latitude,longitude\n2026-08-24T06:00:00Z,85000,50,14',
       ["temperature"],
-      [850],
       { latitude: 50, longitude: 14 },
     )).toThrow("missing variable Temperature_isobaric");
   });
 
   it("parses Pa pressure coordinates and normalizes 0-360 longitudes", () => {
-    const parsed = parseHistoricalProfileCsv(
-      csv.replaceAll("14.5", "350"),
-      ["temperature"],
-      [850],
-      { latitude: 50.08, longitude: -10 },
-    );
-    expect(parsed.gridPoint).toEqual({ latitude: 50, longitude: -10 });
-    expect(parsed.levels[0]).toMatchObject({ pressureHpa: 850, temperatureC: 12 });
+    const csv = [
+      'latitude,longitude,vertCoord[unit="Pa"],Temperature_isobaric[unit="K"]',
+      "50,350,85000,285.15",
+    ].join("\n");
+    const rows = parseHistoricalNcssPointCsv(csv, ["temperature"], {
+      latitude: 50.08,
+      longitude: -10,
+    });
+    expect(rows).toEqual([{
+      latitude: 50,
+      longitude: -10,
+      pressureHpa: 850,
+      values: { temperature: 285.15 },
+    }]);
   });
 
-  it("honors vertCoord Pa units so a 7 hPa row does not overwrite 700 hPa", () => {
-    const awsStack = [
-      'latitude,longitude,vertCoord[unit="Pa"],Temperature_isobaric[unit="1"]',
+  it("honors Pa units so a 7 hPa row does not overwrite 700 hPa", () => {
+    const csv = [
+      'latitude,longitude,vertCoord[unit="Pa"],Temperature_isobaric[unit="K"]',
       "50,14.5,85000,281.15",
       "50,14.5,70000,272.15",
       "50,14.5,700,221.15",
     ].join("\n");
-    const parsed = parseHistoricalProfileCsv(
-      awsStack,
+    const rows = parseHistoricalNcssPointCsv(csv, ["temperature"], {
+      latitude: 50.08,
+      longitude: 14.43,
+    });
+    const parsed = parseHistoricalProfileRows(
+      rows,
       ["temperature"],
       [850, 700],
       { latitude: 50.08, longitude: 14.43 },

@@ -148,7 +148,7 @@ Area:
 }
 ```
 
-Dataset-specific limits remain explicit. For example, historical NCEI transects are more tightly bounded than AWS-backed operational queries.
+Dataset-specific limits remain explicit. For example, historical archive queries are more tightly bounded than AWS-backed operational queries.
 
 For operational `gfs`, source selection is normally automatic and is not another query dimension. Point/profile, time-series, multi-point, transect, and run-comparison work prefers NOAA AWS Open Data byte ranges; bounded areas use NOMADS geographic subsetting. An explicit `source: "nomads" | "s3" | "archive"` is an override/debugging control where the chosen geometry supports it. Old explicit forecast runs still route to the grid-matched archive. CLI time-range queries report native-step progress on stderr, leaving JSON stdout machine-readable.
 
@@ -416,7 +416,7 @@ Unified state/diagnostic operations return a common envelope:
 - IFS carries deterministic 0.25° values with explicit ECMWF run, lead, sampled grid point, product and source provenance.
 - AIFS ENS carries distributions over the selected `c00,p01..p50` stochastic AI members while keeping AIFS Single separate.
 - IFS ENS carries distributions across the requested `p01`–`p50` perturbed members, requested quantiles, and optional raw members where the operation permits them; deterministic IFS remains the separate unperturbed-control dataset.
-- Historical GFS analysis carries deterministic analyzed values and NCEI provenance.
+- Historical GFS analysis carries deterministic analyzed values and the provenance of the route that actually served the request (NOAA AWS Open Data, NCEI fileServer, or NCEI NCSS).
 
 This is deliberate: the API unifies **how the question is expressed**, not the physical meaning of the answer.
 
@@ -576,7 +576,7 @@ A common query vocabulary does not mean every dataset/source implements every co
 
 Examples:
 
-- historical NCEI operations have tighter point/sample/time bounds because archive access is file/NCSS oriented and NOAA-paced;
+- historical `gfs-analysis` operations have tighter point/sample/time bounds because archive access is bounded and may route across AWS ranges, NCEI full files, or NCSS;
 - archived GFS forecasts preserve grid-native cadence and inventory: 0.25° GDEX uses 3-hour steps through +240 h then 12-hour steps through +384 h, while 0.5° Grid 4 uses 3-hour steps through +192 h;
 - historical analysis does not expose forecast accumulation products as if they were instantaneous analysis state;
 - ensemble-only controls are rejected for deterministic datasets;
@@ -589,7 +589,7 @@ The unified dispatcher delegates to the existing dataset-specific schemas after 
 
 ## Public failure contract
 
-Every CLI and MCP failure is reduced to one envelope: `{ code, message, retryable, details? }`. The CLI prints `CODE: message` (or the JSON envelope on stderr with `--json`); MCP tools return the same envelope as an `isError` text result outside the success schema.
+Every CLI and MCP failure uses the same envelope shape: `{ code, message, retryable, details? }`. The CLI prints `CODE: message` (or the JSON envelope on stderr with `--json`); MCP tools return an `isError` text result outside the success schema. Typed failures preserve their actionable message/details on both surfaces. Unclassified `INTERNAL_ERROR` is intentionally different: the CLI keeps a bounded, redacted local message for debugging, while MCP replaces arbitrary internal text with a generic message.
 
 | Code | Meaning | Retry? |
 | --- | --- | --- |
@@ -599,7 +599,7 @@ Every CLI and MCP failure is reduced to one envelope: `{ code, message, retryabl
 | `DATA_UNAVAILABLE` | The provider confirmed absence: run/inventory not published, or an analog target that is not materialized in the local index while fetching is disabled. | usually no |
 | `RATE_LIMITED` | Provider quota exhausted after bounded retries. | yes |
 | `UPSTREAM_UNAVAILABLE` | Provider 5xx or transport failure after bounded retries. | yes |
-| `INTERNAL_ERROR` | Anything not yet classified. The original message is preserved (single line, bounded, credentials redacted) so agents can still act on it; treat a recurring `INTERNAL_ERROR` as a bug report for a missing typed failure. | no |
+| `INTERNAL_ERROR` | Anything not yet classified. CLI keeps a single-line, bounded, credential-redacted message for local diagnosis; MCP returns `Unexpected internal error while handling the request`. Treat recurrence as a bug report for a missing typed failure. | no |
 
 `details` is optional structured context (offending values, allowed values, env var names, index paths). Messages never embed the code and never carry stack traces or raw provider response bodies.
 
@@ -607,6 +607,7 @@ The envelope is the only failure shape on either surface:
 
 - **CLI usage errors** (unknown option or command, missing required option, non-numeric value for a numeric flag) are `INVALID_REQUEST`, name the offending flag, and point at the relevant `--help`; Commander's native `error:` output and exit path are not used.
 - **MCP argument validation** happens inside the tool handler, not in the SDK pre-check, so schema violations return the same `isError` envelope instead of a JSON-RPC `Invalid arguments` protocol error. Tool listing still advertises the full JSON Schema.
+- **MCP internal failures** never expose arbitrary plain-`Error` text such as local paths or decoder implementation details. Anything an agent is expected to act on must be a typed failure before it reaches the MCP boundary.
 - **Schema violations** report the first failing field in the message (`Request validation failed at geometry.latitude: …`), append `(+N more in details.issues)` when several fields fail, and list every issue with its path in `details.issues`. Unknown keys are rejected (`Unrecognized key: "pressureLevelHpa"`) rather than silently dropped, so misspelled options never degrade into defaults.
 - **Registry-dispatched operations** validate against the one contract the caller selected. `compare_datasets` dispatches on `datasets` to the registered pair (reporting reversed or unregistered pairs together with the registered list); `verify_forecast` dispatches on the time form (`time.at` vs `time.from`/`time.to`). Failures therefore name the field under that contract, e.g. `at pressureLevelHpa: … (gfs↔gefs comparison)`, never a union-wide `Invalid input`.
 - **Upstream HTTP failures** are classified once (`src/access/http-failure.ts`): 404 → `DATA_UNAVAILABLE`, 429 → `RATE_LIMITED`, 5xx → `UPSTREAM_UNAVAILABLE` (retryable), any other non-2xx → `UPSTREAM_UNAVAILABLE` (not retryable). Messages name the provider, the request that failed and the HTTP status; `details` carries `provider`, `status` and the redacted `url`.

@@ -16,7 +16,7 @@ import type {
   HistoricalParcelQueryInput,
   HistoricalParcelResult,
 } from "../schema/history-parcel.js";
-import { NCEI_GFS_GRID4_ANALYSIS_START } from "../sources/ncei-gfs-history.js";
+import { GFS_ANALYSIS_START } from "../sources/gfs-analysis.js";
 import { HistoricalDiagnosticsService } from "./history-diagnostics.js";
 import { HistoricalParcelService } from "./history-parcel.js";
 import { historicalAnalysisTimesInRange } from "./history-time-series.js";
@@ -70,9 +70,9 @@ export class HistoricalDiagnosticTimeSeriesService {
     const startTime = new Date(query.startTime);
     const endTime = new Date(query.endTime);
 
-    if (startTime < NCEI_GFS_GRID4_ANALYSIS_START) {
+    if (startTime < GFS_ANALYSIS_START) {
       throw new Error(
-        `NCEI GFS Grid 4 analysis history begins at ${NCEI_GFS_GRID4_ANALYSIS_START.toISOString()}`,
+        `GFS Grid 4 analysis history begins at ${GFS_ANALYSIS_START.toISOString()}`,
       );
     }
     if (endTime > this.now()) throw new Error("Historical GFS endTime must not be in the future");
