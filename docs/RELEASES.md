@@ -52,7 +52,7 @@ NCEI moved the Grid 4 GFS archive behind THREDDS onto S3 and broke NCSS/OPeNDAP 
 - For operations with a primary AWS/fileServer route, NCSS remains the fallback so a repaired NCEI IAM policy comes back automatically (`access: "ncei_thredds_ncss"`).
 - The analysis response cache is keyed by the canonical `gfs-analysis` request, not an NCSS/AWS/fileServer URL; old NCSS-only cache entries are intentionally not carried forward.
 
-The historical parser interchange and public result shapes are unchanged; provenance `provider`/`access` report the path that actually served the request.
+The internal analysis interchange is now typed and provider-neutral rather than NCSS-shaped CSV; public result shapes remain unchanged. Provenance `provider`/`access` reports the path that actually served the request.
 
 ### stdio MCP smoke coverage
 
