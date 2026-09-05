@@ -11,9 +11,10 @@ import {
 import type {
   HistoricalAnalysisAreaDataSource,
   HistoricalAnalysisAreaRequest,
+  HistoricalAnalysisAreaResponse,
   HistoricalAnalysisDataSource,
+  HistoricalAnalysisPointResponse,
   HistoricalAnalysisRequest,
-  HistoricalAnalysisResponse,
   HistoricalAnalysisSource,
 } from "./gfs-analysis.js";
 import { GFS_S3_ARCHIVE_START } from "./gfs-s3.js";
@@ -78,7 +79,7 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
     }
   }
 
-  fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisResponse> {
+  fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisPointResponse> {
     const primary = request.analysisTime >= GFS_S3_ARCHIVE_START ? this.aws : this.fileServer;
     return this.withFallback(
       () => primary.fetch(request),
@@ -86,7 +87,7 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
     );
   }
 
-  fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisResponse> {
+  fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisAreaResponse> {
     if (request.analysisTime < GFS_S3_ARCHIVE_START) {
       return this.ncss.fetchArea(request);
     }
@@ -96,10 +97,10 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
     );
   }
 
-  private async withFallback(
-    primary: () => Promise<HistoricalAnalysisResponse>,
-    fallback: () => Promise<HistoricalAnalysisResponse>,
-  ): Promise<HistoricalAnalysisResponse> {
+  private async withFallback<T>(
+    primary: () => Promise<T>,
+    fallback: () => Promise<T>,
+  ): Promise<T> {
     try {
       return await primary();
     } catch (primaryError) {
