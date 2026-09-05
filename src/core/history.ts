@@ -9,7 +9,8 @@ import { CachedGfsAnalysisFileStore, CachedGfsAnalysisSource } from "../cache/hi
 import { RoutedGfsAnalysisSource } from "../sources/gfs-analysis-routed.js";
 import type {
   HistoricalAnalysisDataSource,
-  HistoricalAnalysisResponse,
+  HistoricalAnalysisPointResponse,
+  HistoricalAnalysisPointRow,
 } from "../sources/gfs-analysis.js";
 import {
   deriveAirDensityKgM3,
@@ -56,59 +57,48 @@ type HistoricalPressureAxisGroup =
   | "ozone_mixing_ratio";
 
 interface RawHistoryVariable {
-  ncssName: string;
   pressureAxisGroup: HistoricalPressureAxisGroup;
   apply(level: ProfileLevel, value: number): void;
 }
 
 const RAW_HISTORY_VARIABLES: Record<HistoricalRawVariableId, RawHistoryVariable> = {
   temperature: {
-    ncssName: "Temperature_isobaric",
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.temperatureC = value - 273.15; },
   },
   relative_humidity: {
-    ncssName: "Relative_humidity_isobaric",
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.relativeHumidityPct = value; },
   },
   u_wind: {
-    ncssName: "u-component_of_wind_isobaric",
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.uWindMs = value; },
   },
   v_wind: {
-    ncssName: "v-component_of_wind_isobaric",
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.vWindMs = value; },
   },
   geopotential_height: {
-    ncssName: "Geopotential_height_isobaric",
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.geopotentialHeightGpm = value; },
   },
   specific_humidity: {
-    ncssName: "Specific_humidity_isobaric",
     pressureAxisGroup: "full_profile",
     apply: (level, value) => { level.specificHumidityKgKg = value; },
   },
   vertical_velocity: {
-    ncssName: "Vertical_velocity_pressure_isobaric",
     pressureAxisGroup: "vertical_velocity",
     apply: (level, value) => { level.verticalVelocityPaS = value; },
   },
   absolute_vorticity: {
-    ncssName: "Absolute_vorticity_isobaric",
     pressureAxisGroup: "absolute_vorticity",
     apply: (level, value) => { level.absoluteVorticityS1 = value; },
   },
   cloud_water_mixing_ratio: {
-    ncssName: "Cloud_mixing_ratio_isobaric",
     pressureAxisGroup: "cloud_mixing_ratio",
     apply: (level, value) => { level.cloudWaterMixingRatioKgKg = value; },
   },
   ozone_mixing_ratio: {
-    ncssName: "Ozone_Mixing_Ratio_isobaric",
     pressureAxisGroup: "ozone_mixing_ratio",
     apply: (level, value) => { level.ozoneMixingRatioKgKg = value; },
   },
@@ -188,7 +178,7 @@ export class HistoricalProfileService {
 
     const rawVariables = expandHistoricalVariables(query.variables, this.nativeSpecificHumidity);
     const groups = groupHistoricalVariablesByPressureAxis(rawVariables);
-    const responses: HistoricalAnalysisResponse[] = [];
+    const responses: HistoricalAnalysisPointResponse[] = [];
     const mergedLevels = new Map<number, ProfileLevel>();
     for (const pressureHpa of query.pressureLevelsHpa) {
       mergedLevels.set(levelKey(pressureHpa), { pressureHpa });
@@ -200,11 +190,11 @@ export class HistoricalProfileService {
         analysisTime,
         latitude: query.latitude,
         longitude: query.longitude,
-        variables: group.map((id) => RAW_HISTORY_VARIABLES[id].ncssName),
+        variables: group,
       });
       responses.push(response);
-      const parsed = parseHistoricalProfileCsv(
-        response.csv,
+      const parsed = parseHistoricalProfileRows(
+        response.rows,
         group,
         query.pressureLevelsHpa,
         { latitude: query.latitude, longitude: query.longitude },
@@ -295,80 +285,29 @@ interface ParsedHistoricalProfile {
   levels: ProfileLevel[];
 }
 
-export function parseHistoricalProfileCsv(
-  csv: string,
+export function parseHistoricalProfileRows(
+  rows: readonly HistoricalAnalysisPointRow[],
   rawVariables: readonly HistoricalRawVariableId[],
   pressureLevelsHpa: readonly number[],
   requestedPoint: { latitude: number; longitude: number },
 ): ParsedHistoricalProfile {
-  const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
-  if (lines.length < 2) throw new Error("Historical GFS analysis response contains no data rows");
-
-  const rawHeaders = parseCsvLine(lines[0]!);
-  const headers = rawHeaders.map(normalizeHeader);
-  const pressureIndex = findHeaderIndex(headers, [
-    "vertCoord",
-    "alt",
-    "isobaric",
-    "isobaric1",
-    "isobaric2",
-    "isobaric3",
-    "isobaric4",
-    "isobaric5",
-    "isobaric6",
-    "isobaric7",
-  ]);
-  if (pressureIndex < 0) throw new Error("Historical GFS analysis response is missing a pressure coordinate");
-  const pressureInPa = /\[unit\s*=\s*"?Pa"?\]/i.test(rawHeaders[pressureIndex] ?? "");
-
-  const latitudeIndex = findHeaderIndex(headers, ["latitude", "lat"]);
-  const longitudeIndex = findHeaderIndex(headers, ["longitude", "lon"]);
-  const variableIndexes = new Map<HistoricalRawVariableId, number>();
-  for (const id of rawVariables) {
-    const name = RAW_HISTORY_VARIABLES[id].ncssName;
-    const aliases = name.startsWith("u-component") || name.startsWith("v-component")
-      ? [name, name.replace("-component", "component")]
-      : [name];
-    const index = findHeaderIndex(headers, aliases);
-    if (index < 0) throw new Error(`Historical GFS analysis response is missing variable ${name}`);
-    variableIndexes.set(id, index);
-  }
-
   const requested = new Set(pressureLevelsHpa.map(levelKey));
   const levelMap = new Map<number, ProfileLevel>();
   for (const pressureHpa of pressureLevelsHpa) levelMap.set(levelKey(pressureHpa), { pressureHpa });
 
   let gridPoint = requestedPoint;
-  for (const line of lines.slice(1)) {
-    const cells = parseCsvLine(line);
-    const rawPressure = numericCell(cells[pressureIndex]);
-    if (rawPressure === undefined) continue;
-    // Prefer an explicit Pa unit from the CSV header. The old >2000 heuristic
-    // misreads upper-air levels such as 7 hPa (700 Pa) as 700 hPa when AWS
-    // returns the full isobaric stack.
-    const pressureHpa = pressureInPa || rawPressure > 2_000
-      ? rawPressure / 100
-      : rawPressure;
-    const key = levelKey(pressureHpa);
+  for (const row of rows) {
+    if (row.pressureHpa === undefined) continue;
+    const key = levelKey(row.pressureHpa);
     if (!requested.has(key)) continue;
     const level = levelMap.get(key);
     if (!level) continue;
 
     for (const id of rawVariables) {
-      const index = variableIndexes.get(id);
-      if (index === undefined) continue;
-      const value = numericCell(cells[index]);
+      const value = row.values[id];
       if (value !== undefined) RAW_HISTORY_VARIABLES[id].apply(level, value);
     }
-
-    const latitude = latitudeIndex < 0 ? undefined : numericCell(cells[latitudeIndex]);
-    const longitude = longitudeIndex < 0 ? undefined : numericCell(cells[longitudeIndex]);
-    if (latitude !== undefined && longitude !== undefined) {
-      gridPoint = {
-        latitude,
-        longitude: longitude > 180 ? longitude - 360 : longitude,
-      };
-    }
+    gridPoint = { latitude: row.latitude, longitude: row.longitude };
   }
 
   return {
@@ -485,46 +424,6 @@ function hasHistoricalValue(level: ProfileLevel, id: HistoricalGfsVariableId): b
   }
 }
 
-function normalizeHeader(header: string): string {
-  return header.replace(/^\uFEFF/, "").replace(/\[.*$/, "").trim();
-}
-
-function findHeaderIndex(headers: readonly string[], aliases: readonly string[]): number {
-  return headers.findIndex((header) => aliases.includes(header));
-}
-
-function numericCell(value: string | undefined): number | undefined {
-  if (value === undefined || value.trim() === "" || value.trim().toLowerCase() === "nan") return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
 function levelKey(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-function parseCsvLine(line: string): string[] {
-  const cells: string[] = [];
-  let value = "";
-  let quoted = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    if (char === '"') {
-      if (quoted && line[index + 1] === '"') {
-        value += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-      continue;
-    }
-    if (char === "," && !quoted) {
-      cells.push(value);
-      value = "";
-      continue;
-    }
-    value += char;
-  }
-  cells.push(value);
-  return cells;
 }
