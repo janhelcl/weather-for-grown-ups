@@ -8,6 +8,7 @@ import {
   UnifiedForecastVerificationService,
   UnifiedRunComparisonService,
 } from "./core/unified-atmosphere-api.js";
+import { toPublicFailure } from "./failure.js";
 import {
   PUBLIC_ATMOSPHERIC_DATASET_IDS,
   diagnoseAtmosphereSchema,
@@ -139,11 +140,12 @@ function toolResult(output: object) {
   };
 }
 
-function toolError(error: unknown) {
+export function toolError(error: unknown) {
+  const failure = toPublicFailure(error);
   return {
     content: [{
       type: "text" as const,
-      text: error instanceof Error ? error.message : String(error),
+      text: JSON.stringify({ error: failure }),
     }],
     isError: true as const,
   };

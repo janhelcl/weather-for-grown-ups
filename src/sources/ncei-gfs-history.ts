@@ -1,6 +1,11 @@
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
 import { runWithHttpRetry } from "../access/http-retry.js";
+import {
+  DataUnavailableError,
+  RateLimitedError,
+  UpstreamUnavailableError,
+} from "../failure.js";
 
 export const NCEI_GFS_HISTORY_BASE_URL = "https://www.ncei.noaa.gov/thredds/ncss/grid";
 export const NCEI_GFS_GRID4_ANALYSIS_START = new Date("2007-01-01T00:00:00Z");
@@ -92,23 +97,36 @@ export class NceiGfsHistorySource implements HistoricalAnalysisDataSource, Histo
     );
 
     if (result.status === 404) {
-      throw new Error(
-        `NCEI historical GFS analysis is not available for ${analysisTime.toISOString()} (${dataset})`,
+      throw new DataUnavailableError(
+        `NCEI has no GFS analysis for ${analysisTime.toISOString()}`,
+        { details: { provider: "NOAA NCEI", dataset, analysisTime: analysisTime.toISOString() } },
+      );
+    }
+    if (result.status === 429) {
+      throw new RateLimitedError(
+        "NOAA NCEI rate limit remained exhausted after retries",
+        { details: { provider: "NOAA NCEI", status: result.status } },
       );
     }
     if (result.status >= 500 && result.status <= 599) {
-      throw new Error(
-        `NCEI historical GFS source unavailable: HTTP ${result.status} ${result.statusText} after retries; this is an upstream availability failure, not an unsupported dataset`,
+      throw new UpstreamUnavailableError(
+        `NOAA NCEI is unavailable after retries (HTTP ${result.status} ${result.statusText})`,
+        { details: { provider: "NOAA NCEI", status: result.status } },
       );
     }
     if (result.status < 200 || result.status >= 300 || result.csv === undefined) {
-      throw new Error(
-        `NCEI historical GFS request failed: HTTP ${result.status} ${result.statusText}`,
+      throw new UpstreamUnavailableError(
+        `NOAA NCEI rejected the historical GFS request (HTTP ${result.status} ${result.statusText})`,
+        {
+          retryable: false,
+          details: { provider: "NOAA NCEI", status: result.status },
+        },
       );
     }
     if (!result.csv.includes("\n")) {
-      throw new Error(
-        `NCEI historical GFS returned an unexpected response: ${result.csv.slice(0, 240)}`,
+      throw new UpstreamUnavailableError(
+        "NOAA NCEI returned an invalid historical GFS response",
+        { retryable: false, details: { provider: "NOAA NCEI" } },
       );
     }
 
@@ -170,4 +188,3 @@ function yyyymmdd(date: Date): string {
   const day = date.getUTCDate().toString().padStart(2, "0");
   return `${year}${month}${day}`;
 }
-
