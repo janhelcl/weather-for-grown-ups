@@ -136,6 +136,22 @@ export interface HistoricalProfileServiceOptions {
   nativeSpecificHumidity?: boolean;
 }
 
+export interface HistoricalProfileLoadOptions {
+  source: HistoricalAnalysisDataSource;
+  analysisTime: Date;
+  latitude: number;
+  longitude: number;
+  variables: readonly HistoricalGfsVariableId[];
+  pressureLevelsHpa: readonly number[];
+  nativeSpecificHumidity: boolean;
+}
+
+export interface HistoricalProfileLoadResult {
+  gridPoint: { latitude: number; longitude: number };
+  levels: ProfileLevel[];
+  responses: HistoricalAnalysisPointResponse[];
+}
+
 export class HistoricalProfileService {
   private readonly source: HistoricalAnalysisDataSource;
   private readonly now: () => Date;
@@ -176,61 +192,85 @@ export class HistoricalProfileService {
       throw new Error("Historical GFS analysisTime must not be in the future");
     }
 
-    const rawVariables = expandHistoricalVariables(query.variables, this.nativeSpecificHumidity);
-    const groups = groupHistoricalVariablesByPressureAxis(rawVariables);
-    const responses: HistoricalAnalysisPointResponse[] = [];
-    const mergedLevels = new Map<number, ProfileLevel>();
-    for (const pressureHpa of query.pressureLevelsHpa) {
-      mergedLevels.set(levelKey(pressureHpa), { pressureHpa });
-    }
-    let gridPoint = { latitude: query.latitude, longitude: query.longitude };
-
-    for (const group of groups) {
-      const response = await this.source.fetch({
-        analysisTime,
-        latitude: query.latitude,
-        longitude: query.longitude,
-        variables: group,
-      });
-      responses.push(response);
-      const parsed = parseHistoricalProfileRows(
-        response.rows,
-        group,
-        query.pressureLevelsHpa,
-        { latitude: query.latitude, longitude: query.longitude },
-      );
-      gridPoint = parsed.gridPoint;
-      mergeHistoricalLevels(mergedLevels, parsed.levels);
-    }
-
-    const levels = [...mergedLevels.values()].sort((a, b) => b.pressureHpa - a.pressureHpa);
-    for (const level of levels) {
-      applyHistoricalDerivedValues(level, query.variables);
-    }
-    assertRequestedVariablesComplete(levels, query.variables);
-
-    const firstResponse = responses[0];
+    const loaded = await loadHistoricalProfileData({
+      source: this.source,
+      analysisTime,
+      latitude: query.latitude,
+      longitude: query.longitude,
+      variables: query.variables,
+      pressureLevelsHpa: query.pressureLevelsHpa,
+      nativeSpecificHumidity: this.nativeSpecificHumidity,
+    });
+    const firstResponse = loaded.responses[0];
     if (!firstResponse) throw new Error("Historical GFS query resolved no source variables");
+    const publicSource = publicHistoricalSource(firstResponse);
 
     return {
       model: "gfs_grid4_analysis_0p5",
       analysisTime: analysisTime.toISOString(),
       requestedPoint: { latitude: query.latitude, longitude: query.longitude },
-      gridPoint,
+      gridPoint: loaded.gridPoint,
       selection: {
         variables: query.variables,
         pressureLevelsHpa: query.pressureLevelsHpa,
       },
-      levels,
+      levels: loaded.levels,
       source: {
-        provider: firstResponse.provider,
-        access: firstResponse.access,
+        ...publicSource,
         dataset: firstResponse.dataset,
-        cacheHit: responses.every((response) => response.cacheHit),
+        cacheHit: loaded.responses.every((response) => response.cacheHit),
       },
       caveat: CAVEAT,
     };
   }
+}
+
+export async function loadHistoricalProfileData(
+  options: HistoricalProfileLoadOptions,
+): Promise<HistoricalProfileLoadResult> {
+  const rawVariables = expandHistoricalVariables(options.variables, options.nativeSpecificHumidity);
+  const groups = groupHistoricalVariablesByPressureAxis(rawVariables);
+  const responses: HistoricalAnalysisPointResponse[] = [];
+  const mergedLevels = new Map<number, ProfileLevel>();
+  for (const pressureHpa of options.pressureLevelsHpa) {
+    mergedLevels.set(levelKey(pressureHpa), { pressureHpa });
+  }
+  let gridPoint = { latitude: options.latitude, longitude: options.longitude };
+
+  for (const group of groups) {
+    const response = await options.source.fetch({
+      analysisTime: options.analysisTime,
+      latitude: options.latitude,
+      longitude: options.longitude,
+      variables: group,
+    });
+    responses.push(response);
+    const parsed = parseHistoricalProfileRows(
+      response.rows,
+      group,
+      options.pressureLevelsHpa,
+      { latitude: options.latitude, longitude: options.longitude },
+    );
+    gridPoint = parsed.gridPoint;
+    mergeHistoricalLevels(mergedLevels, parsed.levels);
+  }
+
+  const levels = [...mergedLevels.values()].sort((a, b) => b.pressureHpa - a.pressureHpa);
+  for (const level of levels) {
+    applyHistoricalDerivedValues(level, options.variables);
+  }
+  assertRequestedVariablesComplete(levels, options.variables);
+
+  return { gridPoint, levels, responses };
+}
+
+function publicHistoricalSource(
+  response: HistoricalAnalysisPointResponse,
+): Pick<HistoricalProfileResult["source"], "provider" | "access"> {
+  if (response.provider === "NCAR GDEX" || response.access === "gdex_thredds_ncss") {
+    throw new Error("gfs-analysis source returned archive-only GDEX provenance");
+  }
+  return { provider: response.provider, access: response.access };
 }
 
 function expandHistoricalVariables(
