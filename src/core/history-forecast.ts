@@ -33,7 +33,7 @@ import {
   RDA_GFS_0P25_FORECAST_START,
   RdaGfsForecastHistorySource,
 } from "../sources/rda-gfs-forecast-history.js";
-import { HistoricalProfileService } from "./history.js";
+import { loadHistoricalProfileData } from "./history.js";
 import type { GridPoint } from "../types/decoded.js";
 
 export interface ArchivedGfsForecastProfileQuery {
@@ -126,37 +126,34 @@ export class ArchivedGfsForecastProfileService {
       validTime,
       ...provenance,
     });
-    const normalizer = new HistoricalProfileService({
+    const loaded = await loadHistoricalProfileData({
       source: adapter,
-      now: this.now,
-      allowNonAnalysisCycle: true,
-      minimumTime,
-      nativeSpecificHumidity: grid === "0p25",
-    });
-    const profile = await normalizer.getHistoricalProfile({
+      analysisTime: validTime,
       latitude: query.latitude,
       longitude: query.longitude,
-      analysisTime: validTime.toISOString(),
-      variables: [...query.variables],
-      pressureLevelsHpa: [...query.pressureLevelsHpa],
+      variables: query.variables,
+      pressureLevelsHpa: query.pressureLevelsHpa,
+      nativeSpecificHumidity: grid === "0p25",
     });
+    const firstResponse = loaded.responses[0];
+    if (!firstResponse) throw new Error("Archived GFS profile resolved no source variables");
 
     return {
       model: archivedGfsModelId(grid),
       runTime: query.runTime.toISOString(),
       forecastHour,
       validTime: validTime.toISOString(),
-      requestedPoint: profile.requestedPoint,
-      gridPoint: profile.gridPoint,
+      requestedPoint: { latitude: query.latitude, longitude: query.longitude },
+      gridPoint: loaded.gridPoint,
       selection: {
         variables: [...query.variables],
         pressureLevelsHpa: [...query.pressureLevelsHpa],
       },
-      levels: profile.levels,
+      levels: loaded.levels,
       source: {
         ...provenance,
-        dataset: profile.source.dataset,
-        cacheHit: profile.source.cacheHit,
+        dataset: firstResponse.dataset,
+        cacheHit: loaded.responses.every((response) => response.cacheHit),
       },
     };
   }
