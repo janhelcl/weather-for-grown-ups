@@ -66,7 +66,7 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 
 `npm run test:live:icon-d2` checks the deterministic DWD regional transport, bzip2 decode path, pressure/surface normalization and the distinction between the model's native ~2.1 km icosahedral mesh and the 0.02° regular-lat/lon Open Data access product.
 
-`npm run test:live:icon-d2-eps` makes one bounded two-member query through public `dataset: "icon-d2-eps"`. It deliberately exercises the Docker image's native CDO + `wgrib2` path because DWD publishes this ensemble on its provider-native triangular grid. WFG downloads DWD's official `target_grid_icon_d2_002.txt` and `weights_icon_d2_002.nc`, remaps each selected all-member object once to 0.02° regular lat/lon, then selects requested members from the `ENS=...` inventory. The smoke checks that transport/remap/member-extraction chain, one pressure distribution, the 20-member population contract and member-first aggregation. The `p01,p02` selection is deliberately a source-compatibility smoke rather than a representative probabilistic sample.
+`npm run test:live:icon-d2-eps` makes one bounded two-member query through public `dataset: "icon-d2-eps"`. DWD publishes this ensemble on its provider-native triangular grid, so the smoke exercises the in-process remap: WFG downloads DWD's official `target_grid_icon_d2_002.txt` and `weights_icon_d2_002.nc`, remaps each selected all-member object once to 0.02° regular lat/lon through the provider's nearest-neighbour index, then splits the requested members by their GRIB2 perturbation number. No native executable is involved. The smoke checks that transport/remap/member-extraction chain, one pressure distribution, the 20-member population contract and member-first aggregation. The `p01,p02` selection is deliberately a source-compatibility smoke rather than a representative probabilistic sample.
 
 ### Météo-France AROME
 
@@ -80,7 +80,7 @@ This smoke requires `WFG_METEO_FRANCE_TOKEN` plus either `WFG_PEAROME_WCS_URL_TE
 
 ### Historical GFS analysis and forecast skill
 
-`npm run test:live:history` exercises fixed NOAA NCEI Grid 4 data through THREDDS NCSS. It verifies a 2017 historical analysis profile and time series, then an archived 2019 forecast against the later 0.5° analysis and the bounded `gfs-analysis` skill-summary path. The skill smoke reuses the same fixed verification case, so it proves the range aggregation contract without turning the live test into a large archive scan.
+`npm run test:live:history` exercises fixed Grid 4 analysis through the era-routed `gfs-analysis` path: a 2017 profile/time series via NCEI THREDDS fileServer (full GRIB decode), a 2024 profile via NOAA AWS Open Data 0.50° `.idx` byte ranges, then an archived 2019 forecast verified against the later 0.5° analysis and the bounded `gfs-analysis` skill-summary path. The skill smoke reuses the same fixed verification case, so it proves the range aggregation contract without turning the live test into a large archive scan. NCSS remains a tertiary analysis fallback; archived Grid 4 **forecast** verification still uses NCSS and is bounded by a timeout while that endpoint hangs behind the broken S3 IAM path.
 
 ### IGRA radiosonde verification
 

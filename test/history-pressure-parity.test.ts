@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { NCEI_NCSS_PROVENANCE } from "../src/sources/ncei-gfs-history.js";
 import { HistoricalProfileService } from "../src/core/history.js";
 import {
   deriveAirDensityKgM3,
@@ -33,9 +34,9 @@ function sourceForParity(): HistoricalAnalysisDataSource {
   return {
     fetch: vi.fn(async (request) => {
       const variable = request.variables[0];
-      if (variable === "Cloud_mixing_ratio_isobaric") return { csv: cloudCsv, dataset, cacheHit: true };
-      if (variable === "Ozone_Mixing_Ratio_isobaric") return { csv: ozoneCsv, dataset, cacheHit: true };
-      return { csv: thermoCsv, dataset, cacheHit: true };
+      if (variable === "Cloud_mixing_ratio_isobaric") return { csv: cloudCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
+      if (variable === "Ozone_Mixing_Ratio_isobaric") return { csv: ozoneCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
+      return { csv: thermoCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
     }),
   };
 }

@@ -1,3 +1,4 @@
+import { DataUnavailableError } from "../failure.js";
 import type { GefsMember } from "../catalog/gefs.js";
 import { ifsEnsMemberNumber, type IfsEnsMember } from "../catalog/ifs-ens.js";
 import type { GefsIfsEnsComparisonVariable } from "../schema/gefs-ifs-ens-comparison.js";
@@ -85,7 +86,7 @@ export class GefsIfsEnsAlignedRunResolver implements GefsIfsEnsAlignedRunProvide
       if (gefsAvailable && ifsAvailable) return run;
     }
 
-    throw new Error(
+    throw new DataUnavailableError(
       `No aligned GEFS/IFS ENS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested valid time, pressure selection, and member subsets`,
     );
   }

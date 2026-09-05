@@ -74,10 +74,10 @@ export function isAtmosphericDatasetComparisonPair(
 
 export const ATMOSPHERIC_RUN_COMPARISON_DATASET_IDS = ["gfs", "gefs", "ifs", "ifs-ens"] as const;
 
-export const compareAtmosphericRunsSchema = z.object({
+export const compareAtmosphericRunsSchema = z.strictObject({
   dataset: z.enum(ATMOSPHERIC_RUN_COMPARISON_DATASET_IDS),
-  geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
-  time: z.object({ at: isoDateTimeSchema }),
+  geometry: z.strictObject({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
+  time: z.strictObject({ at: isoDateTimeSchema }),
   selection: atmosphericSelectionSchema,
   anchorRun: atmosphericRunSelectorSchema,
   gfsGrid: gfsGridSchema.optional(),
@@ -135,10 +135,10 @@ export const compareAtmosphericRunsSchema = z.object({
   }
 });
 
-const compareGfsGefsDatasetsSchema = z.object({
-  datasets: z.tuple([z.literal("gfs"), z.literal("gefs")]).default(["gfs", "gefs"]),
-  geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
-  time: z.object({ at: isoDateTimeSchema }),
+const compareGfsGefsDatasetsSchema = z.strictObject({
+  datasets: z.tuple([z.literal("gfs"), z.literal("gefs")]),
+  geometry: z.strictObject({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
+  time: z.strictObject({ at: isoDateTimeSchema }),
   variable: z.string().min(1),
   pressureLevelHpa: z.number().positive(),
   run: atmosphericRunSelectorSchema,
@@ -155,10 +155,10 @@ const compareGfsGefsDatasetsSchema = z.object({
   validateRunSelectorForDatasets(request.run, request.datasets, ["run"], context);
 });
 
-const compareGfsIfsDatasetsSchema = z.object({
+const compareGfsIfsDatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("gfs"), z.literal("ifs")]),
-  geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
-  time: z.object({ at: isoDateTimeSchema }),
+  geometry: z.strictObject({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
+  time: z.strictObject({ at: isoDateTimeSchema }),
   variable: ifsPressureVariableSchema,
   pressureLevelHpa: ifsPressureLevelSchema,
   run: atmosphericRunSelectorSchema,
@@ -175,10 +175,10 @@ const compareGfsIfsDatasetsSchema = z.object({
   validateRunSelectorForDatasets(request.run, request.datasets, ["run"], context);
 });
 
-export const compareGefsIfsEnsDatasetsSchema = z.object({
+export const compareGefsIfsEnsDatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("gefs"), z.literal("ifs-ens")]),
-  geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
-  time: z.object({ at: isoDateTimeSchema }),
+  geometry: z.strictObject({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
+  time: z.strictObject({ at: isoDateTimeSchema }),
   variable: gefsIfsEnsComparisonVariableSchema,
   pressureLevelHpa: ifsPressureLevelSchema,
   run: atmosphericRunSelectorSchema,
@@ -211,10 +211,10 @@ export const compareGefsIfsEnsDatasetsSchema = z.object({
   }
 });
 
-export const compareIfsIfsEnsDatasetsSchema = z.object({
+export const compareIfsIfsEnsDatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("ifs"), z.literal("ifs-ens")]),
-  geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
-  time: z.object({ at: isoDateTimeSchema }),
+  geometry: z.strictObject({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
+  time: z.strictObject({ at: isoDateTimeSchema }),
   variable: ifsIfsEnsComparisonVariableSchema,
   pressureLevelHpa: ifsPressureLevelSchema,
   run: atmosphericRunSelectorSchema,
@@ -245,7 +245,39 @@ export const compareIfsIfsEnsDatasetsSchema = z.object({
   }
 });
 
-export const compareAtmosphericDatasetsSchema = z.union([
+/**
+ * Pair-specific contracts, keyed by the registered `left↔right` ordering.
+ * Every registered pair in ATMOSPHERIC_DATASET_COMPARISON_PAIRS must have one entry.
+ */
+const DATASET_COMPARISON_PAIR_SCHEMAS: ReadonlyMap<string, z.ZodType> = new Map<string, z.ZodType>([
+  [pairKey("gfs", "gefs"), compareGfsGefsDatasetsSchema],
+  [pairKey("gfs", "ifs"), compareGfsIfsDatasetsSchema],
+  [pairKey("gefs", "ifs-ens"), compareGefsIfsEnsDatasetsSchema],
+  [pairKey("ifs", "ifs-ens"), compareIfsIfsEnsDatasetsSchema],
+  [pairKey("gfs", "aigfs"), compareGfsAigfsDatasetsSchema],
+  [pairKey("ifs", "aifs"), compareIfsAifsDatasetsSchema],
+  [pairKey("aigfs", "aifs"), compareAigfsAifsDatasetsSchema],
+  [pairKey("gefs", "aigefs"), compareGefsAigefsDatasetsSchema],
+  [pairKey("ifs-ens", "aifs-ens"), compareIfsEnsAifsEnsDatasetsSchema],
+  [pairKey("hgefs", "gefs"), compareHgefsGefsDatasetsSchema],
+  [pairKey("hgefs", "aigefs"), compareHgefsAigefsDatasetsSchema],
+  [pairKey("ifs", "icon-d2"), compareIfsIconD2DatasetsSchema],
+  [pairKey("ifs", "arome"), compareIfsAromeDatasetsSchema],
+  [pairKey("gfs", "icon-d2"), compareGfsIconD2DatasetsSchema],
+  [pairKey("ifs-ens", "icon-d2-eps"), compareIfsEnsIconD2EpsDatasetsSchema],
+  [pairKey("ifs-ens", "pe-arome"), compareIfsEnsPeAromeDatasetsSchema],
+]);
+
+function pairKey(left: string, right: string): string {
+  return `${left}↔${right}`;
+}
+
+/**
+ * Discovery-facing description of every pair contract. Suitable for JSON Schema
+ * generation (MCP tool listing); validation goes through
+ * compareAtmosphericDatasetsSchema so failures name the pair contract that rejected them.
+ */
+export const compareAtmosphericDatasetsInputSchema = z.union([
   compareGfsGefsDatasetsSchema,
   compareGfsIfsDatasetsSchema,
   compareGefsIfsEnsDatasetsSchema,
@@ -264,11 +296,84 @@ export const compareAtmosphericDatasetsSchema = z.union([
   compareIfsEnsPeAromeDatasetsSchema,
 ]);
 
-const verifyAtmosphericForecastCaseSchema = z.object({
+/**
+ * Dispatches on `datasets` to exactly one registered pair contract instead of
+ * trying sixteen alternatives blindly. A plain union reports "Invalid input" for
+ * any mistake; this reports the offending field under the contract the caller
+ * actually selected, and names the registered pairs when the pair itself is wrong.
+ */
+export const compareAtmosphericDatasetsSchema = z.any().transform((input, context) => {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    context.addIssue({
+      code: "custom",
+      message: "compare_datasets expects an object request with datasets, geometry, time and a pair-specific selection",
+    });
+    return z.NEVER;
+  }
+
+  const rawDatasets = (input as { datasets?: unknown }).datasets;
+  const registeredPairs = ATMOSPHERIC_DATASET_COMPARISON_PAIRS
+    .map(([left, right]) => pairKey(left, right))
+    .join(", ");
+  let datasets: readonly [string, string];
+  if (rawDatasets === undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["datasets"],
+      message: `datasets is required: name the registered [left, right] pair explicitly. Registered pairs: ${registeredPairs}`,
+    });
+    return z.NEVER;
+  } else if (
+    Array.isArray(rawDatasets)
+    && rawDatasets.length === 2
+    && rawDatasets.every((entry) => typeof entry === "string")
+  ) {
+    datasets = [rawDatasets[0] as string, rawDatasets[1] as string];
+  } else {
+    context.addIssue({
+      code: "custom",
+      path: ["datasets"],
+      message: `datasets must be a [left, right] pair of dataset IDs from the registered comparison pairs: ${registeredPairs}`,
+    });
+    return z.NEVER;
+  }
+
+  const schema = DATASET_COMPARISON_PAIR_SCHEMAS.get(pairKey(datasets[0], datasets[1]));
+  if (schema === undefined) {
+    const reversed = DATASET_COMPARISON_PAIR_SCHEMAS.has(pairKey(datasets[1], datasets[0]));
+    context.addIssue({
+      code: "custom",
+      path: ["datasets"],
+      message: reversed
+        ? `${pairKey(datasets[0], datasets[1])} is registered as ${pairKey(datasets[1], datasets[0])}; datasets is ordered [left, right] exactly as registered`
+        : `Unsupported comparison pair: ${pairKey(datasets[0], datasets[1])}. Registered pairs: ${registeredPairs}`,
+    });
+    return z.NEVER;
+  }
+
+  const parsed = schema.safeParse(input);
+  if (!parsed.success) {
+    const pair = pairKey(datasets[0], datasets[1]);
+    for (const issue of parsed.error.issues) {
+      context.addIssue({
+        code: "custom",
+        path: [...issue.path] as (string | number)[],
+        message: `${issue.message} (${pair} comparison)`,
+      });
+    }
+    return z.NEVER;
+  }
+  return parsed.data as z.infer<typeof compareAtmosphericDatasetsInputSchema>;
+}) as unknown as z.ZodType<
+  z.infer<typeof compareAtmosphericDatasetsInputSchema>,
+  z.input<typeof compareAtmosphericDatasetsInputSchema>
+>;
+
+const verifyAtmosphericForecastCaseSchema = z.strictObject({
   forecastDataset: z.literal("gfs").default("gfs"),
   referenceDataset: z.enum(["gfs-analysis", "igra"]).default("gfs-analysis"),
-  geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
-  time: z.object({ at: isoDateTimeSchema }),
+  geometry: z.strictObject({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
+  time: z.strictObject({ at: isoDateTimeSchema }),
   leadHours: historicalVerificationLeadHoursSchema,
   variables: z.array(z.string().min(1)).min(1),
   pressureLevelsHpa: z.array(z.number().positive()).min(1),
@@ -300,11 +405,11 @@ const verifyAtmosphericForecastCaseSchema = z.object({
   }
 });
 
-const verifyAtmosphericForecastSkillSchema = z.object({
+const verifyAtmosphericForecastSkillSchema = z.strictObject({
   forecastDataset: z.literal("gfs").default("gfs"),
   referenceDataset: z.enum(["gfs-analysis", "igra"]).default("gfs-analysis"),
-  geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
-  time: z.object({
+  geometry: z.strictObject({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
+  time: z.strictObject({
     from: isoDateTimeSchema,
     to: isoDateTimeSchema,
     hoursUtc: z.array(historicalCycleHourUtcSchema).min(1).max(4).default([0, 12]),
@@ -398,15 +503,69 @@ function validateRunSelectorForDatasets(
   });
 }
 
-export const verifyAtmosphericForecastSchema = z.union([
+/** Discovery-facing description of both verification forms (atomic case, skill summary). */
+export const verifyAtmosphericForecastInputSchema = z.union([
   verifyAtmosphericForecastCaseSchema,
   verifyAtmosphericForecastSkillSchema,
 ]);
 
-export const findAtmosphericAnalogsSchema = z.object({
+/**
+ * Dispatches on the time form: `time.at` selects the atomic case contract,
+ * `time.from`/`time.to` the skill-summary contract. Errors then name the field
+ * inside the chosen form instead of a union-wide "Invalid input".
+ */
+export const verifyAtmosphericForecastSchema = z.any().transform((input, context) => {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    context.addIssue({
+      code: "custom",
+      message: "verify_forecast expects an object request with geometry, time, leadHours, variables and pressureLevelsHpa",
+    });
+    return z.NEVER;
+  }
+  const time = (input as { time?: unknown }).time;
+  if (typeof time !== "object" || time === null) {
+    context.addIssue({
+      code: "custom",
+      path: ["time"],
+      message: "time must be { at } for one verification case or { from, to } for a skill summary",
+    });
+    return z.NEVER;
+  }
+  const hasAt = (time as { at?: unknown }).at !== undefined;
+  const hasRange = (time as { from?: unknown }).from !== undefined
+    || (time as { to?: unknown }).to !== undefined;
+  if (hasAt === hasRange) {
+    context.addIssue({
+      code: "custom",
+      path: ["time"],
+      message: "Choose exactly one time form: time.at for one verification case, or time.from plus time.to for a skill summary",
+    });
+    return z.NEVER;
+  }
+
+  const form = hasAt ? "atomic" : "skill-summary";
+  const parsed = (hasAt ? verifyAtmosphericForecastCaseSchema : verifyAtmosphericForecastSkillSchema)
+    .safeParse(input);
+  if (!parsed.success) {
+    for (const issue of parsed.error.issues) {
+      context.addIssue({
+        code: "custom",
+        path: [...issue.path] as (string | number)[],
+        message: `${issue.message} (${form} verification)`,
+      });
+    }
+    return z.NEVER;
+  }
+  return parsed.data as z.infer<typeof verifyAtmosphericForecastInputSchema>;
+}) as unknown as z.ZodType<
+  z.infer<typeof verifyAtmosphericForecastInputSchema>,
+  z.input<typeof verifyAtmosphericForecastInputSchema>
+>;
+
+export const findAtmosphericAnalogsSchema = z.strictObject({
   dataset: z.literal("gfs-analysis").default("gfs-analysis"),
-  geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
-  time: z.object({ at: isoDateTimeSchema }),
+  geometry: z.strictObject({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
+  time: z.strictObject({ at: isoDateTimeSchema }),
   variables: z.array(z.string().min(1)).min(1),
   pressureLevelsHpa: z.array(z.number().positive()).min(1),
   count: z.number().int().min(1).max(20).default(5),

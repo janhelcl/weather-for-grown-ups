@@ -30,7 +30,7 @@ export const historicalCycleHourUtcSchema = z.union([
   z.literal(6),
   z.literal(12),
   z.literal(18),
-]);
+], { error: "GFS analysis cycles are 0, 6, 12 or 18 UTC" });
 
 export const historicalAnalysisTimeSchema = z.string().refine((value) => {
   if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) || !Number.isFinite(Date.parse(value))) return false;

@@ -1,3 +1,4 @@
+import { upstreamHttpFailure } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, rename, rm, writeFile } from "node:fs/promises";
@@ -111,9 +112,13 @@ export class AromeOpenDataCache implements AromeSubsetCache {
       );
       if (response.status === 404) return false;
       if (!response.ok) {
-        throw new Error(
-          `Météo-France AROME availability request failed: HTTP ${response.status} ${response.statusText} for ${url}`,
-        );
+        throw upstreamHttpFailure({
+          provider: "Météo-France Open Data",
+          operation: "AROME availability request",
+          status: response.status,
+          statusText: response.statusText,
+          url,
+        });
       }
     }
     return true;
@@ -155,9 +160,14 @@ export class AromeOpenDataCache implements AromeSubsetCache {
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (!response.ok) {
-      throw new Error(
-        `Météo-France AROME Open Data request failed: HTTP ${response.status} ${response.statusText} for ${url}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "Météo-France Open Data",
+        operation: "AROME product request",
+        status: response.status,
+        statusText: response.statusText,
+        resource: "the requested AROME product file",
+        url,
+      });
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {

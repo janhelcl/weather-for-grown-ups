@@ -10,11 +10,46 @@ Post-0.5.0 QA found that many actionable failures reached the CLI and MCP as an 
 - `catalog --sections` help and docs list the valid sections (`variables|fields|layer_diagnostics|profile_diagnostics|parcel_definitions`); invalid names report `allowedSections` in `details`.
 - Response-size guardrails (`maxSteps`, `maxGridPoints`, `maxMemberGridPoints`, multi-point sample caps) across all datasets are `INVALID_REQUEST`, so an agent sees “exceeding maxSteps=N. Narrow the range or raise maxSteps.”
 - GEFSv12 reforecast run validation (2000–2019, daily 00Z, native cadence) is `INVALID_REQUEST` with `supportedYears` in `details`.
-- Missing local/environment prerequisites are `UNSUPPORTED_OPERATION` with `details` naming the fix: `cdo`/`CDO_PATH` for `icon-d2-eps`; `WFG_METEO_FRANCE_TOKEN`, `WFG_PEAROME_WCS_URL_TEMPLATE`/`WFG_PEAROME_WCS_ENDPOINTS` for `pe-arome`.
+- Missing environment prerequisites are `UNSUPPORTED_OPERATION` with `details` naming the fix: `WFG_METEO_FRANCE_TOKEN`, `WFG_PEAROME_WCS_URL_TEMPLATE`/`WFG_PEAROME_WCS_ENDPOINTS` for `pe-arome`.
 - `find_analogs`/`analogs --no-fetch-target` with an unmaterialized target is `DATA_UNAVAILABLE` and reports the index path.
 - Any remaining plain `Error` is still `INTERNAL_ERROR`, but its message is now preserved (single line, bounded to 600 characters, bearer tokens/API keys/env secrets redacted) instead of being replaced by generic text. Non-`Error` throwables stay generic.
 
 The public failure contract is documented in [UNIFIED_API.md](UNIFIED_API.md#public-failure-contract).
+
+### One failure envelope on every path
+
+A second pass over the CLI and MCP boundaries removed the remaining places where a failure could bypass the envelope or arrive without the information needed to fix the request:
+
+- Commander usage errors (unknown option/command, missing required option) are `INVALID_REQUEST` with a pointer to the relevant `--help`; the CLI no longer prints Commander's `error:` text or exits through Commander. `--help`/`--version` are unaffected.
+- Every numeric CLI flag rejects non-numeric input by flag name (`Expected --lat to be a number, received: abc`) instead of passing `NaN` into the schema.
+- MCP argument validation runs inside each tool handler (`describedSchema` keeps the full JSON Schema for `tools/list`), so invalid arguments return the `isError` envelope instead of a JSON-RPC `Input validation error` protocol error.
+- `compare_datasets` and `verify_forecast` dispatch to the selected pair/time-form contract before validating. Errors name the field under that contract (`at pressureLevelHpa: … (gfs↔gefs comparison)`); reversed or unregistered pairs report the registered list. The union-wide `Invalid input` is gone.
+- Request schemas are strict: unknown keys (`pressureLevelHpa` for `pressureLevelsHpa`, `dataset` for `datasets`) are `INVALID_REQUEST` instead of silently ignored. Geometry is a `type`-discriminated union, so `geometry.latitude` failures are reported at that path.
+- Schema failure messages lead with the field path (`Request validation failed at time.at: …`), count further issues, and flatten residual unions to the closest branch.
+- Upstream HTTP failures are classified in one place (`src/access/http-failure.ts`): 404 → `DATA_UNAVAILABLE`, 429 → `RATE_LIMITED`, 5xx → `UPSTREAM_UNAVAILABLE` (retryable), other non-2xx → `UPSTREAM_UNAVAILABLE` (not retryable), with provider, request, status and redacted URL in the message/`details`. This replaces two dozen provider-specific `throw new Error("... request failed: HTTP ...")` sites that had surfaced as `INTERNAL_ERROR`.
+- Forecast-hour, cadence and horizon violations across GFS/GEFS/IFS/AIFS/AIGFS/ICON-D2/AROME/PE-AROME are `INVALID_REQUEST` with `run`, `validTime`, `forecastHour` and the applicable limit in `details`; "no published cycle" and index 404s are `DATA_UNAVAILABLE`. Shared AI-family helpers no longer label AIGEFS/HGEFS failures as "AIGFS".
+- **Breaking:** `wfg compare-datasets` now requires both `--dataset` and `--against`, and `compare_datasets` requires `datasets: [left, right]`; the implicit `gfs`/`gefs` (and `gefs` for `--against ifs-ens`) defaults are gone. A comparison pair is a scientific choice and is always stated explicitly.
+- `wfg diagnose` gains `--forecast-kind` (parity with `query` and `diagnose_atmosphere`); `wfg mcp` / `wfg mcp-http` appear in `--help` as transport launchers, and `weather-for-grown-ups` and `wfg` share one program.
+
+### ICON-D2-EPS without native dependencies
+
+`icon-d2-eps` no longer requires CDO or native `wgrib2`; the npm install now serves every dataset with the bundled decoder alone.
+
+- DWD's official remap is reproduced in-process. WFG still downloads the provider's `ICON_D2_002_EASY` bundle, but now parses the SCRIP nearest-neighbour weights (classic NetCDF-3) and the CDO target-grid description itself, decodes each native triangular-grid message through the bundled decoder by patching GRIB2 section 3 in memory, gathers values through DWD's index table and writes a regular 0.02° GRIB2 message. Simple packing reuses the source reference value, scale factors and bit width, so values are bit-identical to the provider's own quantisation; sections 1, 2 and 4 are copied verbatim.
+- Because section 4 is preserved, the earlier `DBZ_CMAX`/`UH_MAX` "member-first remap" special cases and the member-file combiner are gone; every field takes one path.
+- Members are split by the GRIB2 perturbation number in section 4 rather than by a `wgrib2` inventory match.
+- `CDO_PATH` is removed. `WGRIB2_PATH`/`WFG_DECODER=wgrib2` remain the optional compatibility/debug decoder switch for all datasets. The Docker image drops CDO.
+- The bundled decoder now parses DWD `DBZ_CMAX` messages whose second fixed surface is marked missing.
+
+### GFS analysis without broken NCEI NCSS
+
+NCEI moved the Grid 4 GFS archive behind THREDDS onto S3 and broke NCSS/OPeNDAP with an IAM 403. `dataset: "gfs-analysis"` now routes by era:
+
+- ≥ 2021-01-01 → NOAA AWS Open Data `noaa-gfs-bdp-pds` 0.50° `f000` with `.idx` byte-range subsetting (`access: "s3_range"`, `provider: "NOAA AWS Open Data"`). Pre-/post-`atmos` S3 layouts around the 2021-03-22 GFS v16 change are handled.
+- 2007–2020 → NCEI THREDDS fileServer full-file download, immutable local cache, local decode (`access: "ncei_thredds_fileserver"`). Point queries are supported; area subsets for that era fall through.
+- NCSS remains the tertiary fallback for both eras so a repaired NCEI IAM policy comes back automatically (`access: "ncei_thredds_ncss"`).
+
+Public CSV parsers and result shapes are unchanged; provenance `provider`/`access` are widened to report the path that actually served the request.
 
 ### stdio MCP smoke coverage
 

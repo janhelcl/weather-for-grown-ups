@@ -1,6 +1,7 @@
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
 import { fetchWithRetry } from "../access/http-fetch.js";
 import type { HttpRetryExecutionOptions } from "../access/http-retry.js";
+import { formatHttpStatus } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
 import type { RawVariableDefinition } from "../catalog/variables.js";
@@ -82,13 +83,13 @@ export class NomadsSource implements NomadsPointGribSource, NomadsAreaGribSource
     }
     if (response.status >= 500 && response.status <= 599) {
       throw new UpstreamUnavailableError(
-        `NOAA NOMADS is unavailable after retries (HTTP ${response.status} ${response.statusText})`,
+        `NOAA NOMADS is unavailable after retries (${formatHttpStatus(response.status, response.statusText)})`,
         { details: { provider: "NOAA NOMADS", status: response.status } },
       );
     }
     if (!response.ok) {
       throw new UpstreamUnavailableError(
-        `NOAA NOMADS rejected the request (HTTP ${response.status} ${response.statusText})`,
+        `NOAA NOMADS rejected the request (${formatHttpStatus(response.status, response.statusText)})`,
         {
           retryable: false,
           details: { provider: "NOAA NOMADS", status: response.status },

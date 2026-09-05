@@ -1,4 +1,7 @@
 import * as z from "zod/v4";
+import {
+  historicalAnalysisSourceSchema,
+} from "./history-result.js";
 import { historicalAnalysisTimeSchema, historicalGfsVariableIdSchema } from "./history.js";
 import { nonIsobaricFieldResultSchema, gridPointSchema, profileLevelResultSchema } from "./result.js";
 import { pointCoordinateSchema, pressureLevelSchema } from "./query.js";
@@ -50,12 +53,7 @@ export const historicalFieldsQuerySchema = z.object({
   }
 });
 
-const sourceSchema = z.object({
-  provider: z.literal("NOAA NCEI"),
-  access: z.literal("ncei_thredds_ncss"),
-  dataset: z.string().min(1),
-  cacheHit: z.boolean(),
-});
+const sourceSchema = historicalAnalysisSourceSchema;
 
 export const historicalFieldsResultSchema = z.object({
   model: z.literal("gfs_grid4_analysis_0p5"),

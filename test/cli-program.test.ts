@@ -11,6 +11,9 @@ const EXPECTED_COMMANDS = [
   "verify",
   "analogs",
   "index",
+  // Transport launchers: same services exposed to MCP clients, not new operations.
+  "mcp",
+  "mcp-http",
 ];
 
 describe("CLI public surface", () => {

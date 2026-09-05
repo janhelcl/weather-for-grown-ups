@@ -57,6 +57,7 @@ A model-to-model difference is not an observation error, verification score, cal
 
 ```bash
 wfg compare-datasets \
+  --dataset gfs \
   --against ifs \
   --lat 50.08 \
   --lon 14.43 \

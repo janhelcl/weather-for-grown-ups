@@ -5,7 +5,8 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
-import { CachedNceiGfsHistorySource } from "../cache/historical-gfs-cache.js";
+import { CachedGfsAnalysisFileStore, CachedNceiGfsHistorySource } from "../cache/historical-gfs-cache.js";
+import { RoutedGfsAnalysisSource } from "../sources/gfs-analysis-routed.js";
 import {
   HISTORICAL_AREA_FIELD_CATALOG,
   HISTORICAL_AREA_PRESSURE_CATALOG,
@@ -23,7 +24,6 @@ import {
 import { isoDateTimeSchema } from "../schema/query.js";
 import {
   NCEI_GFS_GRID4_ANALYSIS_START,
-  NceiGfsHistorySource,
   type HistoricalAnalysisAreaDataSource,
 } from "../sources/ncei-gfs-history.js";
 import { computeAreaDistribution } from "./area-distribution.js";
@@ -53,9 +53,14 @@ export class HistoricalAreaSummaryService {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
     const accessPolicy = options.accessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
+    const awsAccessPolicy = new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.noaaAws);
     this.source = options.source ?? new CachedNceiGfsHistorySource(
       join(cacheDir, "ncei-history"),
-      new NceiGfsHistorySource({ limiter: accessPolicy }),
+      new RoutedGfsAnalysisSource({
+        nceiAccessPolicy: accessPolicy,
+        awsAccessPolicy,
+        fileStore: new CachedGfsAnalysisFileStore(join(cacheDir, "ncei-gfs-analysis-fileserver")),
+      }),
     );
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
@@ -143,8 +148,8 @@ export class HistoricalAreaSummaryService {
       },
       ...(distributionRequested ? { distribution: computed.distribution } : {}),
       source: {
-        provider: "NOAA NCEI",
-        access: "ncei_thredds_ncss",
+        provider: response.provider,
+        access: response.access,
         subset: "native_bbox_grid",
         dataset: response.dataset,
         cacheHit: response.cacheHit,

@@ -117,13 +117,18 @@ export class ArchivedGfsForecastProfileService {
     if (validTime > this.now()) throw new Error("Archived GFS forecast validTime must not be in the future");
 
     const adapter: HistoricalAnalysisDataSource = {
-      fetch: async (request) => source.fetch({
-        runTime: query.runTime,
-        forecastHour,
-        latitude: request.latitude,
-        longitude: request.longitude,
-        variables: request.variables,
-      }),
+      fetch: async (request) => {
+        const response = await source.fetch({
+          runTime: query.runTime,
+          forecastHour,
+          latitude: request.latitude,
+          longitude: request.longitude,
+          variables: request.variables,
+        });
+        // Provenance is rewritten below for the archive product; the analysis
+        // normalizer only needs a typed HistoricalAnalysisResponse here.
+        return { ...response, provider: "NOAA NCEI", access: "ncei_thredds_ncss" };
+      },
     };
     const normalizer = new HistoricalProfileService({
       source: adapter,

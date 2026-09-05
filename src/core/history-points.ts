@@ -41,7 +41,9 @@ export class HistoricalPointsService {
     const fields = query.fields ? [...new Set(query.fields)] : undefined;
 
     const points: HistoricalPointsResult["points"] = [];
-    // Intentionally serial. Each point may require one or more immutable NCEI NCSS
+    let provider: HistoricalPointsResult["source"]["provider"] | undefined;
+    let access: HistoricalPointsResult["source"]["access"] | undefined;
+    // Intentionally serial. Each point may require one or more immutable upstream
     // requests and cache misses share WFG's cross-process NOAA courtesy limiter.
     for (const point of query.points) {
       if (fields) {
@@ -53,6 +55,8 @@ export class HistoricalPointsService {
           ...(pressureLevelsHpa ? { pressureLevelsHpa } : {}),
           fields,
         });
+        provider ??= result.source.provider;
+        access ??= result.source.access;
         points.push({
           requestedPoint: result.requestedPoint,
           gridPoint: result.gridPoint,
@@ -69,6 +73,8 @@ export class HistoricalPointsService {
           variables: variables!,
           pressureLevelsHpa: pressureLevelsHpa!,
         });
+        provider ??= result.source.provider;
+        access ??= result.source.access;
         points.push({
           requestedPoint: result.requestedPoint,
           gridPoint: result.gridPoint,
@@ -89,8 +95,8 @@ export class HistoricalPointsService {
       },
       points,
       source: {
-        provider: "NOAA NCEI",
-        access: "ncei_thredds_ncss",
+        provider: provider!,
+        access: access!,
         composition: "serial_point_queries",
       },
       caveat: CAVEAT,

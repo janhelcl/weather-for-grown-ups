@@ -214,7 +214,7 @@ describe("AIFS ENS Open Data subset cache", () => {
     mode = "bad-http";
     await expect(cache.isForecastAvailable(run, 6, [
       { key: "temperature@850", param: "t", levtype: "pl", levelist: 850 },
-    ])).rejects.toThrow("run discovery failed");
+    ])).rejects.toThrow("rejected the AIFS ENS run discovery request (HTTP 400");
   });
 });
 

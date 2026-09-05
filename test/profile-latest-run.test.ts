@@ -121,7 +121,7 @@ describe("ProfileService latest-run selection", () => {
     const { service, fetchMock } = harness(new Date("2026-08-19T12:00:00Z"));
     await expect(
       service.getProfile({ ...base, validTime: "2026-08-19T11:00:00Z" }),
-    ).rejects.toThrow(/at or after run time/);
+    ).rejects.toThrow(/at or after run/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

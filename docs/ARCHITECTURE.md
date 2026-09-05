@@ -249,7 +249,7 @@ Member work is bounded-concurrent. Multi-point and transect operations deliberat
 
 Regional providers preserve their own packaging and access policy below the unified dataset boundary.
 
-ICON-D2 deterministic access uses DWD Open Data products while retaining the native ~2.1 km model-grid identity separately from regular-lat/lon delivery products. ICON-D2-EPS preserves the native 20-member all-member GRIB packaging and performs the official DWD grid remapping/member extraction path with CDO and `wgrib2`; those runtime requirements are source/decoder concerns, not query dimensions.
+ICON-D2 deterministic access uses DWD Open Data products while retaining the native ~2.1 km model-grid identity separately from regular-lat/lon delivery products. ICON-D2-EPS preserves the native 20-member all-member GRIB packaging that DWD publishes on its icosahedral-triangular grid (GRIB2 grid template 3.101). `src/grib/icon-d2-remap.ts` reproduces DWD's official conversion in-process: it reads the provider's `ICON_D2_002_EASY` bundle (a CDO lonlat target-grid description plus a SCRIP nearest-neighbour weights table in classic NetCDF-3), decodes each native message through the bundled decoder by patching section 3 in memory, gathers values through the provider index, and emits a regular 0.02° lat/lon GRIB2 message (grid template 3.0, simple packing that reuses the source reference value, scale factors and bit width so the provider's integer quantisation is preserved exactly). Sections 1, 2 and 4 are copied verbatim, which keeps DWD local parameters, statistical intervals and ensemble metadata intact. Members are then split by the perturbation number in section 4. The remap and split are cache concerns; no native executable is involved.
 
 AROME uses Météo-France's public EURW1S100 GRIB packages and keeps the 0.01° delivery grid distinct from the nominal ~1.3 km model mesh. PE-AROME uses authenticated targeted WCS requests with bearer credentials, one-member/one-field packaging and geographic subsetting. Credentials, endpoint details, retries, concurrency and immutable caching remain isolated in source/access layers.
 
@@ -259,7 +259,7 @@ ECMWF access uses official Open Data indexed byte ranges with bounded mirror ret
 
 ## GRIB decoding
 
-The normal npm path uses the bundled GRIB2 decoder supplied by `@mattnucc/gribberish`, so users do **not** need to install native `wgrib2` for CLI or MCP use.
+The normal npm path uses the bundled GRIB2 decoder supplied by `@mattnucc/gribberish` for every dataset, so users do **not** need to install native `wgrib2`, CDO or any other weather tooling for CLI or MCP use.
 
 Native `wgrib2` remains an explicit compatibility/debug backend selected through `WGRIB2_PATH` or `WFG_DECODER=wgrib2`. The Docker image includes native `wgrib2` as that reproducible fallback path.
 
@@ -281,7 +281,10 @@ The CLI surface is compact:
 - `query` for atmospheric state over point(s), time range, transect, or area where supported;
 - `diagnose` for shared layer/profile/parcel physics;
 - `compare-runs`, `compare-datasets`, `verify`, and `analogs` for composition operations;
-- `index build` and `index backfill` for local analog-index administration.
+- `index build` and `index backfill` for local analog-index administration;
+- `mcp` and `mcp-http` as transport launchers for the MCP surface below.
+
+Commander is configured with `exitOverride` and silenced error output so that usage errors (unknown option/command, missing required option) and typed option parsers (`numberOption`, `parseNumberList`, `parseCoordinate` in `cli/shared.ts`) all flow through `runCli` into the public failure envelope. The CLI never prints Commander's own `error:` text.
 
 ### MCP
 
@@ -298,6 +301,8 @@ The MCP vocabulary is similarly small:
 The first three are the normal atmospheric query language. Comparison, verification and analog search remain separate because they are genuine composition operations rather than another geometry/time shape. Dataset comparison is itself registry-driven and restrictive: a shared atmospheric vocabulary does not imply that every pair has a scientifically meaningful comparison strategy. Physics, AI and hybrid pairs declare alignment, comparison semantics, output shape and provenance explicitly; there is no universal subtraction fallback.
 
 The unified adapters validate the common request and then delegate through dataset-specific schemas/services internally, so unsupported combinations fail explicitly rather than being coerced into fake symmetry. Those dataset-native services are implementation details and are not registered as separate public MCP tools.
+
+Validation belongs to the application services, not the transport. MCP tools register their Zod contracts through `describedSchema` (`src/mcp-tool-schema.ts`), which hands the SDK the JSON Schema for `tools/list` but performs no validation of its own; the service's `schema.parse` then runs inside the handler and any failure becomes the same `isError` envelope the CLI prints. Request schemas are strict objects (unknown keys are rejected), geometry is a `type`-discriminated union, and registry-dispatched operations (`compare_datasets` by `datasets` pair, `verify_forecast` by time form) select one contract before validating so errors name the field under that contract instead of a union-wide "Invalid input". `toPublicFailure` reports the first issue with its field path and, for residual plain unions, flattens to the closest branch.
 
 Both MCP transports instantiate the same tool catalog:
 

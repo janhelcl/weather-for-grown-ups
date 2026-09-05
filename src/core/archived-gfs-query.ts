@@ -380,17 +380,20 @@ export class ArchivedGfsForecastQueryService {
     const fh = archivedForecastHour(run, validTime, grid);
     const source = this.sourceForGrid(grid);
     const areaSource: HistoricalAnalysisAreaDataSource = {
-      fetchArea: async (input) => source.fetchArea({
-        runTime: run,
-        forecastHour: fh,
-        westLongitude: input.westLongitude,
-        eastLongitude: input.eastLongitude,
-        southLatitude: input.southLatitude,
-        northLatitude: input.northLatitude,
-        variables: input.variables,
-        ...(input.verticalCoordinate === undefined ? {} : { verticalCoordinate: input.verticalCoordinate }),
-        ...(input.horizontalStride === undefined ? {} : { horizontalStride: input.horizontalStride }),
-      }),
+      fetchArea: async (input) => {
+        const response = await source.fetchArea({
+          runTime: run,
+          forecastHour: fh,
+          westLongitude: input.westLongitude,
+          eastLongitude: input.eastLongitude,
+          southLatitude: input.southLatitude,
+          northLatitude: input.northLatitude,
+          variables: input.variables,
+          ...(input.verticalCoordinate === undefined ? {} : { verticalCoordinate: input.verticalCoordinate }),
+          ...(input.horizontalStride === undefined ? {} : { horizontalStride: input.horizontalStride }),
+        });
+        return { ...response, provider: "NOAA NCEI", access: "ncei_thredds_ncss" };
+      },
     };
     const service = new HistoricalAreaSummaryService({
       source: areaSource,
@@ -453,13 +456,16 @@ export class ArchivedGfsForecastQueryService {
 
     if (fields !== undefined && fields.length > 0) {
       const adapter: HistoricalAnalysisDataSource = {
-        fetch: async (input) => source.fetch({
-          runTime: run,
-          forecastHour: fh,
-          latitude: input.latitude,
-          longitude: input.longitude,
-          variables: input.variables,
-        }),
+        fetch: async (input) => {
+          const response = await source.fetch({
+            runTime: run,
+            forecastHour: fh,
+            latitude: input.latitude,
+            longitude: input.longitude,
+            variables: input.variables,
+          });
+          return { ...response, provider: "NOAA NCEI", access: "ncei_thredds_ncss" };
+        },
       };
       const service = new HistoricalFieldsService({
         source: adapter,

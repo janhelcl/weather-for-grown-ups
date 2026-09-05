@@ -1,3 +1,4 @@
+import { InvalidRequestError, DataUnavailableError } from "../failure.js";
 import type {
   AigfsAvailabilityProbe,
   AigfsAvailabilityRequirement,
@@ -62,10 +63,10 @@ export class AigfsRunResolver implements AigfsRunProvider {
       aigfsForecastHour(firstCandidate, requirement.validTime);
     } else {
       if (requirement.endTime.getTime() < requirement.startTime.getTime()) {
-        throw new Error("endTime must be at or after startTime");
+        throw new InvalidRequestError("endTime must be at or after startTime");
       }
       if (requirement.endTime.getTime() > firstCandidate.getTime() + AIGFS_MAX_FORECAST_HOUR * HOUR_MS) {
-        throw new Error("Requested time range extends beyond the 384-hour AIGFS horizon");
+        throw new InvalidRequestError("Requested time range extends beyond the 384-hour AIGFS horizon");
       }
     }
 
@@ -94,7 +95,7 @@ export class AigfsRunResolver implements AigfsRunProvider {
         return candidate;
       }
     }
-    throw new Error(
+    throw new DataUnavailableError(
       `Could not find a complete AIGFS run in the last ${this.lookbackCycles} cycles`,
     );
   }

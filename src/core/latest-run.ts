@@ -1,3 +1,4 @@
+import { InvalidRequestError, DataUnavailableError } from "../failure.js";
 import {
   GfsS3RunProbe,
   type ForecastAvailabilitySelection,
@@ -66,7 +67,7 @@ export class LatestRunResolver implements LatestRunProvider {
       if (complete) return candidate;
     }
 
-    throw new Error(`Could not find a complete GFS run in the last ${this.lookbackCycles} cycles`);
+    throw new DataUnavailableError(`Could not find a complete GFS run in the last ${this.lookbackCycles} cycles`);
   }
 
   private async resolveLatestAvailableRun(
@@ -88,11 +89,11 @@ export class LatestRunResolver implements LatestRunProvider {
       forecastHour(firstCandidate, requirement.validTime, grid);
     } else {
       if (requirement.endTime.getTime() < requirement.startTime.getTime()) {
-        throw new Error("endTime must be at or after startTime");
+        throw new InvalidRequestError("endTime must be at or after startTime");
       }
       const newestHorizonEnd = firstCandidate.getTime() + 384 * 3_600_000;
       if (requirement.endTime.getTime() > newestHorizonEnd) {
-        throw new Error("Requested time range extends beyond the 384-hour GFS horizon");
+        throw new InvalidRequestError("Requested time range extends beyond the 384-hour GFS horizon");
       }
     }
 
@@ -104,7 +105,7 @@ export class LatestRunResolver implements LatestRunProvider {
       if (available) return candidate;
     }
 
-    throw new Error(
+    throw new DataUnavailableError(
       `Could not find a GFS run satisfying the requested forecast in the last ${this.lookbackCycles} eligible cycles`,
     );
   }
@@ -114,13 +115,11 @@ export class LatestRunResolver implements LatestRunProvider {
     requirement: Extract<LatestRunRequirement, { type: "valid_time" }>,
     grid: GfsGrid,
   ): Promise<boolean> {
-    let fh: number;
-    try {
-      fh = forecastHour(candidate, requirement.validTime, grid);
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("<= 384")) return false;
-      throw error;
-    }
+    // Older candidates only move the lead further out; skip those beyond the horizon
+    // without turning a routine walk-back into a caller-facing error.
+    const rawHours = (requirement.validTime.getTime() - candidate.getTime()) / 3_600_000;
+    if (rawHours > 384) return false;
+    const fh = forecastHour(candidate, requirement.validTime, grid);
     return grid === "0p50"
       ? this.probe.isForecastAvailable(candidate, fh, requirement.selection, grid)
       : this.probe.isForecastAvailable(candidate, fh, requirement.selection);

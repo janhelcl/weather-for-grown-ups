@@ -1,3 +1,4 @@
+import { DataUnavailableError } from "../failure.js";
 import { expandRequestedVariables } from "../catalog/variables.js";
 import type { IfsPressureVariableId } from "../catalog/ifs.js";
 import type { GfsGrid } from "../schema/gfs-grid.js";
@@ -81,7 +82,7 @@ export class GfsIfsAlignedRunResolver implements GfsIfsAlignedRunProvider {
       if (gfsAvailable && ifsAvailable) return run;
     }
 
-    throw new Error(
+    throw new DataUnavailableError(
       `No aligned GFS/IFS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested valid time, variable, pressure level, and GFS grid`,
     );
   }

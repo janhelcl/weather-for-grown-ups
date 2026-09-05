@@ -82,7 +82,7 @@ export class HistoricalFieldsTimeSeriesService {
         fields: query.fields,
         cycleHoursUtc,
       },
-      source: { provider: "NOAA NCEI", access: "ncei_thredds_ncss" },
+      source: { provider: first.source.provider, access: first.source.access },
       series: steps.map((step) => ({
         analysisTime: step.analysisTime,
         ...(step.levels ? { levels: step.levels } : {}),

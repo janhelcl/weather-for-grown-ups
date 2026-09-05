@@ -114,8 +114,8 @@ export class HistoricalPointsTimeSeriesService {
         cycleHoursUtc,
       },
       source: {
-        provider: "NOAA NCEI",
-        access: "ncei_thredds_ncss",
+        provider: first.source.provider,
+        access: first.source.access,
         composition: "serial_cycle_point_queries",
       },
       series: batches.map((batch) => ({

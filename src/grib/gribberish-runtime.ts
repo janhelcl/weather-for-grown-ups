@@ -76,6 +76,12 @@ export async function readGribMessages(path: string): Promise<GribMessage[]> {
   return messages;
 }
 
+export function readGribMessagesFromBytes(bytes: Uint8Array): GribMessage[] {
+  const messages = parseMessagesWithKnownLocalAliases(bytes);
+  if (messages.length === 0) throw new Error("Bundled GRIB2 decoder found no readable messages in buffer");
+  return messages;
+}
+
 /**
  * gribberish intentionally follows the WMO parameter tables and can drop
  * DWD-local parameters before exposing a GribMessage. Rewrite only the
@@ -412,7 +418,9 @@ function verticalFromKey(key: string): Omit<DecodedValue, "code" | "value" | "gr
   }
   const heightMatch = key.match(/:([-+]?\d+(?:\.\d+)?) in above ground(?=:|$)/i);
   if (heightMatch?.[1] !== undefined) return { heightAboveGroundM: Number(heightMatch[1]) };
-  if (/:\s*(?:0\s+)?in surface:0 in top of atmosphere(?=:|$)/i.test(key)) {
+  // The second fixed surface's scaled value may be 0 or missing (DWD
+  // ICON-D2-EPS encodes it as missing), so accept an empty value too.
+  if (/:\s*(?:0\s+)?in surface:\s*(?:0\s+)?in top of atmosphere(?=:|$)/i.test(key)) {
     return { namedVertical: "entire atmosphere" };
   }
   if (/:\s*(?:0\s+)?in surface(?=:|$)/i.test(key)) return { surface: true };

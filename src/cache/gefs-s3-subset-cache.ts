@@ -18,6 +18,7 @@ import {
   type NonIsobaricGribSelector,
 } from "../grib/index.js";
 import { fetchWithRetry } from "../access/http-fetch.js";
+import { upstreamHttpFailure } from "../access/http-failure.js";
 import {
   buildGefsS3ForecastIndexUrl,
   buildGefsS3ForecastUrl,
@@ -176,7 +177,14 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (!response.ok) {
-      throw new Error(`NOAA GEFS AWS index request failed: HTTP ${response.status} ${response.statusText}`);
+      throw upstreamHttpFailure({
+        provider: "NOAA AWS Open Data",
+        operation: "GEFS member index request",
+        status: response.status,
+        statusText: response.statusText,
+        resource: "the requested GEFS member forecast",
+        url,
+      });
     }
     const text = await response.text();
     await writeFile(path, text, "utf8");
@@ -196,7 +204,12 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (response.status !== 206) {
-      throw new Error(`NOAA GEFS AWS range request failed: HTTP ${response.status} ${response.statusText}`);
+      throw upstreamHttpFailure({
+        provider: "NOAA AWS Open Data",
+        operation: "GEFS member byte-range request",
+        status: response.status,
+        statusText: response.statusText,
+      });
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {

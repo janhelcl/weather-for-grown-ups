@@ -1,3 +1,4 @@
+import { upstreamHttpFailure } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { inflateRawSync } from "node:zlib";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
@@ -112,9 +113,13 @@ export class NceiIgraSource {
     );
 
     if (result.status < 200 || result.status >= 300) {
-      throw new Error(
-        `NOAA IGRA request failed: HTTP ${result.status} ${result.statusText} (${url})`,
-      );
+      throw upstreamHttpFailure({
+        provider: "NOAA IGRA",
+        operation: "radiosonde archive request",
+        status: result.status,
+        statusText: result.statusText,
+        url,
+      });
     }
     if (result.text === undefined) throw new Error("NOAA IGRA text response was empty");
     return result.text;
@@ -144,9 +149,13 @@ export class NceiIgraSource {
     );
 
     if (result.status < 200 || result.status >= 300) {
-      throw new Error(
-        `NOAA IGRA request failed: HTTP ${result.status} ${result.statusText} (${url})`,
-      );
+      throw upstreamHttpFailure({
+        provider: "NOAA IGRA",
+        operation: "radiosonde archive request",
+        status: result.status,
+        statusText: result.statusText,
+        url,
+      });
     }
     if (result.bytes === undefined) throw new Error("NOAA IGRA binary response was empty");
     return result.bytes;

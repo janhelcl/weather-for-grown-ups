@@ -1,3 +1,4 @@
+import { DataUnavailableError } from "../failure.js";
 import { ifsEnsMemberNumber, type IfsEnsMember } from "../catalog/ifs-ens.js";
 import type { IfsIfsEnsComparisonVariable } from "../schema/ifs-ifs-ens-comparison.js";
 import {
@@ -83,7 +84,7 @@ export class IfsIfsEnsAlignedRunResolver implements IfsIfsEnsAlignedRunProvider 
       if (ifsAvailable && ifsEnsAvailable) return run;
     }
 
-    throw new Error(
+    throw new DataUnavailableError(
       `No aligned deterministic IFS/IFS ENS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested valid time, pressure selection, and perturbation subset`,
     );
   }

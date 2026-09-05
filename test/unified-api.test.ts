@@ -714,6 +714,7 @@ describe("unified specialized operations", () => {
     const service = new UnifiedDatasetComparisonService({ strategies: pairs });
 
     const gfsGefs = await service.compare({
+      datasets: ["gfs", "gefs"],
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       variable: "temperature",

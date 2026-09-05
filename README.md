@@ -199,7 +199,7 @@ The answer remains structured model evidence. Activity-specific scores, route ch
 
 ## Installation notes
 
-The normal npm path includes the GRIB2 decoder and needs no separate weather tooling. `icon-d2-eps` is the current exception: DWD's native triangular-grid ensemble path requires CDO plus `wgrib2`; the Docker image includes both.
+The npm path includes the GRIB2 decoder and needs no separate weather tooling for any dataset. `icon-d2-eps`, which DWD publishes on its native triangular grid, is remapped in-process through DWD's own official nearest-neighbour index table, so no native binaries are required.
 
 Most datasets use anonymous Open Data. `pe-arome` requires a Météo-France bearer token and subscribed WCS endpoint configuration.
 

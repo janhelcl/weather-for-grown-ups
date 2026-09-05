@@ -1,3 +1,4 @@
+import { DataUnavailableError } from "../failure.js";
 import { GEFS_MAX_FORECAST_HOUR, type GefsMember } from "../catalog/gefs.js";
 import { GefsS3RunProbe, type GefsAvailabilityProbe } from "../sources/gefs-s3.js";
 import { gefsForecastHour, latestGefsCycleAtOrBefore, previousGefsCycle } from "./gefs-time.js";
@@ -47,7 +48,7 @@ export class GefsLatestRunResolver implements GefsLatestRunProvider, GefsLatestR
 
     // Produce the same explicit cadence/range errors callers get for an explicit run where possible.
     gefsForecastHour(anchor, validTime);
-    throw new Error(
+    throw new DataUnavailableError(
       `No published GEFS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested valid time and member selection`,
     );
   }
@@ -84,7 +85,7 @@ export class GefsLatestRunResolver implements GefsLatestRunProvider, GefsLatestR
     // Preserve the same explicit cadence/range validation as a reproducible explicit run.
     gefsForecastHour(anchor, startTime);
     gefsForecastHour(anchor, endTime);
-    throw new Error(
+    throw new DataUnavailableError(
       `No published GEFS cycle in the last ${this.maxCandidates} candidate runs can satisfy the complete requested time range and member selection`,
     );
   }

@@ -1,3 +1,4 @@
+import { DataUnavailableError } from "../failure.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { IfsOpenDataAccessPolicy } from "../access/ifs-open-data.js";
@@ -88,7 +89,7 @@ export class IfsEnsLatestRunResolver implements IfsEnsLatestRunProvider {
       if (await selectionAvailable(this.probe, run, lastForecastHour, selectors)) return run;
     }
 
-    throw new Error(
+    throw new DataUnavailableError(
       `No published ECMWF IFS ENS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested time range, perturbations, and field selection`,
     );
   }
@@ -108,7 +109,7 @@ export class IfsEnsLatestRunResolver implements IfsEnsLatestRunProvider {
     }
 
     ifsEnsForecastHour(anchor, validTime);
-    throw new Error(
+    throw new DataUnavailableError(
       `No published ECMWF IFS ENS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested valid time, perturbations, and field selection`,
     );
   }

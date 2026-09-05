@@ -1,8 +1,8 @@
+import { upstreamHttpFailure } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
-import { access, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { execa } from "execa";
 import {
   FileAccessPolicy,
   UPSTREAM_ACCESS_POLICIES,
@@ -16,6 +16,7 @@ import {
 import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
 import type { RawVariableDefinition } from "../catalog/variables.js";
 import { buildIconD2EpsOpenDataUrl } from "../sources/icon-d2-eps.js";
+import { scanGrib2Messages } from "../grib/dwd-local-parameters.js";
 import {
   bunzip2,
   type IconD2AvailabilityRequirement,
@@ -25,15 +26,14 @@ import {
   type IconD2SubsetCache,
 } from "./icon-d2-open-data-cache.js";
 
-export type IconD2EpsWgrib2Runner = (
-  executable: string,
-  args: string[],
-) => Promise<{ stdout: string }>;
-
-const defaultWgrib2Runner: IconD2EpsWgrib2Runner = async (executable, args) => {
-  const { stdout } = await execa(executable, args);
-  return { stdout };
-};
+const ICON_D2_EPS_MEMBER_COUNT = 20;
+/**
+ * Product definition templates 4.1 (instant) and 4.11 (statistical interval)
+ * are the individual-ensemble-member templates DWD publishes for ICON-D2-EPS.
+ * Both place the perturbation number at section-4 octet 36.
+ */
+const ENSEMBLE_MEMBER_PRODUCT_TEMPLATES = new Set([1, 11]);
+const PERTURBATION_NUMBER_OFFSET = 35;
 
 export class IconD2EpsOpenDataCache implements IconD2SubsetCache {
   private readonly inFlight = new Map<string, Promise<IconD2SourceFile>>();
@@ -102,9 +102,13 @@ export class IconD2EpsOpenDataCache implements IconD2SubsetCache {
       );
       if (response.status === 404) return false;
       if (!response.ok) {
-        throw new Error(
-          `DWD ICON-D2-EPS availability request failed: HTTP ${response.status} ${response.statusText} for ${url}`,
-        );
+        throw upstreamHttpFailure({
+          provider: "DWD Open Data",
+          operation: "ICON-D2-EPS availability request",
+          status: response.status,
+          statusText: response.statusText,
+          url,
+        });
       }
     }
     return true;
@@ -142,9 +146,14 @@ export class IconD2EpsOpenDataCache implements IconD2SubsetCache {
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (!response.ok) {
-      throw new Error(
-        `DWD ICON-D2-EPS Open Data request failed: HTTP ${response.status} ${response.statusText} for ${url}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "DWD Open Data",
+        operation: "ICON-D2-EPS product request",
+        status: response.status,
+        statusText: response.statusText,
+        resource: "the requested ICON-D2-EPS product file",
+        url,
+      });
     }
     const bytes = await this.decompress(new Uint8Array(await response.arrayBuffer()));
     if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
@@ -155,22 +164,15 @@ export class IconD2EpsOpenDataCache implements IconD2SubsetCache {
 }
 
 /**
- * DWD packages all ICON-D2-EPS members in one native-grid GRIB object.
- * This shared filter resolves the upstream ensemble labels once and materializes
- * immutable member-only GRIB files for the existing deterministic ICON-D2 engine.
- *
- * Native wgrib2 is intentionally required here: the bundled decoder cannot read
- * the provider-native triangular ICON-D2-EPS files reliably.
+ * DWD packages all ICON-D2-EPS members in one GRIB object. This shared filter
+ * reads each message's product definition section, resolves the provider's
+ * perturbation numbers once, and materializes immutable member-only GRIB files
+ * for the existing deterministic ICON-D2 engine. Messages are copied verbatim.
  */
 export class IconD2EpsMemberFileFilter {
-  private readonly inventories = new Map<string, Promise<string>>();
   private readonly inFlight = new Map<string, Promise<IconD2SourceFile>>();
 
-  constructor(
-    private readonly rootDir: string,
-    private readonly executable = process.env.WGRIB2_PATH ?? "wgrib2",
-    private readonly runner: IconD2EpsWgrib2Runner = defaultWgrib2Runner,
-  ) {}
+  constructor(private readonly rootDir: string) {}
 
   async filter(path: string, member: IconD2EpsMember): Promise<IconD2SourceFile> {
     await mkdir(this.rootDir, { recursive: true });
@@ -195,24 +197,11 @@ export class IconD2EpsMemberFileFilter {
     member: IconD2EpsMember,
     memberPath: string,
   ): Promise<IconD2SourceFile> {
-    const inventory = await this.inventory(sourcePath);
-    const ensembleTag = iconD2EpsWgrib2TagForMember(inventory, member);
+    const bytes = new Uint8Array(await readFile(sourcePath));
+    const selected = selectIconD2EpsMemberMessages(bytes, member);
     const tempPath = `${memberPath}.${process.pid}.${randomUUID()}.tmp`;
-
     try {
-      const { stdout } = await this.run([
-        sourcePath,
-        "-match",
-        iconD2EpsExactMemberMatchPattern(ensembleTag),
-        "-grib",
-        tempPath,
-      ]);
-      const details = await stat(tempPath);
-      if (details.size === 0) {
-        throw new Error(
-          `wgrib2 produced an empty ICON-D2-EPS member file for ${member}. Output: ${stdout.slice(0, 500)}`,
-        );
-      }
+      await writeFile(tempPath, selected);
       await rename(tempPath, memberPath);
       return { path: memberPath, cacheHit: false };
     } catch (error) {
@@ -220,29 +209,87 @@ export class IconD2EpsMemberFileFilter {
       throw error;
     }
   }
+}
 
-  private inventory(path: string): Promise<string> {
-    const cached = this.inventories.get(path);
-    if (cached !== undefined) return cached;
-    const pending = this.run([path, "-s"]).then(({ stdout }) => stdout);
-    this.inventories.set(path, pending);
-    void pending.catch(() => this.inventories.delete(path));
-    return pending;
+/**
+ * Return the concatenated GRIB2 messages of one member. Members are resolved
+ * by sorting the distinct perturbation numbers found in the object and
+ * selecting the ordinal position of the requested member, which mirrors DWD's
+ * `p01..p20` labelling without assuming a particular numbering origin.
+ */
+export function selectIconD2EpsMemberMessages(
+  bytes: Uint8Array,
+  member: IconD2EpsMember,
+): Uint8Array {
+  const slices = scanGrib2Messages(bytes);
+  if (slices.length === 0) {
+    throw new Error("ICON-D2-EPS all-members object contains no GRIB2 messages");
+  }
+  const perturbations = slices.map((slice) =>
+    iconD2EpsPerturbationNumber(bytes.subarray(slice.start, slice.end)));
+  const distinct = [...new Set(perturbations)].sort((left, right) => left - right);
+  if (distinct.length !== ICON_D2_EPS_MEMBER_COUNT) {
+    throw new Error(
+      `ICON-D2-EPS object exposed ${distinct.length} distinct forecast-member numbers; expected ${ICON_D2_EPS_MEMBER_COUNT}`,
+    );
+  }
+  const wanted = distinct[iconD2EpsMemberOrdinal(member) - 1];
+  if (wanted === undefined) {
+    throw new Error(`ICON-D2-EPS object has no member mapping for ${member}`);
   }
 
-  private async run(args: string[]): Promise<{ stdout: string }> {
-    try {
-      return await this.runner(this.executable, args);
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("ENOENT")) {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (let index = 0; index < slices.length; index += 1) {
+    if (perturbations[index] !== wanted) continue;
+    const slice = slices[index]!;
+    chunks.push(bytes.subarray(slice.start, slice.end));
+    total += slice.end - slice.start;
+  }
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output;
+}
+
+/**
+ * Read the perturbation number of one GRIB2 message from its product
+ * definition section. Only the individual-ensemble templates are accepted so a
+ * deterministic or derived-ensemble message cannot be silently mislabelled.
+ */
+export function iconD2EpsPerturbationNumber(message: Uint8Array): number {
+  let cursor = 16;
+  const end = message.byteLength - 4;
+  while (cursor + 5 <= end) {
+    const length = readUint32(message, cursor);
+    if (length < 5 || cursor + length > end) break;
+    if (message[cursor + 4] === 4) {
+      if (length < PERTURBATION_NUMBER_OFFSET + 2) {
+        throw new Error("ICON-D2-EPS message has a product definition section without ensemble metadata");
+      }
+      const template = (message[cursor + 7]! << 8) | message[cursor + 8]!;
+      if (!ENSEMBLE_MEMBER_PRODUCT_TEMPLATES.has(template)) {
         throw new Error(
-          "ICON-D2-EPS requires native wgrib2 for DWD's provider-native triangular GRIB files. "
-          + `Install wgrib2 or set WGRIB2_PATH. Original error: ${error.message}`,
+          `ICON-D2-EPS message uses product definition template 4.${template}, which carries no individual member number`,
         );
       }
-      throw error;
+      return message[cursor + PERTURBATION_NUMBER_OFFSET]!;
     }
+    cursor += length;
   }
+  throw new Error("ICON-D2-EPS message is missing its product definition section");
+}
+
+function readUint32(bytes: Uint8Array, offset: number): number {
+  return (
+    bytes[offset]! * 0x1000000
+    + bytes[offset + 1]! * 0x10000
+    + bytes[offset + 2]! * 0x100
+    + bytes[offset + 3]!
+  );
 }
 
 export class IconD2EpsMemberSubsetCache implements IconD2SubsetCache {
@@ -268,49 +315,6 @@ export class IconD2EpsMemberSubsetCache implements IconD2SubsetCache {
   ): Promise<boolean> {
     return this.source.isForecastAvailable(run, forecastHour, requirement);
   }
-}
-
-export function iconD2EpsExactMemberMatchPattern(ensembleTag: string): string {
-  return `:${escapePosixExtendedRegex(ensembleTag)}:`;
-}
-
-export function iconD2EpsWgrib2TagForMember(
-  inventory: string,
-  member: IconD2EpsMember,
-): string {
-  const tags = [...new Set(
-    inventory
-      .split(/\r?\n/)
-      .flatMap((line) => [...line.matchAll(/:((?:ENS|P-ENS|IC-ENS|MP-ENS|ICMP-ENS)=[^:]+)/g)])
-      .map((match) => match[1])
-      .filter((tag): tag is string => tag !== undefined),
-  )]
-    .map((tag) => ({ tag, order: ensembleTagOrder(tag) }))
-    .filter((entry): entry is { tag: string; order: number } => entry.order !== null)
-    .sort((left, right) => left.order - right.order);
-
-  if (tags.length !== 20) {
-    throw new Error(
-      `ICON-D2-EPS wgrib2 inventory exposed ${tags.length} distinct forecast-member tags; expected 20`,
-    );
-  }
-
-  const selected = tags[iconD2EpsMemberOrdinal(member) - 1];
-  if (selected === undefined) {
-    throw new Error(`ICON-D2-EPS inventory has no member mapping for ${member}`);
-  }
-  return selected.tag;
-}
-
-function escapePosixExtendedRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function ensembleTagOrder(tag: string): number | null {
-  const match = tag.match(/=(?:\+|-)?(\d+)$/);
-  if (match?.[1] === undefined) return null;
-  const value = Number(match[1]);
-  return Number.isInteger(value) ? value : null;
 }
 
 function selectedUrls(request: IconD2DataRequest): string[] {

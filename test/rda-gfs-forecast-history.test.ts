@@ -189,7 +189,7 @@ describe("GDEX terminal and decoder edge cases", () => {
       latitude: 50,
       longitude: 14,
       variables: ["Temperature_isobaric"],
-    })).rejects.toThrow("is not available for run");
+    })).rejects.toThrow("has no archived GFS 0.25° forecast online for run");
     expect(fetchFn).toHaveBeenCalledOnce();
     expect(run).toHaveBeenCalledOnce();
   });
@@ -204,7 +204,7 @@ describe("GDEX terminal and decoder edge cases", () => {
       fetchFn,
     });
 
-    await expect(source.fetchArea(request)).rejects.toThrow("is not available for run");
+    await expect(source.fetchArea(request)).rejects.toThrow("has no archived GFS 0.25° forecast online for run");
     expect(fetchFn).toHaveBeenCalledOnce();
     expect(run).toHaveBeenCalledOnce();
   });

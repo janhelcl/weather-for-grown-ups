@@ -1,27 +1,28 @@
+import { upstreamHttpFailure } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import {
   access,
   mkdir,
+  open,
   readFile,
   rename,
   rm,
-  stat,
   writeFile,
 } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { execa } from "execa";
 import {
   FileAccessPolicy,
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
 import { fetchWithRetry } from "../access/http-fetch.js";
-import { UnsupportedOperationError } from "../failure.js";
 import {
-  prepareDwdLocalParametersForGenericProcessing,
-  restoreDwdLocalParametersAfterGenericProcessing,
-} from "../grib/dwd-local-parameters.js";
+  parseCdoLonLatGridDescription,
+  readScripNearestNeighbourIndex,
+  remapGrib2Messages,
+  type NearestNeighbourRemapIndex,
+} from "../grib/icon-d2-remap.js";
 import {
   bunzip2,
   type IconD2AvailabilityRequirement,
@@ -45,15 +46,9 @@ export interface IconD2EpsRemapAssetProvider {
   paths(): Promise<IconD2EpsRemapAssets>;
 }
 
-export type IconD2EpsCdoRunner = (
-  executable: string,
-  args: string[],
-) => Promise<{ stdout: string }>;
-
-const defaultCdoRunner: IconD2EpsCdoRunner = async (executable, args) => {
-  const { stdout } = await execa(executable, args);
-  return { stdout };
-};
+export interface IconD2EpsRemapIndexProvider {
+  index(): Promise<NearestNeighbourRemapIndex>;
+}
 
 /**
  * DWD distributes the official ICON-D2 0.02 degree target grid and
@@ -96,9 +91,12 @@ export class IconD2EpsDwdRemapAssetCache implements IconD2EpsRemapAssetProvider 
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (!response.ok) {
-      throw new Error(
-        `DWD ICON-D2 remapping-asset request failed: HTTP ${response.status} ${response.statusText}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "DWD Open Data",
+        operation: "ICON-D2 remapping-asset request",
+        status: response.status,
+        statusText: response.statusText,
+      });
     }
 
     const downloaded = new Uint8Array(await response.arrayBuffer());
@@ -126,25 +124,60 @@ export class IconD2EpsDwdRemapAssetCache implements IconD2EpsRemapAssetProvider 
 }
 
 /**
+ * Parse DWD's target grid and SCRIP nearest-neighbour weights once per process
+ * into the gather index used by the JS remapper. The 50 MB weights file is
+ * read lazily on first use and the parsed index is shared by every request.
+ */
+export class IconD2EpsRemapIndexLoader implements IconD2EpsRemapIndexProvider {
+  private ready: Promise<NearestNeighbourRemapIndex> | undefined;
+
+  constructor(private readonly assets: IconD2EpsRemapAssetProvider) {}
+
+  index(): Promise<NearestNeighbourRemapIndex> {
+    this.ready ??= this.load().catch((error) => {
+      this.ready = undefined;
+      throw error;
+    });
+    return this.ready;
+  }
+
+  private async load(): Promise<NearestNeighbourRemapIndex> {
+    const { targetGridPath, weightsPath } = await this.assets.paths();
+    const [gridText, weightsBytes] = await Promise.all([
+      readFile(targetGridPath, "utf8"),
+      readFile(weightsPath),
+    ]);
+    return readScripNearestNeighbourIndex(
+      new Uint8Array(weightsBytes),
+      parseCdoLonLatGridDescription(gridText),
+    );
+  }
+}
+
+/**
  * Remap one immutable all-members native ICON-D2-EPS GRIB object to DWD's
  * official 0.02 degree target grid. This is deliberately done before member
  * splitting so a request pays the remap cost once no matter how many members
  * are selected later.
+ *
+ * The remap is a pure-JS gather through DWD's own nearest-neighbour index, so
+ * values are identical to the provider's CDO path and no native executable is
+ * required. Sections 1, 2 and 4 are copied verbatim, which keeps DWD local
+ * parameters, ensemble metadata and statistical intervals intact without any
+ * pre/post rewriting.
  */
-export class IconD2EpsCdoRemapper {
+export class IconD2EpsGridRemapper {
   private readonly inFlight = new Map<string, Promise<IconD2SourceFile>>();
 
   constructor(
     private readonly rootDir: string,
-    private readonly assets: IconD2EpsRemapAssetProvider,
-    private readonly executable = process.env.CDO_PATH ?? "cdo",
-    private readonly runner: IconD2EpsCdoRunner = defaultCdoRunner,
+    private readonly indexProvider: IconD2EpsRemapIndexProvider,
   ) {}
 
   async remap(path: string): Promise<IconD2SourceFile> {
     await mkdir(this.rootDir, { recursive: true });
     const key = createHash("sha256")
-      .update(`dwd-icon-d2-002-nearest-neighbour-v3-dwd-semantics\0${path}`)
+      .update(`dwd-icon-d2-002-nearest-neighbour-v4-js-gather\0${path}`)
       .digest("hex");
     const outputPath = join(this.rootDir, `${key}.grib2`);
     if (await exists(outputPath)) return { path: outputPath, cacheHit: true };
@@ -165,59 +198,25 @@ export class IconD2EpsCdoRemapper {
     inputPath: string,
     outputPath: string,
   ): Promise<IconD2SourceFile> {
-    const { targetGridPath, weightsPath } = await this.assets.paths();
+    const index = await this.indexProvider.index();
+    const sourceBytes = new Uint8Array(await readFile(inputPath));
     const tempPath = `${outputPath}.${process.pid}.${randomUUID()}.tmp`;
-    const preparedInputPath = `${outputPath}.${process.pid}.${randomUUID()}.prepared-input.tmp`;
-    const sourceBytes = await readFile(inputPath);
-    const prepared = prepareDwdLocalParametersForGenericProcessing(sourceBytes);
-    const cdoInputPath = prepared.rewrites.length === 0 ? inputPath : preparedInputPath;
+    const handle = await open(tempPath, "w");
     try {
-      if (prepared.rewrites.length > 0) {
-        await writeFile(preparedInputPath, prepared.bytes);
+      let messages = 0;
+      for (const remapped of remapGrib2Messages(sourceBytes, index)) {
+        await handle.write(remapped);
+        messages += 1;
       }
-      await this.run([
-        "-f",
-        "grb2",
-        `remap,${targetGridPath},${weightsPath}`,
-        cdoInputPath,
-        tempPath,
-      ]);
-      const details = await stat(tempPath);
-      if (details.size === 0) {
-        throw new Error("CDO produced an empty ICON-D2-EPS remapped GRIB");
-      }
-      if (prepared.rewrites.length > 0) {
-        const remappedBytes = await readFile(tempPath);
-        const restored = restoreDwdLocalParametersAfterGenericProcessing(
-          remappedBytes,
-          prepared.rewrites,
-        );
-        await writeFile(tempPath, restored);
+      await handle.close();
+      if (messages === 0) {
+        throw new Error("ICON-D2-EPS remap produced no GRIB2 messages");
       }
       await rename(tempPath, outputPath);
       return { path: outputPath, cacheHit: false };
     } catch (error) {
+      await handle.close().catch(() => undefined);
       await rm(tempPath, { force: true });
-      throw error;
-    } finally {
-      await rm(preparedInputPath, { force: true });
-    }
-  }
-
-  private async run(args: string[]): Promise<{ stdout: string }> {
-    try {
-      return await this.runner(this.executable, args);
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("ENOENT")) {
-        throw new UnsupportedOperationError(
-          "ICON-D2-EPS requires the native CDO executable for DWD's provider-supplied ICON-D2 grid mapping, "
-          + `but "${this.executable}" was not found. Install cdo or point CDO_PATH at the binary.`,
-          {
-            details: { dataset: "icon-d2-eps", missingDependency: "cdo", executable: this.executable, envVar: "CDO_PATH" },
-            cause: error,
-          },
-        );
-      }
       throw error;
     }
   }
@@ -226,7 +225,7 @@ export class IconD2EpsCdoRemapper {
 export class IconD2EpsRemappedSubsetCache implements IconD2SubsetCache {
   constructor(
     private readonly source: IconD2SubsetCache,
-    private readonly remapper: IconD2EpsCdoRemapper,
+    private readonly remapper: Pick<IconD2EpsGridRemapper, "remap">,
   ) {}
 
   async fetch(request: IconD2DataRequest): Promise<IconD2SourceFile> {

@@ -1,4 +1,7 @@
 import * as z from "zod/v4";
+import {
+  historicalAnalysisSourceSummarySchema,
+} from "./history-result.js";
 import { historicalGfsFieldIdSchema } from "./history-fields.js";
 import { historicalAnalysisTimeSchema, historicalGfsVariableIdSchema } from "./history.js";
 import { historicalPointResultSchema, MAX_HISTORICAL_POINTS } from "./history-points.js";
@@ -59,8 +62,7 @@ export const historicalTransectResultSchema = z.object({
   }),
   samples: z.array(historicalTransectSampleSchema).min(2),
   source: z.object({
-    provider: z.literal("NOAA NCEI"),
-    access: z.literal("ncei_thredds_ncss"),
+    ...historicalAnalysisSourceSummarySchema.shape,
     composition: z.literal("great_circle_to_serial_point_queries"),
   }),
   caveat: z.literal(

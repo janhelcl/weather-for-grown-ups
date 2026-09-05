@@ -10,14 +10,14 @@ const THREE_HOURS_MS = 3 * HOUR_MS;
 
 export function parseGefsRun(value: string): Date {
   const run = new Date(value);
-  if (Number.isNaN(run.getTime())) throw new Error(`Invalid GEFS run: ${value}`);
+  if (Number.isNaN(run.getTime())) throw new InvalidRequestError(`Invalid GEFS run: ${value}`);
   if (
     !GEFS_RUN_HOURS.has(run.getUTCHours()) ||
     run.getUTCMinutes() !== 0 ||
     run.getUTCSeconds() !== 0 ||
     run.getUTCMilliseconds() !== 0
   ) {
-    throw new Error("GEFS run must be initialized at 00Z, 06Z, 12Z, or 18Z");
+    throw new InvalidRequestError("GEFS run must be initialized at 00Z, 06Z, 12Z, or 18Z");
   }
   return run;
 }
@@ -25,27 +25,37 @@ export function parseGefsRun(value: string): Date {
 export function gefsForecastHour(run: Date, validTime: Date): number {
   const hours = (validTime.getTime() - run.getTime()) / HOUR_MS;
   if (!Number.isInteger(hours) || hours < 0) {
-    throw new Error("GEFS validTime must be a whole forecast hour at or after run time");
+    throw new InvalidRequestError("GEFS validTime must be a whole forecast hour at or after run time");
   }
   if (hours > GEFS_MAX_FORECAST_HOUR) {
-    throw new Error(`GEFS forecast hour must be <= ${GEFS_MAX_FORECAST_HOUR} in the current WFG ensemble contract`);
+    throw new InvalidRequestError(
+      `GEFS forecast hour must be <= ${GEFS_MAX_FORECAST_HOUR}; ${validTime.toISOString()} is f${hours} for run ${run.toISOString()}`,
+      {
+        details: {
+          run: run.toISOString(),
+          validTime: validTime.toISOString(),
+          forecastHour: hours,
+          maxForecastHour: GEFS_MAX_FORECAST_HOUR,
+        },
+      },
+    );
   }
   if (hours % GEFS_FORECAST_STEP_HOURS !== 0) {
-    throw new Error("GEFS 0.5° pgrb2a output is available every 3 hours");
+    throw new InvalidRequestError("GEFS 0.5° pgrb2a output is available every 3 hours");
   }
   return hours;
 }
 
 export function nativeGefsValidTimesInRange(startTime: Date, endTime: Date, maxSteps: number): Date[] {
   if (endTime.getTime() < startTime.getTime()) {
-    throw new Error("GEFS time-series endTime must be at or after startTime");
+    throw new InvalidRequestError("GEFS time-series endTime must be at or after startTime");
   }
   if (!isNativeGefsValidTime(startTime) || !isNativeGefsValidTime(endTime)) {
-    throw new Error("GEFS time-series bounds must be exact native three-hour valid times");
+    throw new InvalidRequestError("GEFS time-series bounds must be exact native three-hour valid times");
   }
   const span = endTime.getTime() - startTime.getTime();
   if (span % THREE_HOURS_MS !== 0) {
-    throw new Error("GEFS time-series range must align to the native three-hour cadence");
+    throw new InvalidRequestError("GEFS time-series range must align to the native three-hour cadence");
   }
   const count = span / THREE_HOURS_MS + 1;
   if (count > maxSteps) {

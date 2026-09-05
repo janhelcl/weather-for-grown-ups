@@ -1,3 +1,4 @@
+import { InvalidRequestError } from "../failure.js";
 export const AROME_0P01_MAX_FORECAST_HOUR = 51;
 export const AROME_0P01_FORECAST_INTERVAL_HOURS = 1;
 export const AROME_0P01_NATIVE_FORECAST_HOURS = Object.freeze(
@@ -27,7 +28,7 @@ export function buildArome0p01OpenDataUrl(
 
 export function parseAromeRun(value: string): Date {
   const run = new Date(value);
-  if (Number.isNaN(run.getTime())) throw new Error(`Invalid AROME run: ${value}`);
+  if (Number.isNaN(run.getTime())) throw new InvalidRequestError(`Invalid AROME run: ${value}`);
   assertAromeRun(run);
   return run;
 }
@@ -35,7 +36,7 @@ export function parseAromeRun(value: string): Date {
 export function aromeForecastHour(run: Date, validTime: Date): number {
   const hours = (validTime.getTime() - run.getTime()) / 3_600_000;
   if (!Number.isInteger(hours) || hours < 0) {
-    throw new Error("AROME validTime must be a whole forecast hour at or after run time");
+    throw new InvalidRequestError("AROME validTime must be a whole forecast hour at or after run time");
   }
   assertAromeForecastHour(hours);
   return hours;
@@ -79,7 +80,7 @@ function assertAromeRun(run: Date): void {
     || run.getUTCSeconds() !== 0
     || run.getUTCMilliseconds() !== 0
   ) {
-    throw new Error("AROME run must be initialized at a 3-hourly UTC cycle (00Z, 03Z, ..., 21Z)");
+    throw new InvalidRequestError("AROME run must be initialized at a 3-hourly UTC cycle (00Z, 03Z, ..., 21Z)");
   }
 }
 
@@ -89,7 +90,7 @@ function assertAromeForecastHour(forecastHour: number): void {
     || forecastHour < 0
     || forecastHour > AROME_0P01_MAX_FORECAST_HOUR
   ) {
-    throw new Error(
+    throw new InvalidRequestError(
       `AROME forecast hour must be a whole number from 0 to ${AROME_0P01_MAX_FORECAST_HOUR}`,
     );
   }

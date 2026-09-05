@@ -70,6 +70,7 @@ No raw member payload is exposed by the comparison result.
 
 ```bash
 wfg compare-datasets \
+  --dataset gefs \
   --against ifs-ens \
   --lat 50.08 \
   --lon 14.43 \
@@ -84,6 +85,7 @@ Optional member subsets and a common threshold:
 
 ```bash
 wfg compare-datasets \
+  --dataset gefs \
   --against ifs-ens \
   --lat 50.08 --lon 14.43 \
   --at 2026-08-28T12:00:00Z \

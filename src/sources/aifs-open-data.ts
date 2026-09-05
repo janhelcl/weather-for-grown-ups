@@ -3,6 +3,7 @@ import {
   runIfsHttpWithRetry,
 } from "../access/ifs-open-data.js";
 import { isRetryableHttpStatus } from "../access/http-retry.js";
+import { formatHttpStatus } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import {
   DataUnavailableError,
@@ -83,7 +84,7 @@ export class AifsOpenDataRunProbe implements AifsAvailabilityProbe {
       }
       if (result.status < 200 || result.status >= 300) {
         throw new UpstreamUnavailableError(
-          `ECMWF AIFS run discovery failed (HTTP ${result.status} ${result.statusText})`,
+          `ECMWF AIFS run discovery failed (${formatHttpStatus(result.status, result.statusText)})`,
           {
             retryable: false,
             details: { provider: "ECMWF Open Data", mirror: mirror.id, status: result.status },

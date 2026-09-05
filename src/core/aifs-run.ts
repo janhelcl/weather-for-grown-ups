@@ -1,3 +1,4 @@
+import { DataUnavailableError } from "../failure.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { IfsOpenDataAccessPolicy } from "../access/ifs-open-data.js";
@@ -70,7 +71,7 @@ export class AifsLatestRunResolver implements AifsLatestRunProvider {
       }
     }
 
-    throw new Error(
+    throw new DataUnavailableError(
       `No published ECMWF AIFS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested valid time and field selection`,
     );
   }
@@ -106,7 +107,7 @@ export class AifsLatestRunResolver implements AifsLatestRunProvider {
       }
     }
 
-    throw new Error(
+    throw new DataUnavailableError(
       `No published ECMWF AIFS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested time range and field selection`,
     );
   }

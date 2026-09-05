@@ -624,7 +624,7 @@ function assertWithinHgefsHorizon(
   }
   const endLead = (new Date(time.to).getTime() - run.getTime()) / 3_600_000;
   if (endLead > HGEFS_MAX_FORECAST_HOUR) {
-    throw new Error(
+    throw new InvalidRequestError(
       `Requested time range extends beyond the ${HGEFS_MAX_FORECAST_HOUR}-hour HGEFS horizon`,
     );
   }
@@ -633,7 +633,7 @@ function assertWithinHgefsHorizon(
 function hgefsForecastHour(run: Date, validTime: Date): number {
   const forecastHour = aigfsForecastHour(run, validTime);
   if (forecastHour > HGEFS_MAX_FORECAST_HOUR) {
-    throw new Error(
+    throw new InvalidRequestError(
       `HGEFS forecast hour must be at most ${HGEFS_MAX_FORECAST_HOUR}; received ${forecastHour}`,
     );
   }
@@ -647,7 +647,7 @@ function nativeTimes(
   requestedMaxSteps: number | undefined,
 ): Date[] {
   if (endTime.getTime() > run.getTime() + HGEFS_MAX_FORECAST_HOUR * 3_600_000) {
-    throw new Error(
+    throw new InvalidRequestError(
       `Requested time range extends beyond the ${HGEFS_MAX_FORECAST_HOUR}-hour HGEFS horizon`,
     );
   }

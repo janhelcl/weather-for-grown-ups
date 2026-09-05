@@ -1,3 +1,4 @@
+import { InvalidRequestError } from "../failure.js";
 export const ICON_D2_MAX_FORECAST_HOUR = 48;
 export const ICON_D2_FORECAST_INTERVAL_HOURS = 1;
 export const ICON_D2_NATIVE_FORECAST_HOURS = Object.freeze(
@@ -40,7 +41,7 @@ export function buildIconD2OpenDataUrl(
 
 export function parseIconD2Run(value: string): Date {
   const run = new Date(value);
-  if (Number.isNaN(run.getTime())) throw new Error(`Invalid ICON-D2 run: ${value}`);
+  if (Number.isNaN(run.getTime())) throw new InvalidRequestError(`Invalid ICON-D2 run: ${value}`);
   assertIconD2Run(run);
   return run;
 }
@@ -48,7 +49,7 @@ export function parseIconD2Run(value: string): Date {
 export function iconD2ForecastHour(run: Date, validTime: Date): number {
   const hours = (validTime.getTime() - run.getTime()) / 3_600_000;
   if (!Number.isInteger(hours) || hours < 0) {
-    throw new Error("ICON-D2 validTime must be a whole forecast hour at or after run time");
+    throw new InvalidRequestError("ICON-D2 validTime must be a whole forecast hour at or after run time");
   }
   assertIconD2ForecastHour(hours);
   return hours;
@@ -92,7 +93,7 @@ function assertIconD2Run(run: Date): void {
     || run.getUTCSeconds() !== 0
     || run.getUTCMilliseconds() !== 0
   ) {
-    throw new Error("ICON-D2 run must be initialized at a 3-hourly UTC cycle (00Z, 03Z, ..., 21Z)");
+    throw new InvalidRequestError("ICON-D2 run must be initialized at a 3-hourly UTC cycle (00Z, 03Z, ..., 21Z)");
   }
 }
 
@@ -102,7 +103,7 @@ function assertIconD2ForecastHour(forecastHour: number): void {
     || forecastHour < 0
     || forecastHour > ICON_D2_MAX_FORECAST_HOUR
   ) {
-    throw new Error(
+    throw new InvalidRequestError(
       `ICON-D2 forecast hour must be a whole number from 0 to ${ICON_D2_MAX_FORECAST_HOUR}`,
     );
   }

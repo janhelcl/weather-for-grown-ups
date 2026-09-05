@@ -151,14 +151,14 @@ describe("GfsS3SubsetCache", () => {
       headers: { "retry-after": "0" },
     }));
     await expect(makeCache(fetchFn as typeof fetch).fetch(request()))
-      .rejects.toThrow(/index request failed: HTTP 503/);
+      .rejects.toThrow(/unavailable after retries during the GFS index request \(HTTP 503/);
     expect(fetchFn).toHaveBeenCalledTimes(3);
   });
 
   it("fails rather than accepting a server that ignores the Range header", async () => {
     const fetchFn = vi.fn(async (input: string | URL | Request) =>
       String(input).endsWith(".idx") ? new Response(indexText, { status: 200 }) : new Response(new TextEncoder().encode("GRIB0000"), { status: 200 }));
-    await expect(makeCache(fetchFn as typeof fetch).fetch(request(["temperature"], [850]))).rejects.toThrow(/range request failed: HTTP 200/);
+    await expect(makeCache(fetchFn as typeof fetch).fetch(request(["temperature"], [850]))).rejects.toThrow(/rejected the GFS byte-range request \(HTTP 200\)/);
   });
 
   it("rejects byte ranges that do not begin with a GRIB message", async () => {

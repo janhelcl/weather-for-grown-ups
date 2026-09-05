@@ -112,11 +112,11 @@ describe("comparison CLI request builder", () => {
     expect(hybrid.thresholdGte).toBe(8);
   });
 
-  it("keeps legacy default pair selection", () => {
-    expect(buildUnifiedDatasetComparison({ ...base, against: "gefs" }).datasets)
-      .toEqual(["gfs", "gefs"]);
-    expect(buildUnifiedDatasetComparison({ ...base, against: "ifs-ens" }).datasets)
-      .toEqual(["gefs", "ifs-ens"]);
+  it("requires both sides of the pair explicitly (no implicit gfs/gefs defaults)", () => {
+    expect(() => buildUnifiedDatasetComparison({ ...base, against: "gefs" }))
+      .toThrow("Expected --dataset");
+    expect(() => buildUnifiedDatasetComparison({ ...base, dataset: "gfs" }))
+      .toThrow("Expected --against");
   });
 
   it("rejects invalid and unregistered pair requests before execution", () => {

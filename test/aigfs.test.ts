@@ -883,7 +883,7 @@ describe("AIGFS guard branches", () => {
       new Date("2026-08-30T00:00:00Z"),
       6,
       { pressure: false, surface: true },
-    )).rejects.toThrow("availability request failed");
+    )).rejects.toThrow("unavailable after retries during the AIGFS availability request (HTTP 503");
   });
 
   it("fails latest resolution clearly when no eligible cycle is published", async () => {

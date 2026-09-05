@@ -1,7 +1,9 @@
+import { upstreamHttpFailure } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { NetCDFReader } from "netcdfjs";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
 import { runWithHttpRetry } from "../access/http-retry.js";
+import { DataUnavailableError } from "../failure.js";
 import type {
   ArchivedGfsForecastAreaDataSource,
   ArchivedGfsForecastAreaRequest,
@@ -82,14 +84,25 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
     );
 
     if (result.status === 404) {
-      throw new Error(
-        `NCAR/GDEX historical GFS 0.25 forecast is not available for run ${request.runTime.toISOString()} f${formatForecastHour(request.forecastHour)} (${dataset})`,
+      throw new DataUnavailableError(
+        `NCAR/GDEX has no archived GFS 0.25° forecast online for run ${request.runTime.toISOString()} f${formatForecastHour(request.forecastHour)}`,
+        {
+          details: {
+            provider: "NCAR/GDEX",
+            dataset,
+            runTime: request.runTime.toISOString(),
+            forecastHour: request.forecastHour,
+          },
+        },
       );
     }
     if (result.status < 200 || result.status >= 300 || result.bytes === undefined) {
-      throw new Error(
-        `NCAR/GDEX historical GFS 0.25 area request failed: HTTP ${result.status} ${result.statusText}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "NCAR/GDEX",
+        operation: "archived GFS 0.25° area request",
+        status: result.status,
+        statusText: result.statusText,
+      });
     }
 
     let csv: string;
@@ -137,14 +150,25 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
     );
 
     if (result.status === 404) {
-      throw new Error(
-        `NCAR/GDEX historical GFS 0.25 forecast is not available for run ${runTime.toISOString()} f${formatForecastHour(forecastHour)} (${dataset})`,
+      throw new DataUnavailableError(
+        `NCAR/GDEX has no archived GFS 0.25° forecast online for run ${runTime.toISOString()} f${formatForecastHour(forecastHour)}`,
+        {
+          details: {
+            provider: "NCAR/GDEX",
+            dataset,
+            runTime: runTime.toISOString(),
+            forecastHour,
+          },
+        },
       );
     }
     if (result.status < 200 || result.status >= 300 || result.csv === undefined) {
-      throw new Error(
-        `NCAR/GDEX historical GFS 0.25 request failed: HTTP ${result.status} ${result.statusText}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "NCAR/GDEX",
+        operation: "archived GFS 0.25° request",
+        status: result.status,
+        statusText: result.statusText,
+      });
     }
     if (!result.csv.includes("\n")) {
       throw new Error(

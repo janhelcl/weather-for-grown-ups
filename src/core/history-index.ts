@@ -32,7 +32,7 @@ export interface HistoricalIndexTimeSeriesGetter {
       pressureLevelsHpa: number[];
       cycleHoursUtc: number[];
     };
-    source: { provider: "NOAA NCEI"; access: "ncei_thredds_ncss" };
+    source: { provider: HistoricalIndexRecord["source"]["provider"]; access: HistoricalIndexRecord["source"]["access"] };
     series: Array<{
       analysisTime: string;
       levels: HistoricalIndexRecord["levels"];
@@ -81,8 +81,8 @@ export class HistoricalIndexService {
       selection: { variables, pressureLevelsHpa },
       levels: step.levels,
       source: {
-        provider: "NOAA NCEI",
-        access: "ncei_thredds_ncss",
+        provider: result.source.provider,
+        access: result.source.access,
         dataset: step.dataset,
       },
     }));
@@ -319,8 +319,8 @@ function recordFromProfile(
     selection: { variables, pressureLevelsHpa },
     levels: profile.levels,
     source: {
-      provider: "NOAA NCEI",
-      access: "ncei_thredds_ncss",
+      provider: profile.source.provider,
+      access: profile.source.access,
       dataset: profile.source.dataset,
     },
   };

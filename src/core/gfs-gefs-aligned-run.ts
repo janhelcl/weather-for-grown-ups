@@ -1,3 +1,4 @@
+import { DataUnavailableError } from "../failure.js";
 import { GEFS_MAX_FORECAST_HOUR, type GefsMember } from "../catalog/gefs.js";
 import type { GfsGrid } from "../schema/gfs-grid.js";
 import { GfsS3RunProbe, type RunAvailabilityProbe } from "../sources/gfs-s3.js";
@@ -68,7 +69,7 @@ export class GfsGefsAlignedRunResolver implements GfsGefsAlignedRunProvider {
     }
 
     gefsForecastHour(anchor, validTime);
-    throw new Error(
+    throw new DataUnavailableError(
       `No aligned GFS/GEFS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested valid time, field, pressure level, and member selection`,
     );
   }

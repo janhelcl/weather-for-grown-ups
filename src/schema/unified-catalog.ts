@@ -19,13 +19,13 @@ export const UNIFIED_CATALOG_SECTIONS = [
 
 export const unifiedCatalogSectionSchema = z.enum(UNIFIED_CATALOG_SECTIONS);
 
-export const catalogCoverageGeometrySchema = z.union([
-  z.object({
+export const catalogCoverageGeometrySchema = z.discriminatedUnion("type", [
+  z.strictObject({
     type: z.literal("point"),
     latitude: z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
   }),
-  z.object({
+  z.strictObject({
     type: z.literal("area"),
     westLongitude: z.number().min(-180).max(180),
     eastLongitude: z.number().min(-180).max(180),
@@ -49,7 +49,7 @@ export const catalogCoverageGeometrySchema = z.union([
   }),
 ]);
 
-export const searchAtmosphereCatalogSchema = z.object({
+export const searchAtmosphereCatalogSchema = z.strictObject({
   search: z.string().min(1).optional(),
   datasets: z.array(publicAtmosphericDatasetSchema).min(1).max(PUBLIC_ATMOSPHERIC_DATASET_IDS.length)
     .default([...PUBLIC_ATMOSPHERIC_DATASET_IDS]),

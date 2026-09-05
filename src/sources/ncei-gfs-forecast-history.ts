@@ -1,3 +1,4 @@
+import { formatHttpStatus } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
 import { runWithHttpRetry } from "../access/http-retry.js";
@@ -118,13 +119,13 @@ export class NceiGfsForecastHistorySource implements ArchivedGfsForecastDataSour
     }
     if (result.status >= 500 && result.status <= 599) {
       throw new UpstreamUnavailableError(
-        `NOAA NCEI is unavailable after retries (HTTP ${result.status} ${result.statusText})`,
+        `NOAA NCEI is unavailable after retries (${formatHttpStatus(result.status, result.statusText)})`,
         { details: { provider: "NOAA NCEI", status: result.status } },
       );
     }
     if (result.status < 200 || result.status >= 300 || result.csv === undefined) {
       throw new UpstreamUnavailableError(
-        `NOAA NCEI rejected the archived GFS request (HTTP ${result.status} ${result.statusText})`,
+        `NOAA NCEI rejected the archived GFS request (${formatHttpStatus(result.status, result.statusText)})`,
         {
           retryable: false,
           details: { provider: "NOAA NCEI", status: result.status },

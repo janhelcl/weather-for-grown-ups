@@ -24,6 +24,15 @@ describe("GFS S3 run discovery", () => {
     );
   });
 
+  it("uses the pre-atmos layout before the GFS v16 directory change", () => {
+    expect(buildGfsS3ForecastIndexUrl(new Date("2021-03-22T06:00:00Z"), 0, "0p50")).toBe(
+      "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20210322/06/gfs.t06z.pgrb2.0p50.f000.idx",
+    );
+    expect(buildGfsS3ForecastIndexUrl(new Date("2021-03-22T12:00:00Z"), 0, "0p50")).toBe(
+      "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20210322/12/atmos/gfs.t12z.pgrb2.0p50.f000.idx",
+    );
+  });
+
   it("reports a run as complete when the marker HEAD succeeds", async () => {
     const fetchFn = vi.fn(async () => new Response(null, { status: 200 }));
     const probe = new GfsS3RunProbe(fetchFn as typeof fetch);

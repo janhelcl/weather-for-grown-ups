@@ -1,3 +1,4 @@
+import { upstreamHttpFailure } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -169,9 +170,14 @@ export class AigfsNomadsSubsetCache implements AigfsSubsetCache {
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (!response.ok) {
-      throw new Error(
-        `AIGFS NOMADS index request failed: HTTP ${response.status} ${response.statusText}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "NOAA NOMADS",
+        operation: "AIGFS index request",
+        status: response.status,
+        statusText: response.statusText,
+        resource: `AIGFS run ${run.toISOString()} f${String(forecastHour).padStart(3, "0")}`,
+        details: { run: run.toISOString(), forecastHour, product },
+      });
     }
     const text = await response.text();
     await writeFile(path, text, "utf8");
@@ -195,9 +201,12 @@ export class AigfsNomadsSubsetCache implements AigfsSubsetCache {
     );
     if (response.status === 404) return false;
     if (!response.ok) {
-      throw new Error(
-        `AIGFS NOMADS availability request failed: HTTP ${response.status} ${response.statusText}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "NOAA NOMADS",
+        operation: "AIGFS availability request",
+        status: response.status,
+        statusText: response.statusText,
+      });
     }
     const text = await response.text();
     await writeFile(path, text, "utf8");
@@ -217,9 +226,12 @@ export class AigfsNomadsSubsetCache implements AigfsSubsetCache {
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (response.status !== 206) {
-      throw new Error(
-        `AIGFS NOMADS range request failed: HTTP ${response.status} ${response.statusText}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "NOAA NOMADS",
+        operation: "AIGFS byte-range request",
+        status: response.status,
+        statusText: response.statusText,
+      });
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {

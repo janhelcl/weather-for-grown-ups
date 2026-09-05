@@ -2,16 +2,15 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   IconD2EpsMemberFileFilter,
+  IconD2EpsMemberSubsetCache,
   IconD2EpsOpenDataCache,
 } from "../cache/icon-d2-eps-open-data-cache.js";
 import {
-  IconD2EpsCdoRemapper,
   IconD2EpsDwdRemapAssetCache,
+  IconD2EpsGridRemapper,
+  IconD2EpsRemapIndexLoader,
+  IconD2EpsRemappedSubsetCache,
 } from "../cache/icon-d2-eps-remap-cache.js";
-import {
-  IconD2EpsAdaptiveMemberSubsetCache,
-  IconD2EpsMemberFileCombiner,
-} from "../cache/icon-d2-eps-member-cache.js";
 import {
   ICON_D2_EPS_MEMBERS,
   sortIconD2EpsMembers,
@@ -26,6 +25,7 @@ import type {
   ProfileDiagnosticResult,
   ProfileLevel,
 } from "./types.js";
+import type { GribDecoderName } from "../types/decoded.js";
 import { IconD2RunResolver } from "./icon-d2-run.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
 import { Wgrib2GridDecoder } from "../grib/wgrib2-grid.js";
@@ -79,32 +79,28 @@ export class IconD2EpsForecastService {
     const remapAssets = new IconD2EpsDwdRemapAssetCache(
       join(cacheDir, "icon-d2-remap-assets"),
     );
-    const remapper = new IconD2EpsCdoRemapper(
+    const remapper = new IconD2EpsGridRemapper(
       join(cacheDir, "icon-d2-eps-remapped"),
-      remapAssets,
+      new IconD2EpsRemapIndexLoader(remapAssets),
     );
-    const wgrib2 = process.env.WGRIB2_PATH ?? "wgrib2";
+    const remappedCache = new IconD2EpsRemappedSubsetCache(cache, remapper);
     const memberFilter = new IconD2EpsMemberFileFilter(
       join(cacheDir, "icon-d2-eps-members"),
-      wgrib2,
-    );
-    const memberCombiner = new IconD2EpsMemberFileCombiner(
-      join(cacheDir, "icon-d2-eps-member-combined"),
     );
     this.memberServiceFactory = options.memberServiceFactory ?? ((member) => {
-      const memberCache = new IconD2EpsAdaptiveMemberSubsetCache(
-        cache,
-        remapper,
-        memberFilter,
-        memberCombiner,
+      const memberCache = new IconD2EpsMemberSubsetCache(
+        remappedCache,
         member,
+        memberFilter,
       );
+      // Same bundled decoder defaults as deterministic ICON-D2; native wgrib2
+      // remains an explicit opt-in through WGRIB2_PATH / WFG_DECODER.
       return new IconD2ForecastService({
         cache: memberCache,
         runProvider,
-        decoder: new Wgrib2Decoder(wgrib2, "DWD"),
-        areaDecoder: new Wgrib2StatsDecoder(wgrib2, undefined, "DWD"),
-        areaGridDecoder: new Wgrib2GridDecoder(wgrib2, undefined, "DWD"),
+        decoder: new Wgrib2Decoder(undefined, "DWD"),
+        areaDecoder: new Wgrib2StatsDecoder(undefined, undefined, "DWD"),
+        areaGridDecoder: new Wgrib2GridDecoder(undefined, undefined, "DWD"),
       });
     });
   }
@@ -823,7 +819,7 @@ function ensembleSource(members: readonly MemberResult[]) {
     provider: "DWD Open Data" as const,
     product: "icon_d2_eps_native_icosahedral" as const,
     access: "dwd_open_data" as const,
-    decoder: "wgrib2" as const,
+    decoder: resultDecoder(members),
     nativeGrid: {
       type: "icosahedral" as const,
       nominalResolutionKm: 2.1,
@@ -837,6 +833,11 @@ function ensembleSource(members: readonly MemberResult[]) {
     memberCount: members.length,
     allCacheHit: members.every(({ result }) => resultCacheHit(result)),
   };
+}
+
+function resultDecoder(members: readonly MemberResult[]): GribDecoderName {
+  const decoder = members[0]?.result?.source?.decoder;
+  return decoder === "wgrib2" ? "wgrib2" : "gribberish";
 }
 
 function resultCacheHit(result: any): boolean {

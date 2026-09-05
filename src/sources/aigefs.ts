@@ -1,3 +1,4 @@
+import { InvalidRequestError } from "../failure.js";
 import { aigefsSourceMember, type AigefsMember } from "../catalog/aigefs.js";
 import {
   AIGFS_FORECAST_INTERVAL_HOURS,
@@ -50,11 +51,11 @@ function assertAigefsForecastHour(forecastHour: number): void {
     || forecastHour < 0
     || forecastHour > AIGEFS_MAX_FORECAST_HOUR
   ) {
-    throw new Error(
+    throw new InvalidRequestError(
       `AIGEFS forecast hour must be a whole number from 0 to ${AIGEFS_MAX_FORECAST_HOUR}`,
     );
   }
   if (forecastHour % AIGEFS_FORECAST_INTERVAL_HOURS !== 0) {
-    throw new Error("AIGEFS output is available every 6 forecast hours");
+    throw new InvalidRequestError("AIGEFS output is available every 6 forecast hours");
   }
 }

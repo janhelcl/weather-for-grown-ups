@@ -1,3 +1,4 @@
+import { InvalidRequestError } from "../failure.js";
 import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
 import {
   peAromeMemberNumber,
@@ -44,7 +45,7 @@ const WCS_FIELD_MAPPINGS: Partial<Record<RawNonIsobaricFieldDefinition["id"], Wc
 export function parsePeAromeRun(value: string): Date {
   const run = new Date(value);
   if (!Number.isFinite(run.getTime()) || run.toISOString() !== value) {
-    throw new Error("PE-AROME run must be a canonical timezone-aware ISO instant");
+    throw new InvalidRequestError("PE-AROME run must be a canonical timezone-aware ISO instant");
   }
   assertPeAromeCycle(run);
   return run;
@@ -58,7 +59,7 @@ export function assertPeAromeCycle(run: Date): void {
     || run.getUTCMilliseconds() !== 0
     || ![3, 9, 15, 21].includes(hour)
   ) {
-    throw new Error("PE-AROME runs initialize at 03, 09, 15, or 21 UTC");
+    throw new InvalidRequestError("PE-AROME runs initialize at 03, 09, 15, or 21 UTC");
   }
 }
 
@@ -71,10 +72,10 @@ export function peAromeForecastHour(run: Date, validTime: Date): number {
   assertPeAromeCycle(run);
   const deltaHours = (validTime.getTime() - run.getTime()) / HOUR_MS;
   if (!Number.isInteger(deltaHours)) {
-    throw new Error("PE-AROME valid times must align to the native hourly forecast cadence");
+    throw new InvalidRequestError("PE-AROME valid times must align to the native hourly forecast cadence");
   }
   if (deltaHours < 0 || deltaHours > PE_AROME_MAX_FORECAST_HOUR) {
-    throw new Error(
+    throw new InvalidRequestError(
       `PE-AROME forecast hour must be between 0 and ${PE_AROME_MAX_FORECAST_HOUR}`,
     );
   }
@@ -88,7 +89,7 @@ export function peAromeValidTime(run: Date, forecastHour: number): Date {
     || forecastHour < 0
     || forecastHour > PE_AROME_MAX_FORECAST_HOUR
   ) {
-    throw new Error(
+    throw new InvalidRequestError(
       `PE-AROME forecast hour must be an integer from 0 to ${PE_AROME_MAX_FORECAST_HOUR}`,
     );
   }

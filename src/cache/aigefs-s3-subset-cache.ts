@@ -1,3 +1,4 @@
+import { upstreamHttpFailure } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -167,9 +168,14 @@ export class AigefsS3SubsetCache implements AigfsSubsetCache {
       { fetchFn: this.memberFetchFn, accessPolicy: this.memberAccessPolicy },
     );
     if (!response.ok) {
-      throw new Error(
-        `AIGEFS NOAA EAGLE index request failed for ${this.member}: HTTP ${response.status} ${response.statusText}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "NOAA AWS Open Data",
+        operation: `AIGEFS ${this.member} index request`,
+        status: response.status,
+        statusText: response.statusText,
+        resource: `AIGEFS member ${this.member} for run ${run.toISOString()} f${String(forecastHour).padStart(3, "0")}`,
+        details: { run: run.toISOString(), forecastHour, member: this.member, product },
+      });
     }
     const text = await response.text();
     await writeFile(path, text, "utf8");
@@ -193,9 +199,12 @@ export class AigefsS3SubsetCache implements AigfsSubsetCache {
     );
     if (response.status === 404) return false;
     if (!response.ok) {
-      throw new Error(
-        `AIGEFS NOAA EAGLE availability request failed for ${this.member}: HTTP ${response.status} ${response.statusText}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "NOAA AWS Open Data",
+        operation: `AIGEFS ${this.member} availability request`,
+        status: response.status,
+        statusText: response.statusText,
+      });
     }
     const text = await response.text();
     await writeFile(path, text, "utf8");
@@ -221,9 +230,12 @@ export class AigefsS3SubsetCache implements AigfsSubsetCache {
         { fetchFn: this.memberFetchFn, accessPolicy: this.memberAccessPolicy },
       );
       if (response.status !== 206) {
-        throw new Error(
-          `AIGEFS NOAA EAGLE range request failed for ${this.member}: HTTP ${response.status} ${response.statusText}`,
-        );
+        throw upstreamHttpFailure({
+          provider: "NOAA AWS Open Data",
+          operation: `AIGEFS ${this.member} byte-range request`,
+          status: response.status,
+          statusText: response.statusText,
+        });
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
       if (

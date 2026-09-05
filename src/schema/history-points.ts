@@ -1,4 +1,7 @@
 import * as z from "zod/v4";
+import {
+  historicalAnalysisSourceSummarySchema,
+} from "./history-result.js";
 import { historicalGfsFieldIdSchema } from "./history-fields.js";
 import {
   historicalAnalysisTimeSchema,
@@ -57,8 +60,7 @@ export const historicalPointsResultSchema = z.object({
   }),
   points: z.array(historicalPointResultSchema).min(1),
   source: z.object({
-    provider: z.literal("NOAA NCEI"),
-    access: z.literal("ncei_thredds_ncss"),
+    ...historicalAnalysisSourceSummarySchema.shape,
     composition: z.literal("serial_point_queries"),
   }),
   caveat: z.literal(

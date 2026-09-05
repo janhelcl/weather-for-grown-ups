@@ -91,9 +91,7 @@ export function toPublicFailure(error: unknown): PublicFailure {
     const issues = zodIssueDetails(error);
     return {
       code: "INVALID_REQUEST",
-      message: issues.length === 0
-        ? "Request validation failed"
-        : `Request validation failed: ${issues[0]!.message}`,
+      message: zodFailureMessage(issues),
       retryable: false,
       ...(issues.length === 0 ? {} : { details: { issues } }),
     };
@@ -207,9 +205,16 @@ function isSafeDetails(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+interface ZodLikeIssue {
+  code?: unknown;
+  path?: unknown[];
+  message?: unknown;
+  errors?: unknown;
+}
+
 interface ZodLikeError {
   name: "ZodError";
-  issues?: Array<{ path?: unknown[]; message?: unknown }>;
+  issues?: ZodLikeIssue[];
 }
 
 function isZodError(error: unknown): error is ZodLikeError {
@@ -219,12 +224,70 @@ function isZodError(error: unknown): error is ZodLikeError {
     && (error as { name?: unknown }).name === "ZodError";
 }
 
+/**
+ * Lead with the first issue and its field path so an agent can correct the
+ * request from the message alone; the bounded full list stays in details.issues.
+ */
+function zodFailureMessage(issues: Array<{ path: string; message: string }>): string {
+  if (issues.length === 0) return "Request validation failed";
+  const [first] = issues;
+  const lead = first!.path.length === 0
+    ? `Request validation failed: ${first!.message}`
+    : `Request validation failed at ${first!.path}: ${first!.message}`;
+  return issues.length === 1
+    ? lead
+    : `${lead} (+${issues.length - 1} more in details.issues)`;
+}
+
+const MAX_REPORTED_ISSUES = 8;
+
 function zodIssueDetails(error: ZodLikeError): Array<{ path: string; message: string }> {
   if (!Array.isArray(error.issues)) return [];
-  return error.issues.slice(0, 8).map((issue) => ({
-    path: Array.isArray(issue.path) ? issue.path.map(String).join(".") : "",
-    message: typeof issue.message === "string" ? issue.message : "Invalid value",
-  }));
+  return flattenZodIssues(error.issues, []).slice(0, MAX_REPORTED_ISSUES);
+}
+
+/**
+ * A plain union reports "Invalid input" at the union root and hides the branch
+ * issues underneath. When one branch is clearly closest (fewest issues), report
+ * that branch's issues at their full path; otherwise summarise the tied branches
+ * so the caller sees what each form was missing instead of an opaque failure.
+ */
+function flattenZodIssues(
+  issues: ZodLikeIssue[],
+  prefix: string[],
+): Array<{ path: string; message: string }> {
+  const out: Array<{ path: string; message: string }> = [];
+  for (const issue of issues) {
+    const path = [...prefix, ...(Array.isArray(issue.path) ? issue.path.map(String) : [])];
+    const branches = issue.code === "invalid_union" && Array.isArray(issue.errors)
+      ? (issue.errors as unknown[]).filter((branch): branch is ZodLikeIssue[] => Array.isArray(branch))
+      : [];
+    if (branches.length === 0) {
+      out.push({
+        path: path.join("."),
+        message: typeof issue.message === "string" ? issue.message : "Invalid value",
+      });
+      continue;
+    }
+    const fewest = Math.min(...branches.map((branch) => branch.length));
+    const closest = branches.filter((branch) => branch.length === fewest);
+    if (closest.length === 1) {
+      out.push(...flattenZodIssues(closest[0]!, path));
+      continue;
+    }
+    const summary = closest
+      .slice(0, 3)
+      .map((branch) => flattenZodIssues(branch, [])
+        .map((entry) => (entry.path.length === 0 ? entry.message : `${entry.path}: ${entry.message}`))
+        .join("; "))
+      .map((text) => `[${text}]`)
+      .join(" or ");
+    const lead = typeof issue.message === "string" && issue.message !== "Invalid input"
+      ? issue.message
+      : "No accepted form matched";
+    out.push({ path: path.join("."), message: `${lead}. Closest forms: ${summary}` });
+  }
+  return out;
 }
 
 function httpStatus(error: unknown): number | undefined {

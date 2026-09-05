@@ -3,6 +3,7 @@ import {
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
 import { fetchWithRetry } from "../access/http-fetch.js";
+import { upstreamHttpFailure } from "../access/http-failure.js";
 import type { HttpRetryExecutionOptions } from "../access/http-retry.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import type { RawNonIsobaricFieldDefinition } from "../catalog/non-isobaric-fields.js";
@@ -18,6 +19,10 @@ import type { ProfileDataRequest } from "./types.js";
 
 export const GFS_S3_BASE_URL = "https://noaa-gfs-bdp-pds.s3.amazonaws.com";
 export const COMPLETE_RUN_MARKER_FORECAST_HOUR = 384;
+/** GFS v16 / NOMADS+AWS directory layout that nests atmospheric products under `/atmos`. */
+export const GFS_S3_ATMOS_LAYOUT_START = new Date("2021-03-22T12:00:00Z");
+/** Earliest GFS cycles routinely present on `noaa-gfs-bdp-pds` for analysis routing. */
+export const GFS_S3_ARCHIVE_START = new Date("2021-01-01T00:00:00Z");
 
 export interface ForecastAvailabilitySelection {
   variableCodes: readonly string[];
@@ -44,7 +49,10 @@ export function buildGfsS3ForecastUrl(run: Date, forecastHour: number, grid: Gfs
   const date = yyyymmdd(run);
   const hour = run.getUTCHours().toString().padStart(2, "0");
   const fh = forecastHour.toString().padStart(3, "0");
-  return `${GFS_S3_BASE_URL}/gfs.${date}/${hour}/atmos/gfs.t${hour}z.pgrb2.${grid}.f${fh}`;
+  const cycleRoot = run < GFS_S3_ATMOS_LAYOUT_START
+    ? `${GFS_S3_BASE_URL}/gfs.${date}/${hour}`
+    : `${GFS_S3_BASE_URL}/gfs.${date}/${hour}/atmos`;
+  return `${cycleRoot}/gfs.t${hour}z.pgrb2.${grid}.f${fh}`;
 }
 
 export function buildGfsS3ForecastIndexUrl(run: Date, forecastHour: number, grid: GfsGrid = "0p25"): string {
@@ -75,7 +83,14 @@ export class GfsS3Source implements GfsS3SubsetSource {
       },
     );
     if (!response.ok) {
-      throw new Error(`NOAA AWS index request failed: HTTP ${response.status} ${response.statusText}`);
+      throw upstreamHttpFailure({
+        provider: "NOAA AWS Open Data",
+        operation: "GFS index request",
+        status: response.status,
+        statusText: response.statusText,
+        resource: `GFS ${grid} run ${request.run.toISOString()} f${String(request.forecastHour).padStart(3, "0")}`,
+        details: { run: request.run.toISOString(), forecastHour: request.forecastHour, grid },
+      });
     }
     return response.text();
   }
@@ -124,7 +139,12 @@ export class GfsS3Source implements GfsS3SubsetSource {
       },
     );
     if (response.status !== 206) {
-      throw new Error(`NOAA AWS range request failed: HTTP ${response.status} ${response.statusText}`);
+      throw upstreamHttpFailure({
+        provider: "NOAA AWS Open Data",
+        operation: "GFS byte-range request",
+        status: response.status,
+        statusText: response.statusText,
+      });
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
@@ -146,9 +166,13 @@ export class GfsS3RunProbe implements RunAvailabilityProbe {
 
     if (response.ok) return true;
     if (response.status === 404) return false;
-    throw new Error(
-      `GFS run discovery failed: HTTP ${response.status} ${response.statusText} for ${url}`,
-    );
+    throw upstreamHttpFailure({
+      provider: "NOAA AWS Open Data",
+      operation: "GFS run discovery request",
+      status: response.status,
+      statusText: response.statusText,
+      url,
+    });
   }
 
   async isForecastAvailable(
@@ -164,9 +188,13 @@ export class GfsS3RunProbe implements RunAvailabilityProbe {
 
     if (response.status === 404) return false;
     if (!response.ok) {
-      throw new Error(
-        `GFS forecast discovery failed: HTTP ${response.status} ${response.statusText} for ${url}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "NOAA AWS Open Data",
+        operation: "GFS forecast discovery request",
+        status: response.status,
+        statusText: response.statusText,
+        url,
+      });
     }
 
     const records = parseGribIndex(await response.text());

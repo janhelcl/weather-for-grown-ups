@@ -128,7 +128,7 @@ describe("PE-AROME WCS cache defensive branches", () => {
       new Date("2026-09-01T09:00:00Z"),
       6,
       products,
-    )).rejects.toThrow("availability request failed: HTTP 418");
+    )).rejects.toThrow("rejected the PE-AROME availability request (HTTP 418)");
   });
 
   it("rejects empty requests, failed downloads, and non-GRIB payloads", async () => {
@@ -160,7 +160,7 @@ describe("PE-AROME WCS cache defensive branches", () => {
       run: new Date("2026-09-01T09:00:00Z"),
       forecastHour: 1,
       fields: [field],
-    })).rejects.toThrow("WCS request failed: HTTP 400");
+    })).rejects.toThrow("rejected the PE-AROME coverage request (HTTP 400");
 
     const invalidRoot = await mkdtemp(join(tmpdir(), "wfg-pe-arome-invalid-"));
     roots.push(invalidRoot);

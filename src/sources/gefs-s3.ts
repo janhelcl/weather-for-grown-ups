@@ -1,3 +1,4 @@
+import { upstreamHttpFailure } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import type { GefsMember } from "../catalog/gefs.js";
 
@@ -64,7 +65,13 @@ export class GefsS3RunProbe implements GefsAvailabilityProbe {
     });
     if (response.ok) return true;
     if (response.status === 404) return false;
-    throw new Error(`GEFS run discovery failed: HTTP ${response.status} ${response.statusText} for ${url}`);
+    throw upstreamHttpFailure({
+      provider: "NOAA AWS Open Data",
+      operation: "GEFS run discovery request",
+      status: response.status,
+      statusText: response.statusText,
+      url,
+    });
   }
 }
 

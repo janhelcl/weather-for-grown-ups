@@ -1,3 +1,4 @@
+import { upstreamHttpFailure } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -225,7 +226,14 @@ export class GefsReforecastS3SubsetCache implements GefsReforecastSelectionSourc
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (!response.ok) {
-      throw new Error(`NOAA GEFSv12 reforecast AWS index request failed: HTTP ${response.status} ${response.statusText}`);
+      throw upstreamHttpFailure({
+        provider: "NOAA AWS Open Data",
+        operation: "GEFSv12 reforecast index request",
+        status: response.status,
+        statusText: response.statusText,
+        resource: "the requested GEFSv12 reforecast member file",
+        url,
+      });
     }
     const text = await response.text();
     await writeFile(path, text, "utf8");
@@ -245,7 +253,12 @@ export class GefsReforecastS3SubsetCache implements GefsReforecastSelectionSourc
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (response.status !== 206) {
-      throw new Error(`NOAA GEFSv12 reforecast AWS range request failed: HTTP ${response.status} ${response.statusText}`);
+      throw upstreamHttpFailure({
+        provider: "NOAA AWS Open Data",
+        operation: "GEFSv12 reforecast byte-range request",
+        status: response.status,
+        statusText: response.statusText,
+      });
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {

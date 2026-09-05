@@ -1,14 +1,6 @@
 #!/usr/bin/env node
+import { runCli } from "./cli/run.js";
 
-const mode = process.argv[2];
-
-if (mode === "mcp") {
-  process.argv.splice(2, 1);
-  await import("./mcp.js");
-} else if (mode === "mcp-http") {
-  process.argv.splice(2, 1);
-  await import("./mcp-http.js");
-} else {
-  const { runCli } = await import("./cli/run.js");
-  await runCli(process.argv, "weather-for-grown-ups");
-}
+// `weather-for-grown-ups` and `wfg` share one program; `mcp` and `mcp-http`
+// are ordinary subcommands that launch the MCP transports.
+await runCli(process.argv, "weather-for-grown-ups");

@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { HistoricalProfileService, parseHistoricalProfileCsv } from "../src/core/history.js";
-import {
-  buildNceiGfsAnalysisAreaUrl,
+import { NCEI_NCSS_PROVENANCE, buildNceiGfsAnalysisAreaUrl,
   buildNceiGfsAnalysisDatasetPath,
   buildNceiGfsAnalysisPointUrl,
   type HistoricalAnalysisDataSource,
@@ -32,6 +31,7 @@ function mockSource(): HistoricalAnalysisDataSource {
       csv,
       dataset,
       cacheHit: false,
+      ...NCEI_NCSS_PROVENANCE,
     })),
   };
 }
@@ -96,12 +96,12 @@ describe("HistoricalProfileService", () => {
   it("splits variables with incompatible historical pressure axes and merges their levels", async () => {
     const fetch = vi.fn(async (request: { variables: readonly string[] }) => {
       if (request.variables.includes("Vertical_velocity_pressure_isobaric")) {
-        return { csv: verticalVelocityCsv, dataset, cacheHit: true };
+        return { csv: verticalVelocityCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
       }
       if (request.variables.includes("Absolute_vorticity_isobaric")) {
-        return { csv: vorticityCsv, dataset, cacheHit: true };
+        return { csv: vorticityCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
       }
-      return { csv, dataset, cacheHit: true };
+      return { csv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
     });
     const service = new HistoricalProfileService({ source: { fetch } });
 
@@ -133,7 +133,7 @@ describe("HistoricalProfileService", () => {
       'time,alt[unit="Pa"],station,latitude[unit="degrees_north"],longitude[unit="degrees_east"],Specific_humidity_isobaric[unit="kg/kg"],Temperature_isobaric[unit="K"]',
       '2026-08-24T06:00:00Z,85000,GridPointRequestedAt[50.000N_14.000E],50.000,14.000,0.010,285.15',
     ].join("\n");
-    const fetch = vi.fn(async () => ({ csv: nativeCsv, dataset: "gdex", cacheHit: true }));
+    const fetch = vi.fn(async () => ({ csv: nativeCsv, dataset: "gdex", cacheHit: true, ...NCEI_NCSS_PROVENANCE }));
     const service = new HistoricalProfileService({
       source: { fetch },
       now: () => new Date("2026-08-27T12:00:00Z"),
@@ -334,5 +334,24 @@ describe("NCEI historical GFS access", () => {
     );
     expect(parsed.gridPoint).toEqual({ latitude: 50, longitude: -10 });
     expect(parsed.levels[0]).toMatchObject({ pressureHpa: 850, temperatureC: 12 });
+  });
+
+  it("honors vertCoord Pa units so a 7 hPa row does not overwrite 700 hPa", () => {
+    const awsStack = [
+      'latitude,longitude,vertCoord[unit="Pa"],Temperature_isobaric[unit="1"]',
+      "50,14.5,85000,281.15",
+      "50,14.5,70000,272.15",
+      "50,14.5,700,221.15",
+    ].join("\n");
+    const parsed = parseHistoricalProfileCsv(
+      awsStack,
+      ["temperature"],
+      [850, 700],
+      { latitude: 50.08, longitude: 14.43 },
+    );
+    expect(parsed.levels).toEqual([
+      { pressureHpa: 850, temperatureC: 8 },
+      { pressureHpa: 700, temperatureC: -1 },
+    ]);
   });
 });

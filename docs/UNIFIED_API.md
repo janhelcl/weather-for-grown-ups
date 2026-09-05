@@ -502,7 +502,7 @@ wfg query \
   --json
 ```
 
-The same routing applies to `wfg diagnose`: `--grid 0p25|0p50` selects the deterministic GFS grid, and an old explicit `--run` derives layer, profile, parcel, or diagnostic time-series products from the matching archived forecast state.
+The same routing applies to `wfg diagnose`: `--grid 0p25|0p50` selects the deterministic GFS grid, an old explicit `--run` derives layer, profile, parcel, or diagnostic time-series products from the matching archived forecast state, and `--forecast-kind reforecast` selects the GEFSv12 retrospective population exactly as it does for `wfg query`.
 
 Historical analysis: change the dataset and time.
 
@@ -564,6 +564,12 @@ wfg diagnose \
 
 Specialized CLI operations are `compare-runs`, `compare-datasets`, `verify`, and `analogs`.
 
+`wfg compare-datasets` requires both sides of the registered pair, in registered order: `--dataset <left> --against <right>` (`--dataset gfs --against gefs`, `--dataset ifs-ens --against pe-arome`). There are no implicit defaults, and `compare_datasets` likewise requires `datasets: [left, right]`. Reversed, missing or unregistered pairs fail with the registered list.
+
+Every numeric flag (`--lat`, `--levels`, `--quantiles`, `--gte`, …) rejects non-numeric input by name (`Expected --lat to be a number, received: abc`) rather than passing `NaN` down to the schema.
+
+`wfg mcp` and `wfg mcp-http` launch the two MCP transports over the same services; they are launchers, not additional operations.
+
 ## Capability differences are errors, not fake symmetry
 
 A common query vocabulary does not mean every dataset/source implements every combination.
@@ -588,7 +594,7 @@ Every CLI and MCP failure is reduced to one envelope: `{ code, message, retryabl
 | Code | Meaning | Retry? |
 | --- | --- | --- |
 | `INVALID_REQUEST` | Malformed or contradictory request: schema violations, unknown dataset/section/option values, missing paired options, guardrail limits such as `maxSteps`/`maxGridPoints`, or a GEFSv12 reforecast run outside 2000–2019. | no |
-| `UNSUPPORTED_OPERATION` | Valid request that this dataset or this environment cannot serve: capability gaps, a missing local dependency (`cdo` for `icon-d2-eps`), or missing provider credentials/endpoints (`WFG_METEO_FRANCE_TOKEN`, `WFG_PEAROME_WCS_*` for `pe-arome`). | no |
+| `UNSUPPORTED_OPERATION` | Valid request that this dataset or this environment cannot serve: capability gaps or missing provider credentials/endpoints (`WFG_METEO_FRANCE_TOKEN`, `WFG_PEAROME_WCS_*` for `pe-arome`). | no |
 | `OUT_OF_DOMAIN` | Geometry lies outside a limited-area dataset's declared coverage. | no |
 | `DATA_UNAVAILABLE` | The provider confirmed absence: run/inventory not published, or an analog target that is not materialized in the local index while fetching is disabled. | usually no |
 | `RATE_LIMITED` | Provider quota exhausted after bounded retries. | yes |
@@ -596,6 +602,15 @@ Every CLI and MCP failure is reduced to one envelope: `{ code, message, retryabl
 | `INTERNAL_ERROR` | Anything not yet classified. The original message is preserved (single line, bounded, credentials redacted) so agents can still act on it; treat a recurring `INTERNAL_ERROR` as a bug report for a missing typed failure. | no |
 
 `details` is optional structured context (offending values, allowed values, env var names, index paths). Messages never embed the code and never carry stack traces or raw provider response bodies.
+
+The envelope is the only failure shape on either surface:
+
+- **CLI usage errors** (unknown option or command, missing required option, non-numeric value for a numeric flag) are `INVALID_REQUEST`, name the offending flag, and point at the relevant `--help`; Commander's native `error:` output and exit path are not used.
+- **MCP argument validation** happens inside the tool handler, not in the SDK pre-check, so schema violations return the same `isError` envelope instead of a JSON-RPC `Invalid arguments` protocol error. Tool listing still advertises the full JSON Schema.
+- **Schema violations** report the first failing field in the message (`Request validation failed at geometry.latitude: …`), append `(+N more in details.issues)` when several fields fail, and list every issue with its path in `details.issues`. Unknown keys are rejected (`Unrecognized key: "pressureLevelHpa"`) rather than silently dropped, so misspelled options never degrade into defaults.
+- **Registry-dispatched operations** validate against the one contract the caller selected. `compare_datasets` dispatches on `datasets` to the registered pair (reporting reversed or unregistered pairs together with the registered list); `verify_forecast` dispatches on the time form (`time.at` vs `time.from`/`time.to`). Failures therefore name the field under that contract, e.g. `at pressureLevelHpa: … (gfs↔gefs comparison)`, never a union-wide `Invalid input`.
+- **Upstream HTTP failures** are classified once (`src/access/http-failure.ts`): 404 → `DATA_UNAVAILABLE`, 429 → `RATE_LIMITED`, 5xx → `UPSTREAM_UNAVAILABLE` (retryable), any other non-2xx → `UPSTREAM_UNAVAILABLE` (not retryable). Messages name the provider, the request that failed and the HTTP status; `details` carries `provider`, `status` and the redacted `url`.
+- **Time, cadence and horizon violations** (a valid time before the run, off-cadence step, forecast hour beyond the dataset horizon, unsupported run cycle) are `INVALID_REQUEST` with `run`, `validTime`, `forecastHour` and the applicable limit in `details`; "no published cycle" is `DATA_UNAVAILABLE`.
 
 ## Administrative indexing
 

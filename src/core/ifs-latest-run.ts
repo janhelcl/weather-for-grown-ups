@@ -1,3 +1,4 @@
+import { DataUnavailableError } from "../failure.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { IfsOpenDataAccessPolicy } from "../access/ifs-open-data.js";
@@ -88,7 +89,7 @@ export class IfsLatestRunResolver implements IfsLatestRunProvider {
       if (await selectionAvailable(this.probe, run, lastForecastHour, selectors)) return run;
     }
 
-    throw new Error(
+    throw new DataUnavailableError(
       `No published ECMWF IFS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested time range and field selection`,
     );
   }
@@ -109,7 +110,7 @@ export class IfsLatestRunResolver implements IfsLatestRunProvider {
 
     // Preserve explicit cadence errors when possible before reporting publication failure.
     ifsForecastHour(anchor, validTime);
-    throw new Error(
+    throw new DataUnavailableError(
       `No published ECMWF IFS cycle in the last ${this.maxCandidates} candidate runs can satisfy the requested valid time and field selection`,
     );
   }

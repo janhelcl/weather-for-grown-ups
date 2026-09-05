@@ -4,15 +4,13 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   IconD2EpsMemberFileFilter,
+  IconD2EpsMemberSubsetCache,
   IconD2EpsOpenDataCache,
-  iconD2EpsExactMemberMatchPattern,
-  iconD2EpsWgrib2TagForMember,
+  iconD2EpsPerturbationNumber,
+  selectIconD2EpsMemberMessages,
 } from "../src/cache/icon-d2-eps-open-data-cache.js";
-import {
-  IconD2EpsAdaptiveMemberSubsetCache,
-  IconD2EpsMemberFileCombiner,
-  iconD2EpsRequiresMemberFirstRemap,
-} from "../src/cache/icon-d2-eps-member-cache.js";
+import { scanGrib2Messages } from "../src/grib/dwd-local-parameters.js";
+import { concat, nativeIconMessage, sectionMap } from "./icon-d2-fixtures.js";
 import {
   ICON_D2_EPS_FIELD_IDS,
   ICON_D2_EPS_MEMBERS,
@@ -343,7 +341,7 @@ describe("ICON-D2-EPS source defensive branches", () => {
       run,
       6,
       { pressure: true, surface: false },
-    )).rejects.toThrow("availability request failed: HTTP 403");
+    )).rejects.toThrow("rejected the ICON-D2-EPS availability request (HTTP 403");
   });
 
   it("rejects bad download status and malformed decompressed objects", async () => {
@@ -361,7 +359,7 @@ describe("ICON-D2-EPS source defensive branches", () => {
       { run: <T>(operation: () => Promise<T>) => operation() },
     );
     await expect(failed.fetch(request)).rejects.toThrow(
-      "Open Data request failed: HTTP 404",
+      "has not published the requested ICON-D2-EPS product file (HTTP 404",
     );
 
     const tooShort = new IconD2EpsOpenDataCache(
@@ -397,262 +395,116 @@ describe("ICON-D2-EPS native member filtering", () => {
     await rm(rootDir, { recursive: true, force: true });
   });
 
-  it("maps the provider inventory to p01..p20 and materializes one member-only GRIB", async () => {
-    const inventory = Array.from({ length: 20 }, (_, index) =>
-      `${index + 1}:0:d=2026083100:TMP:850 mb:6 hour fcst:ENS=? table4.6=192 pert=${index + 1}`
-    ).join("\n");
-    const runner = vi.fn(async (_executable: string, args: string[]) => {
-      if (args.includes("-s")) return { stdout: inventory };
-      const output = args.at(-1)!;
-      await writeFile(output, new TextEncoder().encode("GRIB-MEMBER"));
-      return { stdout: "selected" };
-    });
-    const sourcePath = join(rootDir, "all-members.grib2");
-    await writeFile(sourcePath, new TextEncoder().encode("GRIB-ALL"));
-    const filter = new IconD2EpsMemberFileFilter(
-      join(rootDir, "filtered"),
-      "wgrib2-test",
-      runner,
-    );
+  const allMembers = (fields = 1): Uint8Array => concat(
+    Array.from({ length: 20 * fields }, (_, index) => nativeIconMessage({
+      values: [index, 1, 2, 3, 4, 5],
+      perturbation: (index % 20) + 1,
+      parameter: Math.floor(index / 20),
+    })),
+  );
 
-    expect(iconD2EpsWgrib2TagForMember(inventory, "p01")).toBe("ENS=? table4.6=192 pert=1");
-    expect(iconD2EpsWgrib2TagForMember(inventory, "p20")).toBe("ENS=? table4.6=192 pert=20");
-    const p01Pattern = iconD2EpsExactMemberMatchPattern(
-      iconD2EpsWgrib2TagForMember(inventory, "p01"),
-    );
-    expect(p01Pattern).toBe(":ENS=\\? table4\\.6=192 pert=1:");
-    const p01Regex = new RegExp(p01Pattern);
-    expect(p01Regex.test(":ENS=? table4.6=192 pert=1:vt=2026083106:")).toBe(true);
-    expect(p01Regex.test(":ENS=? table4.6=192 pert=10:vt=2026083106:")).toBe(false);
+  it("reads perturbation numbers from section 4 and materializes one member-only GRIB", async () => {
+    const sourcePath = join(rootDir, "all-members.grib2");
+    await writeFile(sourcePath, allMembers(2));
+    const filter = new IconD2EpsMemberFileFilter(join(rootDir, "filtered"));
 
     const first = await filter.filter(sourcePath, "p02");
     expect(first.cacheHit).toBe(false);
-    expect(new TextDecoder().decode(await readFile(first.path))).toBe("GRIB-MEMBER");
-    expect(runner).toHaveBeenCalledTimes(2);
-    expect(runner.mock.calls[1]![1]).toEqual(expect.arrayContaining([
-      "-match",
-      ":ENS=\\? table4\\.6=192 pert=2:",
-    ]));
+    const selected = new Uint8Array(await readFile(first.path));
+    const slices = scanGrib2Messages(selected);
+    expect(slices).toHaveLength(2);
+    expect(slices.map((slice) => iconD2EpsPerturbationNumber(selected.subarray(slice.start, slice.end))))
+      .toEqual([2, 2]);
+    expect(slices.map((slice) => slice.parameter)).toEqual([0, 1]);
+    // Messages are copied verbatim, so section 4 and the native grid survive unchanged.
+    expect(selected.subarray(slices[0]!.start, slices[0]!.end))
+      .toEqual(nativeIconMessage({ values: [1, 1, 2, 3, 4, 5], perturbation: 2, parameter: 0 }));
 
     const second = await filter.filter(sourcePath, "p02");
     expect(second).toMatchObject({ path: first.path, cacheHit: true });
-    expect(runner).toHaveBeenCalledTimes(2);
+
+    const p20 = await filter.filter(sourcePath, "p20");
+    const p20Bytes = new Uint8Array(await readFile(p20.path));
+    expect(scanGrib2Messages(p20Bytes).map((slice) =>
+      iconD2EpsPerturbationNumber(p20Bytes.subarray(slice.start, slice.end)))).toEqual([20, 20]);
   });
 
-  it("rejects incomplete member inventories instead of guessing", () => {
-    const inventory = Array.from({ length: 19 }, (_, index) =>
-      `${index + 1}:0:d=2026083100:TMP:850 mb:6 hour fcst:ENS=? table4.6=192 pert=${index + 1}`
-    ).join("\n");
-    expect(() => iconD2EpsWgrib2TagForMember(inventory, "p01"))
-      .toThrow("exposed 19 distinct forecast-member tags; expected 20");
+  it("deduplicates concurrent member extraction and reports the waiter as a cache hit", async () => {
+    const sourcePath = join(rootDir, "all-members-concurrent.grib2");
+    await writeFile(sourcePath, allMembers());
+    const filter = new IconD2EpsMemberFileFilter(join(rootDir, "filtered"));
+    const [first, second] = await Promise.all([
+      filter.filter(sourcePath, "p05"),
+      filter.filter(sourcePath, "p05"),
+    ]);
+    expect(first.path).toBe(second.path);
+    expect([first.cacheHit, second.cacheHit].sort()).toEqual([false, true]);
   });
 
-  it("surfaces the native wgrib2 dependency clearly", async () => {
-    const sourcePath = join(rootDir, "all-members.grib2");
-    await writeFile(sourcePath, new TextEncoder().encode("GRIB-ALL"));
-    const filter = new IconD2EpsMemberFileFilter(
-      join(rootDir, "filtered"),
-      "missing-wgrib2",
-      async () => { throw new Error("spawn missing-wgrib2 ENOENT"); },
-    );
-    await expect(filter.filter(sourcePath, "p01"))
-      .rejects.toThrow("ICON-D2-EPS requires native wgrib2");
+  it("maps the sorted distinct member numbers to p01..p20 regardless of numbering origin", () => {
+    const zeroBased = concat(Array.from({ length: 20 }, (_, index) =>
+      nativeIconMessage({ values: [index, 1, 2, 3, 4, 5], perturbation: index })));
+    const p01 = selectIconD2EpsMemberMessages(zeroBased, "p01");
+    expect(iconD2EpsPerturbationNumber(p01)).toBe(0);
+    const p20 = selectIconD2EpsMemberMessages(zeroBased, "p20");
+    expect(iconD2EpsPerturbationNumber(p20)).toBe(19);
   });
-});
 
-describe("ICON-D2-EPS adaptive member remapping", () => {
-  const baseRequest = {
-    run: new Date("2026-08-31T00:00:00Z"),
-    forecastHour: 6,
-    variables: [],
-    pressureLevelsHpa: [],
-  };
+  it("rejects incomplete inventories and non-member products instead of guessing", () => {
+    const nineteen = concat(Array.from({ length: 19 }, (_, index) =>
+      nativeIconMessage({ values: [1, 2, 3, 4, 5, 6], perturbation: index + 1 })));
+    expect(() => selectIconD2EpsMemberMessages(nineteen, "p01"))
+      .toThrow("exposed 19 distinct forecast-member numbers; expected 20");
+    expect(() => selectIconD2EpsMemberMessages(new Uint8Array(16), "p01"))
+      .toThrow("contains no GRIB2 messages");
 
-  it("isolates member-first reflectivity from ordinary fields in mixed requests", async () => {
+    const deterministic = nativeIconMessage({ values: [1, 2, 3, 4, 5, 6] });
+    // Rewrite PDT 4.1 -> 4.0 in place: no perturbation number exists on that template.
+    const sections = sectionMap(deterministic);
+    const section4 = sections.get(4)!;
+    section4[7] = 0;
+    section4[8] = 0;
+    expect(() => iconD2EpsPerturbationNumber(deterministic))
+      .toThrow("product definition template 4.0, which carries no individual member number");
+
+    const truncated = nativeIconMessage({ values: [1, 2, 3, 4, 5, 6] });
+    const shortSection4 = sectionMap(truncated).get(4)!;
+    shortSection4[0] = 0;
+    shortSection4[1] = 0;
+    shortSection4[2] = 0;
+    shortSection4[3] = 20;
+    expect(() => iconD2EpsPerturbationNumber(truncated))
+      .toThrow("product definition section without ensemble metadata");
+
+    const withoutSection4 = nativeIconMessage({ values: [1, 2, 3, 4, 5, 6], dropSection: 4 });
+    expect(() => iconD2EpsPerturbationNumber(withoutSection4))
+      .toThrow("missing its product definition section");
+  });
+
+  it("chains the member filter behind the remapped all-member cache with combined provenance", async () => {
     const source = {
-      fetch: vi.fn(async (request: any) => ({
-        path: `/raw/${request.fields.map((field: any) => field.id).join("+") || "pressure"}.grib2`,
-        cacheHit: true,
-      })),
-      isForecastAvailable: vi.fn(async () => true),
-    };
-    const remapper = {
-      remap: vi.fn(async (path: string) => ({
-        path: `${path}.remapped`,
-        cacheHit: true,
-      })),
+      fetch: vi.fn(async () => ({ path: "/remapped/all.grib2", cacheHit: true })),
+      isForecastAvailable: vi.fn(async () => false),
     };
     const filter = {
-      filter: vi.fn(async (path: string, member: string) => ({
-        path: `${path}.${member}`,
-        cacheHit: true,
-      })),
+      filter: vi.fn(async (path: string, member: string) => ({ path: `${path}.${member}`, cacheHit: false })),
+    } as unknown as IconD2EpsMemberFileFilter;
+    const cache = new IconD2EpsMemberSubsetCache(source, "p03", filter);
+    const request = {
+      run: new Date("2026-08-31T00:00:00Z"),
+      forecastHour: 6,
+      variables: [VARIABLE_CATALOG.temperature],
+      pressureLevelsHpa: [850],
+      fields: [],
     };
-    const combiner = {
-      combine: vi.fn(async () => ({
-        path: "/combined/p02.grib2",
-        cacheHit: true,
-      })),
-    };
-    const cache = new IconD2EpsAdaptiveMemberSubsetCache(
-      source as any,
-      remapper as any,
-      filter as any,
-      combiner as any,
-      "p02",
-    );
-
-    const ordinary = {
-      ...baseRequest,
-      fields: [
-        NON_ISOBARIC_FIELD_CATALOG.temperature_2m,
-        NON_ISOBARIC_FIELD_CATALOG.convective_rain,
-      ] as RawNonIsobaricFieldDefinition[],
-    };
-    expect(iconD2EpsRequiresMemberFirstRemap(ordinary)).toBe(false);
-    await expect(cache.fetch(ordinary)).resolves.toMatchObject({
-      path: "/raw/temperature_2m+convective_rain.grib2.remapped.p02",
-      cacheHit: true,
-    });
-    expect(remapper.remap).toHaveBeenLastCalledWith(
-      "/raw/temperature_2m+convective_rain.grib2",
-    );
-    expect(filter.filter).toHaveBeenLastCalledWith(
-      "/raw/temperature_2m+convective_rain.grib2.remapped",
-      "p02",
-    );
-    expect(combiner.combine).not.toHaveBeenCalled();
-
-    vi.clearAllMocks();
-    const mixed = {
-      ...baseRequest,
-      fields: [
-        NON_ISOBARIC_FIELD_CATALOG.temperature_2m,
-        NON_ISOBARIC_FIELD_CATALOG.convective_rain,
-        NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity,
-        NON_ISOBARIC_FIELD_CATALOG.updraft_helicity_max_2_8km,
-      ] as RawNonIsobaricFieldDefinition[],
-    };
-    expect(iconD2EpsRequiresMemberFirstRemap(mixed)).toBe(true);
-    await expect(cache.fetch(mixed)).resolves.toEqual({
-      path: "/combined/p02.grib2",
-      cacheHit: true,
-    });
-    expect(source.fetch).toHaveBeenCalledTimes(2);
-    expect(source.fetch.mock.calls.map(([request]: any[]) =>
-      request.fields.map((field: any) => field.id))).toEqual(expect.arrayContaining([
-      ["temperature_2m", "convective_rain"],
-      ["column_maximum_reflectivity", "updraft_helicity_max_2_8km"],
-    ]));
-    expect(remapper.remap).toHaveBeenCalledWith(
-      "/raw/temperature_2m+convective_rain.grib2",
-    );
-    expect(filter.filter).toHaveBeenCalledWith(
-      "/raw/temperature_2m+convective_rain.grib2.remapped",
-      "p02",
-    );
-    expect(filter.filter).toHaveBeenCalledWith(
-      "/raw/column_maximum_reflectivity+updraft_helicity_max_2_8km.grib2",
-      "p02",
-    );
-    expect(remapper.remap).toHaveBeenCalledWith(
-      "/raw/column_maximum_reflectivity+updraft_helicity_max_2_8km.grib2.p02",
-    );
-    expect(combiner.combine).toHaveBeenCalledWith([
-      {
-        path: "/raw/temperature_2m+convective_rain.grib2.remapped.p02",
-        cacheHit: true,
-      },
-      {
-        path: "/raw/column_maximum_reflectivity+updraft_helicity_max_2_8km.grib2.p02.remapped",
-        cacheHit: true,
-      },
-    ]);
-
-    vi.clearAllMocks();
-    const reflectivityOnly = {
-      ...baseRequest,
-      fields: [
-        NON_ISOBARIC_FIELD_CATALOG.column_maximum_reflectivity,
-      ] as RawNonIsobaricFieldDefinition[],
-    };
-    await expect(cache.fetch(reflectivityOnly)).resolves.toEqual({
-      path: "/raw/column_maximum_reflectivity.grib2.p02.remapped",
-      cacheHit: true,
-    });
-    expect(combiner.combine).not.toHaveBeenCalled();
-
-    vi.clearAllMocks();
-    const updraftHelicityOnly = {
-      ...baseRequest,
-      fields: [
-        NON_ISOBARIC_FIELD_CATALOG.updraft_helicity_max_2_8km,
-      ] as RawNonIsobaricFieldDefinition[],
-    };
-    expect(iconD2EpsRequiresMemberFirstRemap(updraftHelicityOnly)).toBe(true);
-    await expect(cache.fetch(updraftHelicityOnly)).resolves.toEqual({
-      path: "/raw/updraft_helicity_max_2_8km.grib2.p02.remapped",
-      cacheHit: true,
-    });
-    expect(filter.filter).toHaveBeenCalledWith(
-      "/raw/updraft_helicity_max_2_8km.grib2",
-      "p02",
-    );
-    expect(remapper.remap).toHaveBeenCalledWith(
-      "/raw/updraft_helicity_max_2_8km.grib2.p02",
-    );
-    expect(combiner.combine).not.toHaveBeenCalled();
-  });
-});
-
-describe("ICON-D2-EPS member file combiner", () => {
-  let rootDir: string;
-
-  beforeEach(async () => {
-    rootDir = await mkdtemp(join(tmpdir(), "wfg-icon-d2-eps-combined-"));
-  });
-
-  afterEach(async () => {
-    await rm(rootDir, { recursive: true, force: true });
-  });
-
-  it("combines strategy-specific member GRIBs once and preserves cache provenance", async () => {
-    const first = join(rootDir, "ordinary.grib2");
-    const second = join(rootDir, "reflectivity.grib2");
-    await Promise.all([
-      writeFile(first, new TextEncoder().encode("GRIB-ORDINARY")),
-      writeFile(second, new TextEncoder().encode("GRIB-REFLECTIVITY")),
-    ]);
-    const combiner = new IconD2EpsMemberFileCombiner(join(rootDir, "combined"));
-
-    const materialized = await combiner.combine([
-      { path: first, cacheHit: true },
-      { path: second, cacheHit: true },
-    ]);
-    expect(materialized.cacheHit).toBe(false);
-    expect(new TextDecoder().decode(await readFile(materialized.path)))
-      .toBe("GRIB-ORDINARYGRIB-REFLECTIVITY");
-
-    await expect(combiner.combine([
-      { path: first, cacheHit: true },
-      { path: second, cacheHit: true },
-    ])).resolves.toEqual({
-      path: materialized.path,
-      cacheHit: true,
-    });
-
-    await expect(combiner.combine([
-      { path: first, cacheHit: false },
-      { path: second, cacheHit: true },
-    ])).resolves.toEqual({
-      path: materialized.path,
+    await expect(cache.fetch(request)).resolves.toEqual({
+      path: "/remapped/all.grib2.p03",
       cacheHit: false,
     });
-    await expect(combiner.combine([{ path: first, cacheHit: true }]))
-      .resolves.toEqual({ path: first, cacheHit: true });
-    await expect(combiner.combine([])).rejects.toThrow(
-      "requires at least one GRIB file",
-    );
+    expect(filter.filter).toHaveBeenCalledWith("/remapped/all.grib2", "p03");
+    await expect(cache.isForecastAvailable(request.run, 6, { pressure: true, surface: false }))
+      .resolves.toBe(false);
+    expect(source.isForecastAvailable).toHaveBeenCalledWith(request.run, 6, { pressure: true, surface: false });
   });
 });
 
@@ -713,7 +565,7 @@ describe("ICON-D2-EPS service guards and defaults", () => {
           source: {
             provider: "DWD Open Data",
             access: "dwd_open_data",
-            decoder: "wgrib2",
+            decoder: "gribberish",
             cacheHit: true,
           },
         })),

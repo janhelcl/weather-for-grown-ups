@@ -126,8 +126,8 @@ export class HistoricalDiagnosticTimeSeriesService {
       diagnostic,
       cycleHoursUtc,
       source: {
-        provider: "NOAA NCEI",
-        access: "ncei_thredds_ncss",
+        provider: first.source.provider,
+        access: first.source.access,
       },
       series: tagged.map(toCompactStep),
       caveat: CAVEAT,

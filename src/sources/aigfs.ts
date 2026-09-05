@@ -1,3 +1,4 @@
+import { InvalidRequestError } from "../failure.js";
 export const AIGFS_MAX_FORECAST_HOUR = 384;
 export const AIGFS_FORECAST_INTERVAL_HOURS = 6;
 export const AIGFS_NATIVE_FORECAST_HOURS = Object.freeze(
@@ -41,14 +42,14 @@ export function buildAigfsNomadsIndexUrl(
 
 export function parseAigfsRun(value: string): Date {
   const run = new Date(value);
-  if (Number.isNaN(run.getTime())) throw new Error(`Invalid AIGFS run: ${value}`);
+  if (Number.isNaN(run.getTime())) throw new InvalidRequestError(`Invalid AIGFS run: ${value}`);
   if (
     run.getUTCHours() % 6 !== 0
     || run.getUTCMinutes() !== 0
     || run.getUTCSeconds() !== 0
     || run.getUTCMilliseconds() !== 0
   ) {
-    throw new Error("AIGFS run must be initialized at 00Z, 06Z, 12Z, or 18Z");
+    throw new InvalidRequestError("AIGFS run must be initialized at 00Z, 06Z, 12Z, or 18Z");
   }
   return run;
 }
@@ -56,7 +57,7 @@ export function parseAigfsRun(value: string): Date {
 export function aigfsForecastHour(run: Date, validTime: Date): number {
   const hours = (validTime.getTime() - run.getTime()) / 3_600_000;
   if (!Number.isInteger(hours) || hours < 0) {
-    throw new Error("AIGFS validTime must be a whole forecast hour at or after run time");
+    throw new InvalidRequestError("AIGFS/AIGEFS validTime must be a whole forecast hour at or after run time");
   }
   assertAigfsForecastHour(hours);
   return hours;
@@ -68,7 +69,7 @@ export function aigfsNativeForecastHoursInRange(
   endTime: Date,
 ): number[] {
   if (endTime.getTime() < startTime.getTime()) {
-    throw new Error("endTime must be at or after startTime");
+    throw new InvalidRequestError("endTime must be at or after startTime");
   }
   const startMs = startTime.getTime();
   const endMs = endTime.getTime();
@@ -77,7 +78,7 @@ export function aigfsNativeForecastHoursInRange(
     return validMs >= startMs && validMs <= endMs;
   });
   if (hours.length === 0) {
-    throw new Error("No native AIGFS forecast outputs fall inside the requested time range");
+    throw new InvalidRequestError("No native AIGFS forecast outputs fall inside the requested time range");
   }
   return [...hours];
 }
@@ -95,9 +96,9 @@ export function floorToAigfsCycle(value: Date): Date {
 
 function assertAigfsForecastHour(forecastHour: number): void {
   if (!Number.isInteger(forecastHour) || forecastHour < 0 || forecastHour > AIGFS_MAX_FORECAST_HOUR) {
-    throw new Error(`AIGFS forecast hour must be a whole number from 0 to ${AIGFS_MAX_FORECAST_HOUR}`);
+    throw new InvalidRequestError(`AIGFS/AIGEFS forecast hour must be a whole number from 0 to ${AIGFS_MAX_FORECAST_HOUR}`);
   }
   if (forecastHour % AIGFS_FORECAST_INTERVAL_HOURS !== 0) {
-    throw new Error("AIGFS output is available every 6 forecast hours");
+    throw new InvalidRequestError("AIGFS/AIGEFS output is available every 6 forecast hours");
   }
 }

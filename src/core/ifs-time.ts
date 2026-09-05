@@ -1,3 +1,4 @@
+import { InvalidRequestError } from "../failure.js";
 export const IFS_LONG_RUN_MAX_FORECAST_HOUR = 240;
 export const IFS_SHORT_RUN_MAX_FORECAST_HOUR = 90;
 export const IFS_ENS_LONG_RUN_MAX_FORECAST_HOUR = 360;
@@ -7,14 +8,14 @@ const HOUR_MS = 3_600_000;
 
 export function parseIfsRun(value: string): Date {
   const run = new Date(value);
-  if (!Number.isFinite(run.getTime())) throw new Error(`Invalid IFS run: ${value}`);
+  if (!Number.isFinite(run.getTime())) throw new InvalidRequestError(`Invalid IFS run: ${value}`);
   if (
     run.getUTCMinutes() !== 0
     || run.getUTCSeconds() !== 0
     || run.getUTCMilliseconds() !== 0
     || ![0, 6, 12, 18].includes(run.getUTCHours())
   ) {
-    throw new Error("IFS run must be an exact 00/06/12/18 UTC initialization cycle");
+    throw new InvalidRequestError("IFS run must be an exact 00/06/12/18 UTC initialization cycle");
   }
   return run;
 }
@@ -141,10 +142,10 @@ function validateForecastHour(
 ): number {
   const forecastHour = (validTime.getTime() - run.getTime()) / HOUR_MS;
   if (!Number.isInteger(forecastHour) || forecastHour < 0) {
-    throw new Error(`${label} valid time must be at or after the run on an integer forecast hour`);
+    throw new InvalidRequestError(`${label} valid time must be at or after the run on an integer forecast hour`);
   }
   if (!isNative(run, forecastHour)) {
-    throw new Error(
+    throw new InvalidRequestError(
       `${label} run ${run.toISOString()} does not publish f${forecastHour}; native cadence is ${cadenceDescription(run)} (max f${maxForecastHour(run)})`,
     );
   }
@@ -159,7 +160,7 @@ function forecastHoursInRange(
   emptyMessage: string,
 ): number[] {
   if (endTime.getTime() < startTime.getTime()) {
-    throw new Error("IFS end time must be at or after start time");
+    throw new InvalidRequestError("IFS end time must be at or after start time");
   }
   const firstHour = Math.ceil((startTime.getTime() - run.getTime()) / HOUR_MS);
   const lastHour = Math.floor((endTime.getTime() - run.getTime()) / HOUR_MS);
@@ -167,7 +168,7 @@ function forecastHoursInRange(
   for (let forecastHour = Math.max(0, firstHour); forecastHour <= lastHour; forecastHour += 1) {
     if (isNative(run, forecastHour)) result.push(forecastHour);
   }
-  if (result.length === 0) throw new Error(emptyMessage);
+  if (result.length === 0) throw new InvalidRequestError(emptyMessage);
   return result;
 }
 

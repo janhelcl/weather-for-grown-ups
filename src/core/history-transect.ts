@@ -68,8 +68,8 @@ export class HistoricalTransectService {
         };
       }),
       source: {
-        provider: "NOAA NCEI",
-        access: "ncei_thredds_ncss",
+        provider: batch.source.provider,
+        access: batch.source.access,
         composition: "great_circle_to_serial_point_queries",
       },
       caveat: CAVEAT,

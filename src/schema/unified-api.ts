@@ -86,17 +86,17 @@ export const PUBLIC_DATASET_METADATA = {
   "gfs-analysis": datasetMetadata("gfs_grid4_analysis_0p5"),
 } as const;
 
-const pointGeometrySchema = z.object({
+const pointGeometrySchema = z.strictObject({
   type: z.literal("point"),
   ...pointCoordinateSchema.shape,
 });
 
-const pointsGeometrySchema = z.object({
+const pointsGeometrySchema = z.strictObject({
   type: z.literal("points"),
   points: z.array(pointCoordinateSchema).min(1).max(50),
 });
 
-const transectGeometrySchema = z.object({
+const transectGeometrySchema = z.strictObject({
   type: z.literal("transect"),
   start: pointCoordinateSchema,
   end: pointCoordinateSchema,
@@ -114,7 +114,7 @@ const transectGeometrySchema = z.object({
   }
 });
 
-const areaGeometrySchema = z.object({
+const areaGeometrySchema = z.strictObject({
   type: z.literal("area"),
   westLongitude: z.number().min(-180).max(180),
   eastLongitude: z.number().min(-180).max(180),
@@ -137,20 +137,20 @@ const areaGeometrySchema = z.object({
   }
 });
 
-export const atmosphericGeometrySchema = z.union([
+export const atmosphericGeometrySchema = z.discriminatedUnion("type", [
   pointGeometrySchema,
   pointsGeometrySchema,
   transectGeometrySchema,
   areaGeometrySchema,
-]);
+], { error: "geometry.type must be point, points, transect or area" });
 
 const historicalHourSchema = z.union([z.literal(0), z.literal(6), z.literal(12), z.literal(18)]);
 
-export const atmosphericInstantTimeSchema = z.object({
+export const atmosphericInstantTimeSchema = z.strictObject({
   at: isoDateTimeSchema.describe("Atmospheric state valid at this time"),
 });
 
-export const atmosphericRangeTimeSchema = z.object({
+export const atmosphericRangeTimeSchema = z.strictObject({
   from: isoDateTimeSchema.describe("Inclusive start of the valid-time range"),
   to: isoDateTimeSchema.describe("Inclusive end of the valid-time range"),
   hoursUtc: z.array(historicalHourSchema).min(1).max(4).optional().describe(
@@ -177,9 +177,9 @@ export const atmosphericRangeTimeSchema = z.object({
 export const atmosphericTimeSchema = z.union([
   atmosphericInstantTimeSchema,
   atmosphericRangeTimeSchema,
-]);
+], { error: "time must be { at } for one valid time or { from, to } for a valid-time range" });
 
-export const atmosphericSelectionSchema = z.object({
+export const atmosphericSelectionSchema = z.strictObject({
   variables: z.array(z.string().min(1)).min(1).optional(),
   pressureLevelsHpa: z.array(z.number().positive()).min(1).optional(),
   fields: z.array(z.string().min(1)).min(1).optional(),
@@ -226,7 +226,7 @@ export const atmosphericRunSelectorSchema = z.union([
   "Forecast initialization: latest, latest_complete where supported, or an explicit timezone-aware ISO cycle",
 );
 
-export const atmosphericForecastOptionsSchema = z.object({
+export const atmosphericForecastOptionsSchema = z.strictObject({
   kind: z.enum(["operational", "reforecast"]).optional().describe(
     "Forecast population. Omit (or use 'operational') for normal forecasts; 'reforecast' selects the GEFSv12 retrospective ensemble rather than an archive of operational cycles.",
   ),
@@ -234,7 +234,7 @@ export const atmosphericForecastOptionsSchema = z.object({
   grid: gfsGridSchema.optional().describe("GFS-only horizontal grid override: 0p25 (default when omitted) or 0p50"),
 });
 
-export const atmosphericEnsembleOptionsSchema = z.object({
+export const atmosphericEnsembleOptionsSchema = z.strictObject({
   members: z.array(z.string().min(1)).min(2).max(62).optional(),
   quantiles: z.array(z.number().min(0).max(1)).min(1).max(9).optional(),
   includeMembers: z.boolean().optional(),
@@ -248,20 +248,20 @@ export const atmosphericEnsembleOptionsSchema = z.object({
   }
 });
 
-export const atmosphericLimitsSchema = z.object({
+export const atmosphericLimitsSchema = z.strictObject({
   maxSamples: z.number().int().min(1).max(5_000).optional(),
   maxPointSteps: z.number().int().min(1).max(5_000).optional(),
   maxGridPoints: z.number().int().min(1).max(1_100_000).optional(),
   maxMemberGridPoints: z.number().int().min(2).max(2_000_000).optional(),
 }).optional();
 
-export const atmosphericAggregationSchema = z.object({
+export const atmosphericAggregationSchema = z.strictObject({
   percentiles: z.array(z.number().min(0).max(100)).max(20).optional(),
   thresholds: z.array(areaThresholdSchema).max(20).optional(),
   includeExtremaLocations: z.boolean().optional(),
 }).optional();
 
-export const queryAtmosphereSchema = z.object({
+export const queryAtmosphereSchema = z.strictObject({
   dataset: publicAtmosphericDatasetSchema,
   geometry: atmosphericGeometrySchema,
   time: atmosphericTimeSchema,
@@ -274,7 +274,7 @@ export const queryAtmosphereSchema = z.object({
 }).superRefine(validateCommonAtmosphericRequest);
 
 export const atmosphericDiagnosticSelectionSchema = z.discriminatedUnion("kind", [
-  z.object({
+  z.strictObject({
     kind: z.literal("layer"),
     lowerPressureHpa: z.number().positive(),
     upperPressureHpa: z.number().positive(),
@@ -288,19 +288,19 @@ export const atmosphericDiagnosticSelectionSchema = z.discriminatedUnion("kind",
       });
     }
   }),
-  z.object({
+  z.strictObject({
     kind: z.literal("profile"),
     pressureLevelsHpa: z.array(z.number().positive()).min(2),
     diagnostics: z.array(z.enum(PROFILE_DIAGNOSTIC_IDS)).min(1),
   }),
-  z.object({
+  z.strictObject({
     kind: z.literal("parcel"),
     pressureLevelsHpa: z.array(z.number().positive()).min(2),
     parcel: z.enum(PARCEL_DEFINITION_IDS),
   }),
 ]);
 
-export const diagnoseAtmosphereSchema = z.object({
+export const diagnoseAtmosphereSchema = z.strictObject({
   dataset: publicAtmosphericDatasetSchema,
   geometry: pointGeometrySchema,
   time: atmosphericTimeSchema,

@@ -19,9 +19,9 @@ import {
   ATMOSPHERIC_RUN_COMPARISON_DATASET_IDS,
   compareAtmosphericDatasetsSchema,
   compareAtmosphericRunsSchema,
-  isAtmosphericDatasetComparisonPair,
   type CompareAtmosphericDatasetsInput,
   type CompareAtmosphericRunsInput,
+  type VerifyAtmosphericForecastInput,
 } from "../schema/unified-specialized.js";
 import type { PointCoordinate } from "../schema/query.js";
 import type { AtmosphericStepProgress } from "../core/progress.js";
@@ -29,12 +29,14 @@ import { InvalidRequestError } from "../failure.js";
 import {
   DEFAULT_LEVELS,
   collectPoint,
+  numberOption,
   parseAigefsMembers,
   parseAifsEnsMembers,
+  parseCoordinate,
   parseGefsMembers,
   parseIfsEnsMembers,
-  parseLevels,
-  parseNumbers,
+  parseNumberList,
+  parseStringList,
 } from "./shared.js";
 
 const DEFAULT_UNIFIED_VARIABLES =
@@ -56,21 +58,21 @@ function registerQueryCommand(program: Command): void {
     .command("query")
     .description("Query atmospheric state through dataset × geometry × time × selection")
     .option("--dataset <id>", `Atmospheric dataset (${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")})`, "gfs")
-    .option("--lat <number>", "Point latitude", Number)
-    .option("--lon <number>", "Point longitude", Number)
+    .option("--lat <number>", "Point latitude", numberOption("--lat"))
+    .option("--lon <number>", "Point longitude", numberOption("--lon"))
     .option("--point <lat,lon>", "Multi-point coordinate; repeat as needed", collectPoint)
     .option("--start <lat,lon>", "Transect start")
     .option("--end <lat,lon>", "Transect end")
-    .option("--samples <number>", "Transect sample count", Number)
-    .option("--west <number>", "Area west longitude", Number)
-    .option("--east <number>", "Area east longitude", Number)
-    .option("--south <number>", "Area south latitude", Number)
-    .option("--north <number>", "Area north latitude", Number)
+    .option("--samples <number>", "Transect sample count", numberOption("--samples"))
+    .option("--west <number>", "Area west longitude", numberOption("--west"))
+    .option("--east <number>", "Area east longitude", numberOption("--east"))
+    .option("--south <number>", "Area south latitude", numberOption("--south"))
+    .option("--north <number>", "Area north latitude", numberOption("--north"))
     .option("--at <iso>", "One atmospheric valid time")
     .option("--from <iso>", "Inclusive valid-time range start")
     .option("--to <iso>", "Inclusive valid-time range end")
     .option("--cycles <list>", "gfs-analysis range only: UTC cycles such as 0,6,12,18")
-    .option("--max-steps <number>", "Maximum time steps", Number)
+    .option("--max-steps <number>", "Maximum time steps", numberOption("--max-steps"))
     .option("--vars <list>", "Comma-separated pressure-level variables")
     .option("--levels <list>", "Comma-separated pressure levels in hPa")
     .option("--fields <list>", "Comma-separated non-isobaric fields")
@@ -82,14 +84,14 @@ function registerQueryCommand(program: Command): void {
     .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
     .option("--include-members", "Include raw ensemble member payloads where supported")
     .option("--percentiles <list>", "Area spatial percentiles, e.g. 10,50,90")
-    .option("--gte <number>", "Area fraction at or above this threshold", Number)
-    .option("--lte <number>", "Area fraction at or below this threshold", Number)
+    .option("--gte <number>", "Area fraction at or above this threshold", numberOption("--gte"))
+    .option("--lte <number>", "Area fraction at or below this threshold", numberOption("--lte"))
     .option("--extrema", "Area representative min/max locations")
-    .option("--max-samples <number>", "Multi-point time-series sample guardrail", Number)
-    .option("--max-point-steps <number>", "Point × time-step guardrail", Number)
-    .option("--max-grid-points <number>", "Area grid-point guardrail", Number)
-    .option("--max-member-grid-points <number>", "Ensemble area member × grid guardrail", Number)
-    .option("--max-member-samples <number>", "Ensemble raw member payload guardrail", Number)
+    .option("--max-samples <number>", "Multi-point time-series sample guardrail", numberOption("--max-samples"))
+    .option("--max-point-steps <number>", "Point × time-step guardrail", numberOption("--max-point-steps"))
+    .option("--max-grid-points <number>", "Area grid-point guardrail", numberOption("--max-grid-points"))
+    .option("--max-member-grid-points <number>", "Ensemble area member × grid guardrail", numberOption("--max-member-grid-points"))
+    .option("--max-member-samples <number>", "Ensemble raw member payload guardrail", numberOption("--max-member-samples"))
     .option("--json", "Output JSON")
     .action(async (options) => {
       const request = buildUnifiedQuery(options);
@@ -105,20 +107,21 @@ function registerDiagnoseCommand(program: Command): void {
     .command("diagnose")
     .description("Derive layer, profile, or parcel meteorology from any atmospheric dataset")
     .option("--dataset <id>", `Atmospheric dataset (${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")})`, "gfs")
-    .requiredOption("--lat <number>", "Latitude", Number)
-    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--lat <number>", "Latitude", numberOption("--lat"))
+    .requiredOption("--lon <number>", "Longitude", numberOption("--lon"))
     .requiredOption("--kind <layer|profile|parcel>", "Diagnostic family")
     .option("--at <iso>", "One atmospheric valid time")
     .option("--from <iso>", "Inclusive valid-time range start")
     .option("--to <iso>", "Inclusive valid-time range end")
     .option("--cycles <list>", "gfs-analysis range only: UTC cycles such as 0,6,12,18")
-    .option("--max-steps <number>", "Maximum time steps", Number)
-    .option("--lower <hpa>", "Layer lower pressure surface", Number)
-    .option("--upper <hpa>", "Layer upper pressure surface", Number)
+    .option("--max-steps <number>", "Maximum time steps", numberOption("--max-steps"))
+    .option("--lower <hpa>", "Layer lower pressure surface", numberOption("--lower"))
+    .option("--upper <hpa>", "Layer upper pressure surface", numberOption("--upper"))
     .option("--levels <list>", "Profile/parcel pressure levels in hPa", DEFAULT_LEVELS)
     .option("--diagnostics <list>", "Layer/profile diagnostic IDs")
     .option("--parcel <surface_2m|mixed_layer_100hpa|most_unstable_300hpa>", "Parcel definition")
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
+    .option("--forecast-kind <operational|reforecast>", "Forecast population; reforecast currently selects GEFSv12 retrospective forecasts")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
     .option("--source <nomads|s3|archive>", "GFS source override; omit for automatic AWS/NOMADS/archive routing")
     .option("--members <list>", "Dataset-native ensemble member IDs; use catalog/search_catalog for the supported population")
@@ -141,19 +144,19 @@ function registerCompareRunsCommand(program: Command): void {
       "Forecast dataset",
       "gfs",
     )
-    .requiredOption("--lat <number>", "Latitude", Number)
-    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--lat <number>", "Latitude", numberOption("--lat"))
+    .requiredOption("--lon <number>", "Longitude", numberOption("--lon"))
     .requiredOption("--at <iso>", "Forecast valid time")
     .option("--vars <list>", "Pressure-level variables", "temperature")
     .option("--levels <list>", "Pressure levels in hPa", "850")
     .option("--fields <list>", "Deterministic GFS/IFS non-isobaric fields")
     .option("--anchor-run <iso|latest>", "Newest initialization cycle to compare", "latest")
     .option("--grid <0p25|0p50>", "GFS horizontal grid")
-    .option("--cycles <number>", "Number of consecutive cycles", Number, 3)
+    .option("--cycles <number>", "Number of consecutive cycles", numberOption("--cycles"), 3)
     .option("--members <list>", "Dataset-native ensemble member IDs; use catalog/search_catalog for the supported population")
     .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
-    .option("--gte <number>", "Ensemble threshold in normalized units", Number)
-    .option("--cycle-stride-hours <6|12>", "IFS ENS only: initialization-cycle stride", Number)
+    .option("--gte <number>", "Ensemble threshold in normalized units", numberOption("--gte"))
+    .option("--cycle-stride-hours <6|12>", "IFS ENS only: initialization-cycle stride", numberOption("--cycle-stride-hours"))
     .option("--json", "Output JSON")
     .action(async (options) => {
       const result = await new UnifiedRunComparisonService().compare(
@@ -167,20 +170,19 @@ function registerCompareDatasetsCommand(program: Command): void {
   program
     .command("compare-datasets")
     .description("Compare scientifically compatible aligned forecast datasets")
-    .requiredOption("--lat <number>", "Latitude", Number)
-    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--lat <number>", "Latitude", numberOption("--lat"))
+    .requiredOption("--lon <number>", "Longitude", numberOption("--lon"))
     .requiredOption("--at <iso>", "Forecast valid time")
-    .option(
+    .requiredOption(
       "--dataset <id>",
-      "Left-side dataset; omit only to preserve the legacy GFS/GEFS or GEFS/IFS-ENS defaults",
+      "Left-side dataset of a registered comparison pair, in registered order (e.g. gfs with --against gefs)",
     )
-    .option(
+    .requiredOption(
       "--against <id>",
-      "Right-side dataset from an explicitly registered comparison pair",
-      "gefs",
+      "Right-side dataset of the registered comparison pair; see catalog/search_catalog or the compare_datasets tool description for the registry",
     )
     .option("--var <id>", "Canonical pressure-level variable")
-    .option("--level <hpa>", "Pressure level in hPa", Number)
+    .option("--level <hpa>", "Pressure level in hPa", numberOption("--level"))
     .option("--field <id>", "Canonical non-isobaric field for registered field comparisons")
     .option(
       "--run <iso|latest>",
@@ -200,7 +202,7 @@ function registerCompareDatasetsCommand(program: Command): void {
       "HGEFS population-qualified members (gefs:c00..p30,aigefs:c00..p30)",
     )
     .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
-    .option("--gte <number>", "Compare raw ensemble member fractions at or above this threshold", Number)
+    .option("--gte <number>", "Compare raw ensemble member fractions at or above this threshold", numberOption("--gte"))
     .option("--json", "Output JSON")
     .action(async (options) => {
       const request = buildUnifiedDatasetComparison(options);
@@ -213,29 +215,24 @@ function registerCompareDatasetsCommand(program: Command): void {
 export function buildUnifiedDatasetComparison(
   options: Record<string, any>,
 ): CompareAtmosphericDatasetsInput {
-  const against = String(options.against ?? "gefs").trim().toLowerCase();
+  const against = String(options.against).trim().toLowerCase();
   if (!publicAtmosphericDatasetSchema.safeParse(against).success) {
     throw new InvalidRequestError(
       `Expected --against ${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}, received: ${options.against}`,
+      { details: { option: "--against", received: options.against } },
     );
   }
 
-  const requestedLeft = options.dataset === undefined
-    ? undefined
-    : String(options.dataset).trim().toLowerCase();
-  if (
-    requestedLeft !== undefined
-    && !publicAtmosphericDatasetSchema.safeParse(requestedLeft).success
-  ) {
+  const left = String(options.dataset).trim().toLowerCase();
+  if (!publicAtmosphericDatasetSchema.safeParse(left).success) {
     throw new InvalidRequestError(
       `Expected --dataset ${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}, received: ${options.dataset}`,
+      { details: { option: "--dataset", received: options.dataset } },
     );
   }
 
-  const left = requestedLeft ?? (against === "ifs-ens" ? "gefs" : "gfs");
-  if (!isAtmosphericDatasetComparisonPair(left, against)) {
-    throw new InvalidRequestError(`Unsupported comparison pair: ${left}↔${against}`);
-  }
+  // Both sides are explicit; the pair schema reports reversed or unregistered
+  // pairs together with the registered list.
 
   const request = {
     datasets: [left, against],
@@ -263,16 +260,16 @@ export function buildUnifiedDatasetComparison(
       : { aifsEnsMembers: parseAifsEnsMembers(options.aifsEnsMembers) }),
     ...(options.hgefsMembers === undefined
       ? {}
-      : { hgefsMembers: parseStrings(options.hgefsMembers) }),
+      : { hgefsMembers: parseStringList(options.hgefsMembers) }),
     ...(options.iconD2EpsMembers === undefined
       ? {}
-      : { iconD2EpsMembers: parseStrings(options.iconD2EpsMembers) }),
+      : { iconD2EpsMembers: parseStringList(options.iconD2EpsMembers) }),
     ...(options.peAromeMembers === undefined
       ? {}
-      : { peAromeMembers: parseStrings(options.peAromeMembers) }),
+      : { peAromeMembers: parseStringList(options.peAromeMembers) }),
     ...(options.quantiles === undefined
       ? {}
-      : { quantiles: parseNumbers(options.quantiles) }),
+      : { quantiles: parseNumberList(options.quantiles, "--quantiles") }),
     ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
   };
 
@@ -283,18 +280,18 @@ function registerVerifyCommand(program: Command): void {
   program
     .command("verify")
     .description("Verify archived GFS forecasts against GFS analysis or IGRA radiosondes")
-    .requiredOption("--lat <number>", "Latitude", Number)
-    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--lat <number>", "Latitude", numberOption("--lat"))
+    .requiredOption("--lon <number>", "Longitude", numberOption("--lon"))
     .option("--at <iso>", "One historical valid time")
     .option("--from <iso>", "Skill-summary range start")
     .option("--to <iso>", "Skill-summary range end")
     .requiredOption("--lead-hours <number|list>", "Forecast lead(s) in hours; multiples of 6")
     .option("--reference <gfs-analysis|igra>", "Verification reference", "gfs-analysis")
     .option("--hours <list>", "Skill-summary nominal UTC cycles", "0,12")
-    .option("--max-valid-times <number>", "Skill-summary sampling cap (max 8)", Number, 8)
+    .option("--max-valid-times <number>", "Skill-summary sampling cap (max 8)", numberOption("--max-valid-times"), 8)
     .option("--grid <0p25|0p50>", "GFS forecast grid; IGRA reference only")
     .option("--station <id>", "Explicit 11-character IGRA station ID")
-    .option("--max-station-distance-km <number>", "Maximum IGRA station distance", Number)
+    .option("--max-station-distance-km <number>", "Maximum IGRA station distance", numberOption("--max-station-distance-km"))
     .option("--vars <list>", "Pressure-level variables")
     .option("--levels <list>", "Pressure levels in hPa", DEFAULT_LEVELS)
     .option("--json", "Output JSON")
@@ -312,7 +309,7 @@ function registerVerifyCommand(program: Command): void {
       const defaultVariables = referenceDataset === "igra"
         ? DEFAULT_IGRA_VERIFICATION_VARIABLES
         : DEFAULT_UNIFIED_VARIABLES;
-      const leads = parseNumbers(options.leadHours);
+      const leads = parseNumberList(options.leadHours, "--lead-hours");
       if (hasInstant && leads.length !== 1) {
         throw new InvalidRequestError("Atomic verification requires exactly one --lead-hours value");
       }
@@ -320,8 +317,8 @@ function registerVerifyCommand(program: Command): void {
       const common = {
         forecastDataset: "gfs" as const,
         geometry: { type: "point" as const, latitude: options.lat, longitude: options.lon },
-        variables: parseStrings(options.vars ?? defaultVariables),
-        pressureLevelsHpa: parseLevels(options.levels),
+        variables: parseStringList(options.vars ?? defaultVariables),
+        pressureLevelsHpa: parseNumberList(options.levels, "--levels"),
         ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
         ...(options.station === undefined ? {} : { stationId: options.station }),
         ...(options.maxStationDistanceKm === undefined
@@ -329,7 +326,7 @@ function registerVerifyCommand(program: Command): void {
           : { maxStationDistanceKm: options.maxStationDistanceKm }),
       };
 
-      const request = hasInstant
+      const request: VerifyAtmosphericForecastInput = hasInstant
         ? {
             ...common,
             referenceDataset: referenceDataset as "gfs-analysis" | "igra",
@@ -342,13 +339,13 @@ function registerVerifyCommand(program: Command): void {
             time: {
               from: options.from,
               to: options.to,
-              hoursUtc: parseNumbers(options.hours) as Array<0 | 6 | 12 | 18>,
+              hoursUtc: parseNumberList(options.hours, "--hours") as Array<0 | 6 | 12 | 18>,
               maxValidTimes: options.maxValidTimes,
             },
             leadHours: leads,
           };
 
-      const result = await new UnifiedForecastVerificationService().verify(request as any);
+      const result = await new UnifiedForecastVerificationService().verify(request);
       printResult(result, Boolean(options.json));
     });
 }
@@ -357,13 +354,13 @@ function registerAnalogsCommand(program: Command): void {
   program
     .command("analogs")
     .description("Find historical atmospheric analogs in the local materialized index")
-    .requiredOption("--lat <number>", "Latitude", Number)
-    .requiredOption("--lon <number>", "Longitude", Number)
+    .requiredOption("--lat <number>", "Latitude", numberOption("--lat"))
+    .requiredOption("--lon <number>", "Longitude", numberOption("--lon"))
     .requiredOption("--at <iso>", "Target historical analysis time")
     .option("--vars <list>", "Pressure-level variables", DEFAULT_UNIFIED_VARIABLES)
     .option("--levels <list>", "Pressure levels in hPa", DEFAULT_LEVELS)
-    .option("--count <number>", "Number of analogs", Number, 5)
-    .option("--exclude-within-hours <number>", "Exclude candidates near target time", Number, 24)
+    .option("--count <number>", "Number of analogs", numberOption("--count"), 5)
+    .option("--exclude-within-hours <number>", "Exclude candidates near target time", numberOption("--exclude-within-hours"), 24)
     .option("--no-fetch-target", "Do not fetch and materialize the target when missing")
     .option("--json", "Output JSON")
     .action(async (options) => {
@@ -371,8 +368,8 @@ function registerAnalogsCommand(program: Command): void {
         dataset: "gfs-analysis",
         geometry: { type: "point", latitude: options.lat, longitude: options.lon },
         time: { at: options.at },
-        variables: parseStrings(options.vars),
-        pressureLevelsHpa: parseLevels(options.levels),
+        variables: parseStringList(options.vars),
+        pressureLevelsHpa: parseNumberList(options.levels, "--levels"),
         count: options.count,
         excludeWithinHours: options.excludeWithinHours,
         fetchTargetIfMissing: options.fetchTarget,
@@ -426,7 +423,7 @@ export function buildUnifiedRunComparison(
               : { members: parseEnsembleMembers(dataset, options.members) }),
             ...(options.quantiles === undefined
               ? {}
-              : { quantiles: parseNumbers(options.quantiles) }),
+              : { quantiles: parseNumberList(options.quantiles, "--quantiles") }),
           },
         }),
     ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
@@ -452,7 +449,7 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
       kind: "layer",
       lowerPressureHpa: options.lower,
       upperPressureHpa: options.upper,
-      diagnostics: parseStrings(options.diagnostics) as any,
+      diagnostics: parseStringList(options.diagnostics) as any,
     };
   } else if (kind === "profile") {
     if (options.diagnostics === undefined) {
@@ -460,8 +457,8 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
     }
     diagnostic = {
       kind: "profile",
-      pressureLevelsHpa: parseLevels(options.levels),
-      diagnostics: parseStrings(options.diagnostics) as any,
+      pressureLevelsHpa: parseNumberList(options.levels, "--levels"),
+      diagnostics: parseStringList(options.diagnostics) as any,
     };
   } else if (kind === "parcel") {
     if (options.parcel === undefined) {
@@ -469,7 +466,7 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
     }
     diagnostic = {
       kind: "parcel",
-      pressureLevelsHpa: parseLevels(options.levels),
+      pressureLevelsHpa: parseNumberList(options.levels, "--levels"),
       parcel: options.parcel,
     } as DiagnoseAtmosphereInput["diagnostic"];
   } else {
@@ -518,8 +515,8 @@ function parseGeometry(options: Record<string, any>): QueryAtmosphereInput["geom
     if (options.start === undefined || options.end === undefined) throw new InvalidRequestError("Transect geometry requires both --start and --end");
     return {
       type: "transect",
-      start: parseCoordinate(options.start),
-      end: parseCoordinate(options.end),
+      start: parseCoordinate(options.start, "--start"),
+      end: parseCoordinate(options.end, "--end"),
       ...(options.samples === undefined ? {} : { samples: options.samples }),
     };
   }
@@ -546,18 +543,18 @@ function parseTime(options: Record<string, any>): QueryAtmosphereInput["time"] {
   return {
     from: String(options.from),
     to: String(options.to),
-    ...(options.cycles === undefined ? {} : { hoursUtc: parseNumbers(options.cycles) as Array<0 | 6 | 12 | 18> }),
+    ...(options.cycles === undefined ? {} : { hoursUtc: parseNumberList(options.cycles, "--cycles") as Array<0 | 6 | 12 | 18> }),
     ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }),
   };
 }
 
 function parseSelection(options: Record<string, any>): QueryAtmosphereInput["selection"] {
-  const fields = options.fields === undefined ? undefined : parseStrings(options.fields);
+  const fields = options.fields === undefined ? undefined : parseStringList(options.fields);
   const explicitPressure = options.vars !== undefined || options.levels !== undefined;
   if (fields !== undefined && !explicitPressure) return { fields };
   return {
-    variables: parseStrings(options.vars ?? DEFAULT_UNIFIED_VARIABLES),
-    pressureLevelsHpa: parseLevels(options.levels ?? DEFAULT_LEVELS),
+    variables: parseStringList(options.vars ?? DEFAULT_UNIFIED_VARIABLES),
+    pressureLevelsHpa: parseNumberList(options.levels ?? DEFAULT_LEVELS, "--levels"),
     ...(fields === undefined ? {} : { fields }),
   };
 }
@@ -593,7 +590,7 @@ function ensembleInput(dataset: PublicAtmosphericDataset, options: Record<string
   return {
     ensemble: {
       ...(members === undefined ? {} : { members }),
-      ...(options.quantiles === undefined ? {} : { quantiles: parseNumbers(options.quantiles) }),
+      ...(options.quantiles === undefined ? {} : { quantiles: parseNumberList(options.quantiles, "--quantiles") }),
       ...(options.includeMembers ? { includeMembers: true } : {}),
       ...(options.maxMemberSamples === undefined ? {} : { maxMemberSamples: options.maxMemberSamples }),
     },
@@ -606,7 +603,7 @@ function parseEnsembleMembers(
 ): string[] {
   if (dataset === "gefs") return parseGefsMembers(value);
   if (dataset === "ifs-ens") return parseIfsEnsMembers(value);
-  return parseStrings(value);
+  return parseStringList(value);
 }
 
 function aggregateInput(options: Record<string, any>) {
@@ -618,7 +615,7 @@ function aggregateInput(options: Record<string, any>) {
   if (!hasAggregate) return {};
   return {
     aggregate: {
-      ...(options.percentiles === undefined ? {} : { percentiles: parseNumbers(options.percentiles) }),
+      ...(options.percentiles === undefined ? {} : { percentiles: parseNumberList(options.percentiles, "--percentiles") }),
       ...(thresholds.length === 0 ? {} : { thresholds }),
       ...(options.extrema ? { includeExtremaLocations: true } : {}),
     },
@@ -635,14 +632,6 @@ function limitsInput(options: Record<string, any>) {
       : { maxMemberGridPoints: options.maxMemberGridPoints }),
   };
   return Object.keys(limits).length === 0 ? {} : { limits };
-}
-
-function parseCoordinate(value: unknown): PointCoordinate {
-  return collectPoint(String(value), undefined)[0]!;
-}
-
-function parseStrings(value: unknown): string[] {
-  return String(value).split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 function reportCliProgress(progress: AtmosphericStepProgress): void {

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { NCEI_NCSS_PROVENANCE } from "../src/sources/ncei-gfs-history.js";
 import { HistoricalFieldsService, parseHistoricalFieldsCsv } from "../src/core/history-fields.js";
 import type { HistoricalProfileResult } from "../src/schema/history-result.js";
 import { HISTORICAL_GFS_FIELD_IDS } from "../src/schema/history-fields.js";
@@ -45,16 +46,16 @@ function source(): HistoricalAnalysisDataSource {
   return {
     fetch: vi.fn(async (request) => {
       const first = request.variables[0];
-      if (first === "Temperature_height_above_ground") return { csv: temperatureCsv, dataset, cacheHit: true };
+      if (first === "Temperature_height_above_ground") return { csv: temperatureCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
       if (first === "Relative_humidity_height_above_ground" || first === "Dewpoint_temperature_height_above_ground") {
-        return { csv: moistureCsv, dataset, cacheHit: true };
+        return { csv: moistureCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
       }
-      if (first === "Specific_humidity_height_above_ground") return { csv: specificHumidityCsv, dataset, cacheHit: true };
-      if (first === "Pressure_height_above_ground") return { csv: pressureCsv, dataset, cacheHit: true };
+      if (first === "Specific_humidity_height_above_ground") return { csv: specificHumidityCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
+      if (first === "Pressure_height_above_ground") return { csv: pressureCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
       if (first === "u-component_of_wind_height_above_ground" || first === "v-component_of_wind_height_above_ground") {
-        return { csv: windCsv, dataset, cacheHit: true };
+        return { csv: windCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
       }
-      return { csv: scalarCsv, dataset, cacheHit: true };
+      return { csv: scalarCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
     }),
   };
 }
@@ -139,9 +140,9 @@ describe("historical mixed fields", () => {
     ].join("\n");
     const fetch = vi.fn(async (request: any) => {
       if (request.variables.includes("Pressure_surface")) {
-        return { csv: scalarCsv, dataset, cacheHit: true };
+        return { csv: scalarCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
       }
-      return { csv: pressureCsv, dataset, cacheHit: true };
+      return { csv: pressureCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
     });
     const service = new HistoricalFieldsService({
       source: { fetch },

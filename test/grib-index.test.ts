@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   parseGribIndex,
+  selectAllPressureByteRanges,
+  selectNamedLevelByteRanges,
   selectNonIsobaricByteRangesAtForecastHour,
   selectPressureByteRanges,
   selectPressureByteRangesAtForecastHour,
@@ -82,6 +84,60 @@ describe("selectPressureByteRanges", () => {
   });
 });
 
+
+describe("selectAllPressureByteRanges", () => {
+  const records = parseGribIndex(indexText);
+
+  it("selects every isobaric message for the requested variables", () => {
+    expect(selectAllPressureByteRanges(records, ["TMP"])).toEqual([
+      { start: 0, end: 7 },
+      { start: 32, end: 39 },
+      { start: 48, end: 55 },
+    ]);
+  });
+
+  it("fails when no isobaric messages match", () => {
+    expect(() => selectAllPressureByteRanges(records, ["CAPE"])).toThrow(
+      /no isobaric messages for: CAPE/,
+    );
+    // HGT only appears as surface in the fixture inventory.
+    expect(() => selectAllPressureByteRanges(records, ["HGT"])).toThrow(
+      /no isobaric messages for: HGT/,
+    );
+  });
+});
+
+describe("selectNamedLevelByteRanges", () => {
+  const records = parseGribIndex([
+    "1:0:d=2026081906:TMP:850 mb:anl:",
+    "2:8:d=2026081906:TMP:2 m above ground:anl:",
+    "3:16:d=2026081906:TMP:80 m above ground:anl:",
+    "4:24:d=2026081906:PRES:surface:anl:",
+    "5:32:d=2026081906:PWAT:entire atmosphere (considered as a single layer):anl:",
+  ].join("\n"));
+
+  it("selects an exact named level", () => {
+    expect(selectNamedLevelByteRanges(records, [
+      { gfsCode: "PRES", gribLevel: "surface" },
+    ])).toEqual([{ start: 24, end: 31 }]);
+  });
+
+  it("selects every non-isobaric level when gribLevel is omitted", () => {
+    expect(selectNamedLevelByteRanges(records, [{ gfsCode: "TMP" }])).toEqual([
+      { start: 8, end: 15 },
+      { start: 16, end: 23 },
+    ]);
+  });
+
+  it("reports missing named selectors", () => {
+    expect(() => selectNamedLevelByteRanges(records, [
+      { gfsCode: "TMP", gribLevel: "10 m above ground" },
+    ])).toThrow(/TMP@10 m above ground/);
+    expect(() => selectNamedLevelByteRanges(records, [
+      { gfsCode: "RH" },
+    ])).toThrow(/RH@\*/);
+  });
+});
 
 describe("selectNonIsobaricByteRangesAtForecastHour", () => {
   it("selects one lead from a retrospective multi-lead variable file without swallowing the next message", () => {

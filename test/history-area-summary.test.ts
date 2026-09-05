@@ -7,6 +7,7 @@ import {
 import { HISTORICAL_AREA_PRESSURE_CATALOG } from "../src/catalog/history-area.js";
 import { historicalAreaSummaryQuerySchema } from "../src/schema/history-area-summary.js";
 import type { HistoricalAnalysisAreaDataSource } from "../src/sources/ncei-gfs-history.js";
+import { NCEI_NCSS_PROVENANCE } from "../src/sources/ncei-gfs-history.js";
 
 const dataset = "model-gfs-g4-anl-files-old/201705/20170509/gfsanl_4_20170509_1200_000.grb2";
 const temperatureCsv = [
@@ -27,7 +28,7 @@ const windCsv = [
 
 function source(csv = temperatureCsv, cacheHit = false): HistoricalAnalysisAreaDataSource {
   return {
-    fetchArea: vi.fn(async () => ({ csv, dataset, cacheHit })),
+    fetchArea: vi.fn(async () => ({ csv, dataset, cacheHit, ...NCEI_NCSS_PROVENANCE })),
   };
 }
 

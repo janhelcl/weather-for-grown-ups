@@ -241,8 +241,8 @@ function recordFromProfile(
     selection: { variables, pressureLevelsHpa },
     levels: profile.levels,
     source: {
-      provider: "NOAA NCEI",
-      access: "ncei_thredds_ncss",
+      provider: profile.source.provider,
+      access: profile.source.access,
       dataset: profile.source.dataset,
     },
   };

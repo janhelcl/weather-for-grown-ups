@@ -5,7 +5,8 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
-import { CachedNceiGfsHistorySource } from "../cache/historical-gfs-cache.js";
+import { CachedGfsAnalysisFileStore, CachedNceiGfsHistorySource } from "../cache/historical-gfs-cache.js";
+import { RoutedGfsAnalysisSource } from "../sources/gfs-analysis-routed.js";
 import {
   deriveAirDensityKgM3,
   deriveDewPointC,
@@ -27,7 +28,6 @@ import type { HistoricalProfileResult } from "../schema/history-result.js";
 import { isoDateTimeSchema } from "../schema/query.js";
 import {
   NCEI_GFS_GRID4_ANALYSIS_START,
-  NceiGfsHistorySource,
   type HistoricalAnalysisDataSource,
   type HistoricalAnalysisResponse,
 } from "../sources/ncei-gfs-history.js";
@@ -157,9 +157,14 @@ export class HistoricalProfileService {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
     const accessPolicy = options.accessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
+    const awsAccessPolicy = new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.noaaAws);
     this.source = options.source ?? new CachedNceiGfsHistorySource(
       join(cacheDir, "ncei-history"),
-      new NceiGfsHistorySource({ limiter: accessPolicy }),
+      new RoutedGfsAnalysisSource({
+        nceiAccessPolicy: accessPolicy,
+        awsAccessPolicy,
+        fileStore: new CachedGfsAnalysisFileStore(join(cacheDir, "ncei-gfs-analysis-fileserver")),
+      }),
     );
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
@@ -228,8 +233,8 @@ export class HistoricalProfileService {
       },
       levels,
       source: {
-        provider: "NOAA NCEI",
-        access: "ncei_thredds_ncss",
+        provider: firstResponse.provider,
+        access: firstResponse.access,
         dataset: firstResponse.dataset,
         cacheHit: responses.every((response) => response.cacheHit),
       },
@@ -299,7 +304,8 @@ export function parseHistoricalProfileCsv(
   const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
   if (lines.length < 2) throw new Error("NCEI historical GFS response contains no data rows");
 
-  const headers = parseCsvLine(lines[0]!).map(normalizeHeader);
+  const rawHeaders = parseCsvLine(lines[0]!);
+  const headers = rawHeaders.map(normalizeHeader);
   const pressureIndex = findHeaderIndex(headers, [
     "vertCoord",
     "alt",
@@ -313,6 +319,7 @@ export function parseHistoricalProfileCsv(
     "isobaric7",
   ]);
   if (pressureIndex < 0) throw new Error("NCEI historical GFS response is missing a pressure coordinate");
+  const pressureInPa = /\[unit\s*=\s*"?Pa"?\]/i.test(rawHeaders[pressureIndex] ?? "");
 
   const latitudeIndex = findHeaderIndex(headers, ["latitude", "lat"]);
   const longitudeIndex = findHeaderIndex(headers, ["longitude", "lon"]);
@@ -336,7 +343,12 @@ export function parseHistoricalProfileCsv(
     const cells = parseCsvLine(line);
     const rawPressure = numericCell(cells[pressureIndex]);
     if (rawPressure === undefined) continue;
-    const pressureHpa = rawPressure > 2_000 ? rawPressure / 100 : rawPressure;
+    // Prefer an explicit Pa unit from the CSV header. The old >2000 heuristic
+    // misreads upper-air levels such as 7 hPa (700 Pa) as 700 hPa when AWS
+    // returns the full isobaric stack.
+    const pressureHpa = pressureInPa || rawPressure > 2_000
+      ? rawPressure / 100
+      : rawPressure;
     const key = levelKey(pressureHpa);
     if (!requested.has(key)) continue;
     const level = levelMap.get(key);

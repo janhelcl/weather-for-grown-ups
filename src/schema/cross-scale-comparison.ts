@@ -125,7 +125,7 @@ const gfsIconPressureLevelSchema = z.number().refine(
   `GFS/ICON-D2 comparison pressure levels are: ${GFS_ICON_D2_PRESSURE_LEVELS_HPA.join(", ")} hPa`,
 );
 
-export const compareIfsIconD2DatasetsSchema = z.object({
+export const compareIfsIconD2DatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("ifs"), z.literal("icon-d2")]),
   geometry: pointGeometrySchema,
   time: pointTimeSchema,
@@ -140,7 +140,7 @@ export const compareIfsIconD2DatasetsSchema = z.object({
   validateSharedCycleAndLead(request.run, request.time.at, 48, 3, context);
 });
 
-export const compareGfsIconD2DatasetsSchema = z.object({
+export const compareGfsIconD2DatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("gfs"), z.literal("icon-d2")]),
   geometry: pointGeometrySchema,
   time: pointTimeSchema,
@@ -155,7 +155,7 @@ export const compareGfsIconD2DatasetsSchema = z.object({
   validateSharedCycleAndLead(request.run, request.time.at, 48, 1, context);
 });
 
-export const compareIfsAromeDatasetsSchema = z.object({
+export const compareIfsAromeDatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("ifs"), z.literal("arome")]),
   geometry: pointGeometrySchema,
   time: pointTimeSchema,
@@ -172,7 +172,7 @@ export const compareIfsAromeDatasetsSchema = z.object({
 const iconD2EpsMemberSchema = z.enum(ICON_D2_EPS_MEMBERS);
 const peAromeMemberSchema = z.enum(PE_AROME_MEMBERS);
 
-export const compareIfsEnsIconD2EpsDatasetsSchema = z.object({
+export const compareIfsEnsIconD2EpsDatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("ifs-ens"), z.literal("icon-d2-eps")]),
   geometry: pointGeometrySchema,
   time: pointTimeSchema,
@@ -202,7 +202,7 @@ export const compareIfsEnsIconD2EpsDatasetsSchema = z.object({
   validateUnique(request.quantiles, ["quantiles"], "Quantile selection", context);
 });
 
-export const compareIfsEnsPeAromeDatasetsSchema = z.object({
+export const compareIfsEnsPeAromeDatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("ifs-ens"), z.literal("pe-arome")]),
   geometry: pointGeometrySchema,
   time: pointTimeSchema,

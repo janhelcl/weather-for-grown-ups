@@ -177,6 +177,63 @@ export function selectNonIsobaricByteRangesAtForecastHour(
   return rangesForStarts(records, selectedStarts);
 }
 
+/**
+ * Select every isobaric message for the given variable codes. Used by
+ * gfs-analysis GRIB backends that emulate NCSS's full vertical-column CSV
+ * and let the historical parsers filter to the requested levels.
+ */
+export function selectAllPressureByteRanges(
+  records: GribIndexRecord[],
+  variableCodes: Iterable<string>,
+): ByteRange[] {
+  const codeSet = new Set(variableCodes);
+  const selectedStarts = new Set(
+    records
+      .filter((record) => codeSet.has(record.variable) && record.pressureHpa !== undefined)
+      .map((record) => record.startByte),
+  );
+  if (selectedStarts.size === 0) {
+    throw new Error(
+      `GFS index has no isobaric messages for: ${[...codeSet].sort().join(", ") || "<none>"}`,
+    );
+  }
+  return rangesForStarts(records, selectedStarts);
+}
+
+/**
+ * Select messages by exact GRIB variable code and level string (e.g.
+ * `TMP` + `2 m above ground`). When `gribLevel` is omitted, every level of
+ * that variable that is not an isobaric `mb` surface is taken — matching
+ * NCSS multi-height CSV rows for a shared variable name.
+ */
+export function selectNamedLevelByteRanges(
+  records: GribIndexRecord[],
+  selectors: Iterable<{ gfsCode: string; gribLevel?: string }>,
+): ByteRange[] {
+  const selectedStarts = new Set<number>();
+  const missing: string[] = [];
+  for (const selector of selectors) {
+    const matches = records.filter((record) => {
+      if (record.variable !== selector.gfsCode) return false;
+      if (selector.gribLevel !== undefined) return record.level === selector.gribLevel;
+      return record.pressureHpa === undefined;
+    });
+    if (matches.length === 0) {
+      missing.push(
+        selector.gribLevel === undefined
+          ? `${selector.gfsCode}@*`
+          : `${selector.gfsCode}@${selector.gribLevel}`,
+      );
+      continue;
+    }
+    for (const match of matches) selectedStarts.add(match.startByte);
+  }
+  if (missing.length > 0) {
+    throw new Error(`GFS index is missing requested fields: ${missing.join(", ")}`);
+  }
+  return rangesForStarts(records, selectedStarts);
+}
+
 export function mergeByteRanges(...groups: ByteRange[][]): ByteRange[] {
   const byStart = new Map<number, ByteRange>();
   for (const range of groups.flat()) byStart.set(range.start, range);

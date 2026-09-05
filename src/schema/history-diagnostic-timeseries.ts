@@ -1,4 +1,7 @@
 import * as z from "zod/v4";
+import {
+  historicalAnalysisSourceSummarySchema,
+} from "./history-result.js";
 import { diagnosticTimeSeriesSelectionSchema } from "./diagnostic-time-series.js";
 import { compactParcelComputationSchema } from "./diagnostic-time-series-result.js";
 import {
@@ -43,10 +46,7 @@ export const historicalDiagnosticTimeSeriesQuerySchema = z.object({
   }
 });
 
-const historicalDiagnosticSourceSchema = z.object({
-  provider: z.literal("NOAA NCEI"),
-  access: z.literal("ncei_thredds_ncss"),
-});
+const historicalDiagnosticSourceSchema = historicalAnalysisSourceSummarySchema;
 
 const commonStepShape = {
   analysisTime: historicalAnalysisTimeSchema,

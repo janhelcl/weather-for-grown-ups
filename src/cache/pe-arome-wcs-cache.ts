@@ -1,4 +1,5 @@
 import { resolveMeteoFranceBearerToken } from "../access/meteo-france-auth.js";
+import { upstreamHttpFailure } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, rename, rm, writeFile } from "node:fs/promises";
@@ -107,9 +108,12 @@ export class PeAromeWcsCache implements AromeSubsetCache {
       throw new Error("Météo-France PE-AROME API rejected the bearer token (HTTP 401)");
     }
     if (!response.ok) {
-      throw new Error(
-        `Météo-France PE-AROME availability request failed: HTTP ${response.status} ${response.statusText}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "Météo-France WCS",
+        operation: "PE-AROME availability request",
+        status: response.status,
+        statusText: response.statusText,
+      });
     }
     return true;
   }
@@ -125,9 +129,12 @@ export class PeAromeWcsCache implements AromeSubsetCache {
         true,
       );
       if (!response.ok) {
-        throw new Error(
-          `Météo-France PE-AROME WCS request failed: HTTP ${response.status} ${response.statusText}`,
-        );
+        throw upstreamHttpFailure({
+          provider: "Météo-France WCS",
+          operation: "PE-AROME coverage request",
+          status: response.status,
+          statusText: response.statusText,
+        });
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
       if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {

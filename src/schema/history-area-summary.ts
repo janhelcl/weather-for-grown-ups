@@ -1,5 +1,8 @@
 import * as z from "zod/v4";
 import {
+  historicalAnalysisSourceSummarySchema,
+} from "./history-result.js";
+import {
   HISTORICAL_AREA_FIELD_IDS,
   HISTORICAL_AREA_PRESSURE_VARIABLE_IDS,
 } from "../catalog/history-area.js";
@@ -149,8 +152,7 @@ export const historicalAreaSummaryResultSchema = z.object({
   }),
   distribution: areaDistributionSchema.optional(),
   source: z.object({
-    provider: z.literal("NOAA NCEI"),
-    access: z.literal("ncei_thredds_ncss"),
+    ...historicalAnalysisSourceSummarySchema.shape,
     subset: z.literal("native_bbox_grid"),
     dataset: z.string().min(1),
     cacheHit: z.boolean(),

@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { searchAtmosphereCatalog } from "../catalog/unified-search.js";
 import { InvalidRequestError } from "../failure.js";
+import { numberOption } from "./shared.js";
 import {
   UNIFIED_CATALOG_SECTIONS,
   type UnifiedCatalogResult,
@@ -29,7 +30,7 @@ export function registerCatalogCommand(program: Command): void {
     .option("--covers-point <lat,lon>", "Return only datasets covering this point")
     .option("--covers-area <west,east,south,north>", "Return only datasets fully covering this bounded area")
     .option("--forecast-kind <operational|reforecast>", "GEFS forecast population capability filter")
-    .option("--limit <number>", "Maximum matches", Number, 30)
+    .option("--limit <number>", "Maximum matches", numberOption("--limit"), 30)
     .option("--json", "Output JSON")
     .action((options) => {
       const dataset = parseDataset(options.dataset);

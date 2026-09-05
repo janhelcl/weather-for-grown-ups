@@ -9,7 +9,8 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
-import { CachedNceiGfsHistorySource } from "../cache/historical-gfs-cache.js";
+import { CachedGfsAnalysisFileStore, CachedNceiGfsHistorySource } from "../cache/historical-gfs-cache.js";
+import { RoutedGfsAnalysisSource } from "../sources/gfs-analysis-routed.js";
 import { deriveWind } from "../derived/wind.js";
 import {
   historicalFieldsQuerySchema,
@@ -22,7 +23,6 @@ import { isoDateTimeSchema } from "../schema/query.js";
 import type { HistoricalProfileResult } from "../schema/history-result.js";
 import {
   NCEI_GFS_GRID4_ANALYSIS_START,
-  NceiGfsHistorySource,
   type HistoricalAnalysisDataSource,
   type HistoricalAnalysisResponse,
 } from "../sources/ncei-gfs-history.js";
@@ -105,9 +105,14 @@ export class HistoricalFieldsService {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
     const accessPolicy = options.accessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
+    const awsAccessPolicy = new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.noaaAws);
     this.source = options.source ?? new CachedNceiGfsHistorySource(
       join(cacheDir, "ncei-history"),
-      new NceiGfsHistorySource({ limiter: accessPolicy }),
+      new RoutedGfsAnalysisSource({
+        nceiAccessPolicy: accessPolicy,
+        awsAccessPolicy,
+        fileStore: new CachedGfsAnalysisFileStore(join(cacheDir, "ncei-gfs-analysis-fileserver")),
+      }),
     );
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
@@ -187,8 +192,8 @@ export class HistoricalFieldsService {
       ...(profile ? { levels: profile.levels } : {}),
       fields: requestedFields.map((id) => buildHistoricalFieldResult(id, rawValues)),
       source: {
-        provider: "NOAA NCEI",
-        access: "ncei_thredds_ncss",
+        provider: firstResponse.provider,
+        access: firstResponse.access,
         dataset: firstResponse.dataset,
         cacheHit: responses.every((response) => response.cacheHit) && (profile?.source.cacheHit ?? true),
       },

@@ -36,8 +36,8 @@ const quantilesSchema = z.array(z.number().min(0).max(1))
   .default([0.1, 0.5, 0.9]);
 
 const pointBase = {
-  geometry: z.object({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
-  time: z.object({ at: isoDateTimeSchema }),
+  geometry: z.strictObject({ type: z.literal("point"), ...pointCoordinateSchema.shape }),
+  time: z.strictObject({ at: isoDateTimeSchema }),
   variable: z.string().min(1),
   pressureLevelHpa: z.number().positive(),
   run: runSchema,
@@ -47,7 +47,7 @@ const aigefsMemberSchema = z.enum(AIGEFS_MEMBERS);
 const aifsEnsMemberSchema = z.enum(AIFS_ENS_MEMBERS);
 const hgefsMemberSchema = z.string().refine(isHgefsMember, "Unknown HGEFS member");
 
-export const compareGfsAigfsDatasetsSchema = z.object({
+export const compareGfsAigfsDatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("gfs"), z.literal("aigfs")]),
   ...pointBase,
   gfsGrid: gfsGridSchema.optional(),
@@ -64,7 +64,7 @@ export const compareGfsAigfsDatasetsSchema = z.object({
   validateAigfsSelection(request.variable, request.pressureLevelHpa, context);
 });
 
-export const compareIfsAifsDatasetsSchema = z.object({
+export const compareIfsAifsDatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("ifs"), z.literal("aifs")]),
   ...pointBase,
   gfsGrid: z.never().optional(),
@@ -82,7 +82,7 @@ export const compareIfsAifsDatasetsSchema = z.object({
   validateAifsSelection(request.variable, request.pressureLevelHpa, context);
 });
 
-export const compareAigfsAifsDatasetsSchema = z.object({
+export const compareAigfsAifsDatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("aigfs"), z.literal("aifs")]),
   ...pointBase,
   gfsGrid: z.never().optional(),
@@ -100,7 +100,7 @@ export const compareAigfsAifsDatasetsSchema = z.object({
   validateAifsSelection(request.variable, request.pressureLevelHpa, context);
 });
 
-export const compareGefsAigefsDatasetsSchema = z.object({
+export const compareGefsAigefsDatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("gefs"), z.literal("aigefs")]),
   ...pointBase,
   gefsMembers: z.array(gefsMemberSchema).min(2).max(GEFS_MEMBERS.length)
@@ -130,7 +130,7 @@ export const compareGefsAigefsDatasetsSchema = z.object({
   validateScalarVariable(request.variable, context);
 });
 
-export const compareIfsEnsAifsEnsDatasetsSchema = z.object({
+export const compareIfsEnsAifsEnsDatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("ifs-ens"), z.literal("aifs-ens")]),
   ...pointBase,
   ifsEnsMembers: z.array(ifsEnsMemberSchema).min(2).optional(),
@@ -169,7 +169,7 @@ const hybridBase = {
   thresholdGte: z.number().optional(),
 };
 
-export const compareHgefsGefsDatasetsSchema = z.object({
+export const compareHgefsGefsDatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("hgefs"), z.literal("gefs")]),
   ...hybridBase,
 }).superRefine((request, context) => {
@@ -187,7 +187,7 @@ export const compareHgefsGefsDatasetsSchema = z.object({
   validateScalarVariable(request.variable, context);
 });
 
-export const compareHgefsAigefsDatasetsSchema = z.object({
+export const compareHgefsAigefsDatasetsSchema = z.strictObject({
   datasets: z.tuple([z.literal("hgefs"), z.literal("aigefs")]),
   ...hybridBase,
 }).superRefine((request, context) => {

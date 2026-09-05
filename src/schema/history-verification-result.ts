@@ -1,4 +1,7 @@
 import * as z from "zod/v4";
+import {
+  historicalAnalysisSourceSummarySchema,
+} from "./history-result.js";
 import { historicalAnalysisTimeSchema, historicalGfsVariableIdSchema } from "./history.js";
 import { historicalVerificationLeadHoursSchema } from "./history-verification.js";
 import { gridPointSchema, profileLevelResultSchema } from "./result.js";
@@ -44,8 +47,7 @@ export const historicalForecastVerificationResultSchema = z.object({
     changes: z.array(numericChangeSchema),
   })).min(1),
   source: z.object({
-    provider: z.literal("NOAA NCEI"),
-    access: z.literal("ncei_thredds_ncss"),
+    ...historicalAnalysisSourceSummarySchema.shape,
     forecastArchiveAvailability: z.literal(
       "online availability varies; older forecast data may require NCEI HAS",
     ),

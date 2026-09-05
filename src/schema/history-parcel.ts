@@ -1,5 +1,9 @@
 import * as z from "zod/v4";
 import {
+  historicalAnalysisSourceSchema,
+  historicalAnalysisSourceSummarySchema,
+} from "./history-result.js";
+import {
   DEFAULT_HISTORICAL_TIME_SERIES_MAX_STEPS,
   HISTORICAL_GFS_CYCLE_HOURS_UTC,
   MAX_HISTORICAL_TIME_SERIES_MAX_STEPS,
@@ -44,12 +48,7 @@ export const historicalParcelQuerySchema = z.object({
   }
 });
 
-const historicalParcelSourceSchema = z.object({
-  provider: z.literal("NOAA NCEI"),
-  access: z.literal("ncei_thredds_ncss"),
-  dataset: z.string().min(1),
-  cacheHit: z.boolean(),
-});
+const historicalParcelSourceSchema = historicalAnalysisSourceSchema;
 
 export const historicalParcelResultSchema = z.object({
   model: z.literal("gfs_grid4_analysis_0p5"),
@@ -110,10 +109,7 @@ export const historicalParcelTimeSeriesResultSchema = z.object({
     ...historicalParcelSelectionShape,
     cycleHoursUtc: z.array(historicalCycleHourUtcSchema).min(1),
   }),
-  source: z.object({
-    provider: z.literal("NOAA NCEI"),
-    access: z.literal("ncei_thredds_ncss"),
-  }),
+  source: historicalAnalysisSourceSummarySchema,
   series: z.array(z.object({
     analysisTime: historicalAnalysisTimeSchema,
     levels: z.array(profileLevelResultSchema).min(2),

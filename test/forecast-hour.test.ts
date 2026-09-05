@@ -37,7 +37,7 @@ describe("forecastHour", () => {
   });
 
   it("rejects valid times before the model run", () => {
-    expect(() => forecastHour(run, atForecastHour(run, -1))).toThrow(/at or after run time/);
+    expect(() => forecastHour(run, atForecastHour(run, -1))).toThrow(/at or after run/);
   });
 
   it("rejects fractional forecast hours", () => {

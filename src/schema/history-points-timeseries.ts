@@ -1,4 +1,7 @@
 import * as z from "zod/v4";
+import {
+  historicalAnalysisSourceSummarySchema,
+} from "./history-result.js";
 import { historicalGfsFieldIdSchema } from "./history-fields.js";
 import {
   DEFAULT_HISTORICAL_TIME_SERIES_MAX_STEPS,
@@ -62,8 +65,7 @@ export const historicalPointsTimeSeriesResultSchema = z.object({
     cycleHoursUtc: z.array(historicalCycleHourUtcSchema).min(1),
   }),
   source: z.object({
-    provider: z.literal("NOAA NCEI"),
-    access: z.literal("ncei_thredds_ncss"),
+    ...historicalAnalysisSourceSummarySchema.shape,
     composition: z.literal("serial_cycle_point_queries"),
   }),
   series: z.array(z.object({

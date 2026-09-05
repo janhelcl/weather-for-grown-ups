@@ -48,7 +48,8 @@ The deterministic suite covers the important boundaries across global, AI/hybrid
 - aligned global/model-class comparisons plus restrictive global↔regional point strategies with explicit shared-cycle, field-intersection and no-regridding semantics;
 - CLI/MCP handler mappings and Streamable HTTP MCP negotiation with external network access blocked;
 - stdio MCP end to end: the SDK `StdioClientTransport` spawns `src/mcp.ts`, negotiates, lists the tool catalog, runs a local `search_catalog` call and receives a typed `OUT_OF_DOMAIN` error envelope;
-- the public failure contract: typed `WfgError` codes, Zod → `INVALID_REQUEST`, transport/5xx/429 classification, and preservation of plain-`Error` messages (redacted and bounded) instead of an opaque `INTERNAL_ERROR`, including the CLI/guardrail/dependency/credential cases surfaced by QA.
+- the public failure contract: typed `WfgError` codes, Zod → `INVALID_REQUEST`, transport/5xx/429 classification, and preservation of plain-`Error` messages (redacted and bounded) instead of an opaque `INTERNAL_ERROR`, including the CLI/guardrail/dependency/credential cases surfaced by QA;
+- request-contract precision (`test/request-contract-precision.test.ts`): Commander usage errors and typed numeric flags reach the envelope, `compare_datasets`/`verify_forecast` dispatch to one pair/time-form contract with field-level messages, strict request objects reject unknown keys, discriminated geometry and union flattening name the failing field, and `describedSchema` advertises JSON Schema to the MCP SDK without validating.
 
 The test suite also checks the scientific semantics that are easy to accidentally flatten: accumulation/average intervals, circular wind direction, stable sampled grids, member-first nonlinear calculations and raw-member-fraction interpretation.
 

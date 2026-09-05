@@ -1,5 +1,8 @@
 import * as z from "zod/v4";
 import {
+  historicalAnalysisSourceSummarySchema,
+} from "./history-result.js";
+import {
   DEFAULT_HISTORICAL_TIME_SERIES_MAX_STEPS,
   historicalAnalysisTimeSchema,
   historicalCycleHourUtcSchema,
@@ -65,8 +68,7 @@ export const historicalIndexRecordSchema = z.object({
   }),
   levels: z.array(profileLevelResultSchema).min(1),
   source: z.object({
-    provider: z.literal("NOAA NCEI"),
-    access: z.literal("ncei_thredds_ncss"),
+    ...historicalAnalysisSourceSummarySchema.shape,
     dataset: z.string().min(1),
   }),
 });

@@ -26,6 +26,8 @@ WFG deliberately does not return an `isOutlier` boolean: an outlier threshold is
 
 ```bash
 wfg compare-datasets \
+  --dataset gfs \
+  --against gefs \
   --lat 50.08 \
   --lon 14.43 \
   --at 2026-08-24T12:00:00Z \

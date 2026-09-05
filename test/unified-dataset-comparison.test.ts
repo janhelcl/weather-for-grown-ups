@@ -17,6 +17,7 @@ describe("unified dataset-comparison strategies", () => {
     const native = { compare: vi.fn(async (query) => ({ route: "gfs-gefs", query })) };
     const strategy = new GfsGefsComparisonStrategy(native as any);
     const request = compareAtmosphericDatasetsSchema.parse({
+      datasets: ["gfs", "gefs"],
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       variable: "temperature",
@@ -98,6 +99,7 @@ describe("unified dataset-comparison strategies", () => {
 
     const gfsGefs = new GfsGefsComparisonStrategy(native as any);
     await gfsGefs.compare(compareAtmosphericDatasetsSchema.parse({
+      datasets: ["gfs", "gefs"],
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       variable: "temperature",
@@ -166,6 +168,7 @@ describe("unified dataset-comparison strategies", () => {
     await expect(gfsIfs.compare(request)).resolves.toBeUndefined();
 
     const gfsGefsRequest = compareAtmosphericDatasetsSchema.parse({
+      datasets: ["gfs", "gefs"],
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       variable: "temperature",

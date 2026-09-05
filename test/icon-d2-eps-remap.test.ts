@@ -1,10 +1,12 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parseMessagesFromBuffer } from "@mattnucc/gribberish";
 import {
-  IconD2EpsCdoRemapper,
   IconD2EpsDwdRemapAssetCache,
+  IconD2EpsGridRemapper,
+  IconD2EpsRemapIndexLoader,
   IconD2EpsRemappedSubsetCache,
   extractSelectedTarFiles,
 } from "../src/cache/icon-d2-eps-remap-cache.js";
@@ -13,11 +15,20 @@ import type {
   IconD2SubsetCache,
 } from "../src/cache/icon-d2-open-data-cache.js";
 import { VARIABLE_CATALOG } from "../src/catalog/variables.js";
-import { UnsupportedOperationError, toPublicFailure } from "../src/failure.js";
 import { scanGrib2Messages } from "../src/grib/dwd-local-parameters.js";
+import type { NearestNeighbourRemapIndex } from "../src/grib/icon-d2-remap.js";
+import {
+  NATIVE_CELLS,
+  TARGET_GRID,
+  concat,
+  nativeIconMessage,
+  scripNetcdf,
+} from "./icon-d2-fixtures.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+/** Pack small integers exactly: reference 0, no binary/decimal scaling. */
+const INTEGER_PACKING = { referenceValue: 0, binaryScale: 0, decimalScale: 0 } as const;
 
 describe("ICON-D2-EPS official DWD remapping assets", () => {
   let rootDir: string;
@@ -106,7 +117,7 @@ describe("ICON-D2-EPS official DWD remapping assets", () => {
       { run: <T>(operation: () => Promise<T>) => operation() },
     );
     await expect(failed.paths()).rejects.toThrow(
-      "DWD ICON-D2 remapping-asset request failed: HTTP 503",
+      "DWD Open Data is unavailable after retries during the ICON-D2 remapping-asset request (HTTP 503",
     );
 
     const incomplete = new IconD2EpsDwdRemapAssetCache(
@@ -172,210 +183,142 @@ describe("ICON-D2-EPS official DWD remapping assets", () => {
   });
 });
 
-describe("ICON-D2-EPS CDO remap cache", () => {
+describe("ICON-D2-EPS pure-JS remap cache", () => {
   let rootDir: string;
+  let index: NearestNeighbourRemapIndex;
 
   beforeEach(async () => {
-    rootDir = await mkdtemp(join(tmpdir(), "wfg-icon-d2-eps-cdo-"));
+    rootDir = await mkdtemp(join(tmpdir(), "wfg-icon-d2-eps-js-remap-"));
+    index = {
+      sourceSize: NATIVE_CELLS,
+      targetGrid: TARGET_GRID,
+      sourceIndexByTarget: Int32Array.from([0, 1, 2, 3, 4, 5]),
+    };
   });
 
   afterEach(async () => {
     await rm(rootDir, { recursive: true, force: true });
   });
 
-  it("remaps once with the official grid/weights and then reuses the immutable result", async () => {
-    const sourcePath = join(rootDir, "native.grib2");
-    const targetGridPath = join(rootDir, "target.txt");
+  it("loads the DWD index once from the provider grid/weights and shares it", async () => {
+    const targetGridPath = join(rootDir, "target_grid_icon_d2_002.txt");
+    const weightsPath = join(rootDir, "weights_icon_d2_002.nc");
+    await Promise.all([
+      writeFile(targetGridPath, [
+        "gridtype = lonlat",
+        `xsize = ${TARGET_GRID.xsize}`,
+        `ysize = ${TARGET_GRID.ysize}`,
+        `xfirst = ${TARGET_GRID.xfirst}`,
+        `xinc = ${TARGET_GRID.xinc}`,
+        `yfirst = ${TARGET_GRID.yfirst}`,
+        `yinc = ${TARGET_GRID.yinc}`,
+      ].join("\n")),
+      writeFile(weightsPath, scripNetcdf({ links: [[1, 2], [2, 1], [3, 3], [4, 4], [5, 5], [6, 6]] })),
+    ]);
+    const paths = vi.fn(async () => ({ targetGridPath, weightsPath }));
+    const loader = new IconD2EpsRemapIndexLoader({ paths });
+
+    const [first, second] = await Promise.all([loader.index(), loader.index()]);
+    expect(first).toBe(second);
+    expect(first.targetGrid).toEqual(TARGET_GRID);
+    expect([...first.sourceIndexByTarget]).toEqual([1, 0, 2, 3, 4, 5]);
+    expect(paths).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries index loading after an asset failure instead of caching the rejection", async () => {
+    let calls = 0;
+    const targetGridPath = join(rootDir, "grid.txt");
     const weightsPath = join(rootDir, "weights.nc");
     await Promise.all([
-      writeFile(sourcePath, "GRIB-NATIVE"),
-      writeFile(targetGridPath, "grid"),
-      writeFile(weightsPath, "weights"),
+      writeFile(targetGridPath, "gridtype = lonlat\nxsize = 3\nysize = 2\nxfirst = 10\nxinc = 0.5\nyfirst = 50\nyinc = 0.5\n"),
+      writeFile(weightsPath, scripNetcdf({ links: [[1, 1]] })),
     ]);
-    const runner = vi.fn(async (_executable: string, args: string[]) => {
-      await writeFile(args.at(-1)!, "GRIB-REMAPPED");
-      return { stdout: "processed" };
+    const loader = new IconD2EpsRemapIndexLoader({
+      paths: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error("DWD Open Data is unavailable");
+        return { targetGridPath, weightsPath };
+      },
     });
-    const remapper = new IconD2EpsCdoRemapper(
-      join(rootDir, "remapped"),
-      { paths: async () => ({ targetGridPath, weightsPath }) },
-      "cdo-test",
-      runner,
-    );
+    await expect(loader.index()).rejects.toThrow("DWD Open Data is unavailable");
+    await expect(loader.index()).resolves.toMatchObject({ sourceSize: NATIVE_CELLS });
+    expect(calls).toBe(2);
+  });
+
+  it("remaps once through the DWD index and then reuses the immutable result", async () => {
+    const sourcePath = join(rootDir, "native.grib2");
+    const native = concat([
+      nativeIconMessage({ values: [1, 2, 3, 4, 5, 6], perturbation: 1, ...INTEGER_PACKING }),
+      nativeIconMessage({ values: [7, 8, 9, 10, 11, 12], perturbation: 2, ...INTEGER_PACKING }),
+    ]);
+    await writeFile(sourcePath, native);
+    const provider = { index: vi.fn(async () => index) };
+    const remapper = new IconD2EpsGridRemapper(join(rootDir, "remapped"), provider);
 
     const first = await remapper.remap(sourcePath);
     expect(first.cacheHit).toBe(false);
-    expect(decoder.decode(await readFile(first.path))).toBe("GRIB-REMAPPED");
-    expect(runner).toHaveBeenCalledTimes(1);
-    expect(runner.mock.calls[0]![1]).toEqual([
-      "-f",
-      "grb2",
-      `remap,${targetGridPath},${weightsPath}`,
-      sourcePath,
-      expect.stringContaining(".tmp"),
+    const remapped = await readFile(first.path);
+    const messages = parseMessagesFromBuffer(new Uint8Array(remapped));
+    expect(messages.map((message) => message.perturbationNumber)).toEqual([1, 2]);
+    expect(messages.map((message) => message.gridShape)).toEqual([
+      { rows: 2, cols: 3 },
+      { rows: 2, cols: 3 },
     ]);
+    expect(messages[1]!.dataAdjusted(true, false)).toEqual([7, 8, 9, 10, 11, 12]);
+    expect(provider.index).toHaveBeenCalledTimes(1);
 
     const second = await remapper.remap(sourcePath);
     expect(second).toMatchObject({ path: first.path, cacheHit: true });
-    expect(runner).toHaveBeenCalledTimes(1);
+    expect(provider.index).toHaveBeenCalledTimes(1);
   });
 
-
-  it("round-trips DWD local precipitation metadata around CDO", async () => {
-    const sourcePath = join(rootDir, "native-rain-con.grib2");
-    const targetGridPath = join(rootDir, "target-local.txt");
-    const weightsPath = join(rootDir, "weights-local.nc");
-    await Promise.all([
-      writeFile(sourcePath, minimalDwdLocalGrib2(76)),
-      writeFile(targetGridPath, "grid"),
-      writeFile(weightsPath, "weights"),
-    ]);
-    const runner = vi.fn(async (_executable: string, args: string[]) => {
-      const preparedPath = args.at(-2)!;
-      expect(preparedPath).not.toBe(sourcePath);
-      const prepared = await readFile(preparedPath);
-      expect(scanGrib2Messages(prepared)[0]).toMatchObject({
-        center: 78,
+  it("keeps DWD local parameters, mean-layer surfaces and UH_MAX identity verbatim", async () => {
+    const sourcePath = join(rootDir, "native-identity.grib2");
+    await writeFile(sourcePath, concat([
+      nativeIconMessage({
+        values: [1, 2, 3, 4, 5, 6],
         category: 1,
-        parameter: 10,
-      });
-      await writeFile(args.at(-1)!, prepared);
-      return { stdout: "processed local parameter" };
-    });
-    const remapper = new IconD2EpsCdoRemapper(
-      join(rootDir, "remapped-local"),
-      { paths: async () => ({ targetGridPath, weightsPath }) },
-      "cdo-test",
-      runner,
-    );
+        parameter: 76,
+        surfaceType: 1,
+        surfaceValue: 0,
+        accumulationHours: 6,
+        ...INTEGER_PACKING,
+      }),
+      nativeIconMessage({ values: [1, 2, 3, 4, 5, 6], category: 7, parameter: 6, surfaceType: 192, surfaceValue: 0, ...INTEGER_PACKING }),
+      nativeIconMessage({ values: [1, 2, 3, 4, 5, 6], category: 7, parameter: 15, surfaceType: 102, surfaceValue: 0, ...INTEGER_PACKING }),
+    ]));
+    const remapper = new IconD2EpsGridRemapper(join(rootDir, "remapped-identity"), { index: async () => index });
 
     const result = await remapper.remap(sourcePath);
-    expect(scanGrib2Messages(await readFile(result.path))[0]).toMatchObject({
-      center: 78,
-      category: 1,
-      parameter: 76,
-    });
-  });
-
-  it("restores mean-layer CAPE/CIN fixed-surface identity after CDO", async () => {
-    const sourcePath = join(rootDir, "native-mean-layer.grib2");
-    const targetGridPath = join(rootDir, "target-mean-layer.txt");
-    const weightsPath = join(rootDir, "weights-mean-layer.nc");
-    await Promise.all([
-      writeFile(sourcePath, concatBytes([
-        minimalDwdMeanLayerGrib2(6),
-        minimalDwdMeanLayerGrib2(7),
-      ])),
-      writeFile(targetGridPath, "grid"),
-      writeFile(weightsPath, "weights"),
-    ]);
-    const runner = vi.fn(async (_executable: string, args: string[]) => {
-      const prepared = Uint8Array.from(await readFile(args.at(-2)!));
-      const chunks = scanGrib2Messages(prepared);
-      expect(chunks.map((chunk) => [
-        chunk.category,
-        chunk.parameter,
-        chunk.firstFixedSurfaceType,
-      ])).toEqual([
-        [7, 6, 192],
-        [7, 7, 192],
-      ]);
-      for (const chunk of chunks) {
-        expect(chunk.firstFixedSurfaceTypeOffset).toBeDefined();
-        prepared[chunk.firstFixedSurfaceTypeOffset!] = 1;
-        writeUint16Be(prepared, chunk.centerOffset!, 255);
-        prepared[chunk.localTableOffset!] = 0;
-      }
-      await writeFile(args.at(-1)!, prepared);
-      return { stdout: "processed mean-layer fields" };
-    });
-    const remapper = new IconD2EpsCdoRemapper(
-      join(rootDir, "remapped-mean-layer"),
-      { paths: async () => ({ targetGridPath, weightsPath }) },
-      "cdo-test",
-      runner,
-    );
-
-    const result = await remapper.remap(sourcePath);
-    expect(scanGrib2Messages(await readFile(result.path)).map((chunk) => [
+    expect(scanGrib2Messages(new Uint8Array(await readFile(result.path))).map((chunk) => [
       chunk.center,
       chunk.localTable,
       chunk.category,
       chunk.parameter,
       chunk.firstFixedSurfaceType,
     ])).toEqual([
+      [78, 1, 1, 76, 1],
       [78, 1, 7, 6, 192],
-      [78, 1, 7, 7, 192],
+      [78, 1, 7, 15, 102],
     ]);
-  });
-
-  it("restores DWD UH_MAX provider identity after CDO", async () => {
-    const sourcePath = join(rootDir, "native-uh-max.grib2");
-    const targetGridPath = join(rootDir, "target-uh-max.txt");
-    const weightsPath = join(rootDir, "weights-uh-max.nc");
-    await Promise.all([
-      writeFile(sourcePath, minimalDwdUpdraftHelicityGrib2()),
-      writeFile(targetGridPath, "grid"),
-      writeFile(weightsPath, "weights"),
-    ]);
-    const runner = vi.fn(async (_executable: string, args: string[]) => {
-      const prepared = Uint8Array.from(await readFile(args.at(-2)!));
-      const chunk = scanGrib2Messages(prepared)[0]!;
-      expect(chunk).toMatchObject({
-        center: 78,
-        category: 7,
-        parameter: 15,
-        firstFixedSurfaceType: 102,
-      });
-      writeUint16Be(prepared, chunk.centerOffset!, 255);
-      prepared[chunk.localTableOffset!] = 0;
-      prepared[chunk.firstFixedSurfaceTypeOffset!] = 1;
-      await writeFile(args.at(-1)!, prepared);
-      return { stdout: "processed UH_MAX" };
-    });
-    const remapper = new IconD2EpsCdoRemapper(
-      join(rootDir, "remapped-uh-max"),
-      { paths: async () => ({ targetGridPath, weightsPath }) },
-      "cdo-test",
-      runner,
-    );
-
-    const result = await remapper.remap(sourcePath);
-    expect(scanGrib2Messages(await readFile(result.path))[0]).toMatchObject({
-      center: 78,
-      localTable: 1,
-      category: 7,
-      parameter: 15,
-      firstFixedSurfaceType: 102,
-    });
   });
 
   it("deduplicates concurrent remaps and reports the waiter as a cache hit", async () => {
     const sourcePath = join(rootDir, "native-concurrent.grib2");
-    const targetGridPath = join(rootDir, "target-concurrent.txt");
-    const weightsPath = join(rootDir, "weights-concurrent.nc");
-    await Promise.all([
-      writeFile(sourcePath, "GRIB-NATIVE"),
-      writeFile(targetGridPath, "grid"),
-      writeFile(weightsPath, "weights"),
-    ]);
+    await writeFile(sourcePath, nativeIconMessage({ values: [1, 2, 3, 4, 5, 6], ...INTEGER_PACKING }));
 
     let release!: () => void;
     let markStarted!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const started = new Promise<void>((resolve) => { markStarted = resolve; });
-    const runner = vi.fn(async (_executable: string, args: string[]) => {
-      markStarted();
-      await gate;
-      await writeFile(args.at(-1)!, "GRIB-REMAPPED");
-      return { stdout: "processed" };
-    });
-    const remapper = new IconD2EpsCdoRemapper(
-      join(rootDir, "concurrent"),
-      { paths: async () => ({ targetGridPath, weightsPath }) },
-      "cdo-test",
-      runner,
-    );
+    const provider = {
+      index: vi.fn(async () => {
+        markStarted();
+        await gate;
+        return index;
+      }),
+    };
+    const remapper = new IconD2EpsGridRemapper(join(rootDir, "concurrent"), provider);
 
     const firstPending = remapper.remap(sourcePath);
     await started;
@@ -385,63 +328,24 @@ describe("ICON-D2-EPS CDO remap cache", () => {
 
     expect(first.cacheHit).toBe(false);
     expect(second).toEqual({ path: first.path, cacheHit: true });
-    expect(runner).toHaveBeenCalledTimes(1);
+    expect(provider.index).toHaveBeenCalledTimes(1);
   });
 
-  it("preserves non-ENOENT CDO failures unchanged", async () => {
-    const sourcePath = join(rootDir, "native-error.grib2");
-    await writeFile(sourcePath, "GRIB-NATIVE");
-    const remapper = new IconD2EpsCdoRemapper(
-      join(rootDir, "generic-error"),
-      {
-        paths: async () => ({
-          targetGridPath: join(rootDir, "target.txt"),
-          weightsPath: join(rootDir, "weights.nc"),
-        }),
-      },
-      "cdo-test",
-      async () => { throw new Error("CDO processing failed"); },
-    );
-    await expect(remapper.remap(sourcePath)).rejects.toThrow("CDO processing failed");
-  });
+  it("fails loudly and leaves no partial output when the input is not remappable", async () => {
+    const remapper = new IconD2EpsGridRemapper(join(rootDir, "errors"), { index: async () => index });
 
-  it("surfaces missing CDO and empty remap output clearly", async () => {
-    const sourcePath = join(rootDir, "native.grib2");
-    await writeFile(sourcePath, "GRIB-NATIVE");
-    const assets = {
-      paths: async () => ({
-        targetGridPath: join(rootDir, "target.txt"),
-        weightsPath: join(rootDir, "weights.nc"),
-      }),
-    };
+    const emptyPath = join(rootDir, "empty.grib2");
+    await writeFile(emptyPath, new Uint8Array(32));
+    await expect(remapper.remap(emptyPath)).rejects.toThrow("contains no GRIB2 messages");
 
-    const missing = new IconD2EpsCdoRemapper(
-      join(rootDir, "missing"),
-      assets,
-      "missing-cdo",
-      async () => { throw new Error("spawn missing-cdo ENOENT"); },
+    const mismatchedPath = join(rootDir, "mismatched.grib2");
+    await writeFile(mismatchedPath, nativeIconMessage({ values: [1, 2, 3], ...INTEGER_PACKING }));
+    await expect(remapper.remap(mismatchedPath)).rejects.toThrow(
+      "has 3 native cells but the DWD index addresses 6",
     );
-    const missingFailure = await missing.remap(sourcePath).catch((error: unknown) => error);
-    expect(missingFailure).toBeInstanceOf(UnsupportedOperationError);
-    expect(toPublicFailure(missingFailure)).toMatchObject({
-      code: "UNSUPPORTED_OPERATION",
-      message: expect.stringContaining("Install cdo or point CDO_PATH at the binary"),
-      retryable: false,
-      details: { dataset: "icon-d2-eps", missingDependency: "cdo", executable: "missing-cdo" },
-    });
 
-    const empty = new IconD2EpsCdoRemapper(
-      join(rootDir, "empty"),
-      assets,
-      "cdo-test",
-      async (_executable, args) => {
-        await writeFile(args.at(-1)!, new Uint8Array());
-        return { stdout: "" };
-      },
-    );
-    await expect(empty.remap(sourcePath)).rejects.toThrow(
-      "CDO produced an empty ICON-D2-EPS remapped GRIB",
-    );
+    // Neither a partial .grib2 nor a stray .tmp file may survive a failed remap.
+    expect(await readdir(join(rootDir, "errors"))).toEqual([]);
   });
 
   it("preserves source/remap cache provenance in the subset wrapper", async () => {
@@ -452,7 +356,7 @@ describe("ICON-D2-EPS CDO remap cache", () => {
     };
     const remapper = {
       remap: vi.fn(async () => ({ path: "/tmp/remapped.grib2", cacheHit: false })),
-    } as unknown as IconD2EpsCdoRemapper;
+    };
     const cache = new IconD2EpsRemappedSubsetCache(source, remapper);
 
     await expect(cache.fetch(request)).resolves.toEqual({
@@ -516,117 +420,4 @@ function writeAscii(
   value: string,
 ): void {
   target.set(encoder.encode(value).subarray(0, width), offset);
-}
-
-function minimalDwdMeanLayerGrib2(parameter: 6 | 7): Uint8Array {
-  const section1 = new Uint8Array(21);
-  writeUint32Be(section1, 0, section1.length);
-  section1[4] = 1;
-  writeUint16Be(section1, 5, 78);
-  writeUint16Be(section1, 7, 0);
-  section1[9] = 34;
-  section1[10] = 1;
-
-  const section4 = new Uint8Array(23);
-  writeUint32Be(section4, 0, section4.length);
-  section4[4] = 4;
-  section4[9] = 7;
-  section4[10] = parameter;
-  section4[22] = 192;
-
-  const totalLength = 16 + section1.length + section4.length + 4;
-  const message = new Uint8Array(totalLength);
-  message.set(encoder.encode("GRIB"), 0);
-  message[6] = 0;
-  message[7] = 2;
-  writeUint64Be(message, 8, totalLength);
-  message.set(section1, 16);
-  message.set(section4, 16 + section1.length);
-  message.set(encoder.encode("7777"), totalLength - 4);
-  return message;
-}
-
-function minimalDwdUpdraftHelicityGrib2(): Uint8Array {
-  const section1 = new Uint8Array(21);
-  writeUint32Be(section1, 0, section1.length);
-  section1[4] = 1;
-  writeUint16Be(section1, 5, 78);
-  writeUint16Be(section1, 7, 0);
-  section1[9] = 34;
-  section1[10] = 1;
-
-  const section4 = new Uint8Array(23);
-  writeUint32Be(section4, 0, section4.length);
-  section4[4] = 4;
-  section4[9] = 7;
-  section4[10] = 15;
-  section4[22] = 102;
-
-  const totalLength = 16 + section1.length + section4.length + 4;
-  const message = new Uint8Array(totalLength);
-  message.set(encoder.encode("GRIB"), 0);
-  message[6] = 0;
-  message[7] = 2;
-  writeUint64Be(message, 8, totalLength);
-  message.set(section1, 16);
-  message.set(section4, 16 + section1.length);
-  message.set(encoder.encode("7777"), totalLength - 4);
-  return message;
-}
-
-function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
-  const output = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
-  let offset = 0;
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return output;
-}
-
-function minimalDwdLocalGrib2(parameter: number): Uint8Array {
-  const section1 = new Uint8Array(21);
-  writeUint32Be(section1, 0, section1.length);
-  section1[4] = 1;
-  writeUint16Be(section1, 5, 78);
-  writeUint16Be(section1, 7, 0);
-  section1[9] = 34;
-  section1[10] = 1;
-
-  const section4 = new Uint8Array(11);
-  writeUint32Be(section4, 0, section4.length);
-  section4[4] = 4;
-  section4[9] = 1;
-  section4[10] = parameter;
-
-  const totalLength = 16 + section1.length + section4.length + 4;
-  const message = new Uint8Array(totalLength);
-  message.set(encoder.encode("GRIB"), 0);
-  message[6] = 0;
-  message[7] = 2;
-  writeUint64Be(message, 8, totalLength);
-  message.set(section1, 16);
-  message.set(section4, 16 + section1.length);
-  message.set(encoder.encode("7777"), totalLength - 4);
-  return message;
-}
-
-function writeUint16Be(bytes: Uint8Array, offset: number, value: number): void {
-  bytes[offset] = (value >>> 8) & 0xff;
-  bytes[offset + 1] = value & 0xff;
-}
-
-function writeUint32Be(bytes: Uint8Array, offset: number, value: number): void {
-  bytes[offset] = (value >>> 24) & 0xff;
-  bytes[offset + 1] = (value >>> 16) & 0xff;
-  bytes[offset + 2] = (value >>> 8) & 0xff;
-  bytes[offset + 3] = value & 0xff;
-}
-
-function writeUint64Be(bytes: Uint8Array, offset: number, value: number): void {
-  let remaining = BigInt(value);
-  for (let index = 7; index >= 0; index -= 1) {
-    bytes[offset + index] = Number(remaining & 0xffn);
-    remaining >>= 8n;
-  }
 }

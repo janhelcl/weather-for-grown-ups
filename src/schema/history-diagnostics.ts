@@ -1,4 +1,7 @@
 import * as z from "zod/v4";
+import {
+  historicalAnalysisSourceSchema,
+} from "./history-result.js";
 import { LAYER_DIAGNOSTIC_IDS } from "../catalog/layer-diagnostics.js";
 import { PROFILE_DIAGNOSTIC_IDS } from "../catalog/profile-diagnostics.js";
 import { historicalAnalysisTimeSchema } from "./history.js";
@@ -41,12 +44,7 @@ export const historicalProfileDiagnosticsQuerySchema = z.object({
   }
 });
 
-const historicalDiagnosticSourceSchema = z.object({
-  provider: z.literal("NOAA NCEI"),
-  access: z.literal("ncei_thredds_ncss"),
-  dataset: z.string().min(1),
-  cacheHit: z.boolean(),
-});
+const historicalDiagnosticSourceSchema = historicalAnalysisSourceSchema;
 
 const historicalDiagnosticCaveatSchema = z.literal(
   "Diagnostics are derived from GFS model analysis; not direct observations or homogeneous climatological reanalysis",

@@ -114,8 +114,8 @@ export class HistoricalForecastVerificationService {
       },
       pressureLevels: compareForecastToAnalysis(forecast.levels, analysis.levels),
       source: {
-        provider: "NOAA NCEI",
-        access: "ncei_thredds_ncss",
+        provider: analysis.source.provider,
+        access: analysis.source.access,
         forecastArchiveAvailability: "online availability varies; older forecast data may require NCEI HAS",
       },
       caveat: CAVEAT,

@@ -1,3 +1,4 @@
+import { InvalidRequestError } from "../failure.js";
 export const AIFS_MAX_FORECAST_HOUR = 360;
 export const AIFS_FORECAST_INTERVAL_HOURS = 6;
 const HOUR_MS = 3_600_000;
@@ -11,14 +12,14 @@ export const AIFS_NATIVE_FORECAST_HOURS = Object.freeze(
 
 export function parseAifsRun(value: string): Date {
   const run = new Date(value);
-  if (!Number.isFinite(run.getTime())) throw new Error(`Invalid AIFS run: ${value}`);
+  if (!Number.isFinite(run.getTime())) throw new InvalidRequestError(`Invalid AIFS run: ${value}`);
   if (
     run.getUTCMinutes() !== 0
     || run.getUTCSeconds() !== 0
     || run.getUTCMilliseconds() !== 0
     || ![0, 6, 12, 18].includes(run.getUTCHours())
   ) {
-    throw new Error("AIFS run must be an exact 00/06/12/18 UTC initialization cycle");
+    throw new InvalidRequestError("AIFS run must be an exact 00/06/12/18 UTC initialization cycle");
   }
   return run;
 }
@@ -26,10 +27,10 @@ export function parseAifsRun(value: string): Date {
 export function aifsForecastHour(run: Date, validTime: Date): number {
   const forecastHour = (validTime.getTime() - run.getTime()) / HOUR_MS;
   if (!Number.isInteger(forecastHour) || forecastHour < 0) {
-    throw new Error("AIFS valid time must be at or after the run on an integer forecast hour");
+    throw new InvalidRequestError("AIFS valid time must be at or after the run on an integer forecast hour");
   }
   if (!isNativeAifsForecastHour(forecastHour)) {
-    throw new Error(
+    throw new InvalidRequestError(
       `AIFS run ${run.toISOString()} does not publish f${forecastHour}; native cadence is 6-hourly through f${AIFS_MAX_FORECAST_HOUR}`,
     );
   }
@@ -49,7 +50,7 @@ export function aifsForecastHoursInRange(
   endTime: Date,
 ): number[] {
   if (endTime.getTime() < startTime.getTime()) {
-    throw new Error("AIFS end time must be at or after start time");
+    throw new InvalidRequestError("AIFS end time must be at or after start time");
   }
   const firstHour = Math.ceil((startTime.getTime() - run.getTime()) / HOUR_MS);
   const lastHour = Math.floor((endTime.getTime() - run.getTime()) / HOUR_MS);
@@ -57,7 +58,7 @@ export function aifsForecastHoursInRange(
     (hour) => hour >= Math.max(0, firstHour) && hour <= lastHour,
   );
   if (result.length === 0) {
-    throw new Error("Requested AIFS time range contains no native forecast outputs for the selected run");
+    throw new InvalidRequestError("Requested AIFS time range contains no native forecast outputs for the selected run");
   }
   return [...result];
 }

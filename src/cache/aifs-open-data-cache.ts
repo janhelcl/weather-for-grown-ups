@@ -1,3 +1,4 @@
+import { upstreamHttpFailure } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -150,9 +151,14 @@ export class AifsOpenDataSubsetCache implements AifsSelectionSource {
       }),
     );
     if (result.status < 200 || result.status >= 300 || result.value === undefined) {
-      throw new Error(
-        `ECMWF AIFS index request failed: HTTP ${result.status} ${result.statusText} for ${url}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "ECMWF Open Data",
+        operation: "AIFS index request",
+        status: result.status,
+        statusText: result.statusText,
+        resource: "the requested AIFS forecast file",
+        url,
+      });
     }
     await writeFile(path, result.value, "utf8");
     return result.value;
@@ -180,9 +186,13 @@ export class AifsOpenDataSubsetCache implements AifsSelectionSource {
       }),
     );
     if (result.status !== 206 || result.value === undefined) {
-      throw new Error(
-        `ECMWF AIFS range request failed: HTTP ${result.status} ${result.statusText} for ${rangeValue}`,
-      );
+      throw upstreamHttpFailure({
+        provider: "ECMWF Open Data",
+        operation: "AIFS byte-range request",
+        status: result.status,
+        statusText: result.statusText,
+        details: { range: rangeValue },
+      });
     }
     if (
       result.value.length < 4

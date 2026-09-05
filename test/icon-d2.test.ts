@@ -1329,7 +1329,7 @@ describe("ICON-D2 guard and inventory branches", () => {
         new Date("2026-08-31T00:00:00Z"),
         6,
         { pressure: false, surface: true },
-      )).rejects.toThrow("availability request failed");
+      )).rejects.toThrow("rejected the ICON-D2 availability request (HTTP 403");
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }

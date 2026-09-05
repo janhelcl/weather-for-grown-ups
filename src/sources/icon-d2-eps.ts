@@ -1,3 +1,4 @@
+import { InvalidRequestError } from "../failure.js";
 import {
   ICON_D2_FORECAST_INTERVAL_HOURS,
   ICON_D2_MAX_FORECAST_HOUR,
@@ -26,7 +27,7 @@ export function buildIconD2EpsOpenDataUrl(
     || forecastHour < 0
     || forecastHour > ICON_D2_EPS_MAX_FORECAST_HOUR
   ) {
-    throw new Error(
+    throw new InvalidRequestError(
       `ICON-D2-EPS forecast hour must be a whole number from 0 to ${ICON_D2_EPS_MAX_FORECAST_HOUR}`,
     );
   }
