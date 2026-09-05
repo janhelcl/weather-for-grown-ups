@@ -55,7 +55,7 @@ describe("public failure contract", () => {
     });
   });
 
-  it("preserves actionable plain Error messages under INTERNAL_ERROR", () => {
+  it("preserves actionable plain Error messages under INTERNAL_ERROR for local reporting", () => {
     const failure = toPublicFailure(new Error(
       "Requested time range contains 120 native GFS outputs, exceeding maxSteps=8. Narrow the range or raise maxSteps.",
     ));
@@ -106,7 +106,7 @@ describe("public failure contract", () => {
 });
 
 describe("MCP failure result", () => {
-  it("returns one stable machine-readable error envelope", () => {
+  it("returns one stable machine-readable typed error envelope", () => {
     const result = toolError(new DataUnavailableError("No matching run", {
       details: { dataset: "gfs-analysis" },
     }));
@@ -123,5 +123,21 @@ describe("MCP failure result", () => {
     });
     expect(result).not.toHaveProperty("structuredContent");
     expect(result.isError).toBe(true);
+  });
+
+  it("does not expose arbitrary plain Error details remotely", () => {
+    const result = toolError(new Error(
+      "decoder exploded at /home/user/.cache/wfg/private-object.grib2 while reading implementation detail",
+    ));
+    const text = result.content[0]?.text;
+    expect(JSON.parse(text!)).toEqual({
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Unexpected internal error while handling the request",
+        retryable: false,
+      },
+    });
+    expect(text).not.toContain("/home/user");
+    expect(text).not.toContain("private-object.grib2");
   });
 });
