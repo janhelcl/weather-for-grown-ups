@@ -21,11 +21,10 @@ import { archivedGfsForecastHourSchema } from "../schema/history-forecast.js";
 import { historicalAreaFieldLevel } from "../schema/history-area-summary.js";
 import type { QueryAtmosphereRequest } from "../schema/unified-api.js";
 import { ArchivedGfsForecastAnalysisAdapter } from "../sources/archived-gfs-analysis-adapter.js";
+import type { ArchivedGfsForecastSource } from "../sources/archived-gfs-forecast.js";
 import {
   NCEI_GFS_GRID4_FORECAST_START,
   NceiGfsForecastHistorySource,
-  type ArchivedGfsForecastAreaDataSource,
-  type ArchivedGfsForecastDataSource,
 } from "../sources/ncei-gfs-forecast-history.js";
 import {
   RDA_GFS_0P25_FORECAST_START,
@@ -55,7 +54,6 @@ const ARCHIVE_0P25_CAVEAT =
   "Archived GFS forecast from the NCAR GDEX 0.25-degree operational GFS archive; model versions changed over time and this is not a homogeneous reforecast dataset" as const;
 
 type Point = { latitude: number; longitude: number };
-type ArchivedForecastSource = ArchivedGfsForecastDataSource & ArchivedGfsForecastAreaDataSource;
 
 interface ArchivedPointResult {
   model: ArchivedGfsModelId;
@@ -85,15 +83,15 @@ export interface ArchivedGfsForecastQueryServiceOptions {
   nceiAccessPolicy?: UpstreamAccessPolicy;
   gdexAccessPolicy?: UpstreamAccessPolicy;
   fetchFn?: typeof fetch;
-  source?: ArchivedForecastSource;
-  rdaSource?: ArchivedForecastSource;
+  source?: ArchivedGfsForecastSource;
+  rdaSource?: ArchivedGfsForecastSource;
   profile?: Pick<ArchivedGfsForecastProfileService, "getArchivedForecastProfile">;
   now?: () => Date;
 }
 
 export class ArchivedGfsForecastQueryService {
-  private readonly nceiSource: ArchivedForecastSource;
-  private readonly rdaSource: ArchivedForecastSource;
+  private readonly nceiSource: ArchivedGfsForecastSource;
+  private readonly rdaSource: ArchivedGfsForecastSource;
   private readonly profile: Pick<ArchivedGfsForecastProfileService, "getArchivedForecastProfile">;
   private readonly now: () => Date;
 
@@ -281,7 +279,7 @@ export class ArchivedGfsForecastQueryService {
     const maxPointSteps = request.limits?.maxPointSteps ?? 5_000;
     if (pointSteps > maxPointSteps) {
       throw new InvalidRequestError(
-        `Requested archived GFS matrix contains ${request.geometry.points.length} points × ${forecastHours.length} steps = ${pointSteps} point-steps, exceeding maxPointSteps=${maxPointSteps}`,
+        `Requested archived GFS matrix contains ${request.geometry.points.length} points × ${forecastHours.length} steps = ${pointSteps} point-steps, exceeding maxPointSteps=${maxPointSteps}.`,
       );
     }
 
@@ -546,7 +544,7 @@ export class ArchivedGfsForecastQueryService {
 
   private analysisAdapter(
     grid: GfsGrid,
-    source: ArchivedForecastSource,
+    source: ArchivedGfsForecastSource,
     runTime: Date,
     forecastHourValue: number,
     validTime: Date,
@@ -567,7 +565,7 @@ export class ArchivedGfsForecastQueryService {
     });
   }
 
-  private sourceForGrid(grid: GfsGrid): ArchivedForecastSource {
+  private sourceForGrid(grid: GfsGrid): ArchivedGfsForecastSource {
     return grid === "0p50" ? this.nceiSource : this.rdaSource;
   }
 }
