@@ -7,7 +7,7 @@ import type {
   HistoricalAnalysisDataSource,
   HistoricalAnalysisPointRow,
 } from "../src/sources/gfs-analysis.js";
-import { parseHistoricalNcssPointCsv } from "../src/sources/gfs-analysis-grib.js";
+import { parseHistoricalNcssPointCsv } from "../src/sources/gfs-analysis-ncss.js";
 import {
   NCEI_NCSS_PROVENANCE,
   buildNceiGfsAnalysisAreaUrl,
