@@ -7,9 +7,10 @@ import {
 } from "../access/access-policy.js";
 import { CachedGfsAnalysisFileStore, CachedGfsAnalysisSource } from "../cache/historical-gfs-cache.js";
 import { RoutedGfsAnalysisSource } from "../sources/gfs-analysis-routed.js";
-import type {
-  HistoricalAnalysisAreaDataSource,
-  HistoricalAnalysisAreaResponse,
+import {
+  GFS_ANALYSIS_START,
+  type HistoricalAnalysisAreaDataSource,
+  type HistoricalAnalysisAreaResponse,
 } from "../sources/gfs-analysis.js";
 import {
   HISTORICAL_AREA_FIELD_CATALOG,
@@ -27,7 +28,6 @@ import {
   type HistoricalAreaSummaryResult,
 } from "../schema/history-area-summary.js";
 import { isoDateTimeSchema } from "../schema/query.js";
-import { NCEI_GFS_GRID4_ANALYSIS_START } from "../sources/ncei-gfs-history.js";
 import { computeAreaDistribution } from "./area-distribution.js";
 import { InvalidRequestError } from "../failure.js";
 
@@ -99,7 +99,7 @@ export class HistoricalAreaSummaryService {
     );
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
-    this.minimumTime = options.minimumTime ?? NCEI_GFS_GRID4_ANALYSIS_START;
+    this.minimumTime = options.minimumTime ?? GFS_ANALYSIS_START;
     this.gridSpacingDegrees = options.gridSpacingDegrees ?? GRID_SPACING_DEG;
   }
 
