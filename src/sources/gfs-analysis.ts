@@ -1,5 +1,7 @@
 import type { GridValuePoint } from "../grib/wgrib2-grid.js";
 
+export const GFS_ANALYSIS_START = new Date("2007-01-01T00:00:00Z");
+
 export const HISTORICAL_ANALYSIS_VARIABLE_IDS = [
   "temperature",
   "relative_humidity",
