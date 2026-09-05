@@ -95,10 +95,6 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
   }
 }
 
-// Core assembly still imports this historical symbol; it is an alias only, not
-// an NCEI-specific cache implementation. New code should use CachedGfsAnalysisSource.
-export { CachedGfsAnalysisSource as CachedNceiGfsHistorySource };
-
 interface CachedHistoricalAnalysisPayload {
   csv: string;
   dataset: string;
