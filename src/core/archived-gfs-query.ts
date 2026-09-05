@@ -32,7 +32,7 @@ import {
 import type {
   HistoricalAnalysisAreaDataSource,
   HistoricalAnalysisDataSource,
-} from "../sources/ncei-gfs-history.js";
+} from "../sources/gfs-analysis.js";
 import { forecastHour, parseGfsRun, validTimeForForecastHour } from "./forecast-hour.js";
 import { HistoricalAreaSummaryService } from "./history-area-summary.js";
 import { HistoricalFieldsService } from "./history-fields.js";
