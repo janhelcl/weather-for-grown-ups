@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { searchAtmosphereCatalog } from "../catalog/unified-search.js";
+import { InvalidRequestError } from "../failure.js";
 import {
   UNIFIED_CATALOG_SECTIONS,
   type UnifiedCatalogResult,
@@ -18,7 +19,10 @@ export function registerCatalogCommand(program: Command): void {
     .description("Search atmospheric variables, fields, diagnostics, and dataset support")
     .option(`--dataset <${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}|all>`, "Dataset filter", "all")
     .option("--search <text>", "Search catalog text")
-    .option("--sections <list>", "Comma-separated catalog sections")
+    .option(
+      "--sections <list>",
+      `Comma-separated catalog sections (${UNIFIED_CATALOG_SECTIONS.join("|")}); dataset capabilities are always included`,
+    )
     .option("--classification <raw|derived>", "Raw or derived entries")
     .option("--temporal <instantaneous|accumulation|average>", "Temporal semantics")
     .option("--spatial-scope <global|limited-area>", "Dataset spatial-domain filter")
@@ -55,7 +59,7 @@ function parseDataset(value: unknown): PublicAtmosphericDataset | "all" {
   if (dataset === "all") return "all";
   const parsed = publicAtmosphericDatasetSchema.safeParse(dataset);
   if (parsed.success) return parsed.data;
-  throw new Error(
+  throw new InvalidRequestError(
     `Expected --dataset ${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}|all, received: ${value}`,
   );
 }
@@ -67,7 +71,10 @@ function parseSections(value: unknown): UnifiedSection[] {
     .filter(Boolean);
   const invalid = sections.filter((item) => !(UNIFIED_CATALOG_SECTIONS as readonly string[]).includes(item));
   if (invalid.length > 0) {
-    throw new Error(`Unknown catalog sections: ${invalid.join(", ")}`);
+    throw new InvalidRequestError(
+      `Unknown catalog sections: ${invalid.join(", ")}. Expected --sections to contain only ${UNIFIED_CATALOG_SECTIONS.join("|")}`,
+      { details: { invalidSections: invalid, allowedSections: [...UNIFIED_CATALOG_SECTIONS] } },
+    );
   }
   return sections as UnifiedSection[];
 }
@@ -76,7 +83,7 @@ function parseSpatialScope(value: unknown): "global" | "limited_area" {
   const scope = String(value).trim().toLowerCase();
   if (scope === "global") return "global";
   if (scope === "limited-area" || scope === "limited_area") return "limited_area";
-  throw new Error(`Expected --spatial-scope global|limited-area, received: ${value}`);
+  throw new InvalidRequestError(`Expected --spatial-scope global|limited-area, received: ${value}`);
 }
 
 function parseCoverage(options: Record<string, any>):
@@ -90,7 +97,7 @@ function parseCoverage(options: Record<string, any>):
     }
   | undefined {
   if (options.coversPoint !== undefined && options.coversArea !== undefined) {
-    throw new Error("Use only one of --covers-point or --covers-area");
+    throw new InvalidRequestError("Use only one of --covers-point or --covers-area");
   }
   if (options.coversPoint !== undefined) {
     const values = parseNumberTuple(options.coversPoint, 2, "--covers-point");
@@ -116,7 +123,7 @@ function parseNumberTuple(
 ): number[] {
   const values = String(value).split(",").map((item) => Number(item.trim()));
   if (values.length !== length || values.some((item) => !Number.isFinite(item))) {
-    throw new Error(`Expected ${option} to contain ${length} comma-separated numbers, received: ${value}`);
+    throw new InvalidRequestError(`Expected ${option} to contain ${length} comma-separated numbers, received: ${value}`);
   }
   return values;
 }

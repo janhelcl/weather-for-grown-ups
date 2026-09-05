@@ -25,6 +25,7 @@ import type { FieldTemporalResult, NonIsobaricFieldLevelResult } from "./types.j
 import { computeAreaDistribution } from "./area-distribution.js";
 import { IfsLatestRunResolver, type IfsLatestRunProvider } from "./ifs-latest-run.js";
 import { ifsForecastHour, parseIfsRun } from "./ifs-time.js";
+import { InvalidRequestError } from "../failure.js";
 
 const HOUR_MS = 3_600_000;
 const IFS_GRID_SPACING_DEG = 0.25;
@@ -63,7 +64,7 @@ export class IfsAreaSummaryService {
     };
     const estimatedGridPoints = estimateIfsGridPoints(box);
     if (estimatedGridPoints > query.maxGridPoints) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested bbox is approximately ${estimatedGridPoints} IFS grid points at 0.25°, exceeding maxGridPoints=${query.maxGridPoints}`,
       );
     }

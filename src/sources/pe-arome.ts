@@ -3,6 +3,7 @@ import {
   peAromeMemberNumber,
   type PeAromeMember,
 } from "../catalog/pe-arome.js";
+import { UnsupportedOperationError } from "../failure.js";
 
 export const PE_AROME_MAX_FORECAST_HOUR = 51;
 export const PE_AROME_FORECAST_INTERVAL_HOURS = 1;
@@ -165,11 +166,17 @@ export function resolvePeAromeWcsEndpoint(
     try {
       endpoints = JSON.parse(encoded) as Record<string, unknown>;
     } catch {
-      throw new Error("WFG_PEAROME_WCS_ENDPOINTS must be a JSON object keyed by c00,p01..p24");
+      throw new UnsupportedOperationError(
+        "WFG_PEAROME_WCS_ENDPOINTS must be a JSON object keyed by c00,p01..p24",
+        { details: { dataset: "pe-arome", invalidEnv: ["WFG_PEAROME_WCS_ENDPOINTS"] } },
+      );
     }
     const endpoint = endpoints[member];
     if (typeof endpoint !== "string" || endpoint.trim() === "") {
-      throw new Error(`WFG_PEAROME_WCS_ENDPOINTS has no endpoint for member=${member}`);
+      throw new UnsupportedOperationError(
+        `WFG_PEAROME_WCS_ENDPOINTS has no endpoint for member=${member}`,
+        { details: { dataset: "pe-arome", member, invalidEnv: ["WFG_PEAROME_WCS_ENDPOINTS"] } },
+      );
     }
     return endpoint;
   }
@@ -183,7 +190,9 @@ export function resolvePeAromeWcsEndpoint(
       .replaceAll("{member_number_2}", String(memberNumber).padStart(2, "0"));
   }
 
-  throw new Error(
-    "PE-AROME requires WFG_PEAROME_WCS_URL_TEMPLATE or WFG_PEAROME_WCS_ENDPOINTS from the subscribed Météo-France PEAROME API",
+  throw new UnsupportedOperationError(
+    "PE-AROME requires WFG_PEAROME_WCS_URL_TEMPLATE or WFG_PEAROME_WCS_ENDPOINTS from the subscribed Météo-France PEAROME API; "
+    + "this environment has no PE-AROME endpoint configured",
+    { details: { dataset: "pe-arome", missingEnv: ["WFG_PEAROME_WCS_URL_TEMPLATE", "WFG_PEAROME_WCS_ENDPOINTS"] } },
   );
 }

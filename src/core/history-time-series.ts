@@ -7,6 +7,7 @@ import {
 import type { HistoricalProfileResult, HistoricalTimeSeriesResult } from "../schema/history-result.js";
 import { NCEI_GFS_GRID4_ANALYSIS_START } from "../sources/ncei-gfs-history.js";
 import { HistoricalProfileService } from "./history.js";
+import { InvalidRequestError } from "../failure.js";
 
 const SIX_HOURS_MS = 6 * 60 * 60 * 1_000;
 
@@ -48,7 +49,7 @@ export class HistoricalTimeSeriesService {
       throw new Error("Requested range contains no selected GFS analysis cycles");
     }
     if (analysisTimes.length > query.maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested historical range contains ${analysisTimes.length} selected GFS analyses, exceeding maxSteps=${query.maxSteps}. Narrow the range, select fewer cycleHoursUtc, or raise maxSteps.`,
       );
     }

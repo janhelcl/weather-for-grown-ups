@@ -31,6 +31,7 @@ import { DEFAULT_GEFS_MEMBER_CONCURRENCY } from "./gefs-ensemble.js";
 import { GefsLatestRunResolver, type GefsLatestRunProvider } from "./gefs-latest-run.js";
 import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
 import { gefsAtmosProductForSelection, gefsAtmosProductGridDegrees, type GefsAtmosProduct } from "../sources/gefs-s3.js";
+import { InvalidRequestError } from "../failure.js";
 
 export interface GefsAreaGridDecoder {
   readonly engine?: GribDecoderName;
@@ -95,11 +96,11 @@ export class GefsAreaSummaryService {
     const horizontalGridDegrees = gefsAtmosProductGridDegrees(product);
     const estimatedGridPoints = estimateGefsGridPoints(box, horizontalGridDegrees);
     if (estimatedGridPoints > query.maxGridPoints) {
-      throw new Error(`Requested bbox is approximately ${estimatedGridPoints} GEFS grid points at ${horizontalGridDegrees}°, exceeding maxGridPoints=${query.maxGridPoints}`);
+      throw new InvalidRequestError(`Requested bbox is approximately ${estimatedGridPoints} GEFS grid points at ${horizontalGridDegrees}°, exceeding maxGridPoints=${query.maxGridPoints}`);
     }
     const estimatedMemberGridPoints = estimatedGridPoints * members.length;
     if (estimatedMemberGridPoints > query.maxMemberGridPoints) {
-      throw new Error(`Requested bbox × member selection is approximately ${estimatedMemberGridPoints} member-grid points at ${horizontalGridDegrees}°, exceeding maxMemberGridPoints=${query.maxMemberGridPoints}`);
+      throw new InvalidRequestError(`Requested bbox × member selection is approximately ${estimatedMemberGridPoints} member-grid points at ${horizontalGridDegrees}°, exceeding maxMemberGridPoints=${query.maxMemberGridPoints}`);
     }
 
     const memberComputations = query.field === undefined

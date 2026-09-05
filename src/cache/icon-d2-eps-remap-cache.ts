@@ -17,6 +17,7 @@ import {
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
 import { fetchWithRetry } from "../access/http-fetch.js";
+import { UnsupportedOperationError } from "../failure.js";
 import {
   prepareDwdLocalParametersForGenericProcessing,
   restoreDwdLocalParametersAfterGenericProcessing,
@@ -208,9 +209,13 @@ export class IconD2EpsCdoRemapper {
       return await this.runner(this.executable, args);
     } catch (error) {
       if (error instanceof Error && error.message.includes("ENOENT")) {
-        throw new Error(
-          "ICON-D2-EPS requires native CDO for DWD's provider-supplied ICON-D2 grid mapping. "
-          + `Install cdo or set CDO_PATH. Original error: ${error.message}`,
+        throw new UnsupportedOperationError(
+          "ICON-D2-EPS requires the native CDO executable for DWD's provider-supplied ICON-D2 grid mapping, "
+          + `but "${this.executable}" was not found. Install cdo or point CDO_PATH at the binary.`,
+          {
+            details: { dataset: "icon-d2-eps", missingDependency: "cdo", executable: this.executable, envVar: "CDO_PATH" },
+            cause: error,
+          },
         );
       }
       throw error;

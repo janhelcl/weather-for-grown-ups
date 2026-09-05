@@ -27,6 +27,7 @@ import {
 } from "../schema/ifs-spatiotemporal.js";
 import type { IfsPointQueryInput, IfsProfileResult } from "../schema/ifs.js";
 import type { PointCoordinate } from "../schema/query.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_IFS_POINT_CONCURRENCY = 4;
 export const DEFAULT_IFS_TIME_CONCURRENCY = 3;
@@ -66,7 +67,7 @@ export class IfsTimeSeriesService {
     const forecastHours = ifsForecastHoursInRange(run, startTime, endTime);
 
     if (forecastHours.length > query.maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested time range contains ${forecastHours.length} native IFS outputs, exceeding maxSteps=${query.maxSteps}`,
       );
     }
@@ -170,13 +171,13 @@ export class IfsPointsTimeSeriesService {
     const forecastHours = ifsForecastHoursInRange(run, startTime, endTime);
 
     if (forecastHours.length > query.maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested time range contains ${forecastHours.length} native IFS outputs, exceeding maxSteps=${query.maxSteps}`,
       );
     }
     const pointSteps = forecastHours.length * query.points.length;
     if (pointSteps > query.maxPointSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested IFS points time series contains ${pointSteps} point × time samples, exceeding maxPointSteps=${query.maxPointSteps}`,
       );
     }

@@ -45,6 +45,7 @@ import {
   type LatestRunProvider,
 } from "./latest-run.js";
 import type { FieldTemporalResult, NonIsobaricFieldLevelResult } from "./types.js";
+import { InvalidRequestError } from "../failure.js";
 
 const HOUR_MS = 3_600_000;
 
@@ -108,7 +109,7 @@ export class AreaSummaryService {
     };
     const estimatedGridPoints = estimateGridPoints(box, query.grid ?? "0p25");
     if (estimatedGridPoints > query.maxGridPoints) {
-      throw new Error(`Requested bbox is approximately ${estimatedGridPoints} GFS grid points, exceeding maxGridPoints=${query.maxGridPoints}`);
+      throw new InvalidRequestError(`Requested bbox is approximately ${estimatedGridPoints} GFS grid points, exceeding maxGridPoints=${query.maxGridPoints}`);
     }
 
     return query.field === undefined

@@ -13,6 +13,7 @@ import type {
   IconD2SubsetCache,
 } from "../src/cache/icon-d2-open-data-cache.js";
 import { VARIABLE_CATALOG } from "../src/catalog/variables.js";
+import { UnsupportedOperationError, toPublicFailure } from "../src/failure.js";
 import { scanGrib2Messages } from "../src/grib/dwd-local-parameters.js";
 
 const encoder = new TextEncoder();
@@ -420,9 +421,14 @@ describe("ICON-D2-EPS CDO remap cache", () => {
       "missing-cdo",
       async () => { throw new Error("spawn missing-cdo ENOENT"); },
     );
-    await expect(missing.remap(sourcePath)).rejects.toThrow(
-      "ICON-D2-EPS requires native CDO",
-    );
+    const missingFailure = await missing.remap(sourcePath).catch((error: unknown) => error);
+    expect(missingFailure).toBeInstanceOf(UnsupportedOperationError);
+    expect(toPublicFailure(missingFailure)).toMatchObject({
+      code: "UNSUPPORTED_OPERATION",
+      message: expect.stringContaining("Install cdo or point CDO_PATH at the binary"),
+      retryable: false,
+      details: { dataset: "icon-d2-eps", missingDependency: "cdo", executable: "missing-cdo" },
+    });
 
     const empty = new IconD2EpsCdoRemapper(
       join(rootDir, "empty"),

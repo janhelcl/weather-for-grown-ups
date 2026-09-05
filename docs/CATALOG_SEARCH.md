@@ -17,7 +17,7 @@ Available filters include:
 
 - `--dataset gfs|gefs|ifs|ifs-ens|gfs-analysis|all`;
 - `--search <text>`;
-- `--sections <list>`;
+- `--sections <list>` — comma-separated subset of `variables|fields|layer_diagnostics|profile_diagnostics|parcel_definitions`; dataset capabilities are always returned and unknown section names are rejected with `INVALID_REQUEST`;
 - `--classification <raw|derived>`;
 - `--temporal <instantaneous|accumulation|average>`;
 - `--limit <number>`.

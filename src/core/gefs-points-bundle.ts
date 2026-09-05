@@ -28,6 +28,7 @@ import {
   gefsAtmosProductGridDegrees,
   type GefsAtmosProduct,
 } from "../sources/gefs-s3.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_GEFS_POINT_DECODE_CONCURRENCY = 4;
 
@@ -81,7 +82,7 @@ export class GefsPointsBundleService {
     if (query.includeMembers) {
       const memberSamples = query.points.length * members.length * bundleScalarOutputCount(selection);
       if (memberSamples > query.maxMemberSamples) {
-        throw new Error(
+        throw new InvalidRequestError(
           `GEFS multi-point bundle would return ${memberSamples} member scalar samples, exceeding maxMemberSamples=${query.maxMemberSamples}`,
         );
       }

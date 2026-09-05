@@ -30,6 +30,7 @@ import {
   ifsValidTimeForForecastHour,
   parseIfsRun,
 } from "./ifs-time.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_IFS_DIAGNOSTIC_TIME_SERIES_CONCURRENCY = 3;
 
@@ -79,7 +80,7 @@ export class IfsDiagnosticTimeSeriesService {
     const forecastHours = ifsForecastHoursInRange(run, startTime, endTime);
 
     if (forecastHours.length > query.maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested diagnostic time range contains ${forecastHours.length} native IFS outputs, exceeding maxSteps=${query.maxSteps}. Narrow the range or raise maxSteps.`,
       );
     }

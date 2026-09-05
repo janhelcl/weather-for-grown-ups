@@ -2,6 +2,7 @@ import {
   GEFS_FORECAST_STEP_HOURS,
   GEFS_MAX_FORECAST_HOUR,
 } from "../catalog/gefs.js";
+import { InvalidRequestError } from "../failure.js";
 
 const GEFS_RUN_HOURS = new Set([0, 6, 12, 18]);
 const HOUR_MS = 3_600_000;
@@ -48,7 +49,7 @@ export function nativeGefsValidTimesInRange(startTime: Date, endTime: Date, maxS
   }
   const count = span / THREE_HOURS_MS + 1;
   if (count > maxSteps) {
-    throw new Error(`GEFS time series would contain ${count} steps, exceeding maxSteps=${maxSteps}`);
+    throw new InvalidRequestError(`GEFS time series would contain ${count} steps, exceeding maxSteps=${maxSteps}`);
   }
   return Array.from({ length: count }, (_, index) => new Date(startTime.getTime() + index * THREE_HOURS_MS));
 }

@@ -41,6 +41,7 @@ import {
   type ArchivedGfsForecastProfileResult,
 } from "./history-forecast.js";
 import { greatCircleDistanceKm, interpolateGreatCircle } from "./transect.js";
+import { InvalidRequestError } from "../failure.js";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 export const GFS_OPERATIONAL_ARCHIVE_WINDOW_DAYS = 28;
@@ -180,7 +181,7 @@ export class ArchivedGfsForecastQueryService {
     );
     const maxSteps = request.time.maxSteps ?? 65;
     if (forecastHours.length > maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested archived GFS range contains ${forecastHours.length} native 3-hour outputs, exceeding maxSteps=${maxSteps}`,
       );
     }
@@ -269,14 +270,14 @@ export class ArchivedGfsForecastQueryService {
     );
     const maxSteps = request.time.maxSteps ?? 65;
     if (forecastHours.length > maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested archived GFS range contains ${forecastHours.length} native 3-hour outputs, exceeding maxSteps=${maxSteps}`,
       );
     }
     const pointSteps = forecastHours.length * request.geometry.points.length;
     const maxPointSteps = request.limits?.maxPointSteps ?? 5_000;
     if (pointSteps > maxPointSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested archived GFS matrix contains ${request.geometry.points.length} points × ${forecastHours.length} steps = ${pointSteps} point-steps, exceeding maxPointSteps=${maxPointSteps}`,
       );
     }

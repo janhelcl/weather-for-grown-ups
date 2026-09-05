@@ -27,6 +27,7 @@ import {
   type HistoricalAnalysisAreaDataSource,
 } from "../sources/ncei-gfs-history.js";
 import { computeAreaDistribution } from "./area-distribution.js";
+import { InvalidRequestError } from "../failure.js";
 
 const GRID_SPACING_DEG = 0.5;
 const CAVEAT = "GFS model analysis area statistics; not direct observations or homogeneous climatological reanalysis" as const;
@@ -84,7 +85,7 @@ export class HistoricalAreaSummaryService {
     };
     const estimatedGridPoints = estimateHistoricalGridPoints(bbox, this.gridSpacingDegrees);
     if (estimatedGridPoints > query.maxGridPoints) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested bbox is approximately ${estimatedGridPoints} historical GFS grid points, exceeding maxGridPoints=${query.maxGridPoints}`,
       );
     }

@@ -19,6 +19,7 @@ import {
 } from "./ensemble-statistics.js";
 import { PeAromeRunResolver } from "./pe-arome-run.js";
 import type { NonIsobaricFieldResult } from "./types.js";
+import { InvalidRequestError } from "../failure.js";
 
 const MODEL = "pe_arome_0p025" as const;
 const DEFAULT_PE_AROME_MEMBER_CONCURRENCY = 2;
@@ -392,7 +393,7 @@ function summarizeArea(
   const estimatedMemberGridPoints = memberGridPoints.reduce((sum, count) => sum + count, 0);
   const maxMemberGridPoints = request.limits?.maxMemberGridPoints ?? 2_000_000;
   if (estimatedMemberGridPoints > maxMemberGridPoints) {
-    throw new Error(
+    throw new InvalidRequestError(
       `PE-AROME area member × grid selection contains approximately ${estimatedMemberGridPoints} member-grid points, exceeding maxMemberGridPoints=${maxMemberGridPoints}`,
     );
   }

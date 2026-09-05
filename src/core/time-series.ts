@@ -16,6 +16,7 @@ import {
 import { ProfileService } from "./profile.js";
 import type { AtmosphericProgressReporter } from "./progress.js";
 import type { ProfileResult, TimeSeriesResult } from "./types.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_TIME_SERIES_CONCURRENCY = 4;
 
@@ -67,7 +68,7 @@ export class TimeSeriesService {
     const forecastHours = nativeForecastHoursInRange(run, startTime, endTime, query.grid);
 
     if (forecastHours.length > query.maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested time range contains ${forecastHours.length} native GFS outputs, exceeding maxSteps=${query.maxSteps}. Narrow the range or raise maxSteps.`,
       );
     }

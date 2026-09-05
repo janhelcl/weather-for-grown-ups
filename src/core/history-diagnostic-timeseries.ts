@@ -20,6 +20,7 @@ import { NCEI_GFS_GRID4_ANALYSIS_START } from "../sources/ncei-gfs-history.js";
 import { HistoricalDiagnosticsService } from "./history-diagnostics.js";
 import { HistoricalParcelService } from "./history-parcel.js";
 import { historicalAnalysisTimesInRange } from "./history-time-series.js";
+import { InvalidRequestError } from "../failure.js";
 
 const CAVEAT = "Diagnostics are derived from GFS model analysis; not direct observations or homogeneous climatological reanalysis" as const;
 
@@ -80,7 +81,7 @@ export class HistoricalDiagnosticTimeSeriesService {
     const analysisTimes = historicalAnalysisTimesInRange(startTime, endTime, cycleHoursUtc);
     if (analysisTimes.length === 0) throw new Error("Requested range contains no selected GFS analysis cycles");
     if (analysisTimes.length > query.maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested historical diagnostic range contains ${analysisTimes.length} selected GFS analyses, exceeding maxSteps=${query.maxSteps}. Narrow the range, select fewer cycleHoursUtc, or raise maxSteps.`,
       );
     }

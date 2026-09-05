@@ -1,5 +1,25 @@
 # Releases
 
+## Unreleased
+
+### Actionable public failures
+
+Post-0.5.0 QA found that many actionable failures reached the CLI and MCP as an opaque `INTERNAL_ERROR: Unexpected internal error while handling the request`, discarding the message that explained what to change. This release fixes the mapping at both ends:
+
+- CLI argument parsing (`catalog`, `query`, `diagnose`, `compare-*`, `verify`, `analogs`, `index`) now throws `INVALID_REQUEST` with the offending value and the allowed vocabulary: unknown `--dataset`, incomplete `--lat/--lon`, `--covers-point` together with `--covers-area`, unknown `--sections`, bad tuples and lists.
+- `catalog --sections` help and docs list the valid sections (`variables|fields|layer_diagnostics|profile_diagnostics|parcel_definitions`); invalid names report `allowedSections` in `details`.
+- Response-size guardrails (`maxSteps`, `maxGridPoints`, `maxMemberGridPoints`, multi-point sample caps) across all datasets are `INVALID_REQUEST`, so an agent sees “exceeding maxSteps=N. Narrow the range or raise maxSteps.”
+- GEFSv12 reforecast run validation (2000–2019, daily 00Z, native cadence) is `INVALID_REQUEST` with `supportedYears` in `details`.
+- Missing local/environment prerequisites are `UNSUPPORTED_OPERATION` with `details` naming the fix: `cdo`/`CDO_PATH` for `icon-d2-eps`; `WFG_METEO_FRANCE_TOKEN`, `WFG_PEAROME_WCS_URL_TEMPLATE`/`WFG_PEAROME_WCS_ENDPOINTS` for `pe-arome`.
+- `find_analogs`/`analogs --no-fetch-target` with an unmaterialized target is `DATA_UNAVAILABLE` and reports the index path.
+- Any remaining plain `Error` is still `INTERNAL_ERROR`, but its message is now preserved (single line, bounded to 600 characters, bearer tokens/API keys/env secrets redacted) instead of being replaced by generic text. Non-`Error` throwables stay generic.
+
+The public failure contract is documented in [UNIFIED_API.md](UNIFIED_API.md#public-failure-contract).
+
+### stdio MCP smoke coverage
+
+The offline suite now drives `wfg-mcp` over stdio with the official `@modelcontextprotocol/client` `StdioClientTransport`: initialize, tool listing, a local `search_catalog` call and a typed `OUT_OF_DOMAIN` error envelope.
+
 ## v0.5.0 — 2026-09-03
 
 v0.5.0 completes WFG's regional/convection-permitting architecture while preserving the same public atmospheric query language.

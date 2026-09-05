@@ -20,6 +20,7 @@ import {
 } from "./latest-run.js";
 import type { BatchPointsResult, PointsTimeSeriesResult } from "./types.js";
 import type { AtmosphericProgressReporter } from "./progress.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_POINTS_TIME_SERIES_CONCURRENCY = 4;
 
@@ -82,14 +83,14 @@ export class PointsTimeSeriesService {
 
     const forecastHours = nativeForecastHoursInRange(run, startTime, endTime, query.grid);
     if (forecastHours.length > query.maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested time range contains ${forecastHours.length} native GFS outputs, exceeding maxSteps=${query.maxSteps}. Narrow the range or raise maxSteps.`,
       );
     }
 
     const samples = query.points.length * forecastHours.length;
     if (samples > query.maxSamples) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested matrix contains ${query.points.length} points × ${forecastHours.length} steps = ${samples} point-steps, exceeding maxSamples=${query.maxSamples}. Narrow the points/range or raise maxSamples.`,
       );
     }

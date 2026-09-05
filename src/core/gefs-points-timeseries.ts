@@ -17,6 +17,7 @@ import {
   type GefsLatestRunRangeProvider,
 } from "./gefs-latest-run.js";
 import { gefsForecastHour, nativeGefsValidTimesInRange, parseGefsRun } from "./gefs-time.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_GEFS_POINTS_TIME_SERIES_CONCURRENCY = 2;
 
@@ -59,7 +60,7 @@ export class GefsPointsTimeSeriesService {
 
     const samples = query.points.length * times.length;
     if (samples > query.maxSamples) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested GEFS matrix contains ${query.points.length} points × ${times.length} steps = ${samples} point-steps, exceeding maxSamples=${query.maxSamples}. Narrow the points/range or raise maxSamples.`,
       );
     }

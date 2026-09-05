@@ -55,13 +55,45 @@ describe("public failure contract", () => {
     });
   });
 
-  it("hides unexpected internal exception messages", () => {
-    const failure = toPublicFailure(new Error("secret provider response body"));
+  it("preserves actionable plain Error messages under INTERNAL_ERROR", () => {
+    const failure = toPublicFailure(new Error(
+      "Requested time range contains 120 native GFS outputs, exceeding maxSteps=8. Narrow the range or raise maxSteps.",
+    ));
     expect(failure).toEqual({
+      code: "INTERNAL_ERROR",
+      message: "Requested time range contains 120 native GFS outputs, exceeding maxSteps=8. Narrow the range or raise maxSteps.",
+      retryable: false,
+    });
+    expect(failure).not.toHaveProperty("stack");
+  });
+
+  it("keeps internal messages single-line, bounded and credential-free", () => {
+    const secret = "AbCdEf0123456789.secret-value";
+    const failure = toPublicFailure(new Error(
+      `Request failed\n  Authorization: Bearer ${secret}\n  url=https://example.test/wcs?apikey=${secret}&x=1 WFG_METEO_FRANCE_TOKEN=${secret}`,
+    ));
+    expect(failure.code).toBe("INTERNAL_ERROR");
+    expect(failure.message).not.toContain(secret);
+    expect(failure.message).not.toContain("\n");
+    expect(failure.message).toContain("Bearer [redacted]");
+    expect(failure.message).toContain("apikey=[redacted]");
+    expect(failure.message).toContain("WFG_METEO_FRANCE_TOKEN=[redacted]");
+
+    const long = toPublicFailure(new Error("x".repeat(2000)));
+    expect(long.message.length).toBeLessThanOrEqual(600);
+    expect(long.message.endsWith("…")).toBe(true);
+  });
+
+  it("stays generic for empty messages and non-Error throwables", () => {
+    const generic = {
       code: "INTERNAL_ERROR",
       message: "Unexpected internal error while handling the request",
       retryable: false,
-    });
+    };
+    expect(toPublicFailure(new Error("   "))).toEqual(generic);
+    expect(toPublicFailure("raw string failure")).toEqual(generic);
+    expect(toPublicFailure({ unexpected: true })).toEqual(generic);
+    expect(toPublicFailure(undefined)).toEqual(generic);
   });
 
   it("formats human-readable failures without embedding semantics in prose", () => {

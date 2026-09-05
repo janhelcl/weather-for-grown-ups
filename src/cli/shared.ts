@@ -3,16 +3,17 @@ import type { AifsEnsMember } from "../catalog/aifs-ens.js";
 import type { IfsEnsMember } from "../catalog/ifs-ens.js";
 import type { GefsMember } from "../catalog/gefs.js";
 import type { PointCoordinate } from "../schema/query.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_LEVELS = "1000,925,850,700,500";
 
 export function collectPoint(value: string, previous: PointCoordinate[] | undefined): PointCoordinate[] {
   const parts = value.split(",").map((part) => part.trim());
-  if (parts.length !== 2) throw new Error(`Expected --point lat,lon, received: ${value}`);
+  if (parts.length !== 2) throw new InvalidRequestError(`Expected --point lat,lon, received: ${value}`);
   const latitude = Number(parts[0]);
   const longitude = Number(parts[1]);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    throw new Error(`Expected numeric --point lat,lon, received: ${value}`);
+    throw new InvalidRequestError(`Expected numeric --point lat,lon, received: ${value}`);
   }
   return [...(previous ?? []), { latitude, longitude }];
 }

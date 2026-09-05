@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { InvalidRequestError } from "../failure.js";
 import { HistoricalIndexBackfillService } from "../core/history-backfill.js";
 import { HistoricalIndexService } from "../core/history-index.js";
 import { VerificationIndexBackfillService } from "../core/verification-index-backfill.js";
@@ -180,7 +181,7 @@ export function registerIndexCommand(program: Command): void {
 
 function assertAnalysisDataset(value: unknown): void {
   if (String(value).trim().toLowerCase() !== "gfs-analysis") {
-    throw new Error(`Indexing currently supports only --dataset gfs-analysis, received: ${value}`);
+    throw new InvalidRequestError(`Indexing currently supports only --dataset gfs-analysis, received: ${value}`);
   }
 }
 
@@ -199,7 +200,7 @@ function parseCycles(value: unknown): HistoricalCycleHourUtc[] {
     cycles.length === 0
     || cycles.some((hour) => !HISTORICAL_GFS_CYCLE_HOURS_UTC.includes(hour as HistoricalCycleHourUtc))
   ) {
-    throw new Error("Expected --cycles to contain only 0,6,12,18");
+    throw new InvalidRequestError("Expected --cycles to contain only 0,6,12,18");
   }
   return cycles as HistoricalCycleHourUtc[];
 }
@@ -215,19 +216,19 @@ function print(result: unknown, json: boolean): void {
 function parseReference(value: unknown): "gfs-analysis" | "igra" {
   const reference = String(value).trim().toLowerCase();
   if (reference === "gfs-analysis" || reference === "igra") return reference;
-  throw new Error(`Expected --reference gfs-analysis|igra, received: ${value}`);
+  throw new InvalidRequestError(`Expected --reference gfs-analysis|igra, received: ${value}`);
 }
 
 function parseStringList(value: unknown): string[] {
   const values = String(value).split(",").map((item) => item.trim()).filter(Boolean);
-  if (values.length === 0) throw new Error("Expected a non-empty comma-separated list");
+  if (values.length === 0) throw new InvalidRequestError("Expected a non-empty comma-separated list");
   return values;
 }
 
 function parseNumbers(value: unknown): number[] {
   const values = String(value).split(",").map((item) => Number(item.trim()));
   if (values.length === 0 || values.some((item) => !Number.isFinite(item))) {
-    throw new Error("Expected a comma-separated numeric list");
+    throw new InvalidRequestError("Expected a comma-separated numeric list");
   }
   return values;
 }

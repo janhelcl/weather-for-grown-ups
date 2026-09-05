@@ -19,6 +19,7 @@ import { GefsPointsBundleService } from "./gefs-points-bundle.js";
 import { gefsForecastHour, nativeGefsValidTimesInRange, parseGefsRun } from "./gefs-time.js";
 import { gefsAtmosProductForSelection, type GefsAtmosProduct } from "../sources/gefs-s3.js";
 import { mapConcurrent } from "./concurrency.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_GEFS_POINTS_BUNDLE_TIME_STEP_CONCURRENCY = 2;
 
@@ -60,7 +61,7 @@ export class GefsPointsBundleTimeSeriesService {
 
     const pointSteps = query.points.length * times.length;
     if (pointSteps > query.maxPointSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested GEFS mixed bundle matrix contains ${query.points.length} points × ${times.length} steps = ${pointSteps} point-steps, exceeding maxPointSteps=${query.maxPointSteps}. Narrow the points/range or raise maxPointSteps.`,
       );
     }
@@ -68,7 +69,7 @@ export class GefsPointsBundleTimeSeriesService {
     if (query.includeMembers) {
       const memberSamples = pointSteps * members.length * bundleScalarOutputCount(selection);
       if (memberSamples > query.maxMemberSamples) {
-        throw new Error(
+        throw new InvalidRequestError(
           `GEFS multi-point bundle time series would return ${memberSamples} member scalar samples, exceeding maxMemberSamples=${query.maxMemberSamples}`,
         );
       }

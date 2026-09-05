@@ -25,6 +25,7 @@ import {
   summarizeCircularDegrees,
   summarizeNumericDistribution,
 } from "./ensemble-statistics.js";
+import { InvalidRequestError } from "../failure.js";
 
 const MODEL = "aigefs_0p25" as const;
 const DEFAULT_AIGEFS_MEMBER_CONCURRENCY = 4;
@@ -413,7 +414,7 @@ function summarizeArea(
   const estimatedMemberGridPoints = memberGridPoints.reduce((sum, count) => sum + count, 0);
   const maxMemberGridPoints = request.limits?.maxMemberGridPoints ?? 2_000_000;
   if (estimatedMemberGridPoints > maxMemberGridPoints) {
-    throw new Error(
+    throw new InvalidRequestError(
       `AIGEFS area member × grid selection contains approximately ${estimatedMemberGridPoints} member-grid points, exceeding maxMemberGridPoints=${maxMemberGridPoints}`,
     );
   }

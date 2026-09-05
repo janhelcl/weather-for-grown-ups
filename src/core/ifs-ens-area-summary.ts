@@ -48,6 +48,7 @@ import { DEFAULT_IFS_ENS_MEMBER_CONCURRENCY } from "./ifs-ens-member-bundle.js";
 import { IfsEnsMemberSelectionSource } from "./ifs-ens-member-source.js";
 import { estimateIfsGridPoints } from "./ifs-area-summary.js";
 import { ifsEnsForecastHour, parseIfsRun } from "./ifs-time.js";
+import { InvalidRequestError } from "../failure.js";
 
 const HOUR_MS = 3_600_000;
 
@@ -102,13 +103,13 @@ export class IfsEnsAreaSummaryService {
     const quantiles = [...query.quantiles].sort((a, b) => a - b);
     const estimatedGridPoints = estimateIfsGridPoints(box);
     if (estimatedGridPoints > query.maxGridPoints) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested bbox is approximately ${estimatedGridPoints} IFS ENS grid points at 0.25°, exceeding maxGridPoints=${query.maxGridPoints}`,
       );
     }
     const estimatedMemberGridPoints = estimatedGridPoints * members.length;
     if (estimatedMemberGridPoints > query.maxMemberGridPoints) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested bbox × perturbation selection is approximately ${estimatedMemberGridPoints} member-grid points at 0.25°, exceeding maxMemberGridPoints=${query.maxMemberGridPoints}`,
       );
     }

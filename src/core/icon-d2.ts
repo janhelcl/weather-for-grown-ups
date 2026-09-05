@@ -72,6 +72,7 @@ import {
 } from "./transect.js";
 import type { DecodedValue, GribDecoderName } from "../types/decoded.js";
 import type { NonIsobaricFieldResult, ProfileLevel } from "./types.js";
+import { InvalidRequestError } from "../failure.js";
 
 const MODEL = "icon_d2_0p02" as const;
 const MAX_NATIVE_STEPS = 49;
@@ -276,7 +277,7 @@ export class IconD2ForecastService {
     const pointSteps = request.geometry.points.length * forecastHours.length;
     const maxPointSteps = request.limits?.maxPointSteps ?? request.limits?.maxSamples ?? 5_000;
     if (pointSteps > maxPointSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested ICON-D2 matrix contains ${request.geometry.points.length} points × ${forecastHours.length} steps = ${pointSteps} point-steps, exceeding maxPointSteps=${maxPointSteps}`,
       );
     }
@@ -357,7 +358,7 @@ export class IconD2ForecastService {
     const estimatedGridPoints = estimateIconD2GridPoints(box);
     const maxGridPoints = request.limits?.maxGridPoints ?? 1_100_000;
     if (estimatedGridPoints > maxGridPoints) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested bbox is approximately ${estimatedGridPoints} ICON-D2 grid points, exceeding maxGridPoints=${maxGridPoints}`,
       );
     }
@@ -764,7 +765,7 @@ function boundedForecastHours(
   const hours = iconD2NativeForecastHoursInRange(run, startTime, endTime);
   const maxSteps = requestedMaxSteps ?? MAX_NATIVE_STEPS;
   if (hours.length > maxSteps) {
-    throw new Error(
+    throw new InvalidRequestError(
       `Requested time range contains ${hours.length} native ICON-D2 outputs, exceeding maxSteps=${maxSteps}`,
     );
   }

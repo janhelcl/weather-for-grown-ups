@@ -52,6 +52,7 @@ import type {
   ProfileDiagnosticResult,
   ProfileLevel,
 } from "./types.js";
+import { InvalidRequestError } from "../failure.js";
 
 const MODEL = "hgefs_0p25" as const;
 const HGEFS_MAX_FORECAST_HOUR = 240;
@@ -654,7 +655,7 @@ function nativeTimes(
     .filter((forecastHour) => forecastHour <= HGEFS_MAX_FORECAST_HOUR);
   const maxSteps = requestedMaxSteps ?? MAX_HGEFS_NATIVE_STEPS;
   if (hours.length > maxSteps) {
-    throw new Error(
+    throw new InvalidRequestError(
       `Requested HGEFS time range contains ${hours.length} native 6-hour outputs, exceeding maxSteps=${maxSteps}`,
     );
   }

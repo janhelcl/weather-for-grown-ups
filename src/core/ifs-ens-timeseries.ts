@@ -23,6 +23,7 @@ import {
   ifsEnsValidTimeForForecastHour,
   parseIfsRun,
 } from "./ifs-time.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_IFS_ENS_TIME_STEP_CONCURRENCY = 2;
 
@@ -71,7 +72,7 @@ export class IfsEnsTimeSeriesService {
     const forecastHours = ifsEnsForecastHoursInRange(run, startTime, endTime);
 
     if (forecastHours.length > query.maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested IFS ENS time range contains ${forecastHours.length} native outputs, exceeding maxSteps=${query.maxSteps}`,
       );
     }
@@ -83,7 +84,7 @@ export class IfsEnsTimeSeriesService {
         + selection.fields.reduce((sum, id) => sum + NON_ISOBARIC_FIELD_CATALOG[id].outputs.length, 0);
       const memberSamples = forecastHours.length * members.length * scalarOutputsPerMemberStep;
       if (memberSamples > query.maxMemberSamples) {
-        throw new Error(
+        throw new InvalidRequestError(
           `IFS ENS time series would return ${memberSamples} member scalar samples, exceeding maxMemberSamples=${query.maxMemberSamples}`,
         );
       }

@@ -25,6 +25,7 @@ import {
   gefsAtmosProductForSelection,
   type GefsAtmosProduct,
 } from "../sources/gefs-s3.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_GEFS_BUNDLE_TIME_STEP_CONCURRENCY = 2;
 
@@ -67,7 +68,7 @@ export class GefsBundleTimeSeriesService {
         + selection.fields.reduce((sum, id) => sum + GEFS_PGRB2A_FIELD_CATALOG[id].outputs.length, 0);
       const memberSamples = times.length * members.length * scalarOutputsPerMemberStep;
       if (memberSamples > query.maxMemberSamples) {
-        throw new Error(
+        throw new InvalidRequestError(
           `GEFS bundle time series would return ${memberSamples} member scalar samples, exceeding maxMemberSamples=${query.maxMemberSamples}`,
         );
       }

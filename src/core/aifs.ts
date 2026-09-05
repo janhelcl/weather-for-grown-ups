@@ -71,6 +71,7 @@ import { deriveLayerDiagnosticsFromLevels, deriveProfileDiagnosticsFromLevels } 
 import { greatCircleDistanceKm, interpolateGreatCircle } from "./transect.js";
 import type { DecodedValue, GribDecoderName } from "../types/decoded.js";
 import type { NonIsobaricFieldResult, ProfileLevel } from "./types.js";
+import { InvalidRequestError } from "../failure.js";
 
 const MODEL = "aifs_0p25" as const;
 const MAX_NATIVE_STEPS = 61;
@@ -245,7 +246,7 @@ export class AifsForecastService {
     const pointSteps = request.geometry.points.length * forecastHours.length;
     const maxPointSteps = request.limits?.maxPointSteps ?? request.limits?.maxSamples ?? 5_000;
     if (pointSteps > maxPointSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested AIFS matrix contains ${request.geometry.points.length} points × ${forecastHours.length} steps = ${pointSteps} point-steps, exceeding maxPointSteps=${maxPointSteps}`,
       );
     }
@@ -335,7 +336,7 @@ export class AifsForecastService {
     const estimatedGridPoints = estimateAifsGridPoints(box);
     const maxGridPoints = request.limits?.maxGridPoints ?? 1_100_000;
     if (estimatedGridPoints > maxGridPoints) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested bbox is approximately ${estimatedGridPoints} AIFS grid points, exceeding maxGridPoints=${maxGridPoints}`,
       );
     }
@@ -958,7 +959,7 @@ function boundedForecastHours(
   const hours = aifsForecastHoursInRange(run, startTime, endTime);
   const maxSteps = requestedMaxSteps ?? MAX_NATIVE_STEPS;
   if (hours.length > maxSteps) {
-    throw new Error(
+    throw new InvalidRequestError(
       `Requested time range contains ${hours.length} native AIFS outputs, exceeding maxSteps=${maxSteps}`,
     );
   }

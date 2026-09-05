@@ -15,6 +15,7 @@ import {
 } from "../sources/gefs-reforecast-s3.js";
 import { mapConcurrent } from "./concurrency.js";
 import { GefsReforecastPointsService } from "./gefs-reforecast-points.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_GEFS_REFORECAST_POINTS_TIME_STEP_CONCURRENCY = 2;
 
@@ -48,7 +49,7 @@ export class GefsReforecastPointsTimeSeriesService {
     );
     const pointSteps = query.points.length * times.length;
     if (pointSteps > query.maxPointSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `GEFSv12 reforecast multi-point range contains ${query.points.length} points × ${times.length} steps = ${pointSteps} point-steps, exceeding maxPointSteps=${query.maxPointSteps}`,
       );
     }

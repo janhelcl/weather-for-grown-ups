@@ -17,6 +17,7 @@ import {
 } from "./gefs-bundle-decoder.js";
 import { GefsReforecastProfileService } from "./gefs-reforecast-profile.js";
 import { GefsReforecastPointService } from "./gefs-reforecast.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_GEFS_REFORECAST_POINT_CONCURRENCY = 4;
 
@@ -210,7 +211,7 @@ function assertMemberSampleLimit(
   maxMemberSamples: number,
 ): void {
   if (includeMembers && samples > maxMemberSamples) {
-    throw new Error(
+    throw new InvalidRequestError(
       `GEFSv12 reforecast multi-point query would return ${samples} member scalar samples, exceeding maxMemberSamples=${maxMemberSamples}`,
     );
   }

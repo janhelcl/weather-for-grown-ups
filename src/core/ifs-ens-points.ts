@@ -34,6 +34,7 @@ import {
   ifsEnsValidTimeForForecastHour,
   parseIfsRun,
 } from "./ifs-time.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_IFS_ENS_POINT_CONCURRENCY = 4;
 export const DEFAULT_IFS_ENS_POINTS_TIME_STEP_CONCURRENCY = 2;
@@ -172,13 +173,13 @@ export class IfsEnsPointsTimeSeriesService {
     const forecastHours = ifsEnsForecastHoursInRange(run, startTime, endTime);
 
     if (forecastHours.length > query.maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested IFS ENS multi-point time range contains ${forecastHours.length} native outputs, exceeding maxSteps=${query.maxSteps}`,
       );
     }
     const pointSteps = query.points.length * forecastHours.length;
     if (pointSteps > query.maxPointSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested IFS ENS multi-point time series contains ${query.points.length} points × ${forecastHours.length} steps = ${pointSteps} point-steps, exceeding maxPointSteps=${query.maxPointSteps}`,
       );
     }
@@ -280,7 +281,7 @@ function guardMemberPayload(
   if (!includeMembers) return;
   const count = pointSteps * memberCount * scalarOutputCount(selection);
   if (count > maxMemberSamples) {
-    throw new Error(
+    throw new InvalidRequestError(
       `${label} would return ${count} member scalar samples, exceeding maxMemberSamples=${maxMemberSamples}`,
     );
   }

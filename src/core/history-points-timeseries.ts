@@ -8,6 +8,7 @@ import type { HistoricalPointsQueryInput, HistoricalPointsResult } from "../sche
 import { NCEI_GFS_GRID4_ANALYSIS_START } from "../sources/ncei-gfs-history.js";
 import { HistoricalPointsService } from "./history-points.js";
 import { historicalAnalysisTimesInRange } from "./history-time-series.js";
+import { InvalidRequestError } from "../failure.js";
 
 const CAVEAT = "GFS model analysis; not direct observations or homogeneous climatological reanalysis" as const;
 
@@ -47,14 +48,14 @@ export class HistoricalPointsTimeSeriesService {
     const analysisTimes = historicalAnalysisTimesInRange(startTime, endTime, cycleHoursUtc);
     if (analysisTimes.length === 0) throw new Error("Requested range contains no selected GFS analysis cycles");
     if (analysisTimes.length > query.maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested historical multi-point range contains ${analysisTimes.length} selected GFS analyses, exceeding maxSteps=${query.maxSteps}.`,
       );
     }
 
     const pointSteps = query.points.length * analysisTimes.length;
     if (pointSteps > query.maxPointSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested historical matrix contains ${query.points.length} points × ${analysisTimes.length} steps = ${pointSteps} point-steps, exceeding maxPointSteps=${query.maxPointSteps}.`,
       );
     }

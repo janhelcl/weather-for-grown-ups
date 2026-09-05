@@ -40,6 +40,7 @@ import {
   summarizeCircularDegrees,
   summarizeNumericDistribution,
 } from "./ensemble-statistics.js";
+import { InvalidRequestError } from "../failure.js";
 
 const MODEL = "icon_d2_eps_2p1km" as const;
 const DEFAULT_ICON_D2_EPS_MEMBER_CONCURRENCY = 4;
@@ -456,7 +457,7 @@ function summarizeArea(
   const estimatedMemberGridPoints = memberGridPoints.reduce((sum, count) => sum + count, 0);
   const maxMemberGridPoints = request.limits?.maxMemberGridPoints ?? 2_000_000;
   if (estimatedMemberGridPoints > maxMemberGridPoints) {
-    throw new Error(
+    throw new InvalidRequestError(
       `ICON-D2-EPS area member × grid selection contains approximately ${estimatedMemberGridPoints} member-grid points, exceeding maxMemberGridPoints=${maxMemberGridPoints}`,
     );
   }

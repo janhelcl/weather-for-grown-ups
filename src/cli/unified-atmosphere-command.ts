@@ -25,6 +25,7 @@ import {
 } from "../schema/unified-specialized.js";
 import type { PointCoordinate } from "../schema/query.js";
 import type { AtmosphericStepProgress } from "../core/progress.js";
+import { InvalidRequestError } from "../failure.js";
 import {
   DEFAULT_LEVELS,
   collectPoint,
@@ -214,7 +215,7 @@ export function buildUnifiedDatasetComparison(
 ): CompareAtmosphericDatasetsInput {
   const against = String(options.against ?? "gefs").trim().toLowerCase();
   if (!publicAtmosphericDatasetSchema.safeParse(against).success) {
-    throw new Error(
+    throw new InvalidRequestError(
       `Expected --against ${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}, received: ${options.against}`,
     );
   }
@@ -226,14 +227,14 @@ export function buildUnifiedDatasetComparison(
     requestedLeft !== undefined
     && !publicAtmosphericDatasetSchema.safeParse(requestedLeft).success
   ) {
-    throw new Error(
+    throw new InvalidRequestError(
       `Expected --dataset ${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}, received: ${options.dataset}`,
     );
   }
 
   const left = requestedLeft ?? (against === "ifs-ens" ? "gefs" : "gfs");
   if (!isAtmosphericDatasetComparisonPair(left, against)) {
-    throw new Error(`Unsupported comparison pair: ${left}↔${against}`);
+    throw new InvalidRequestError(`Unsupported comparison pair: ${left}↔${against}`);
   }
 
   const request = {
@@ -301,10 +302,10 @@ function registerVerifyCommand(program: Command): void {
       const hasInstant = options.at !== undefined;
       const hasRange = options.from !== undefined || options.to !== undefined;
       if (hasInstant === hasRange) {
-        throw new Error("Choose exactly one verification time form: --at, or --from plus --to");
+        throw new InvalidRequestError("Choose exactly one verification time form: --at, or --from plus --to");
       }
       if (hasRange && (options.from === undefined || options.to === undefined)) {
-        throw new Error("Skill-summary verification requires both --from and --to");
+        throw new InvalidRequestError("Skill-summary verification requires both --from and --to");
       }
 
       const referenceDataset = String(options.reference);
@@ -313,7 +314,7 @@ function registerVerifyCommand(program: Command): void {
         : DEFAULT_UNIFIED_VARIABLES;
       const leads = parseNumbers(options.leadHours);
       if (hasInstant && leads.length !== 1) {
-        throw new Error("Atomic verification requires exactly one --lead-hours value");
+        throw new InvalidRequestError("Atomic verification requires exactly one --lead-hours value");
       }
 
       const common = {
@@ -445,7 +446,7 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
   let diagnostic: DiagnoseAtmosphereInput["diagnostic"];
   if (kind === "layer") {
     if (options.lower === undefined || options.upper === undefined || options.diagnostics === undefined) {
-      throw new Error("Layer diagnostics require --lower, --upper and --diagnostics");
+      throw new InvalidRequestError("Layer diagnostics require --lower, --upper and --diagnostics");
     }
     diagnostic = {
       kind: "layer",
@@ -455,7 +456,7 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
     };
   } else if (kind === "profile") {
     if (options.diagnostics === undefined) {
-      throw new Error("Profile diagnostics require --diagnostics");
+      throw new InvalidRequestError("Profile diagnostics require --diagnostics");
     }
     diagnostic = {
       kind: "profile",
@@ -464,7 +465,7 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
     };
   } else if (kind === "parcel") {
     if (options.parcel === undefined) {
-      throw new Error("Parcel diagnostics require --parcel");
+      throw new InvalidRequestError("Parcel diagnostics require --parcel");
     }
     diagnostic = {
       kind: "parcel",
@@ -472,7 +473,7 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
       parcel: options.parcel,
     } as DiagnoseAtmosphereInput["diagnostic"];
   } else {
-    throw new Error(`Expected --kind layer|profile|parcel, received: ${options.kind}`);
+    throw new InvalidRequestError(`Expected --kind layer|profile|parcel, received: ${options.kind}`);
   }
 
   return {
@@ -490,7 +491,7 @@ function parseDataset(value: unknown): PublicAtmosphericDataset {
   const normalized = String(value).trim().toLowerCase();
   const parsed = publicAtmosphericDatasetSchema.safeParse(normalized);
   if (parsed.success) return parsed.data;
-  throw new Error(
+  throw new InvalidRequestError(
     `Expected --dataset ${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}, received: ${value}`,
   );
 }
@@ -503,18 +504,18 @@ function parseGeometry(options: Record<string, any>): QueryAtmosphereInput["geom
     options.west !== undefined || options.east !== undefined || options.south !== undefined || options.north !== undefined,
   ].filter(Boolean).length;
   if (modes !== 1) {
-    throw new Error("Choose exactly one geometry: --lat/--lon, repeatable --point, --start/--end, or --west/--east/--south/--north");
+    throw new InvalidRequestError("Choose exactly one geometry: --lat/--lon, repeatable --point, --start/--end, or --west/--east/--south/--north");
   }
 
   if (options.lat !== undefined || options.lon !== undefined) {
-    if (options.lat === undefined || options.lon === undefined) throw new Error("Point geometry requires both --lat and --lon");
+    if (options.lat === undefined || options.lon === undefined) throw new InvalidRequestError("Point geometry requires both --lat and --lon");
     return { type: "point", latitude: options.lat, longitude: options.lon };
   }
   if (options.point !== undefined) {
     return { type: "points", points: options.point as PointCoordinate[] };
   }
   if (options.start !== undefined || options.end !== undefined) {
-    if (options.start === undefined || options.end === undefined) throw new Error("Transect geometry requires both --start and --end");
+    if (options.start === undefined || options.end === undefined) throw new InvalidRequestError("Transect geometry requires both --start and --end");
     return {
       type: "transect",
       start: parseCoordinate(options.start),
@@ -523,7 +524,7 @@ function parseGeometry(options: Record<string, any>): QueryAtmosphereInput["geom
     };
   }
   for (const key of ["west", "east", "south", "north"]) {
-    if (options[key] === undefined) throw new Error("Area geometry requires --west, --east, --south and --north");
+    if (options[key] === undefined) throw new InvalidRequestError("Area geometry requires --west, --east, --south and --north");
   }
   return {
     type: "area",
@@ -538,10 +539,10 @@ function parseTime(options: Record<string, any>): QueryAtmosphereInput["time"] {
   const hasInstant = options.at !== undefined;
   const hasRange = options.from !== undefined || options.to !== undefined;
   if (hasInstant === hasRange) {
-    throw new Error("Choose exactly one time form: --at, or --from plus --to");
+    throw new InvalidRequestError("Choose exactly one time form: --at, or --from plus --to");
   }
   if (hasInstant) return { at: String(options.at) };
-  if (options.from === undefined || options.to === undefined) throw new Error("Time range requires both --from and --to");
+  if (options.from === undefined || options.to === undefined) throw new InvalidRequestError("Time range requires both --from and --to");
   return {
     from: String(options.from),
     to: String(options.to),

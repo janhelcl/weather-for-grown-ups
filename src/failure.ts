@@ -125,9 +125,47 @@ export function toPublicFailure(error: unknown): PublicFailure {
 
   return {
     code: "INTERNAL_ERROR",
-    message: "Unexpected internal error while handling the request",
+    message: internalErrorMessage(error),
     retryable: false,
   };
+}
+
+const GENERIC_INTERNAL_MESSAGE = "Unexpected internal error while handling the request";
+const MAX_INTERNAL_MESSAGE_LENGTH = 600;
+
+/**
+ * Plain `Error` instances thrown below the public boundary usually carry the
+ * actionable explanation (guardrail exceeded, unsupported selection, missing
+ * local dependency). Surface that text instead of discarding it, but keep the
+ * output single-line, bounded, and free of credentials. Non-Error throwables
+ * (strings, objects) stay generic because their shape is unknown.
+ */
+function internalErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return GENERIC_INTERNAL_MESSAGE;
+  const message = redactSensitiveText(error.message).replace(/\s+/g, " ").trim();
+  if (message.length === 0) return GENERIC_INTERNAL_MESSAGE;
+  return message.length > MAX_INTERNAL_MESSAGE_LENGTH
+    ? `${message.slice(0, MAX_INTERNAL_MESSAGE_LENGTH - 1)}…`
+    : message;
+}
+
+const SENSITIVE_PATTERNS: ReadonlyArray<[RegExp, string]> = [
+  [/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, "$1 [redacted]"],
+  [
+    /([?&](?:token|access_token|apikey|api_key|api-key|key|secret|password|signature|x-amz-[a-z-]+)=)[^&\s"']+/gi,
+    "$1[redacted]",
+  ],
+  [
+    /((?:^|[\s_-])(?:authorization|api[-_]?key|token|password|secret)\s*[:=]\s*["']?)[A-Za-z0-9._~+/=-]{8,}/gi,
+    "$1[redacted]",
+  ],
+];
+
+export function redactSensitiveText(text: string): string {
+  return SENSITIVE_PATTERNS.reduce(
+    (current, [pattern, replacement]) => current.replace(pattern, replacement),
+    text,
+  );
 }
 
 export function formatPublicFailure(failure: PublicFailure): string {

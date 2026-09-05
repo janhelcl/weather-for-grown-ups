@@ -581,6 +581,22 @@ Examples:
 
 The unified dispatcher delegates to the existing dataset-specific schemas after interpreting the common request. Unsupported combinations therefore fail explicitly at the capability boundary.
 
+## Public failure contract
+
+Every CLI and MCP failure is reduced to one envelope: `{ code, message, retryable, details? }`. The CLI prints `CODE: message` (or the JSON envelope on stderr with `--json`); MCP tools return the same envelope as an `isError` text result outside the success schema.
+
+| Code | Meaning | Retry? |
+| --- | --- | --- |
+| `INVALID_REQUEST` | Malformed or contradictory request: schema violations, unknown dataset/section/option values, missing paired options, guardrail limits such as `maxSteps`/`maxGridPoints`, or a GEFSv12 reforecast run outside 2000–2019. | no |
+| `UNSUPPORTED_OPERATION` | Valid request that this dataset or this environment cannot serve: capability gaps, a missing local dependency (`cdo` for `icon-d2-eps`), or missing provider credentials/endpoints (`WFG_METEO_FRANCE_TOKEN`, `WFG_PEAROME_WCS_*` for `pe-arome`). | no |
+| `OUT_OF_DOMAIN` | Geometry lies outside a limited-area dataset's declared coverage. | no |
+| `DATA_UNAVAILABLE` | The provider confirmed absence: run/inventory not published, or an analog target that is not materialized in the local index while fetching is disabled. | usually no |
+| `RATE_LIMITED` | Provider quota exhausted after bounded retries. | yes |
+| `UPSTREAM_UNAVAILABLE` | Provider 5xx or transport failure after bounded retries. | yes |
+| `INTERNAL_ERROR` | Anything not yet classified. The original message is preserved (single line, bounded, credentials redacted) so agents can still act on it; treat a recurring `INTERNAL_ERROR` as a bug report for a missing typed failure. | no |
+
+`details` is optional structured context (offending values, allowed values, env var names, index paths). Messages never embed the code and never carry stack traces or raw provider response bodies.
+
 ## Administrative indexing
 
 Historical analog search uses a local materialized index. Index construction is deliberately outside the atmospheric MCP catalog:

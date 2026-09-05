@@ -3,6 +3,7 @@ import type {
   GefsReforecastMember,
   GefsReforecastPressureVariableId,
 } from "../catalog/gefs-reforecast.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const GEFS_REFORECAST_S3_BASE_URL = "https://noaa-gefs-retrospective.s3.amazonaws.com";
 export const GEFS_REFORECAST_START_YEAR = 2000;
@@ -42,19 +43,27 @@ const REFORECAST_PRESSURE_FILE_STEMS: Record<GefsReforecastPressureVariableId, s
 
 export function parseGefsReforecastRun(value: string): Date {
   const run = new Date(value);
-  if (Number.isNaN(run.getTime())) throw new Error(`Invalid GEFSv12 reforecast run: ${value}`);
+  if (Number.isNaN(run.getTime())) throw new InvalidRequestError(`Invalid GEFSv12 reforecast run: ${value}`);
   if (
     run.getUTCHours() !== 0
     || run.getUTCMinutes() !== 0
     || run.getUTCSeconds() !== 0
     || run.getUTCMilliseconds() !== 0
   ) {
-    throw new Error("GEFSv12 reforecasts are initialized once daily at 00Z");
+    throw new InvalidRequestError("GEFSv12 reforecasts are initialized once daily at 00Z");
   }
   const year = run.getUTCFullYear();
   if (year < GEFS_REFORECAST_START_YEAR || year > GEFS_REFORECAST_END_YEAR) {
-    throw new Error(
-      `GEFSv12 public reforecast runs must be within ${GEFS_REFORECAST_START_YEAR}-${GEFS_REFORECAST_END_YEAR}`,
+    throw new InvalidRequestError(
+      `GEFSv12 public reforecast runs must be within ${GEFS_REFORECAST_START_YEAR}-${GEFS_REFORECAST_END_YEAR}; received run year ${year}`,
+      {
+        details: {
+          dataset: "gefs",
+          forecastKind: "reforecast",
+          run: run.toISOString(),
+          supportedYears: { from: GEFS_REFORECAST_START_YEAR, to: GEFS_REFORECAST_END_YEAR },
+        },
+      },
     );
   }
   return run;
@@ -63,15 +72,15 @@ export function parseGefsReforecastRun(value: string): Date {
 export function gefsReforecastForecastHour(run: Date, validTime: Date): number {
   const hours = (validTime.getTime() - run.getTime()) / 3_600_000;
   if (!Number.isInteger(hours) || hours < 3) {
-    throw new Error("GEFSv12 reforecast validTime must be a whole forecast hour at least +3 h after the run");
+    throw new InvalidRequestError("GEFSv12 reforecast validTime must be a whole forecast hour at least +3 h after the run");
   }
   if (hours > GEFS_REFORECAST_MAX_FORECAST_HOUR) {
-    throw new Error(
+    throw new InvalidRequestError(
       `GEFSv12 standard public reforecast access currently supports lead times through +${GEFS_REFORECAST_MAX_FORECAST_HOUR} h`,
     );
   }
   if (hours <= 240 ? hours % 3 !== 0 : hours % 6 !== 0) {
-    throw new Error(
+    throw new InvalidRequestError(
       hours <= 240
         ? "GEFSv12 reforecast output is available every 3 hours through +240 h"
         : "GEFSv12 reforecast output is available every 6 hours after +240 h",
@@ -87,7 +96,7 @@ export function nativeGefsReforecastValidTimesInRange(
   maxSteps: number,
 ): Date[] {
   if (endTime.getTime() < startTime.getTime()) {
-    throw new Error("GEFSv12 reforecast time-series endTime must be at or after startTime");
+    throw new InvalidRequestError("GEFSv12 reforecast time-series endTime must be at or after startTime");
   }
   const startForecastHour = gefsReforecastForecastHour(run, startTime);
   const endForecastHour = gefsReforecastForecastHour(run, endTime);
@@ -100,10 +109,10 @@ export function nativeGefsReforecastValidTimesInRange(
     forecastHours.push(forecastHour);
   }
   if (forecastHours.at(-1) !== endForecastHour) {
-    throw new Error("GEFSv12 reforecast time-series bounds do not align to one native cadence sequence");
+    throw new InvalidRequestError("GEFSv12 reforecast time-series bounds do not align to one native cadence sequence");
   }
   if (forecastHours.length > maxSteps) {
-    throw new Error(
+    throw new InvalidRequestError(
       `GEFSv12 reforecast time series would contain ${forecastHours.length} steps, exceeding maxSteps=${maxSteps}`,
     );
   }

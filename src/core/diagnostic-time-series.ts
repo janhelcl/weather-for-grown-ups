@@ -40,6 +40,7 @@ import type {
   ProfileDiagnosticsResult,
   SourceProvenance,
 } from "./types.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_DIAGNOSTIC_TIME_SERIES_CONCURRENCY = 4;
 
@@ -101,7 +102,7 @@ export class DiagnosticTimeSeriesService {
     const forecastHours = nativeForecastHoursInRange(run, startTime, endTime, query.grid);
 
     if (forecastHours.length > query.maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested diagnostic time range contains ${forecastHours.length} native GFS outputs, exceeding maxSteps=${query.maxSteps}. Narrow the range or raise maxSteps.`,
       );
     }

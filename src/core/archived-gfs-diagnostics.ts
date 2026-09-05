@@ -19,6 +19,7 @@ import {
   deriveLayerDiagnosticsFromLevels,
   deriveProfileDiagnosticsFromLevels,
 } from "./pressure-diagnostics.js";
+import { InvalidRequestError } from "../failure.js";
 
 const ARCHIVE_DIAGNOSTIC_CAVEAT =
   "Diagnostics are derived from archived GFS forecasts; model versions changed over time and this is not a homogeneous reforecast dataset" as const;
@@ -193,7 +194,7 @@ export class ArchivedGfsForecastDiagnosticService {
     );
     const maxSteps = request.time.maxSteps ?? 65;
     if (forecastHours.length > maxSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `Requested archived GFS diagnostic range contains ${forecastHours.length} native 3-hour outputs, exceeding maxSteps=${maxSteps}`,
       );
     }

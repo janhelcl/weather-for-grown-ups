@@ -9,6 +9,7 @@ import {
   type HistoricalIndexBuildResult,
   type HistoricalIndexRecord,
 } from "../schema/history-index.js";
+import { DataUnavailableError } from "../failure.js";
 import { HistoricalTimeSeriesService, type HistoricalProfileGetter } from "./history-time-series.js";
 import { HistoricalProfileIndexStore, canonicalSelection, sameGridPoint } from "./history-index-store.js";
 import { HistoricalProfileService } from "./history.js";
@@ -116,8 +117,17 @@ export class HistoricalIndexService {
     let targetFromIndex = true;
     if (!target) {
       if (!query.fetchTargetIfMissing) {
-        throw new Error(
-          `Target ${query.targetTime} is not materialized in ${this.store.path} for the requested point/selection. Materialize it first with the index build/backfill workflow, or set fetchTargetIfMissing=true to fetch and persist only the target`,
+        throw new DataUnavailableError(
+          `Target ${query.targetTime} is not materialized in the local analog index (${this.store.path}) for the requested point/selection. Materialize it first with the index build/backfill workflow, or allow fetching the target (fetchTargetIfMissing=true; omit --no-fetch-target on the CLI)`,
+          {
+            details: {
+              dataset: "gfs-analysis",
+              targetTime: query.targetTime,
+              indexPath: this.store.path,
+              indexedRecords: records.length,
+              fetchTargetIfMissing: false,
+            },
+          },
         );
       }
       const profile = await this.profileGetter.getHistoricalProfile({

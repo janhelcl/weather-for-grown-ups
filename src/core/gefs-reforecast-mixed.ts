@@ -30,6 +30,7 @@ import {
 } from "./gefs-bundle-decoder.js";
 import { GefsReforecastProfileService } from "./gefs-reforecast-profile.js";
 import { GefsReforecastPointService } from "./gefs-reforecast.js";
+import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_GEFS_REFORECAST_MIXED_POINT_CONCURRENCY = 4;
 export const DEFAULT_GEFS_REFORECAST_MIXED_TIME_CONCURRENCY = 2;
@@ -302,7 +303,7 @@ export class GefsReforecastMixedPointsTimeSeriesService {
     );
     const pointSteps = query.points.length * times.length;
     if (pointSteps > query.maxPointSteps) {
-      throw new Error(
+      throw new InvalidRequestError(
         `GEFSv12 reforecast mixed multi-point range contains ${query.points.length} points × ${times.length} steps = ${pointSteps} point-steps, exceeding maxPointSteps=${query.maxPointSteps}`,
       );
     }
@@ -503,7 +504,7 @@ function assertMixedMemberSampleLimit(
     query.variables.length * query.pressureLevelsHpa.length + fieldScalarOutputs;
   const samples = query.points.length * memberCount * perMemberPerPoint;
   if (samples > query.maxMemberSamples) {
-    throw new Error(
+    throw new InvalidRequestError(
       `GEFSv12 reforecast mixed multi-point query would return ${samples} member scalar samples, exceeding maxMemberSamples=${query.maxMemberSamples}`,
     );
   }
