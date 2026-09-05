@@ -8,11 +8,11 @@ import type {
   HistoricalAnalysisSource,
 } from "./gfs-analysis.js";
 import {
-  historicalAnalysisSelector,
+  ncssNameForHistoricalAnalysisVariable,
   ncssNamesForHistoricalAnalysisVariables,
   parseHistoricalNcssAreaCsv,
   parseHistoricalNcssPointCsv,
-} from "./gfs-analysis-grib.js";
+} from "./gfs-analysis-ncss.js";
 import type {
   ArchivedGfsForecastAreaDataSource,
   ArchivedGfsForecastDataSource,
@@ -70,7 +70,7 @@ export class ArchivedGfsForecastAnalysisAdapter implements HistoricalAnalysisSou
       eastLongitude: request.eastLongitude,
       southLatitude: request.southLatitude,
       northLatitude: request.northLatitude,
-      variables: [historicalAnalysisSelector(request.variable).ncssName],
+      variables: [ncssNameForHistoricalAnalysisVariable(request.variable)],
       ...(request.verticalCoordinate === undefined
         ? {}
         : { verticalCoordinate: request.verticalCoordinate }),
