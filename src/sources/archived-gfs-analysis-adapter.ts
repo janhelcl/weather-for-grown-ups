@@ -18,11 +18,9 @@ import type {
   ArchivedGfsForecastDataSource,
 } from "./ncei-gfs-forecast-history.js";
 
-type ArchivedForecastSource =
-  ArchivedGfsForecastDataSource & ArchivedGfsForecastAreaDataSource;
-
 export interface ArchivedGfsForecastAnalysisAdapterOptions {
-  source: ArchivedForecastSource;
+  source: ArchivedGfsForecastDataSource;
+  areaSource?: ArchivedGfsForecastAreaDataSource;
   runTime: Date;
   forecastHour: number;
   validTime: Date;
@@ -61,7 +59,11 @@ export class ArchivedGfsForecastAnalysisAdapter implements HistoricalAnalysisSou
 
   async fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisAreaResponse> {
     this.assertValidTime(request.analysisTime);
-    const response = await this.options.source.fetchArea({
+    const areaSource = this.options.areaSource;
+    if (areaSource === undefined) {
+      throw new Error("Archived GFS analysis adapter was not configured for area queries");
+    }
+    const response = await areaSource.fetchArea({
       runTime: this.options.runTime,
       forecastHour: this.options.forecastHour,
       westLongitude: request.westLongitude,
