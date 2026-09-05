@@ -7,10 +7,11 @@ import {
 } from "../access/access-policy.js";
 import { CachedGfsAnalysisFileStore, CachedGfsAnalysisSource } from "../cache/historical-gfs-cache.js";
 import { RoutedGfsAnalysisSource } from "../sources/gfs-analysis-routed.js";
-import type {
-  HistoricalAnalysisDataSource,
-  HistoricalAnalysisPointResponse,
-  HistoricalAnalysisPointRow,
+import {
+  GFS_ANALYSIS_START,
+  type HistoricalAnalysisDataSource,
+  type HistoricalAnalysisPointResponse,
+  type HistoricalAnalysisPointRow,
 } from "../sources/gfs-analysis.js";
 import {
   deriveAirDensityKgM3,
@@ -31,7 +32,6 @@ import {
 } from "../schema/history.js";
 import type { HistoricalProfileResult } from "../schema/history-result.js";
 import { isoDateTimeSchema } from "../schema/query.js";
-import { NCEI_GFS_GRID4_ANALYSIS_START } from "../sources/ncei-gfs-history.js";
 import type { ProfileLevel } from "./types.js";
 
 const CAVEAT = "GFS model analysis; not a direct observation or homogeneous climatological reanalysis" as const;
@@ -174,7 +174,7 @@ export class HistoricalProfileService {
     );
     this.now = options.now ?? (() => new Date());
     this.allowNonAnalysisCycle = options.allowNonAnalysisCycle ?? false;
-    this.minimumTime = options.minimumTime ?? NCEI_GFS_GRID4_ANALYSIS_START;
+    this.minimumTime = options.minimumTime ?? GFS_ANALYSIS_START;
     this.nativeSpecificHumidity = options.nativeSpecificHumidity ?? false;
   }
 
