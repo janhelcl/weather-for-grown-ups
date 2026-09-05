@@ -4,10 +4,11 @@ import type {
   HistoricalAnalysisAccess,
   HistoricalAnalysisAreaDataSource,
   HistoricalAnalysisAreaRequest,
+  HistoricalAnalysisAreaResponse,
   HistoricalAnalysisDataSource,
+  HistoricalAnalysisPointResponse,
   HistoricalAnalysisProvider,
   HistoricalAnalysisRequest,
-  HistoricalAnalysisResponse,
   HistoricalAnalysisSource,
 } from "../sources/gfs-analysis.js";
 import {
@@ -49,8 +50,8 @@ type ArchivedForecastSource =
 
 /**
  * Provider-neutral cache for the public gfs-analysis contract. Cache identity
- * is derived from the canonical request, never from an NCSS/AWS/fileServer URL,
- * so changing routing or upstream transport does not leak into callers.
+ * is derived from canonical WFG selections, never from a provider URL or NCSS
+ * field name. Cached payloads are the typed interchange returned by adapters.
  */
 export class CachedGfsAnalysisSource
 implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
@@ -63,72 +64,95 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
     this.cache = new FileArtifactCache(rootDir);
   }
 
-  fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisResponse> {
-    return this.fetchCached(
-      analysisRequestKey("point", request),
-      () => this.source.fetch(request),
+  async fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisPointResponse> {
+    const cached = await this.cache.getOrCreateText(
+      analysisCacheName(analysisRequestKey("point", request)),
+      async () => JSON.stringify(toPointPayload(await this.source.fetch(request))),
     );
+    const payload = JSON.parse(cached.value) as CachedHistoricalAnalysisPointPayload;
+    return { ...payload, cacheHit: cached.cacheHit };
   }
 
-  fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisResponse> {
-    return this.fetchCached(
-      analysisRequestKey("area", request),
-      () => this.source.fetchArea(request),
+  async fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisAreaResponse> {
+    const cached = await this.cache.getOrCreateText(
+      analysisCacheName(analysisRequestKey("area", request)),
+      async () => JSON.stringify(toAreaPayload(await this.source.fetchArea(request))),
     );
-  }
-
-  private async fetchCached(
-    requestKey: string,
-    loader: () => Promise<HistoricalAnalysisResponse>,
-  ): Promise<HistoricalAnalysisResponse> {
-    const cached = await this.cache.getOrCreateText(analysisCacheName(requestKey), async () => {
-      const response = await loader();
-      return JSON.stringify({
-        csv: response.csv,
-        dataset: response.dataset,
-        provider: response.provider,
-        access: response.access,
-      } satisfies CachedHistoricalAnalysisPayload);
-    });
-    const payload = JSON.parse(cached.value) as CachedHistoricalAnalysisPayload;
+    const payload = JSON.parse(cached.value) as CachedHistoricalAnalysisAreaPayload;
     return { ...payload, cacheHit: cached.cacheHit };
   }
 }
 
-interface CachedHistoricalAnalysisPayload {
-  csv: string;
+interface CachedHistoricalAnalysisProvenance {
   dataset: string;
   provider: HistoricalAnalysisProvider;
   access: HistoricalAnalysisAccess;
+}
+
+interface CachedHistoricalAnalysisPointPayload extends CachedHistoricalAnalysisProvenance {
+  rows: HistoricalAnalysisPointResponse["rows"];
+}
+
+interface CachedHistoricalAnalysisAreaPayload extends CachedHistoricalAnalysisProvenance {
+  variable: HistoricalAnalysisAreaResponse["variable"];
+  points: HistoricalAnalysisAreaResponse["points"];
+  verticalCoordinate?: number;
+}
+
+function toPointPayload(response: HistoricalAnalysisPointResponse): CachedHistoricalAnalysisPointPayload {
+  return {
+    rows: response.rows,
+    dataset: response.dataset,
+    provider: response.provider,
+    access: response.access,
+  };
+}
+
+function toAreaPayload(response: HistoricalAnalysisAreaResponse): CachedHistoricalAnalysisAreaPayload {
+  return {
+    variable: response.variable,
+    points: response.points,
+    ...(response.verticalCoordinate === undefined
+      ? {}
+      : { verticalCoordinate: response.verticalCoordinate }),
+    dataset: response.dataset,
+    provider: response.provider,
+    access: response.access,
+  };
 }
 
 function analysisRequestKey(
   kind: "point" | "area",
   request: HistoricalAnalysisRequest | HistoricalAnalysisAreaRequest,
 ): string {
+  if (kind === "point") {
+    const point = request as HistoricalAnalysisRequest;
+    return JSON.stringify({
+      version: 4,
+      kind,
+      analysisTime: point.analysisTime.toISOString(),
+      latitude: point.latitude,
+      longitude: point.longitude,
+      variables: [...point.variables],
+    });
+  }
+  const area = request as HistoricalAnalysisAreaRequest;
   return JSON.stringify({
-    version: 3,
+    version: 4,
     kind,
-    analysisTime: request.analysisTime.toISOString(),
-    ...(kind === "point"
-      ? {
-          latitude: (request as HistoricalAnalysisRequest).latitude,
-          longitude: (request as HistoricalAnalysisRequest).longitude,
-        }
-      : {
-          westLongitude: (request as HistoricalAnalysisAreaRequest).westLongitude,
-          eastLongitude: (request as HistoricalAnalysisAreaRequest).eastLongitude,
-          southLatitude: (request as HistoricalAnalysisAreaRequest).southLatitude,
-          northLatitude: (request as HistoricalAnalysisAreaRequest).northLatitude,
-          verticalCoordinate: (request as HistoricalAnalysisAreaRequest).verticalCoordinate ?? null,
-          horizontalStride: (request as HistoricalAnalysisAreaRequest).horizontalStride ?? null,
-        }),
-    variables: [...request.variables],
+    analysisTime: area.analysisTime.toISOString(),
+    westLongitude: area.westLongitude,
+    eastLongitude: area.eastLongitude,
+    southLatitude: area.southLatitude,
+    northLatitude: area.northLatitude,
+    variable: area.variable,
+    verticalCoordinate: area.verticalCoordinate ?? null,
+    horizontalStride: area.horizontalStride ?? null,
   });
 }
 
 function analysisCacheName(requestKey: string): string {
-  return `${createHash("sha256").update(`gfs-analysis-v3\0${requestKey}`).digest("hex")}.json`;
+  return `${createHash("sha256").update(`gfs-analysis-v4\0${requestKey}`).digest("hex")}.json`;
 }
 
 export class CachedNceiGfsForecastHistorySource
