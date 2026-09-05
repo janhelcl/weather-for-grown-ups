@@ -158,6 +158,7 @@ The completed model matrix is:
 NOAA physics             GFS                  GEFS
 NOAA AI                  AIGFS                AIGEFS
 ECMWF physics            IFS                  IFS ENS
+ECMWF AI                 AIFS                 AIFS ENS
 NOAA hybrid                                   HGEFS
 ```
 
