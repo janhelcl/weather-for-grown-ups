@@ -19,6 +19,15 @@ import {
   gridPointsInBox,
   readGribMessagesFromBytes,
 } from "../grib/gribberish-runtime.js";
+import type {
+  HistoricalAnalysisAccess,
+  HistoricalAnalysisAreaDataSource,
+  HistoricalAnalysisAreaRequest,
+  HistoricalAnalysisDataSource,
+  HistoricalAnalysisProvider,
+  HistoricalAnalysisRequest,
+  HistoricalAnalysisResponse,
+} from "./gfs-analysis.js";
 import {
   formatHistoricalAreaCsv,
   formatHistoricalPointCsv,
@@ -31,15 +40,6 @@ import {
   buildGfsS3ForecastIndexUrl,
   buildGfsS3ForecastUrl,
 } from "./gfs-s3.js";
-import type {
-  HistoricalAnalysisAccess,
-  HistoricalAnalysisAreaDataSource,
-  HistoricalAnalysisAreaRequest,
-  HistoricalAnalysisDataSource,
-  HistoricalAnalysisProvider,
-  HistoricalAnalysisRequest,
-  HistoricalAnalysisResponse,
-} from "./ncei-gfs-history.js";
 
 const AWS_ANALYSIS_PROVENANCE = {
   provider: "NOAA AWS Open Data",
@@ -55,8 +55,9 @@ export interface AwsGfsAnalysisSourceOptions {
 
 /**
  * GFS Grid 4 analysis via NOAA AWS Open Data (`noaa-gfs-bdp-pds`) 0.50°
- * `f000` products with `.idx` byte-range subsetting. Emits NCSS-shaped CSV so
- * the existing historical parsers and services keep working unchanged.
+ * `f000` products with `.idx` byte-range subsetting. The adapter converts GRIB
+ * into the historical-analysis interchange expected above the source layer;
+ * routing and caching remain provider-neutral.
  */
 export class AwsGfsAnalysisSource
 implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
@@ -96,7 +97,7 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
   async fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisResponse> {
     this.assertAwsEra(request.analysisTime);
     if (request.variables.length !== 1) {
-      throw new Error("AWS GFS analysis area requests must select exactly one NCSS variable");
+      throw new Error("AWS GFS analysis area requests must select exactly one historical variable");
     }
     const ncssName = request.variables[0]!;
     const selectors = historicalNcssSelectors([ncssName]);
