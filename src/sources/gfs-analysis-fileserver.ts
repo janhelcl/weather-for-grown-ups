@@ -15,13 +15,12 @@ import {
 import type {
   HistoricalAnalysisAccess,
   HistoricalAnalysisDataSource,
+  HistoricalAnalysisPointResponse,
   HistoricalAnalysisProvider,
   HistoricalAnalysisRequest,
-  HistoricalAnalysisResponse,
 } from "./gfs-analysis.js";
 import {
-  formatHistoricalPointCsv,
-  historicalNcssSelectors,
+  historicalAnalysisSelectors,
   rowsFromDecodedPointValues,
 } from "./gfs-analysis-grib.js";
 import { GFS_S3_ARCHIVE_START } from "./gfs-s3.js";
@@ -71,9 +70,9 @@ export class NceiGfsFileServerAnalysisSource implements HistoricalAnalysisDataSo
     this.fileStore = options.fileStore;
   }
 
-  async fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisResponse> {
+  async fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisPointResponse> {
     this.assertEra(request.analysisTime);
-    const selectors = historicalNcssSelectors(request.variables);
+    const selectors = historicalAnalysisSelectors(request.variables);
     const { bytes, dataset, cacheHit } = await this.loadGrib(request.analysisTime);
     const decoded = decodePointMessages(
       readGribMessagesFromBytes(bytes),
@@ -87,7 +86,7 @@ export class NceiGfsFileServerAnalysisSource implements HistoricalAnalysisDataSo
       );
     }
     return {
-      csv: formatHistoricalPointCsv(rows),
+      rows,
       dataset,
       cacheHit,
       ...FILESERVER_PROVENANCE,
