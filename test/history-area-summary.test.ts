@@ -8,7 +8,7 @@ import type {
   HistoricalAnalysisAreaDataSource,
   HistoricalAnalysisVariableId,
 } from "../src/sources/gfs-analysis.js";
-import { parseHistoricalNcssAreaCsv } from "../src/sources/gfs-analysis-grib.js";
+import { parseHistoricalNcssAreaCsv } from "../src/sources/gfs-analysis-ncss.js";
 import { NCEI_NCSS_PROVENANCE } from "../src/sources/ncei-gfs-history.js";
 
 const dataset = "model-gfs-g4-anl-files-old/201705/20170509/gfsanl_4_20170509_1200_000.grb2";
