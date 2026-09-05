@@ -1,8 +1,8 @@
 # Weather for Grown Ups
 
-**Numerical weather prediction for agents — one query language, many models, no flattened semantics.**
+**Weather is the hello-world of agent tools. This is the version for when “temperature tomorrow” stops being enough.**
 
-Weather for Grown Ups (WFG) gives agents and humans structured access to operational forecasts, ensembles, AI weather models, regional NWP and history from NOAA, ECMWF, DWD and Météo-France.
+Weather for Grown Ups (WFG) gives agents and humans structured access to operational forecasts, ensembles, AI weather models, regional NWP and history from NOAA, ECMWF, DWD and Météo-France — one query language, many models, no flattened semantics.
 
 > **One query language across weather datasets. Native model semantics stay intact.**
 
@@ -134,19 +134,66 @@ WFG is deliberately opinionated where weather tooling often becomes subtly misle
 
 See [Architecture](docs/ARCHITECTURE.md) for the dependency boundaries behind those rules.
 
-## What can you ask?
+## Ask a harder weather question
 
-WFG is useful once “temperature tomorrow” is not enough:
+“What's the weather tomorrow?” is easy. These are more interesting.
 
-> How do GFS and IFS differ at 500 hPa over this route?
+**Synoptic · Aviation & soaring · Wind energy · AI vs physics · Verification**
 
-> What does the ensemble say about the timing and spread of tomorrow's wind shift?
+<details open>
+<summary><strong>Synoptic</strong> — Follow a front through the atmosphere</summary>
 
-> How does the vertical profile evolve through a frontal passage?
+> A cold front is crossing Prague tomorrow. When does it actually arrive, how does the atmosphere change through the passage, and how much do the models agree?
 
-> What did the 48-hour GFS forecast predict for this event, and how wrong was it?
+`GFS + IFS → GEFS + IFS ENS → pressure profiles → run comparison`
 
-> Is a regional-model signal coherent with the global model, or just a local grid-scale feature?
+An agent can locate the transition in deterministic guidance, inspect ensemble timing spread, follow the vertical structure before and after passage, and check whether successive runs are converging on the same story.
+
+</details>
+
+<details>
+<summary><strong>Aviation & soaring</strong> — Understand the useful part of the day</summary>
+
+> Tomorrow looks flyable around Bassano. What is likely to end the usable convective window first: increasing wind, cloud, stability, or a larger-scale change?
+
+`profiles → parcel diagnostics → ensemble evolution → global + regional models`
+
+An agent can inspect stability and parcel structure through time, see how wind evolves through the column, test the signal across ensemble members, and use regional guidance without turning WFG itself into a “go flying” score.
+
+</details>
+
+<details>
+<summary><strong>Wind energy</strong> — Decide whether a ramp is real</summary>
+
+> A sharp wind ramp appears over the North Sea tomorrow afternoon. Is it a broad synoptic transition or something only one grid point is seeing, and how uncertain is the timing?
+
+`multi-point + area → transect → ensemble spread → model comparison`
+
+An agent can move from a suspicious point signal to its spatial structure, compare deterministic models, and measure how consistently the ensemble supports the timing and magnitude of the change.
+
+</details>
+
+<details>
+<summary><strong>AI vs physics</strong> — Compare different forecasting systems without pretending they are identical</summary>
+
+> AIFS and IFS disagree materially on tomorrow's trough. Are the AI and physics models telling different atmospheric stories, or are those differences smaller than the uncertainty inside their ensembles?
+
+`IFS ↔ AIFS → IFS ENS ↔ AIFS ENS → vertical + spatial comparison`
+
+WFG keeps the models' native semantics intact while giving the agent a common vocabulary for aligned comparisons. Differences remain differences; unsupported symmetry is not invented for convenience.
+
+</details>
+
+<details>
+<summary><strong>Verification</strong> — Ask what the forecast actually got right</summary>
+
+> Three days ago the models called this event very differently. Which forecast got the structure and timing right, and have we seen atmospheric setups like this before?
+
+`archived forecast → analysis / radiosonde → error → historical analogs`
+
+An agent can retrieve the original forecast rather than today's reconstructed view of the event, compare it with later observations or analysis, quantify the miss, and search history for related atmospheric states.
+
+</details>
 
 The answer remains structured model evidence. Activity-specific scores, route choices and safety judgments stay downstream.
 
