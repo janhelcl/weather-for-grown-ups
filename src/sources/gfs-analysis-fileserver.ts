@@ -12,6 +12,13 @@ import {
   decodePointMessages,
   readGribMessagesFromBytes,
 } from "../grib/gribberish-runtime.js";
+import type {
+  HistoricalAnalysisAccess,
+  HistoricalAnalysisDataSource,
+  HistoricalAnalysisProvider,
+  HistoricalAnalysisRequest,
+  HistoricalAnalysisResponse,
+} from "./gfs-analysis.js";
 import {
   formatHistoricalPointCsv,
   historicalNcssSelectors,
@@ -21,13 +28,6 @@ import { GFS_S3_ARCHIVE_START } from "./gfs-s3.js";
 import {
   NCEI_GFS_GRID4_ANALYSIS_START,
   buildNceiGfsAnalysisDatasetPath,
-  type HistoricalAnalysisAccess,
-  type HistoricalAnalysisAreaDataSource,
-  type HistoricalAnalysisAreaRequest,
-  type HistoricalAnalysisDataSource,
-  type HistoricalAnalysisProvider,
-  type HistoricalAnalysisRequest,
-  type HistoricalAnalysisResponse,
 } from "./ncei-gfs-history.js";
 
 export const NCEI_GFS_FILESERVER_BASE_URL = "https://www.ncei.noaa.gov/thredds/fileServer";
@@ -56,12 +56,11 @@ export interface NceiGfsFileServerAnalysisSourceOptions {
 }
 
 /**
- * Pre-AWS Grid 4 analysis access: download the full ~150 MB GRIB2 object from
- * NCEI's THREDDS fileServer and decode locally. This is the free path for
- * 2007–early-2021 while NCSS is broken behind S3 IAM.
+ * Pre-AWS Grid 4 point access: download the full ~150 MB GRIB2 object from
+ * NCEI's THREDDS fileServer and decode locally. Area subsetting is not a
+ * capability of this source and therefore is not part of its interface.
  */
-export class NceiGfsFileServerAnalysisSource
-implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
+export class NceiGfsFileServerAnalysisSource implements HistoricalAnalysisDataSource {
   private readonly fetchFn: typeof fetch;
   private readonly retryOptions: HttpRetryExecutionOptions;
   private readonly fileStore: GfsAnalysisFileStore | undefined;
@@ -93,24 +92,6 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
       cacheHit,
       ...FILESERVER_PROVENANCE,
     };
-  }
-
-  async fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisResponse> {
-    this.assertEra(request.analysisTime);
-    // Full Grid 4 objects are multi-message (~150 MB). Area sampling needs a
-    // single selected message; without an .idx that selection is not free.
-    // Route area queries for this era through NCSS (tertiary) instead.
-    throw new UpstreamUnavailableError(
-      "NCEI fileServer GFS analysis does not serve area subsets; use NCSS or AWS Open Data",
-      {
-        retryable: true,
-        details: {
-          provider: "NOAA NCEI",
-          access: "ncei_thredds_fileserver",
-          analysisTime: request.analysisTime.toISOString(),
-        },
-      },
-    );
   }
 
   private assertEra(analysisTime: Date): void {
