@@ -11,7 +11,6 @@ import type { HistoricalAnalysisAreaDataSource } from "../sources/gfs-analysis.j
 import {
   HISTORICAL_AREA_FIELD_CATALOG,
   HISTORICAL_AREA_PRESSURE_CATALOG,
-  historicalAreaVariableAliases,
   type HistoricalAreaSourceDefinition,
 } from "../catalog/history-area.js";
 import type { GridValuePoint } from "../grib/wgrib2-grid.js";
@@ -96,17 +95,16 @@ export class HistoricalAreaSummaryService {
     const definition = query.field === undefined
       ? HISTORICAL_AREA_PRESSURE_CATALOG[query.variable!]
       : HISTORICAL_AREA_FIELD_CATALOG[query.field];
-
     const verticalCoordinate = definition.verticalCoordinate?.(
       query.pressureLevelHpa === undefined ? {} : { pressureLevelHpa: query.pressureLevelHpa },
     );
     const response = await this.source.fetchArea({
       analysisTime,
       ...bbox,
-      variables: [definition.ncssName],
+      variable: definition.id,
       ...(verticalCoordinate === undefined ? {} : { verticalCoordinate }),
     });
-    const points = parseHistoricalAreaCsv(response.csv, definition, verticalCoordinate);
+    const points = normalizeHistoricalAreaPoints(response, definition, verticalCoordinate);
     const computed = computeAreaDistribution(points, {
       percentiles: query.percentiles,
       thresholds: query.thresholds,
@@ -172,115 +170,31 @@ export function estimateHistoricalGridPoints(box: {
   return Math.max(0, longitudePoints) * Math.max(0, latitudePoints);
 }
 
-export function parseHistoricalAreaCsv(
-  csv: string,
+function normalizeHistoricalAreaPoints(
+  response: Awaited<ReturnType<HistoricalAnalysisAreaDataSource["fetchArea"]>>,
   definition: HistoricalAreaSourceDefinition,
   expectedVerticalCoordinate?: number,
 ): GridValuePoint[] {
-  const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
-  if (lines.length < 2) throw new Error("Historical GFS area response contains no data rows");
-
-  const headers = parseCsvLine(lines[0]!).map(normalizeHeader);
-  const latitudeIndex = findHeaderIndex(headers, ["latitude", "lat"]);
-  const longitudeIndex = findHeaderIndex(headers, ["longitude", "lon"]);
-  if (latitudeIndex < 0 || longitudeIndex < 0) {
-    throw new Error("Historical GFS area response is missing latitude/longitude coordinates");
-  }
-
-  const variableIndex = findHeaderIndex(
-    headers,
-    historicalAreaVariableAliases(definition.ncssName),
-  );
-  const verticalIndex = expectedVerticalCoordinate === undefined
-    ? -1
-    : headers.findIndex((header) =>
-        header.startsWith("isobaric")
-        || header.startsWith("height_above_ground")
-        || header === "vertCoord"
-        || header === "alt"
-      );
-  if (variableIndex < 0) {
+  if (response.variable !== definition.id) {
     throw new Error(
-      `Historical GFS area response is missing variable ${definition.ncssName}`,
+      `Historical GFS area source returned ${response.variable} for requested ${definition.id}`,
     );
   }
-  // The historical interchange may collapse an explicitly selected singleton
-  // vertical dimension and omit its coordinate column. Verify it when present;
-  // when omitted, the exact vertical coordinate remains part of the source request.
-  const points: GridValuePoint[] = [];
-  for (const line of lines.slice(1)) {
-    const cells = parseCsvLine(line);
-    const latitude = numericCell(cells[latitudeIndex]);
-    const longitude = numericCell(cells[longitudeIndex]);
-    const rawValue = numericCell(cells[variableIndex]);
-    if (expectedVerticalCoordinate !== undefined && verticalIndex >= 0) {
-      const returnedVerticalCoordinate = numericCell(cells[verticalIndex]);
-      if (
-        returnedVerticalCoordinate !== undefined
-        && Math.abs(returnedVerticalCoordinate - expectedVerticalCoordinate) > 1e-6
-      ) {
-        throw new Error(
-          `Historical GFS area returned vertical coordinate ${returnedVerticalCoordinate} instead of requested ${expectedVerticalCoordinate} for ${definition.id}`,
-        );
-      }
-    }
-    if (latitude === undefined || longitude === undefined || rawValue === undefined) continue;
-    points.push({
-      latitude,
-      longitude: normalizeLongitude(longitude),
-      value: definition.transform(rawValue),
-    });
-  }
-  if (points.length === 0) {
+  if (
+    expectedVerticalCoordinate !== undefined
+    && response.verticalCoordinate !== undefined
+    && Math.abs(response.verticalCoordinate - expectedVerticalCoordinate) > 1e-6
+  ) {
     throw new Error(
-      `Historical GFS area response contains no defined grid values for ${definition.id}`,
+      `Historical GFS area source returned vertical coordinate ${response.verticalCoordinate} instead of ${expectedVerticalCoordinate} for ${definition.id}`,
     );
   }
-  return points;
-}
-
-function normalizeLongitude(longitude: number): number {
-  return longitude > 180 ? longitude - 360 : longitude;
-}
-
-function normalizeHeader(header: string): string {
-  return header.replace(/^\uFEFF/, "").replace(/\[.*$/, "").trim();
-}
-
-function findHeaderIndex(headers: readonly string[], aliases: readonly string[]): number {
-  return headers.findIndex((header) => aliases.includes(header));
-}
-
-function numericCell(value: string | undefined): number | undefined {
-  if (value === undefined || value.trim() === "" || value.trim().toLowerCase() === "nan") {
-    return undefined;
+  if (response.points.length === 0) {
+    throw new Error(`Historical GFS area response contains no defined grid values for ${definition.id}`);
   }
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function parseCsvLine(line: string): string[] {
-  const cells: string[] = [];
-  let value = "";
-  let quoted = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    if (char === '"') {
-      if (quoted && line[index + 1] === '"') {
-        value += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-      continue;
-    }
-    if (char === "," && !quoted) {
-      cells.push(value);
-      value = "";
-      continue;
-    }
-    value += char;
-  }
-  cells.push(value);
-  return cells;
+  return response.points.map((point) => ({
+    latitude: point.latitude,
+    longitude: point.longitude,
+    value: definition.transform(point.value),
+  }));
 }
