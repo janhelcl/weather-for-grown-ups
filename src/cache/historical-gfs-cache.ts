@@ -1,4 +1,12 @@
 import { createHash } from "node:crypto";
+import type {
+  ArchivedGfsForecastAreaDataSource,
+  ArchivedGfsForecastAreaRequest,
+  ArchivedGfsForecastDataSource,
+  ArchivedGfsForecastRequest,
+  ArchivedGfsForecastResponse,
+  ArchivedGfsForecastSource,
+} from "../sources/archived-gfs-forecast.js";
 import type { GfsAnalysisFileStore } from "../sources/gfs-analysis-fileserver.js";
 import type {
   HistoricalAnalysisAccess,
@@ -15,11 +23,6 @@ import {
   buildNceiGfsForecastAreaUrl,
   buildNceiGfsForecastDatasetPath,
   buildNceiGfsForecastPointUrl,
-  type ArchivedGfsForecastAreaDataSource,
-  type ArchivedGfsForecastAreaRequest,
-  type ArchivedGfsForecastDataSource,
-  type ArchivedGfsForecastRequest,
-  type ArchivedGfsForecastResponse,
 } from "../sources/ncei-gfs-forecast-history.js";
 import {
   buildRdaGfs025ForecastAreaUrl,
@@ -44,9 +47,6 @@ export class CachedGfsAnalysisFileStore implements GfsAnalysisFileStore {
     return { bytes: cached.value, cacheHit: cached.cacheHit };
   }
 }
-
-type ArchivedForecastSource =
-  ArchivedGfsForecastDataSource & ArchivedGfsForecastAreaDataSource;
 
 /**
  * Provider-neutral cache for the public gfs-analysis contract. Cache identity
@@ -161,7 +161,7 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
 
   constructor(
     rootDir: string,
-    private readonly source: ArchivedForecastSource,
+    private readonly source: ArchivedGfsForecastSource,
   ) {
     this.cache = new FileArtifactCache(rootDir);
   }
@@ -201,7 +201,7 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
 
   constructor(
     rootDir: string,
-    private readonly source: ArchivedForecastSource,
+    private readonly source: ArchivedGfsForecastSource,
   ) {
     this.cache = new FileArtifactCache(rootDir);
   }
