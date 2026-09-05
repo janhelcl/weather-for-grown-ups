@@ -11,32 +11,51 @@ import {
   deriveWetBulbTemperatureC,
 } from "../src/derived/thermodynamics.js";
 import { HISTORICAL_GFS_VARIABLE_IDS } from "../src/schema/history.js";
-import type { HistoricalAnalysisDataSource } from "../src/sources/ncei-gfs-history.js";
+import type { HistoricalAnalysisDataSource } from "../src/sources/gfs-analysis.js";
 
 const dataset = "model-gfs-g4-anl-files-old/201705/20170509/gfsanl_4_20170509_1200_000.grb2";
-
-const thermoCsv = [
-  'station_name,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,vertCoord[unit="Pa"],Temperature_isobaric[unit="K"],Relative_humidity_isobaric[unit="%"]',
-  'point,50,14.5,2017-05-09T12:00:00Z,85000,285.15,65',
-].join("\n");
-
-const cloudCsv = [
-  'station_name,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,isobaric3[unit="Pa"],Cloud_mixing_ratio_isobaric[unit="kg/kg"]',
-  'point,50,14.5,2017-05-09T12:00:00Z,85000,0.00012',
-].join("\n");
-
-const ozoneCsv = [
-  'station_name,latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,isobaric[unit="Pa"],Ozone_Mixing_Ratio_isobaric[unit="kg/kg"]',
-  'point,50,14.5,2017-05-09T12:00:00Z,85000,0.00000008',
-].join("\n");
 
 function sourceForParity(): HistoricalAnalysisDataSource {
   return {
     fetch: vi.fn(async (request) => {
       const variable = request.variables[0];
-      if (variable === "Cloud_mixing_ratio_isobaric") return { csv: cloudCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
-      if (variable === "Ozone_Mixing_Ratio_isobaric") return { csv: ozoneCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
-      return { csv: thermoCsv, dataset, cacheHit: true, ...NCEI_NCSS_PROVENANCE };
+      if (variable === "cloud_water_mixing_ratio") {
+        return {
+          rows: [{
+            latitude: 50,
+            longitude: 14.5,
+            pressureHpa: 850,
+            values: { cloud_water_mixing_ratio: 0.00012 },
+          }],
+          dataset,
+          cacheHit: true,
+          ...NCEI_NCSS_PROVENANCE,
+        };
+      }
+      if (variable === "ozone_mixing_ratio") {
+        return {
+          rows: [{
+            latitude: 50,
+            longitude: 14.5,
+            pressureHpa: 850,
+            values: { ozone_mixing_ratio: 0.00000008 },
+          }],
+          dataset,
+          cacheHit: true,
+          ...NCEI_NCSS_PROVENANCE,
+        };
+      }
+      return {
+        rows: [{
+          latitude: 50,
+          longitude: 14.5,
+          pressureHpa: 850,
+          values: { temperature: 285.15, relative_humidity: 65 },
+        }],
+        dataset,
+        cacheHit: true,
+        ...NCEI_NCSS_PROVENANCE,
+      };
     }),
   };
 }
@@ -94,7 +113,7 @@ describe("historical pressure parity", () => {
     );
     expect(source.fetch).toHaveBeenCalledTimes(1);
     expect(source.fetch).toHaveBeenCalledWith(expect.objectContaining({
-      variables: ["Temperature_isobaric", "Relative_humidity_isobaric"],
+      variables: ["temperature", "relative_humidity"],
     }));
   });
 
