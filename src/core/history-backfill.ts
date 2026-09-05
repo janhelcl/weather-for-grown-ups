@@ -7,7 +7,7 @@ import {
   type HistoricalIndexBackfillResult,
   type HistoricalIndexRecord,
 } from "../schema/history-index.js";
-import { NCEI_GFS_GRID4_ANALYSIS_START } from "../sources/ncei-gfs-history.js";
+import { GFS_ANALYSIS_START } from "../sources/gfs-analysis.js";
 import { HistoricalProfileIndexStore, canonicalSelection, sameGridPoint } from "./history-index-store.js";
 import { historicalAnalysisTimesInRange, type HistoricalProfileGetter } from "./history-time-series.js";
 import { HistoricalProfileService } from "./history.js";
@@ -23,7 +23,7 @@ export interface HistoricalIndexBackfillServiceOptions {
 /**
  * Populate the local history index across ranges much larger than the interactive
  * history-timeseries limit. This is deliberately an orchestrator, not a faster
- * archive transport: it preserves exact NCEI GFS-analysis semantics and the
+ * archive transport: it preserves exact historical GFS-analysis semantics and the
  * shared NOAA request pacing while making long backfills resumable/idempotent.
  */
 export class HistoricalIndexBackfillService {
@@ -41,8 +41,8 @@ export class HistoricalIndexBackfillService {
     const query = historicalIndexBackfillQuerySchema.parse(input);
     const startTime = new Date(query.startTime);
     const endTime = new Date(query.endTime);
-    if (startTime < NCEI_GFS_GRID4_ANALYSIS_START) {
-      throw new Error(`NCEI GFS Grid 4 analysis history begins at ${NCEI_GFS_GRID4_ANALYSIS_START.toISOString()}`);
+    if (startTime < GFS_ANALYSIS_START) {
+      throw new Error(`GFS Grid 4 analysis history begins at ${GFS_ANALYSIS_START.toISOString()}`);
     }
     if (endTime > this.now()) throw new Error("Historical GFS backfill endTime must not be in the future");
 
