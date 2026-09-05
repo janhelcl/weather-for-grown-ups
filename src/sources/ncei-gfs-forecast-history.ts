@@ -7,44 +7,17 @@ import {
   RateLimitedError,
   UpstreamUnavailableError,
 } from "../failure.js";
+import type {
+  ArchivedGfsForecastAreaDataSource,
+  ArchivedGfsForecastAreaRequest,
+  ArchivedGfsForecastDataSource,
+  ArchivedGfsForecastRequest,
+  ArchivedGfsForecastResponse,
+} from "./archived-gfs-forecast.js";
 import { NCEI_GFS_HISTORY_BASE_URL } from "./ncei-gfs-history.js";
 
 export const NCEI_GFS_GRID4_FORECAST_START = new Date("2006-10-10T00:00:00Z");
 const NCEI_GFS_GRID4_FORECAST_NAMING_TRANSITION = new Date("2020-06-01T00:00:00Z");
-
-export interface ArchivedGfsForecastRequest {
-  runTime: Date;
-  forecastHour: number;
-  latitude: number;
-  longitude: number;
-  variables: readonly string[];
-}
-
-export interface ArchivedGfsForecastAreaRequest {
-  runTime: Date;
-  forecastHour: number;
-  westLongitude: number;
-  eastLongitude: number;
-  southLatitude: number;
-  northLatitude: number;
-  variables: readonly string[];
-  verticalCoordinate?: number;
-  horizontalStride?: number;
-}
-
-export interface ArchivedGfsForecastResponse {
-  csv: string;
-  dataset: string;
-  cacheHit: boolean;
-}
-
-export interface ArchivedGfsForecastDataSource {
-  fetch(request: ArchivedGfsForecastRequest): Promise<ArchivedGfsForecastResponse>;
-}
-
-export interface ArchivedGfsForecastAreaDataSource {
-  fetchArea(request: ArchivedGfsForecastAreaRequest): Promise<ArchivedGfsForecastResponse>;
-}
 
 export interface NceiGfsForecastHistorySourceOptions {
   limiter: UpstreamAccessPolicy;
@@ -141,7 +114,6 @@ export class NceiGfsForecastHistorySource implements ArchivedGfsForecastDataSour
 
     return { csv: result.csv, dataset, cacheHit: false };
   }
-
 }
 
 export function buildNceiGfsForecastPointUrl(request: ArchivedGfsForecastRequest): string {
