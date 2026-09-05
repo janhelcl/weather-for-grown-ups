@@ -5,8 +5,9 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
-import { CachedGfsAnalysisFileStore, CachedNceiGfsHistorySource } from "../cache/historical-gfs-cache.js";
+import { CachedGfsAnalysisFileStore, CachedGfsAnalysisSource } from "../cache/historical-gfs-cache.js";
 import { RoutedGfsAnalysisSource } from "../sources/gfs-analysis-routed.js";
+import type { HistoricalAnalysisAreaDataSource } from "../sources/gfs-analysis.js";
 import {
   HISTORICAL_AREA_FIELD_CATALOG,
   HISTORICAL_AREA_PRESSURE_CATALOG,
@@ -22,10 +23,7 @@ import {
   type HistoricalAreaSummaryResult,
 } from "../schema/history-area-summary.js";
 import { isoDateTimeSchema } from "../schema/query.js";
-import {
-  NCEI_GFS_GRID4_ANALYSIS_START,
-  type HistoricalAnalysisAreaDataSource,
-} from "../sources/ncei-gfs-history.js";
+import { NCEI_GFS_GRID4_ANALYSIS_START } from "../sources/ncei-gfs-history.js";
 import { computeAreaDistribution } from "./area-distribution.js";
 import { InvalidRequestError } from "../failure.js";
 
@@ -54,12 +52,12 @@ export class HistoricalAreaSummaryService {
     const accessPolicy = options.accessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
     const awsAccessPolicy = new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.noaaAws);
-    this.source = options.source ?? new CachedNceiGfsHistorySource(
-      join(cacheDir, "ncei-history"),
+    this.source = options.source ?? new CachedGfsAnalysisSource(
+      join(cacheDir, "gfs-analysis"),
       new RoutedGfsAnalysisSource({
         nceiAccessPolicy: accessPolicy,
         awsAccessPolicy,
-        fileStore: new CachedGfsAnalysisFileStore(join(cacheDir, "ncei-gfs-analysis-fileserver")),
+        fileStore: new CachedGfsAnalysisFileStore(join(cacheDir, "gfs-analysis-fileserver")),
       }),
     );
     this.now = options.now ?? (() => new Date());
@@ -75,7 +73,7 @@ export class HistoricalAreaSummaryService {
     const analysisTime = new Date(query.analysisTime);
     if (analysisTime < this.minimumTime) {
       throw new Error(
-        `NCEI GFS Grid 4 history begins at ${this.minimumTime.toISOString()} for this data source`,
+        `GFS Grid 4 history begins at ${this.minimumTime.toISOString()} for this data source`,
       );
     }
     if (analysisTime > this.now()) {
@@ -180,13 +178,13 @@ export function parseHistoricalAreaCsv(
   expectedVerticalCoordinate?: number,
 ): GridValuePoint[] {
   const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
-  if (lines.length < 2) throw new Error("NCEI historical GFS area response contains no data rows");
+  if (lines.length < 2) throw new Error("Historical GFS area response contains no data rows");
 
   const headers = parseCsvLine(lines[0]!).map(normalizeHeader);
   const latitudeIndex = findHeaderIndex(headers, ["latitude", "lat"]);
   const longitudeIndex = findHeaderIndex(headers, ["longitude", "lon"]);
   if (latitudeIndex < 0 || longitudeIndex < 0) {
-    throw new Error("NCEI historical GFS area response is missing latitude/longitude coordinates");
+    throw new Error("Historical GFS area response is missing latitude/longitude coordinates");
   }
 
   const variableIndex = findHeaderIndex(
@@ -203,12 +201,12 @@ export function parseHistoricalAreaCsv(
       );
   if (variableIndex < 0) {
     throw new Error(
-      `NCEI historical GFS area response is missing variable ${definition.ncssName}`,
+      `Historical GFS area response is missing variable ${definition.ncssName}`,
     );
   }
-  // NCSS may collapse an explicitly selected singleton vertical dimension and omit
-  // its coordinate column from CSV output. Verify the coordinate whenever it is
-  // present; when omitted, the exact vertCoord remains part of the source request.
+  // The historical interchange may collapse an explicitly selected singleton
+  // vertical dimension and omit its coordinate column. Verify it when present;
+  // when omitted, the exact vertical coordinate remains part of the source request.
   const points: GridValuePoint[] = [];
   for (const line of lines.slice(1)) {
     const cells = parseCsvLine(line);
@@ -222,7 +220,7 @@ export function parseHistoricalAreaCsv(
         && Math.abs(returnedVerticalCoordinate - expectedVerticalCoordinate) > 1e-6
       ) {
         throw new Error(
-          `NCEI historical GFS area returned vertical coordinate ${returnedVerticalCoordinate} instead of requested ${expectedVerticalCoordinate} for ${definition.id}`,
+          `Historical GFS area returned vertical coordinate ${returnedVerticalCoordinate} instead of requested ${expectedVerticalCoordinate} for ${definition.id}`,
         );
       }
     }
@@ -235,7 +233,7 @@ export function parseHistoricalAreaCsv(
   }
   if (points.length === 0) {
     throw new Error(
-      `NCEI historical GFS area response contains no defined grid values for ${definition.id}`,
+      `Historical GFS area response contains no defined grid values for ${definition.id}`,
     );
   }
   return points;
