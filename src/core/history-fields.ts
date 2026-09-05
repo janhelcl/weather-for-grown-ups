@@ -94,6 +94,20 @@ export interface HistoricalFieldsServiceOptions {
   nativeSpecificHumidity?: boolean;
 }
 
+export interface HistoricalFieldsLoadOptions {
+  source: HistoricalAnalysisDataSource;
+  analysisTime: Date;
+  latitude: number;
+  longitude: number;
+  fields: readonly HistoricalGfsFieldId[];
+}
+
+export interface HistoricalFieldsLoadResult {
+  gridPoint: { latitude: number; longitude: number };
+  fields: HistoricalFieldResult[];
+  responses: HistoricalAnalysisPointResponse[];
+}
+
 export class HistoricalFieldsService {
   private readonly source: HistoricalAnalysisDataSource;
   private readonly profileGetter: HistoricalFieldsProfileGetter;
@@ -137,34 +151,13 @@ export class HistoricalFieldsService {
     if (analysisTime > this.now()) throw new Error("Historical GFS analysisTime must not be in the future");
 
     const requestedFields = [...new Set(query.fields)];
-    const rawFields = expandHistoricalFieldDependencies(requestedFields);
-    const groups = groupRawFields(rawFields);
-    const rawValues = new Map<HistoricalRawFieldId, number>();
-    const responses: HistoricalAnalysisPointResponse[] = [];
-    let gridPoint = { latitude: query.latitude, longitude: query.longitude };
-
-    for (const group of groups) {
-      const response = await this.source.fetch({
-        analysisTime,
-        latitude: query.latitude,
-        longitude: query.longitude,
-        variables: group.map((definition) => definition.id),
-      });
-      responses.push(response);
-      const parsed = parseHistoricalFieldRows(response.rows, group, {
-        latitude: query.latitude,
-        longitude: query.longitude,
-      });
-      gridPoint = parsed.gridPoint;
-      for (const [id, value] of parsed.values) rawValues.set(id, value);
-    }
-
-    for (const definition of rawFields) {
-      if (!rawValues.has(definition.id)) {
-        throw new Error(`Historical GFS analysis is missing requested field ${definition.id}`);
-      }
-    }
-
+    const loaded = await loadHistoricalFieldsData({
+      source: this.source,
+      analysisTime,
+      latitude: query.latitude,
+      longitude: query.longitude,
+      fields: requestedFields,
+    });
     const profile = query.variables && query.pressureLevelsHpa
       ? await this.profileGetter.getHistoricalProfile({
           latitude: query.latitude,
@@ -174,32 +167,77 @@ export class HistoricalFieldsService {
           pressureLevelsHpa: query.pressureLevelsHpa,
         })
       : undefined;
-    if (profile) gridPoint = profile.gridPoint;
-
-    const firstResponse = responses[0];
+    const firstResponse = loaded.responses[0];
     if (!firstResponse) throw new Error("Historical GFS mixed-field query resolved no archive fields");
+    const publicSource = publicHistoricalFieldSource(firstResponse);
 
     return {
       model: "gfs_grid4_analysis_0p5",
       analysisTime: analysisTime.toISOString(),
       requestedPoint: { latitude: query.latitude, longitude: query.longitude },
-      gridPoint,
+      gridPoint: profile?.gridPoint ?? loaded.gridPoint,
       selection: {
         ...(query.variables ? { variables: query.variables } : {}),
         ...(query.pressureLevelsHpa ? { pressureLevelsHpa: query.pressureLevelsHpa } : {}),
         fields: requestedFields,
       },
       ...(profile ? { levels: profile.levels } : {}),
-      fields: requestedFields.map((id) => buildHistoricalFieldResult(id, rawValues)),
+      fields: loaded.fields,
       source: {
-        provider: firstResponse.provider,
-        access: firstResponse.access,
+        ...publicSource,
         dataset: firstResponse.dataset,
-        cacheHit: responses.every((response) => response.cacheHit) && (profile?.source.cacheHit ?? true),
+        cacheHit: loaded.responses.every((response) => response.cacheHit) && (profile?.source.cacheHit ?? true),
       },
       caveat: CAVEAT,
     };
   }
+}
+
+export async function loadHistoricalFieldsData(
+  options: HistoricalFieldsLoadOptions,
+): Promise<HistoricalFieldsLoadResult> {
+  const rawFields = expandHistoricalFieldDependencies(options.fields);
+  const groups = groupRawFields(rawFields);
+  const rawValues = new Map<HistoricalRawFieldId, number>();
+  const responses: HistoricalAnalysisPointResponse[] = [];
+  let gridPoint = { latitude: options.latitude, longitude: options.longitude };
+
+  for (const group of groups) {
+    const response = await options.source.fetch({
+      analysisTime: options.analysisTime,
+      latitude: options.latitude,
+      longitude: options.longitude,
+      variables: group.map((definition) => definition.id),
+    });
+    responses.push(response);
+    const parsed = parseHistoricalFieldRows(response.rows, group, {
+      latitude: options.latitude,
+      longitude: options.longitude,
+    });
+    gridPoint = parsed.gridPoint;
+    for (const [id, value] of parsed.values) rawValues.set(id, value);
+  }
+
+  for (const definition of rawFields) {
+    if (!rawValues.has(definition.id)) {
+      throw new Error(`Historical GFS analysis is missing requested field ${definition.id}`);
+    }
+  }
+
+  return {
+    gridPoint,
+    fields: options.fields.map((id) => buildHistoricalFieldResult(id, rawValues)),
+    responses,
+  };
+}
+
+function publicHistoricalFieldSource(
+  response: HistoricalAnalysisPointResponse,
+): Pick<HistoricalFieldsResult["source"], "provider" | "access"> {
+  if (response.provider === "NCAR GDEX" || response.access === "gdex_thredds_ncss") {
+    throw new Error("gfs-analysis field source returned archive-only GDEX provenance");
+  }
+  return { provider: response.provider, access: response.access };
 }
 
 interface ParsedFields {
