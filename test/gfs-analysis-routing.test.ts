@@ -21,7 +21,6 @@ import {
   heightMetresFromGribLevel,
   historicalAnalysisSelectors,
   idForDecodedValue,
-  ncssNamesForHistoricalAnalysisVariables,
   rowsFromDecodedPointValues,
 } from "../src/sources/gfs-analysis-grib.js";
 import { RoutedGfsAnalysisSource } from "../src/sources/gfs-analysis-routed.js";
@@ -128,41 +127,33 @@ function ncssAreaResponse(): HistoricalAnalysisAreaResponse {
 const fastRetry = { maxAttempts: 1 as const, baseDelayMs: 0, jitterRatio: 0 };
 
 describe("historical analysis GRIB mapping", () => {
-  it("maps canonical IDs onto provider selectors", () => {
+  it("maps canonical IDs onto provider-neutral GRIB selectors", () => {
     expect(historicalAnalysisSelectors([
       "temperature",
       "surface_pressure",
       "temperature_2m",
       "precipitable_water",
     ])).toEqual([
-      { id: "temperature", ncssName: "Temperature_isobaric", gfsCode: "TMP", kind: "isobaric" },
+      { id: "temperature", gfsCode: "TMP", kind: "isobaric" },
       {
         id: "surface_pressure",
-        ncssName: "Pressure_surface",
         gfsCode: "PRES",
         gribLevel: "surface",
         kind: "surface_or_column",
       },
       {
         id: "temperature_2m",
-        ncssName: "Temperature_height_above_ground",
         gfsCode: "TMP",
         gribLevel: "2 m above ground",
         kind: "surface_or_column",
       },
       {
         id: "precipitable_water",
-        ncssName: "Precipitable_water_entire_atmosphere_single_layer",
         gfsCode: "PWAT",
         gribLevel: "entire atmosphere (considered as a single layer)",
         kind: "surface_or_column",
       },
     ]);
-    expect(ncssNamesForHistoricalAnalysisVariables([
-      "temperature",
-      "temperature",
-      "surface_pressure",
-    ])).toEqual(["Temperature_isobaric", "Pressure_surface"]);
   });
 
   it("parses height metres from GRIB level strings", () => {
