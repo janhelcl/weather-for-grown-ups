@@ -64,9 +64,11 @@ describe("provider transport retries", () => {
       latitude: 50,
       longitude: 14,
       variables: ["Temperature_isobaric"],
-    })).rejects.toThrow(
-      /source unavailable: HTTP 503 Service Unavailable after retries.*upstream availability failure/i,
-    );
+    })).rejects.toMatchObject({
+      code: "UPSTREAM_UNAVAILABLE",
+      retryable: true,
+      details: { provider: "NOAA NCEI", status: 503 },
+    });
     expect(fetchFn.mock.calls.length).toBeGreaterThan(1);
   });
 
@@ -135,7 +137,14 @@ describe("provider transport retries", () => {
       latitude: 50,
       longitude: 14,
       variables: ["Temperature_isobaric"],
-    })).rejects.toThrow(/not available/);
+    })).rejects.toMatchObject({
+      code: "DATA_UNAVAILABLE",
+      retryable: false,
+      details: {
+        provider: "NOAA NCEI",
+        analysisTime: "2017-05-09T00:00:00.000Z",
+      },
+    });
 
     expect(fetchFn).toHaveBeenCalledOnce();
     expect(run).toHaveBeenCalledOnce();
