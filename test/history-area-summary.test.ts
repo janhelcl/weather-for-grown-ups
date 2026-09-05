@@ -2,33 +2,47 @@ import { describe, expect, it, vi } from "vitest";
 import {
   HistoricalAreaSummaryService,
   estimateHistoricalGridPoints,
-  parseHistoricalAreaCsv,
 } from "../src/core/history-area-summary.js";
-import { HISTORICAL_AREA_PRESSURE_CATALOG } from "../src/catalog/history-area.js";
 import { historicalAreaSummaryQuerySchema } from "../src/schema/history-area-summary.js";
-import type { HistoricalAnalysisAreaDataSource } from "../src/sources/ncei-gfs-history.js";
+import type {
+  HistoricalAnalysisAreaDataSource,
+  HistoricalAnalysisVariableId,
+} from "../src/sources/gfs-analysis.js";
+import { parseHistoricalNcssAreaCsv } from "../src/sources/gfs-analysis-grib.js";
 import { NCEI_NCSS_PROVENANCE } from "../src/sources/ncei-gfs-history.js";
 
 const dataset = "model-gfs-g4-anl-files-old/201705/20170509/gfsanl_4_20170509_1200_000.grb2";
-const temperatureCsv = [
-  'latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,isobaric[unit="Pa"],Temperature_isobaric[unit="K"]',
-  '50,14,2017-05-09T12:00:00Z,85000,283.15',
-  '50,14.5,2017-05-09T12:00:00Z,85000,285.15',
-  '50.5,14,2017-05-09T12:00:00Z,85000,287.15',
-  '50.5,14.5,2017-05-09T12:00:00Z,85000,289.15',
-].join("\n");
+const temperaturePoints = [
+  { latitude: 50, longitude: 14, value: 283.15 },
+  { latitude: 50, longitude: 14.5, value: 285.15 },
+  { latitude: 50.5, longitude: 14, value: 287.15 },
+  { latitude: 50.5, longitude: 14.5, value: 289.15 },
+];
+const windPoints = [
+  { latitude: 50, longitude: 14, value: 2 },
+  { latitude: 50, longitude: 14.5, value: 4 },
+  { latitude: 50.5, longitude: 14, value: 6 },
+  { latitude: 50.5, longitude: 14.5, value: 8 },
+];
 
-const windCsv = [
-  'latitude,longitude,time,height_above_ground[unit="m"],u-component_of_wind_height_above_ground[unit="m/s"]',
-  '50,14,t,10,2',
-  '50,14.5,t,10,4',
-  '50.5,14,t,10,6',
-  '50.5,14.5,t,10,8',
-].join("\n");
-
-function source(csv = temperatureCsv, cacheHit = false): HistoricalAnalysisAreaDataSource {
+function source(options: {
+  variable?: HistoricalAnalysisVariableId;
+  points?: typeof temperaturePoints;
+  verticalCoordinate?: number;
+  cacheHit?: boolean;
+} = {}): HistoricalAnalysisAreaDataSource {
+  const variable = options.variable ?? "temperature";
+  const points = options.points ?? temperaturePoints;
+  const verticalCoordinate = options.verticalCoordinate ?? 85000;
   return {
-    fetchArea: vi.fn(async () => ({ csv, dataset, cacheHit, ...NCEI_NCSS_PROVENANCE })),
+    fetchArea: vi.fn(async () => ({
+      variable,
+      points,
+      verticalCoordinate,
+      dataset,
+      cacheHit: options.cacheHit ?? false,
+      ...NCEI_NCSS_PROVENANCE,
+    })),
   };
 }
 
@@ -77,15 +91,17 @@ describe("estimateHistoricalGridPoints", () => {
   });
 });
 
-describe("parseHistoricalAreaCsv", () => {
-  it("normalizes pressure temperature and 0-360 longitudes", () => {
-    const points = parseHistoricalAreaCsv(
-      temperatureCsv.replaceAll("14.5", "350"),
-      HISTORICAL_AREA_PRESSURE_CATALOG.temperature,
-      85000,
-    );
-    expect(points[0]).toEqual({ latitude: 50, longitude: 14, value: 10 });
-    expect(points[1]).toEqual({ latitude: 50, longitude: -10, value: 12 });
+describe("historical NCSS area adapter", () => {
+  it("normalizes 0-360 longitudes while preserving raw provider values", () => {
+    const csv = [
+      'latitude[unit="degrees_north"],longitude[unit="degrees_east"],time,isobaric[unit="Pa"],Temperature_isobaric[unit="K"]',
+      '50,14,2017-05-09T12:00:00Z,85000,283.15',
+      '50,350,2017-05-09T12:00:00Z,85000,285.15',
+    ].join("\n");
+    expect(parseHistoricalNcssAreaCsv(csv, "temperature", 85000)).toEqual([
+      { latitude: 50, longitude: 14, value: 283.15 },
+      { latitude: 50, longitude: -10, value: 285.15 },
+    ]);
   });
 
   it("accepts the generic GDEX alt vertical coordinate for bbox subsets", () => {
@@ -94,14 +110,9 @@ describe("parseHistoricalAreaCsv", () => {
       '50,14,t,85000,283.15',
       '50,14.25,t,85000,285.15',
     ].join("\n");
-    const points = parseHistoricalAreaCsv(
-      gdexCsv,
-      HISTORICAL_AREA_PRESSURE_CATALOG.temperature,
-      85000,
-    );
-    expect(points).toEqual([
-      { latitude: 50, longitude: 14, value: 10 },
-      { latitude: 50, longitude: 14.25, value: 12 },
+    expect(parseHistoricalNcssAreaCsv(gdexCsv, "temperature", 85000)).toEqual([
+      { latitude: 50, longitude: 14, value: 283.15 },
+      { latitude: 50, longitude: 14.25, value: 285.15 },
     ]);
   });
 
@@ -111,47 +122,44 @@ describe("parseHistoricalAreaCsv", () => {
       '50,14,t,283.15',
       '50,14.5,t,285.15',
     ].join("\n");
-    expect(parseHistoricalAreaCsv(
-      collapsedCsv,
-      HISTORICAL_AREA_PRESSURE_CATALOG.temperature,
-      85000,
-    )).toEqual([
-      { latitude: 50, longitude: 14, value: 10 },
-      { latitude: 50, longitude: 14.5, value: 12 },
+    expect(parseHistoricalNcssAreaCsv(collapsedCsv, "temperature", 85000)).toEqual([
+      { latitude: 50, longitude: 14, value: 283.15 },
+      { latitude: 50, longitude: 14.5, value: 285.15 },
     ]);
   });
 
-  it("rejects NCSS nearest-level substitution instead of silently accepting it", () => {
-    expect(() => parseHistoricalAreaCsv(
-      temperatureCsv.replaceAll("85000", "90000"),
-      HISTORICAL_AREA_PRESSURE_CATALOG.temperature,
-      85000,
-    )).toThrow(/returned vertical coordinate 90000 instead of requested 85000/);
+  it("rejects nearest-level substitution instead of silently accepting it", () => {
+    const csv = [
+      'latitude,longitude,isobaric[unit="Pa"],Temperature_isobaric[unit="K"]',
+      '50,14,90000,283.15',
+    ].join("\n");
+    expect(() => parseHistoricalNcssAreaCsv(csv, "temperature", 85000))
+      .toThrow(/contains no values for temperature/);
   });
 
-  it("fails clearly on missing coordinates, variables, vertical coordinates, or defined values", () => {
-    expect(() => parseHistoricalAreaCsv(
+  it("fails clearly on missing coordinates, variables, or defined values", () => {
+    expect(() => parseHistoricalNcssAreaCsv(
       'foo,Temperature_isobaric\n1,285',
-      HISTORICAL_AREA_PRESSURE_CATALOG.temperature,
+      "temperature",
       85000,
-    )).toThrow(/missing latitude\/longitude/);
+    )).toThrow(/missing coordinates or Temperature_isobaric/);
 
-    expect(() => parseHistoricalAreaCsv(
+    expect(() => parseHistoricalNcssAreaCsv(
       'latitude,longitude,isobaric,foo\n50,14,85000,1',
-      HISTORICAL_AREA_PRESSURE_CATALOG.temperature,
+      "temperature",
       85000,
-    )).toThrow(/missing variable Temperature_isobaric/);
+    )).toThrow(/missing coordinates or Temperature_isobaric/);
 
-    expect(() => parseHistoricalAreaCsv(
+    expect(() => parseHistoricalNcssAreaCsv(
       'latitude,longitude,isobaric,Temperature_isobaric\n50,14,85000,NaN',
-      HISTORICAL_AREA_PRESSURE_CATALOG.temperature,
+      "temperature",
       85000,
-    )).toThrow(/no defined grid values/);
+    )).toThrow(/contains no values for temperature/);
   });
 });
 
 describe("HistoricalAreaSummaryService", () => {
-  it("uses one native bbox subset for pressure statistics and distributions", async () => {
+  it("uses one typed native bbox subset for pressure statistics and distributions", async () => {
     const dataSource = source();
     const service = new HistoricalAreaSummaryService({
       source: dataSource,
@@ -178,7 +186,7 @@ describe("HistoricalAreaSummaryService", () => {
       eastLongitude: 15,
       southLatitude: 50,
       northLatitude: 51,
-      variables: ["Temperature_isobaric"],
+      variable: "temperature",
       verticalCoordinate: 85000,
     });
     expect(result).toMatchObject({
@@ -221,7 +229,12 @@ describe("HistoricalAreaSummaryService", () => {
   });
 
   it("uses field-specific vertical coordinates and omits distributions when not requested", async () => {
-    const dataSource = source(windCsv, true);
+    const dataSource = source({
+      variable: "u_wind_10m",
+      points: windPoints,
+      verticalCoordinate: 10,
+      cacheHit: true,
+    });
     const result = await new HistoricalAreaSummaryService({
       source: dataSource,
       now: () => new Date("2017-05-10T00:00:00Z"),
@@ -235,7 +248,7 @@ describe("HistoricalAreaSummaryService", () => {
     });
 
     expect(dataSource.fetchArea).toHaveBeenCalledWith(expect.objectContaining({
-      variables: ["u-component_of_wind_height_above_ground"],
+      variable: "u_wind_10m",
       verticalCoordinate: 10,
     }));
     expect(result.field).toEqual({
@@ -247,6 +260,23 @@ describe("HistoricalAreaSummaryService", () => {
     expect(result.statistics).toMatchObject({ mean: 5, min: 2, max: 8 });
     expect(result.distribution).toBeUndefined();
     expect(result.source.cacheHit).toBe(true);
+  });
+
+  it("rejects a typed source response for the wrong vertical coordinate", async () => {
+    const dataSource = source({ verticalCoordinate: 90000 });
+    const service = new HistoricalAreaSummaryService({
+      source: dataSource,
+      now: () => new Date("2017-05-10T00:00:00Z"),
+    });
+    await expect(service.summarize({
+      westLongitude: 14,
+      eastLongitude: 15,
+      southLatitude: 50,
+      northLatitude: 51,
+      analysisTime: "2017-05-09T12:00:00Z",
+      variable: "temperature",
+      pressureLevelHpa: 850,
+    })).rejects.toThrow(/returned vertical coordinate 90000 instead of 85000/);
   });
 
   it("rejects archive limits, future analyses, and oversized boxes before source access", async () => {
