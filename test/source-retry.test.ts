@@ -2,12 +2,16 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CachedNceiGfsHistorySource } from "../src/cache/historical-gfs-cache.js";
+import { CachedGfsAnalysisSource } from "../src/cache/historical-gfs-cache.js";
 import { CachedNceiIgraSource } from "../src/cache/igra-cache.js";
 import { NceiGfsHistorySource } from "../src/sources/ncei-gfs-history.js";
 import { NceiIgraSource } from "../src/sources/ncei-igra.js";
 
 const roots: string[] = [];
+const historicalCsv = [
+  'latitude,longitude,vertCoord[unit="Pa"],Temperature_isobaric[unit="K"]',
+  "50,14,85000,285.15",
+].join("\n");
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -22,7 +26,7 @@ describe("provider transport retries", () => {
         statusText: "Service Unavailable",
         headers: { "retry-after": "0" },
       }))
-      .mockResolvedValueOnce(new Response("a,b\n1,2", { status: 200 }));
+      .mockResolvedValueOnce(new Response(historicalCsv, { status: 200 }));
     const source = new NceiGfsHistorySource({
       limiter: { run },
       fetchFn,
@@ -34,11 +38,16 @@ describe("provider transport retries", () => {
       analysisTime: new Date("2017-05-09T00:00:00Z"),
       latitude: 50,
       longitude: 14,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     });
 
     expect(result.cacheHit).toBe(false);
-    expect(result.csv).toBe("a,b\n1,2");
+    expect(result.rows).toEqual([{
+      latitude: 50,
+      longitude: 14,
+      pressureHpa: 850,
+      values: { temperature: 285.15 },
+    }]);
     expect(fetchFn).toHaveBeenCalledTimes(2);
     expect(run).toHaveBeenCalledTimes(2);
   });
@@ -63,7 +72,7 @@ describe("provider transport retries", () => {
       analysisTime: new Date("2017-05-09T00:00:00Z"),
       latitude: 50,
       longitude: 14,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toMatchObject({
       code: "UPSTREAM_UNAVAILABLE",
       retryable: true,
@@ -72,8 +81,8 @@ describe("provider transport retries", () => {
     expect(fetchFn.mock.calls.length).toBeGreaterThan(1);
   });
 
-  it("deduplicates concurrent identical NCEI cache misses above the source boundary", async () => {
-    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-ncei-concurrent-"));
+  it("deduplicates concurrent identical analysis cache misses above the source boundary", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "wfg-analysis-concurrent-"));
     roots.push(cacheDir);
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
     let release!: () => void;
@@ -87,9 +96,9 @@ describe("provider transport retries", () => {
     const fetchFn = vi.fn(async () => {
       markStarted();
       await gate;
-      return new Response("a,b\n1,2", { status: 200 });
+      return new Response(historicalCsv, { status: 200 });
     });
-    const source = new CachedNceiGfsHistorySource(
+    const source = new CachedGfsAnalysisSource(
       cacheDir,
       new NceiGfsHistorySource({
         limiter: { run },
@@ -102,7 +111,7 @@ describe("provider transport retries", () => {
       analysisTime: new Date("2017-05-09T00:00:00Z"),
       latitude: 50,
       longitude: 14,
-      variables: ["Temperature_isobaric"] as const,
+      variables: ["temperature"] as const,
     };
 
     const firstPromise = source.fetch(request);
@@ -112,8 +121,7 @@ describe("provider transport retries", () => {
     const [first, second] = await Promise.all([firstPromise, secondPromise]);
     const cached = await source.fetch(request);
 
-    expect(first.csv).toBe("a,b\n1,2");
-    expect(second.csv).toBe("a,b\n1,2");
+    expect(first.rows).toEqual(second.rows);
     expect(first.cacheHit).toBe(false);
     expect(second.cacheHit).toBe(true);
     expect(cached.cacheHit).toBe(true);
@@ -136,7 +144,7 @@ describe("provider transport retries", () => {
       analysisTime: new Date("2017-05-09T00:00:00Z"),
       latitude: 50,
       longitude: 14,
-      variables: ["Temperature_isobaric"],
+      variables: ["temperature"],
     })).rejects.toMatchObject({
       code: "DATA_UNAVAILABLE",
       retryable: false,
