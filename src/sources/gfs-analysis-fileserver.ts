@@ -12,22 +12,20 @@ import {
   decodePointMessages,
   readGribMessagesFromBytes,
 } from "../grib/gribberish-runtime.js";
-import type {
-  HistoricalAnalysisAccess,
-  HistoricalAnalysisDataSource,
-  HistoricalAnalysisPointResponse,
-  HistoricalAnalysisProvider,
-  HistoricalAnalysisRequest,
+import {
+  GFS_ANALYSIS_START,
+  type HistoricalAnalysisAccess,
+  type HistoricalAnalysisDataSource,
+  type HistoricalAnalysisPointResponse,
+  type HistoricalAnalysisProvider,
+  type HistoricalAnalysisRequest,
 } from "./gfs-analysis.js";
 import {
   historicalAnalysisSelectors,
   rowsFromDecodedPointValues,
 } from "./gfs-analysis-grib.js";
 import { GFS_S3_ARCHIVE_START } from "./gfs-s3.js";
-import {
-  NCEI_GFS_GRID4_ANALYSIS_START,
-  buildNceiGfsAnalysisDatasetPath,
-} from "./ncei-gfs-history.js";
+import { buildNceiGfsAnalysisDatasetPath } from "./ncei-gfs-history.js";
 
 export const NCEI_GFS_FILESERVER_BASE_URL = "https://www.ncei.noaa.gov/thredds/fileServer";
 
@@ -94,9 +92,9 @@ export class NceiGfsFileServerAnalysisSource implements HistoricalAnalysisDataSo
   }
 
   private assertEra(analysisTime: Date): void {
-    if (analysisTime < NCEI_GFS_GRID4_ANALYSIS_START) {
+    if (analysisTime < GFS_ANALYSIS_START) {
       throw new Error(
-        `NCEI GFS Grid 4 history begins at ${NCEI_GFS_GRID4_ANALYSIS_START.toISOString()}`,
+        `GFS Grid 4 history begins at ${GFS_ANALYSIS_START.toISOString()}`,
       );
     }
     if (analysisTime >= GFS_S3_ARCHIVE_START) {
