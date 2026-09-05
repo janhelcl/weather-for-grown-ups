@@ -23,6 +23,7 @@ import {
   type ArchivedGfsModelId,
   type GfsGrid,
 } from "../schema/gfs-grid.js";
+import { ArchivedGfsForecastAnalysisAdapter } from "../sources/archived-gfs-analysis-adapter.js";
 import {
   NCEI_GFS_GRID4_FORECAST_START,
   NceiGfsForecastHistorySource,
@@ -32,7 +33,6 @@ import {
   RDA_GFS_0P25_FORECAST_START,
   RdaGfsForecastHistorySource,
 } from "../sources/rda-gfs-forecast-history.js";
-import type { HistoricalAnalysisDataSource } from "../sources/gfs-analysis.js";
 import { HistoricalProfileService } from "./history.js";
 import type { GridPoint } from "../types/decoded.js";
 
@@ -112,24 +112,20 @@ export class ArchivedGfsForecastProfileService {
       );
     }
     const source = grid === "0p50" ? this.nceiSource : this.rdaSource;
+    const provenance = grid === "0p50"
+      ? { provider: "NOAA NCEI" as const, access: "ncei_thredds_ncss" as const }
+      : { provider: "NCAR GDEX" as const, access: "gdex_thredds_ncss" as const };
 
     const validTime = new Date(query.runTime.getTime() + forecastHour * 60 * 60 * 1_000);
     if (validTime > this.now()) throw new Error("Archived GFS forecast validTime must not be in the future");
 
-    const adapter: HistoricalAnalysisDataSource = {
-      fetch: async (request) => {
-        const response = await source.fetch({
-          runTime: query.runTime,
-          forecastHour,
-          latitude: request.latitude,
-          longitude: request.longitude,
-          variables: request.variables,
-        });
-        // This adapter exists only to reuse the Grid-4 CSV profile normalizer.
-        // Archive provenance is restored in the public result below.
-        return { ...response, provider: "NOAA NCEI", access: "ncei_thredds_ncss" };
-      },
-    };
+    const adapter = new ArchivedGfsForecastAnalysisAdapter({
+      source,
+      runTime: query.runTime,
+      forecastHour,
+      validTime,
+      ...provenance,
+    });
     const normalizer = new HistoricalProfileService({
       source: adapter,
       now: this.now,
@@ -158,8 +154,7 @@ export class ArchivedGfsForecastProfileService {
       },
       levels: profile.levels,
       source: {
-        provider: grid === "0p50" ? "NOAA NCEI" : "NCAR GDEX",
-        access: grid === "0p50" ? "ncei_thredds_ncss" : "gdex_thredds_ncss",
+        ...provenance,
         dataset: profile.source.dataset,
         cacheHit: profile.source.cacheHit,
       },
