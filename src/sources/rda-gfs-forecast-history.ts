@@ -10,12 +10,11 @@ import type {
   ArchivedGfsForecastDataSource,
   ArchivedGfsForecastRequest,
   ArchivedGfsForecastResponse,
-} from "./ncei-gfs-forecast-history.js";
+} from "./archived-gfs-forecast.js";
 
 export const RDA_GFS_0P25_FORECAST_START = new Date("2015-01-15T00:00:00Z");
 export const RDA_GFS_0P25_NCSS_BASE_URL =
   "https://tds.gdex.ucar.edu/thredds/ncss/grid/files/g/d084001";
-
 
 export interface RdaAreaNetcdfReader {
   dimensions: readonly { name: string; size: number }[];
@@ -178,7 +177,6 @@ implements ArchivedGfsForecastDataSource, ArchivedGfsForecastAreaDataSource {
 
     return { csv: result.csv, dataset, cacheHit: false };
   }
-
 }
 
 export function convertRdaGfs025AreaNetcdfToCsv(
@@ -282,7 +280,6 @@ function numericValues(value: unknown, label: string): number[] {
   return flattened;
 }
 
-
 export function buildRdaGfs025ForecastPointUrl(request: ArchivedGfsForecastRequest): string {
   const dataset = buildRdaGfs025ForecastDatasetPath(request.runTime, request.forecastHour);
   const query = new URLSearchParams({
@@ -328,4 +325,3 @@ function yyyymmdd(date: Date): string {
   const day = date.getUTCDate().toString().padStart(2, "0");
   return `${year}${month}${day}`;
 }
-
