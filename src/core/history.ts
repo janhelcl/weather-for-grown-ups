@@ -5,8 +5,12 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
-import { CachedGfsAnalysisFileStore, CachedNceiGfsHistorySource } from "../cache/historical-gfs-cache.js";
+import { CachedGfsAnalysisFileStore, CachedGfsAnalysisSource } from "../cache/historical-gfs-cache.js";
 import { RoutedGfsAnalysisSource } from "../sources/gfs-analysis-routed.js";
+import type {
+  HistoricalAnalysisDataSource,
+  HistoricalAnalysisResponse,
+} from "../sources/gfs-analysis.js";
 import {
   deriveAirDensityKgM3,
   deriveDewPointC,
@@ -26,11 +30,7 @@ import {
 } from "../schema/history.js";
 import type { HistoricalProfileResult } from "../schema/history-result.js";
 import { isoDateTimeSchema } from "../schema/query.js";
-import {
-  NCEI_GFS_GRID4_ANALYSIS_START,
-  type HistoricalAnalysisDataSource,
-  type HistoricalAnalysisResponse,
-} from "../sources/ncei-gfs-history.js";
+import { NCEI_GFS_GRID4_ANALYSIS_START } from "../sources/ncei-gfs-history.js";
 import type { ProfileLevel } from "./types.js";
 
 const CAVEAT = "GFS model analysis; not a direct observation or homogeneous climatological reanalysis" as const;
@@ -158,12 +158,12 @@ export class HistoricalProfileService {
     const accessPolicy = options.accessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
     const awsAccessPolicy = new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.noaaAws);
-    this.source = options.source ?? new CachedNceiGfsHistorySource(
-      join(cacheDir, "ncei-history"),
+    this.source = options.source ?? new CachedGfsAnalysisSource(
+      join(cacheDir, "gfs-analysis"),
       new RoutedGfsAnalysisSource({
         nceiAccessPolicy: accessPolicy,
         awsAccessPolicy,
-        fileStore: new CachedGfsAnalysisFileStore(join(cacheDir, "ncei-gfs-analysis-fileserver")),
+        fileStore: new CachedGfsAnalysisFileStore(join(cacheDir, "gfs-analysis-fileserver")),
       }),
     );
     this.now = options.now ?? (() => new Date());
@@ -179,7 +179,7 @@ export class HistoricalProfileService {
     const analysisTime = new Date(query.analysisTime);
     if (analysisTime < this.minimumTime) {
       throw new Error(
-        `NCEI GFS Grid 4 history begins at ${this.minimumTime.toISOString()} for this data source`,
+        `GFS Grid 4 history begins at ${this.minimumTime.toISOString()} for this data source`,
       );
     }
     if (analysisTime > this.now()) {
@@ -302,7 +302,7 @@ export function parseHistoricalProfileCsv(
   requestedPoint: { latitude: number; longitude: number },
 ): ParsedHistoricalProfile {
   const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
-  if (lines.length < 2) throw new Error("NCEI historical GFS response contains no data rows");
+  if (lines.length < 2) throw new Error("Historical GFS analysis response contains no data rows");
 
   const rawHeaders = parseCsvLine(lines[0]!);
   const headers = rawHeaders.map(normalizeHeader);
@@ -318,7 +318,7 @@ export function parseHistoricalProfileCsv(
     "isobaric6",
     "isobaric7",
   ]);
-  if (pressureIndex < 0) throw new Error("NCEI historical GFS response is missing a pressure coordinate");
+  if (pressureIndex < 0) throw new Error("Historical GFS analysis response is missing a pressure coordinate");
   const pressureInPa = /\[unit\s*=\s*"?Pa"?\]/i.test(rawHeaders[pressureIndex] ?? "");
 
   const latitudeIndex = findHeaderIndex(headers, ["latitude", "lat"]);
@@ -330,7 +330,7 @@ export function parseHistoricalProfileCsv(
       ? [name, name.replace("-component", "component")]
       : [name];
     const index = findHeaderIndex(headers, aliases);
-    if (index < 0) throw new Error(`NCEI historical GFS response is missing variable ${name}`);
+    if (index < 0) throw new Error(`Historical GFS analysis response is missing variable ${name}`);
     variableIndexes.set(id, index);
   }
 
