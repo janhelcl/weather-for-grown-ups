@@ -14,15 +14,6 @@ import type {
   HistoricalAnalysisRequest,
   HistoricalAnalysisResponse,
 } from "./gfs-analysis.js";
-export type {
-  HistoricalAnalysisAccess,
-  HistoricalAnalysisAreaDataSource,
-  HistoricalAnalysisAreaRequest,
-  HistoricalAnalysisDataSource,
-  HistoricalAnalysisProvider,
-  HistoricalAnalysisRequest,
-  HistoricalAnalysisResponse,
-} from "./gfs-analysis.js";
 
 export const NCEI_GFS_HISTORY_BASE_URL = "https://www.ncei.noaa.gov/thredds/ncss/grid";
 export const NCEI_GFS_GRID4_ANALYSIS_START = new Date("2007-01-01T00:00:00Z");
