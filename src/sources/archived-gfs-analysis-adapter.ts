@@ -1,4 +1,8 @@
 import type {
+  ArchivedGfsForecastAreaDataSource,
+  ArchivedGfsForecastDataSource,
+} from "./archived-gfs-forecast.js";
+import type {
   HistoricalAnalysisAccess,
   HistoricalAnalysisAreaRequest,
   HistoricalAnalysisAreaResponse,
@@ -13,10 +17,6 @@ import {
   parseHistoricalNcssAreaCsv,
   parseHistoricalNcssPointCsv,
 } from "./gfs-analysis-ncss.js";
-import type {
-  ArchivedGfsForecastAreaDataSource,
-  ArchivedGfsForecastDataSource,
-} from "./ncei-gfs-forecast-history.js";
 
 export interface ArchivedGfsForecastAnalysisAdapterOptions {
   source: ArchivedGfsForecastDataSource;
