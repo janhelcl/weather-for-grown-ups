@@ -32,7 +32,7 @@ import {
   RDA_GFS_0P25_FORECAST_START,
   RdaGfsForecastHistorySource,
 } from "../sources/rda-gfs-forecast-history.js";
-import type { HistoricalAnalysisDataSource } from "../sources/ncei-gfs-history.js";
+import type { HistoricalAnalysisDataSource } from "../sources/gfs-analysis.js";
 import { HistoricalProfileService } from "./history.js";
 import type { GridPoint } from "../types/decoded.js";
 
@@ -125,8 +125,8 @@ export class ArchivedGfsForecastProfileService {
           longitude: request.longitude,
           variables: request.variables,
         });
-        // Provenance is rewritten below for the archive product; the analysis
-        // normalizer only needs a typed HistoricalAnalysisResponse here.
+        // This adapter exists only to reuse the Grid-4 CSV profile normalizer.
+        // Archive provenance is restored in the public result below.
         return { ...response, provider: "NOAA NCEI", access: "ncei_thredds_ncss" };
       },
     };
