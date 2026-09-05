@@ -5,7 +5,7 @@ import {
   type HistoricalTimeSeriesQueryInput,
 } from "../schema/history.js";
 import type { HistoricalProfileResult, HistoricalTimeSeriesResult } from "../schema/history-result.js";
-import { NCEI_GFS_GRID4_ANALYSIS_START } from "../sources/ncei-gfs-history.js";
+import { GFS_ANALYSIS_START } from "../sources/gfs-analysis.js";
 import { HistoricalProfileService } from "./history.js";
 import { InvalidRequestError } from "../failure.js";
 
@@ -34,9 +34,9 @@ export class HistoricalTimeSeriesService {
     const startTime = new Date(query.startTime);
     const endTime = new Date(query.endTime);
 
-    if (startTime < NCEI_GFS_GRID4_ANALYSIS_START) {
+    if (startTime < GFS_ANALYSIS_START) {
       throw new Error(
-        `NCEI GFS Grid 4 analysis history begins at ${NCEI_GFS_GRID4_ANALYSIS_START.toISOString()}`,
+        `GFS Grid 4 analysis history begins at ${GFS_ANALYSIS_START.toISOString()}`,
       );
     }
     if (endTime > this.now()) {
@@ -54,8 +54,8 @@ export class HistoricalTimeSeriesService {
       );
     }
 
-    // Intentionally serial. Cache misses share the NOAA file-backed courtesy limiter, and
-    // historical archive access should not fan out concurrent NCEI requests.
+    // Intentionally serial. Cache misses share the file-backed NOAA courtesy limiter,
+    // and historical archive access should not fan out concurrent upstream requests.
     const profiles: HistoricalProfileResult[] = [];
     for (const analysisTime of analysisTimes) {
       profiles.push(await this.profileGetter.getHistoricalProfile({
