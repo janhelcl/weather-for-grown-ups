@@ -7,10 +7,15 @@ import {
 } from "../access/access-policy.js";
 import { CachedGfsAnalysisFileStore, CachedGfsAnalysisSource } from "../cache/historical-gfs-cache.js";
 import { RoutedGfsAnalysisSource } from "../sources/gfs-analysis-routed.js";
-import type { HistoricalAnalysisAreaDataSource } from "../sources/gfs-analysis.js";
+import type {
+  HistoricalAnalysisAreaDataSource,
+  HistoricalAnalysisAreaResponse,
+} from "../sources/gfs-analysis.js";
 import {
   HISTORICAL_AREA_FIELD_CATALOG,
   HISTORICAL_AREA_PRESSURE_CATALOG,
+  type HistoricalAreaFieldId,
+  type HistoricalAreaPressureVariableId,
   type HistoricalAreaSourceDefinition,
 } from "../catalog/history-area.js";
 import type { GridValuePoint } from "../grib/wgrib2-grid.js";
@@ -37,6 +42,39 @@ export interface HistoricalAreaSummaryServiceOptions {
   allowNonAnalysisCycle?: boolean;
   minimumTime?: Date;
   gridSpacingDegrees?: number;
+}
+
+export interface HistoricalAreaSelection {
+  field?: HistoricalAreaFieldId;
+  variable?: HistoricalAreaPressureVariableId;
+  pressureLevelHpa?: number;
+}
+
+export interface HistoricalAreaSourceSelection {
+  definition: HistoricalAreaSourceDefinition;
+  verticalCoordinate?: number;
+}
+
+export interface HistoricalAreaLoadOptions {
+  source: HistoricalAnalysisAreaDataSource;
+  analysisTime: Date;
+  bbox: {
+    westLongitude: number;
+    eastLongitude: number;
+    southLatitude: number;
+    northLatitude: number;
+  };
+  definition: HistoricalAreaSourceDefinition;
+  verticalCoordinate?: number;
+  percentiles?: HistoricalAreaSummaryQueryInput["percentiles"];
+  thresholds?: HistoricalAreaSummaryQueryInput["thresholds"];
+  includeExtremaLocations?: boolean;
+}
+
+export interface HistoricalAreaLoadResult {
+  response: HistoricalAnalysisAreaResponse;
+  computed: ReturnType<typeof computeAreaDistribution>;
+  distributionRequested: boolean;
 }
 
 export class HistoricalAreaSummaryService {
@@ -92,27 +130,20 @@ export class HistoricalAreaSummaryService {
       );
     }
 
-    const definition = query.field === undefined
-      ? HISTORICAL_AREA_PRESSURE_CATALOG[query.variable!]
-      : HISTORICAL_AREA_FIELD_CATALOG[query.field];
-    const verticalCoordinate = definition.verticalCoordinate?.(
-      query.pressureLevelHpa === undefined ? {} : { pressureLevelHpa: query.pressureLevelHpa },
-    );
-    const response = await this.source.fetchArea({
+    const selection = resolveHistoricalAreaSourceSelection(query);
+    const loaded = await loadHistoricalAreaData({
+      source: this.source,
       analysisTime,
-      ...bbox,
-      variable: definition.id,
-      ...(verticalCoordinate === undefined ? {} : { verticalCoordinate }),
-    });
-    const points = normalizeHistoricalAreaPoints(response, definition, verticalCoordinate);
-    const computed = computeAreaDistribution(points, {
+      bbox,
+      definition: selection.definition,
+      ...(selection.verticalCoordinate === undefined
+        ? {}
+        : { verticalCoordinate: selection.verticalCoordinate }),
       percentiles: query.percentiles,
       thresholds: query.thresholds,
       includeExtremaLocations: query.includeExtremaLocations,
     });
-    const distributionRequested = query.includeExtremaLocations
-      || (query.percentiles?.length ?? 0) > 0
-      || (query.thresholds?.length ?? 0) > 0;
+    const publicSource = publicHistoricalAreaSource(loaded.response);
 
     return historicalAreaSummaryResultSchema.parse({
       model: "gfs_grid4_analysis_0p5",
@@ -123,8 +154,8 @@ export class HistoricalAreaSummaryService {
             variable: {
               id: query.variable!,
               pressureHpa: query.pressureLevelHpa!,
-              field: definition.outputField,
-              unit: definition.unit,
+              field: selection.definition.outputField,
+              unit: selection.definition.unit,
             },
           }
         : {
@@ -133,26 +164,69 @@ export class HistoricalAreaSummaryService {
               level: historicalAreaFieldLevel(query.field),
               temporal: { type: "instantaneous" },
               output: {
-                field: definition.outputField,
-                unit: definition.unit,
+                field: selection.definition.outputField,
+                unit: selection.definition.unit,
               },
             },
           }),
       statistics: {
-        ...computed.statistics,
+        ...loaded.computed.statistics,
         meanKind: "unweighted_grid_point_mean",
       },
-      ...(distributionRequested ? { distribution: computed.distribution } : {}),
+      ...(loaded.distributionRequested ? { distribution: loaded.computed.distribution } : {}),
       source: {
-        provider: response.provider,
-        access: response.access,
+        ...publicSource,
         subset: "native_bbox_grid",
-        dataset: response.dataset,
-        cacheHit: response.cacheHit,
+        dataset: loaded.response.dataset,
+        cacheHit: loaded.response.cacheHit,
       },
       caveat: CAVEAT,
     });
   }
+}
+
+export function resolveHistoricalAreaSourceSelection(
+  selection: HistoricalAreaSelection,
+): HistoricalAreaSourceSelection {
+  const definition = selection.field === undefined
+    ? HISTORICAL_AREA_PRESSURE_CATALOG[selection.variable!]
+    : HISTORICAL_AREA_FIELD_CATALOG[selection.field];
+  const verticalCoordinate = definition.verticalCoordinate?.(
+    selection.pressureLevelHpa === undefined
+      ? {}
+      : { pressureLevelHpa: selection.pressureLevelHpa },
+  );
+  return {
+    definition,
+    ...(verticalCoordinate === undefined ? {} : { verticalCoordinate }),
+  };
+}
+
+export async function loadHistoricalAreaData(
+  options: HistoricalAreaLoadOptions,
+): Promise<HistoricalAreaLoadResult> {
+  const response = await options.source.fetchArea({
+    analysisTime: options.analysisTime,
+    ...options.bbox,
+    variable: options.definition.id,
+    ...(options.verticalCoordinate === undefined
+      ? {}
+      : { verticalCoordinate: options.verticalCoordinate }),
+  });
+  const points = normalizeHistoricalAreaPoints(
+    response,
+    options.definition,
+    options.verticalCoordinate,
+  );
+  const computed = computeAreaDistribution(points, {
+    percentiles: options.percentiles,
+    thresholds: options.thresholds,
+    includeExtremaLocations: options.includeExtremaLocations,
+  });
+  const distributionRequested = options.includeExtremaLocations === true
+    || (options.percentiles?.length ?? 0) > 0
+    || (options.thresholds?.length ?? 0) > 0;
+  return { response, computed, distributionRequested };
 }
 
 export function estimateHistoricalGridPoints(box: {
@@ -170,8 +244,17 @@ export function estimateHistoricalGridPoints(box: {
   return Math.max(0, longitudePoints) * Math.max(0, latitudePoints);
 }
 
+function publicHistoricalAreaSource(
+  response: HistoricalAnalysisAreaResponse,
+): Pick<HistoricalAreaSummaryResult["source"], "provider" | "access"> {
+  if (response.provider === "NCAR GDEX" || response.access === "gdex_thredds_ncss") {
+    throw new Error("gfs-analysis area source returned archive-only GDEX provenance");
+  }
+  return { provider: response.provider, access: response.access };
+}
+
 function normalizeHistoricalAreaPoints(
-  response: Awaited<ReturnType<HistoricalAnalysisAreaDataSource["fetchArea"]>>,
+  response: HistoricalAnalysisAreaResponse,
   definition: HistoricalAreaSourceDefinition,
   expectedVerticalCoordinate?: number,
 ): GridValuePoint[] {
