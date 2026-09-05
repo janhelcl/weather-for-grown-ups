@@ -7,62 +7,22 @@ import {
   RateLimitedError,
   UpstreamUnavailableError,
 } from "../failure.js";
+import type {
+  HistoricalAnalysisAreaDataSource,
+  HistoricalAnalysisAreaRequest,
+  HistoricalAnalysisDataSource,
+  HistoricalAnalysisRequest,
+  HistoricalAnalysisResponse,
+} from "./gfs-analysis.js";
 
 export const NCEI_GFS_HISTORY_BASE_URL = "https://www.ncei.noaa.gov/thredds/ncss/grid";
 export const NCEI_GFS_GRID4_ANALYSIS_START = new Date("2007-01-01T00:00:00Z");
 const NCEI_GFS_GRID4_NAMING_TRANSITION = new Date("2020-06-01T00:00:00Z");
 
-export interface HistoricalAnalysisRequest {
-  analysisTime: Date;
-  latitude: number;
-  longitude: number;
-  variables: readonly string[];
-}
-
-export interface HistoricalAnalysisAreaRequest {
-  analysisTime: Date;
-  westLongitude: number;
-  eastLongitude: number;
-  southLatitude: number;
-  northLatitude: number;
-  variables: readonly string[];
-  verticalCoordinate?: number;
-  horizontalStride?: number;
-}
-
-export interface HistoricalAnalysisResponse {
-  csv: string;
-  dataset: string;
-  cacheHit: boolean;
-  provider: HistoricalAnalysisProvider;
-  access: HistoricalAnalysisAccess;
-}
-
-export const HISTORICAL_ANALYSIS_PROVIDERS = [
-  "NOAA NCEI",
-  "NOAA AWS Open Data",
-] as const;
-export type HistoricalAnalysisProvider = (typeof HISTORICAL_ANALYSIS_PROVIDERS)[number];
-
-export const HISTORICAL_ANALYSIS_ACCESS = [
-  "ncei_thredds_ncss",
-  "ncei_thredds_fileserver",
-  "s3_range",
-] as const;
-export type HistoricalAnalysisAccess = (typeof HISTORICAL_ANALYSIS_ACCESS)[number];
-
 export const NCEI_NCSS_PROVENANCE = {
   provider: "NOAA NCEI",
   access: "ncei_thredds_ncss",
 } as const satisfies Pick<HistoricalAnalysisResponse, "provider" | "access">;
-
-export interface HistoricalAnalysisDataSource {
-  fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisResponse>;
-}
-
-export interface HistoricalAnalysisAreaDataSource {
-  fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisResponse>;
-}
 
 export interface NceiGfsHistorySourceOptions {
   limiter: UpstreamAccessPolicy;
@@ -158,7 +118,6 @@ export class NceiGfsHistorySource implements HistoricalAnalysisDataSource, Histo
       ...NCEI_NCSS_PROVENANCE,
     };
   }
-
 }
 
 export function buildNceiGfsAnalysisPointUrl(request: HistoricalAnalysisRequest): string {
