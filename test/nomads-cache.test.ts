@@ -163,14 +163,19 @@ describe("NomadsCache", () => {
     expect((await readdir(cacheDir)).filter((name) => name.endsWith(".grib2"))).toEqual([]);
   });
 
-  it("rejects non-GRIB content in the provider source and includes a useful preview", async () => {
+  it("rejects non-GRIB content without exposing the upstream response body", async () => {
     const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) =>
       new Response("NOMADS maintenance page", { status: 200 }),
     );
     vi.stubGlobal("fetch", fetchMock);
     const cache = makeCache();
 
-    await expect(cache.fetch(request())).rejects.toThrow(/NOMADS maintenance page/);
+    await expect(cache.fetch(request())).rejects.toMatchObject({
+      code: "UPSTREAM_UNAVAILABLE",
+      message: "NOAA NOMADS returned invalid non-GRIB content",
+      retryable: true,
+      details: { provider: "NOAA NOMADS" },
+    });
     expect((await readdir(cacheDir)).filter((name) => name.endsWith(".grib2"))).toEqual([]);
   });
 
