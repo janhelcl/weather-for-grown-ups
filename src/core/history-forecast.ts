@@ -24,10 +24,10 @@ import {
   type GfsGrid,
 } from "../schema/gfs-grid.js";
 import { ArchivedGfsForecastAnalysisAdapter } from "../sources/archived-gfs-analysis-adapter.js";
+import type { ArchivedGfsForecastDataSource } from "../sources/archived-gfs-forecast.js";
 import {
   NCEI_GFS_GRID4_FORECAST_START,
   NceiGfsForecastHistorySource,
-  type ArchivedGfsForecastDataSource,
 } from "../sources/ncei-gfs-forecast-history.js";
 import {
   RDA_GFS_0P25_FORECAST_START,
