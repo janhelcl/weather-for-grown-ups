@@ -16,11 +16,11 @@ import type {
   HistoricalAnalysisRequest,
 } from "./gfs-analysis.js";
 import {
-  historicalAnalysisSelector,
+  ncssNameForHistoricalAnalysisVariable,
   ncssNamesForHistoricalAnalysisVariables,
   parseHistoricalNcssAreaCsv,
   parseHistoricalNcssPointCsv,
-} from "./gfs-analysis-grib.js";
+} from "./gfs-analysis-ncss.js";
 
 export const NCEI_GFS_HISTORY_BASE_URL = "https://www.ncei.noaa.gov/thredds/ncss/grid";
 export const NCEI_GFS_GRID4_ANALYSIS_START = new Date("2007-01-01T00:00:00Z");
@@ -159,7 +159,7 @@ export function buildNceiGfsAnalysisPointUrl(request: HistoricalAnalysisRequest)
 export function buildNceiGfsAnalysisAreaUrl(request: HistoricalAnalysisAreaRequest): string {
   const dataset = buildNceiGfsAnalysisDatasetPath(request.analysisTime);
   const query = new URLSearchParams({
-    var: historicalAnalysisSelector(request.variable).ncssName,
+    var: ncssNameForHistoricalAnalysisVariable(request.variable),
     north: String(request.northLatitude),
     south: String(request.southLatitude),
     east: String(request.eastLongitude),
