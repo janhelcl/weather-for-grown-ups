@@ -10,6 +10,7 @@ import {
 } from "../access/ifs-open-data.js";
 import { isRetryableHttpStatus } from "../access/http-retry.js";
 import type { AifsEnsMember } from "../catalog/aifs-ens.js";
+import { DataUnavailableError } from "../failure.js";
 import type { AifsAvailabilityProbe } from "../sources/aifs-open-data.js";
 import {
   aifsEnsSelectorsForMember,
@@ -110,12 +111,7 @@ export class AifsEnsOpenDataSubsetCache
         selectIfsIndexEntries(parseIfsOpenDataIndex(result.value), memberSelectors);
         return true;
       } catch (error) {
-        if (
-          error instanceof Error
-          && error.message.startsWith("ECMWF IFS index is missing requested fields:")
-        ) {
-          continue;
-        }
+        if (error instanceof DataUnavailableError) continue;
         throw error;
       }
     }
