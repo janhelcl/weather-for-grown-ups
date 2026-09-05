@@ -51,6 +51,7 @@ NCEI moved the Grid 4 GFS archive behind THREDDS onto S3 and broke NCSS/OPeNDAP 
 - 2007–2020 area queries → NCEI NCSS directly. If NCSS remains broken, its actual terminal failure is surfaced rather than an artificial fileServer error.
 - For operations with a primary AWS/fileServer route, NCSS remains the fallback so a repaired NCEI IAM policy comes back automatically (`access: "ncei_thredds_ncss"`).
 - The analysis response cache is keyed by the canonical `gfs-analysis` request, not an NCSS/AWS/fileServer URL; old NCSS-only cache entries are intentionally not carried forward.
+- Archived GFS forecast transport interfaces are provider-neutral too: NCEI Grid 4 and NCAR/GDEX 0.25° adapters implement the same source contract rather than sharing types through the NCEI module.
 
 The internal analysis interchange is now typed and provider-neutral rather than NCSS-shaped CSV; public result shapes remain unchanged. Provenance `provider`/`access` reports the path that actually served the request.
 
