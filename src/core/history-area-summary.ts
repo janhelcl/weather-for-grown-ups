@@ -45,9 +45,9 @@ export interface HistoricalAreaSummaryServiceOptions {
 }
 
 export interface HistoricalAreaSelection {
-  field?: HistoricalAreaFieldId;
-  variable?: HistoricalAreaPressureVariableId;
-  pressureLevelHpa?: number;
+  field?: string | undefined;
+  variable?: string | undefined;
+  pressureLevelHpa?: number | undefined;
 }
 
 export interface HistoricalAreaSourceSelection {
@@ -139,8 +139,8 @@ export class HistoricalAreaSummaryService {
       ...(selection.verticalCoordinate === undefined
         ? {}
         : { verticalCoordinate: selection.verticalCoordinate }),
-      percentiles: query.percentiles,
-      thresholds: query.thresholds,
+      ...(query.percentiles === undefined ? {} : { percentiles: query.percentiles }),
+      ...(query.thresholds === undefined ? {} : { thresholds: query.thresholds }),
       includeExtremaLocations: query.includeExtremaLocations,
     });
     const publicSource = publicHistoricalAreaSource(loaded.response);
@@ -188,9 +188,29 @@ export class HistoricalAreaSummaryService {
 export function resolveHistoricalAreaSourceSelection(
   selection: HistoricalAreaSelection,
 ): HistoricalAreaSourceSelection {
-  const definition = selection.field === undefined
-    ? HISTORICAL_AREA_PRESSURE_CATALOG[selection.variable!]
-    : HISTORICAL_AREA_FIELD_CATALOG[selection.field];
+  let definition: HistoricalAreaSourceDefinition;
+  if (selection.field !== undefined) {
+    if (!Object.hasOwn(HISTORICAL_AREA_FIELD_CATALOG, selection.field)) {
+      throw new InvalidRequestError(
+        `Historical GFS area does not support field ${selection.field}`,
+        { details: { supportedFields: Object.keys(HISTORICAL_AREA_FIELD_CATALOG) } },
+      );
+    }
+    definition = HISTORICAL_AREA_FIELD_CATALOG[selection.field as HistoricalAreaFieldId];
+  } else {
+    if (
+      selection.variable === undefined
+      || !Object.hasOwn(HISTORICAL_AREA_PRESSURE_CATALOG, selection.variable)
+    ) {
+      throw new InvalidRequestError(
+        `Historical GFS area does not support pressure variable ${selection.variable ?? "<missing>"}`,
+        { details: { supportedVariables: Object.keys(HISTORICAL_AREA_PRESSURE_CATALOG) } },
+      );
+    }
+    definition = HISTORICAL_AREA_PRESSURE_CATALOG[
+      selection.variable as HistoricalAreaPressureVariableId
+    ];
+  }
   const verticalCoordinate = definition.verticalCoordinate?.(
     selection.pressureLevelHpa === undefined
       ? {}
@@ -219,11 +239,11 @@ export async function loadHistoricalAreaData(
     options.verticalCoordinate,
   );
   const computed = computeAreaDistribution(points, {
-    percentiles: options.percentiles,
-    thresholds: options.thresholds,
-    includeExtremaLocations: options.includeExtremaLocations,
+    ...(options.percentiles === undefined ? {} : { percentiles: options.percentiles }),
+    ...(options.thresholds === undefined ? {} : { thresholds: options.thresholds }),
+    includeExtremaLocations: options.includeExtremaLocations ?? false,
   });
-  const distributionRequested = options.includeExtremaLocations === true
+  const distributionRequested = (options.includeExtremaLocations ?? false)
     || (options.percentiles?.length ?? 0) > 0
     || (options.thresholds?.length ?? 0) > 0;
   return { response, computed, distributionRequested };
