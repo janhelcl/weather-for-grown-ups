@@ -18,6 +18,7 @@ import {
 } from "../schema/gfs-grid.js";
 import type { HistoricalGfsVariableId } from "../schema/history.js";
 import { archivedGfsForecastHourSchema } from "../schema/history-forecast.js";
+import { historicalAreaFieldLevel } from "../schema/history-area-summary.js";
 import type { QueryAtmosphereRequest } from "../schema/unified-api.js";
 import { ArchivedGfsForecastAnalysisAdapter } from "../sources/archived-gfs-analysis-adapter.js";
 import {
@@ -31,8 +32,12 @@ import {
   RdaGfsForecastHistorySource,
 } from "../sources/rda-gfs-forecast-history.js";
 import { forecastHour, parseGfsRun, validTimeForForecastHour } from "./forecast-hour.js";
-import { HistoricalAreaSummaryService } from "./history-area-summary.js";
-import { HistoricalFieldsService } from "./history-fields.js";
+import {
+  estimateHistoricalGridPoints,
+  loadHistoricalAreaData,
+  resolveHistoricalAreaSourceSelection,
+} from "./history-area-summary.js";
+import { loadHistoricalFieldsData } from "./history-fields.js";
 import {
   ArchivedGfsForecastProfileService,
   type ArchivedGfsForecastProfileResult,
@@ -377,47 +382,77 @@ export class ArchivedGfsForecastQueryService {
     const grid = request.forecast?.grid ?? "0p25";
     const fh = archivedForecastHour(run, validTime, grid);
     const source = this.sourceForGrid(grid);
-    const service = new HistoricalAreaSummaryService({
-      source: this.analysisAdapter(grid, source, run, fh, validTime),
-      now: this.now,
-      allowNonAnalysisCycle: true,
-      minimumTime: archiveMinimumTime(grid),
-      gridSpacingDegrees: gfsGridSpacingDegrees(grid),
-    });
-    const scalar = (request.selection.fields?.length ?? 0) === 1
-      ? { field: request.selection.fields![0] }
-      : {
-          variable: request.selection.variables![0],
-          pressureLevelHpa: request.selection.pressureLevelsHpa![0],
-        };
-    const result = await service.summarize({
+    const adapter = this.analysisAdapter(grid, source, run, fh, validTime);
+    const bbox = {
       westLongitude: request.geometry.westLongitude,
       eastLongitude: request.geometry.eastLongitude,
       southLatitude: request.geometry.southLatitude,
       northLatitude: request.geometry.northLatitude,
-      analysisTime: validTime.toISOString(),
-      ...scalar,
-      ...(request.aggregate ?? {}),
-      ...(request.limits?.maxGridPoints === undefined ? {} : { maxGridPoints: request.limits.maxGridPoints }),
-    } as any);
-    const {
-      model: _model,
-      analysisTime: _analysisTime,
-      caveat: _caveat,
-      source: historicalSource,
-      ...rest
-    } = result;
+    };
+    const maxGridPoints = request.limits?.maxGridPoints ?? 2_500;
+    const estimatedGridPoints = estimateHistoricalGridPoints(bbox, gfsGridSpacingDegrees(grid));
+    if (estimatedGridPoints > maxGridPoints) {
+      throw new InvalidRequestError(
+        `Requested bbox is approximately ${estimatedGridPoints} historical GFS grid points, exceeding maxGridPoints=${maxGridPoints}`,
+      );
+    }
+
+    const scalar = (request.selection.fields?.length ?? 0) === 1
+      ? { field: request.selection.fields![0] as HistoricalGfsFieldId }
+      : {
+          variable: request.selection.variables![0] as HistoricalGfsVariableId,
+          pressureLevelHpa: request.selection.pressureLevelsHpa![0],
+        };
+    const selection = resolveHistoricalAreaSourceSelection(scalar);
+    const loaded = await loadHistoricalAreaData({
+      source: adapter,
+      analysisTime: validTime,
+      bbox,
+      definition: selection.definition,
+      ...(selection.verticalCoordinate === undefined
+        ? {}
+        : { verticalCoordinate: selection.verticalCoordinate }),
+      percentiles: request.aggregate?.percentiles,
+      thresholds: request.aggregate?.thresholds,
+      includeExtremaLocations: request.aggregate?.includeExtremaLocations,
+    });
+
     return {
       model: archivedGfsModelId(grid),
       run: run.toISOString(),
       validTime: validTime.toISOString(),
       forecastHour: fh,
-      ...rest,
+      bbox,
+      ...(request.selection.fields?.length === 1
+        ? {
+            field: {
+              id: request.selection.fields[0],
+              level: historicalAreaFieldLevel(request.selection.fields[0] as HistoricalGfsFieldId),
+              temporal: { type: "instantaneous" },
+              output: {
+                field: selection.definition.outputField,
+                unit: selection.definition.unit,
+              },
+            },
+          }
+        : {
+            variable: {
+              id: request.selection.variables![0],
+              pressureHpa: request.selection.pressureLevelsHpa![0],
+              field: selection.definition.outputField,
+              unit: selection.definition.unit,
+            },
+          }),
+      statistics: {
+        ...loaded.computed.statistics,
+        meanKind: "unweighted_grid_point_mean",
+      },
+      ...(loaded.distributionRequested ? { distribution: loaded.computed.distribution } : {}),
       source: {
         ...archiveSourceMetadata(grid),
-        subset: historicalSource.subset,
-        dataset: historicalSource.dataset,
-        cacheHit: historicalSource.cacheHit,
+        subset: "native_bbox_grid",
+        dataset: loaded.response.dataset,
+        cacheHit: loaded.response.cacheHit,
       },
       caveat: archiveCaveat(grid),
     };
@@ -437,41 +472,47 @@ export class ArchivedGfsForecastQueryService {
     const fields = request.selection.fields as HistoricalGfsFieldId[] | undefined;
 
     if (fields !== undefined && fields.length > 0) {
-      const service = new HistoricalFieldsService({
-        source: this.analysisAdapter(grid, source, run, fh, validTime),
-        now: this.now,
-        allowNonAnalysisCycle: true,
-        minimumTime: archiveMinimumTime(grid),
-        nativeSpecificHumidity: grid === "0p25",
-      });
-      const result = await service.getHistoricalFields({
+      const adapter = this.analysisAdapter(grid, source, run, fh, validTime);
+      const loaded = await loadHistoricalFieldsData({
+        source: adapter,
+        analysisTime: validTime,
         latitude: point.latitude,
         longitude: point.longitude,
-        analysisTime: validTime.toISOString(),
-        ...(variables === undefined ? {} : { variables }),
-        ...(pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa }),
         fields,
       });
+      const profile = variables !== undefined && pressureLevelsHpa !== undefined
+        ? await this.profile.getArchivedForecastProfile({
+            runTime: run,
+            grid,
+            forecastHour: fh,
+            latitude: point.latitude,
+            longitude: point.longitude,
+            variables,
+            pressureLevelsHpa,
+          })
+        : undefined;
+      const firstResponse = loaded.responses[0];
+      if (!firstResponse) throw new Error("Archived GFS field query resolved no source fields");
+
       return {
         model: archivedGfsModelId(grid),
         run: run.toISOString(),
         validTime: validTime.toISOString(),
         forecastHour: fh,
-        requestedPoint: result.requestedPoint,
-        gridPoint: result.gridPoint,
+        requestedPoint: point,
+        gridPoint: profile?.gridPoint ?? loaded.gridPoint,
         selection: {
-          ...(result.selection.variables === undefined ? {} : { variables: result.selection.variables }),
-          ...(result.selection.pressureLevelsHpa === undefined
-            ? {}
-            : { pressureLevelsHpa: result.selection.pressureLevelsHpa }),
-          fields: result.selection.fields,
+          ...(variables === undefined ? {} : { variables }),
+          ...(pressureLevelsHpa === undefined ? {} : { pressureLevelsHpa }),
+          fields,
         },
-        ...(result.levels === undefined ? {} : { levels: result.levels }),
-        fields: result.fields,
+        ...(profile === undefined ? {} : { levels: profile.levels }),
+        fields: loaded.fields,
         source: {
           ...archiveSourceMetadata(grid),
-          dataset: result.source.dataset,
-          cacheHit: result.source.cacheHit,
+          dataset: firstResponse.dataset,
+          cacheHit: loaded.responses.every((response) => response.cacheHit)
+            && (profile?.source.cacheHit ?? true),
         },
         caveat: archiveCaveat(grid),
       };
@@ -510,6 +551,12 @@ export class ArchivedGfsForecastQueryService {
     forecastHourValue: number,
     validTime: Date,
   ): ArchivedGfsForecastAnalysisAdapter {
+    const minimumTime = archiveMinimumTime(grid);
+    if (runTime < minimumTime) {
+      throw new Error(
+        `GFS ${grid} forecast history begins at ${minimumTime.toISOString()} for this archive`,
+      );
+    }
     return new ArchivedGfsForecastAnalysisAdapter({
       source,
       areaSource: source,
