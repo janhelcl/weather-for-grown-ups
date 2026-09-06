@@ -1,4 +1,4 @@
-name: PR GFS parity
+name: PR GFS routing
 
 on:
   pull_request:
@@ -7,11 +7,11 @@ on:
       - "**/*.md"
 
 concurrency:
-  group: pr-gfs-parity-${{ github.event.pull_request.number }}
+  group: pr-gfs-routing-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  parity:
+  routing:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -20,5 +20,5 @@ jobs:
         run: docker build --target live-test -t weather-for-grown-ups:live-test .
       - name: Compare NOMADS and NOAA AWS operational transports
         run: docker run --rm weather-for-grown-ups:live-test npm run test:live:gfs-operational-parity
-      - name: Check operational/archive same-run equivalence
-        run: docker run --rm weather-for-grown-ups:live-test npm run test:live:gfs-archive-equivalence
+      - name: Check routed historical GFS analysis sources
+        run: docker run --rm weather-for-grown-ups:live-test npm run test:live:gfs-analysis-routing

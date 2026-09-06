@@ -1,6 +1,6 @@
 # Releases
 
-## Unreleased
+## v0.5.2 — 2026-09-06
 
 ### Actionable public failures
 
@@ -54,6 +54,15 @@ NCEI moved the Grid 4 GFS archive behind THREDDS onto S3 and broke NCSS/OPeNDAP 
 - Archived GFS forecast transport interfaces are provider-neutral too: NCEI Grid 4 and NCAR/GDEX 0.25° adapters implement the same source contract instead of defining shared types in the NCEI adapter.
 
 The internal analysis interchange is now typed and provider-neutral rather than NCSS-shaped CSV; public result shapes remain unchanged. Provenance `provider`/`access` reports the path that actually served the request.
+
+### Release validation
+
+The v0.5.2 release candidate validates the source contract that this release actually ships rather than depending on the retired NCEI NCSS overlap path:
+
+- Node.js 20/24 typecheck, offline tests, coverage, build, CLI/package smoke tests and Docker validation pass;
+- live GFS operational parity confirms NOMADS and NOAA AWS agree for both 0.25° and 0.5° products;
+- live `gfs-analysis` routing confirms a recent analysis resolves through NOAA AWS Open Data (`s3_range`) while an older Grid-4 point analysis resolves through NCEI fileServer (`ncei_thredds_fileserver`);
+- the former recent operational ↔ NCEI THREDDS archived-forecast overlap check is not a release gate: current GFS data is served through AWS while the legacy 0.5° archived-forecast implementation still uses the separate NCEI NCSS path. The dedicated archive-equivalence smoke remains available for that legacy transport rather than being treated as evidence about `gfs-analysis` health.
 
 ### stdio MCP smoke coverage
 
