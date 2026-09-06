@@ -1,6 +1,6 @@
 # Historical GFS parcel diagnostics
 
-WFG can apply the same deterministic parcel-ascent engine used by operational GFS to archived NOAA NCEI GFS Grid 4 analyses.
+WFG applies the same deterministic parcel-ascent engine used by operational GFS to `gfs-analysis` on the historical 0.5° Grid 4 product.
 
 Historical parcel diagnostics answer questions such as:
 
@@ -8,7 +8,9 @@ Historical parcel diagnostics answer questions such as:
 - How did analyzed CAPE/CIN evolve across several historical 12 UTC cycles?
 - Was the most-unstable parcel materially different from the surface parcel on a historical day?
 
-The source is **GFS model analysis on the historical 0.5° Grid 4 archive**. It is not a direct observation and the long GFS archive is not a homogeneous climatological reanalysis. The resulting CAPE/CIN therefore describe the parcel calculation applied to the model-analysis state, not observational truth or a climate-normal quantity.
+The source state is **GFS model analysis**, not a direct observation, and the long GFS record is not a homogeneous climatological reanalysis. The resulting CAPE/CIN therefore describe the shared parcel calculation applied to the model-analysis state, not observational truth or a climate-normal quantity.
+
+Transport is separate from that scientific identity. Historical Grid 4 state may resolve through NOAA AWS Open Data, NCEI fileServer or NCEI NCSS according to era/operation; the result preserves whichever provider/access route actually served the request. See [HISTORY.md](HISTORY.md#one-historical-product-several-transports).
 
 ## Shared parcel engine
 
@@ -27,28 +29,28 @@ For every definition WFG derives the same parcel structures as operational GFS:
 - CAPE and CIN;
 - explicit parcel path including dry/saturated phase and buoyancy information.
 
-There is no separate "historical CAPE algorithm". The source adapter changes; the parcel physics does not.
+There is no separate historical CAPE algorithm. The source adapter changes; the parcel physics does not.
 
 ## Historical state construction
 
 The environmental pressure profile requests:
 
-- `temperature`
-- `specific_humidity`
-- `geopotential_height`
+- `temperature`;
+- `specific_humidity`;
+- `geopotential_height`;
 
 at exactly the pressure levels supplied by the caller. Historical pressure-level specific humidity uses WFG's long-record derivation from archived temperature/RH/pressure where native SPFH is not stable across model eras.
 
 The near-surface parcel state requests:
 
-- `surface_pressure`
-- `surface_geopotential_height`
-- `temperature_2m`
-- `relative_humidity_2m`
+- `surface_pressure`;
+- `surface_geopotential_height`;
+- `temperature_2m`;
+- `relative_humidity_2m`.
 
-WFG derives 2 m specific humidity from 2 m temperature, 2 m relative humidity and surface pressure using the shared thermodynamic conversion. This deliberately avoids making historical parcel availability depend on native 2 m specific-humidity fields that vary across archive eras.
+WFG derives 2 m specific humidity from 2 m temperature, 2 m relative humidity and surface pressure using the shared thermodynamic conversion. This avoids making historical parcel availability depend on native 2 m specific-humidity fields that vary across archive eras.
 
-Environmental vertical resolution is controlled entirely by `pressureLevelsHpa`. WFG does not invent missing archive levels. Parcel-path interpolation required by the parcel calculation (for example LCL or buoyancy crossings) remains part of the shared diagnostic engine, but the source environmental sounding is exactly the requested published pressure surfaces.
+Environmental vertical resolution is controlled entirely by `pressureLevelsHpa`. WFG does not invent missing archive levels. Parcel-path interpolation required by the shared diagnostic engine remains internal to the parcel calculation; the source environmental sounding is exactly the requested published pressure surfaces.
 
 ## Single historical parcel
 
@@ -68,7 +70,7 @@ wfg diagnose \
 
 MCP tool: `diagnose_atmosphere`.
 
-The returned result includes the exact analysis time, requested and sampled Grid 4 point, pressure levels used, complete normalized environmental profile, parcel computation, exact NCEI dataset path and cache status.
+The result includes the exact analysis time, requested and sampled Grid 4 point, pressure levels used, normalized environmental state, parcel computation, resolved source provenance and cache state.
 
 ## Historical parcel time series
 
@@ -91,21 +93,21 @@ wfg diagnose \
 
 MCP tool: `diagnose_atmosphere`.
 
-The time-series primitive uses the same guardrails as the rest of interactive History:
+The time-series primitive uses the same guardrails as the rest of interactive history:
 
 - native 00/06/12/18 UTC analysis cycles only;
 - default `maxSteps=8`;
 - hard maximum `16`;
-- all selected cycles evaluated serially;
-- every step retains its archive dataset path and cache-hit status.
+- selected cycles evaluated serially;
+- each step retains the source/object identity and cache state of its resolved route.
 
-It is intentionally not an unbounded historical CAPE scanner. Multi-year statistical questions should eventually be served from deliberately materialized/indexed diagnostic data rather than thousands of interactive NCEI calls.
+It is intentionally not an unbounded historical CAPE scanner. Multi-year statistical questions should be served from deliberately materialized/indexed data rather than thousands of interactive upstream requests.
 
 ## Interpretation caveats
 
 Historical parcel diagnostics inherit two important limitations:
 
 1. **Model-analysis semantics.** The environmental sounding is the GFS assimilated/model state, not a radiosonde or other direct observation.
-2. **Changing historical GFS.** The archive spans multiple GFS versions and assimilation systems. A long CAPE/CIN series from raw GFS analysis is therefore not a homogeneous climatology.
+2. **Changing historical GFS.** The archive spans multiple GFS versions and assimilation systems. A long CAPE/CIN series from raw GFS analysis is not a homogeneous climatology.
 
-For climatological percentiles, trends or return periods, WFG should use a deliberately homogeneous reanalysis/climatology source instead of treating the evolving GFS archive as climate truth.
+For climatological percentiles, trends or return periods, use a deliberately homogeneous reanalysis/climatology source instead of treating the evolving GFS archive as climate truth.
