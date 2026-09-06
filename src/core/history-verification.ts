@@ -52,8 +52,6 @@ export class HistoricalForecastVerificationService {
       );
     }
 
-    // Keep archive access serial. Both source implementations share WFG's file-backed
-    // NOAA courtesy limiter, so a cache miss cannot turn verification into a burst.
     const analysis = await this.analysisGetter.getHistoricalProfile({
       latitude: query.latitude,
       longitude: query.longitude,
@@ -77,10 +75,7 @@ export class HistoricalForecastVerificationService {
     if (forecast.validTime !== analysis.analysisTime) {
       throw new Error("Archived GFS forecast valid time does not match verification analysis time");
     }
-    if (
-      forecast.gridPoint.latitude !== analysis.gridPoint.latitude
-      || forecast.gridPoint.longitude !== analysis.gridPoint.longitude
-    ) {
+    if (forecast.gridPoint.latitude !== analysis.gridPoint.latitude || forecast.gridPoint.longitude !== analysis.gridPoint.longitude) {
       throw new Error("Archived forecast and analysis sampled different Grid 4 points");
     }
 
@@ -91,10 +86,7 @@ export class HistoricalForecastVerificationService {
       forecastRun: forecastRun.toISOString(),
       requestedPoint: { latitude: query.latitude, longitude: query.longitude },
       gridPoint: analysis.gridPoint,
-      selection: {
-        variables: query.variables,
-        pressureLevelsHpa: query.pressureLevelsHpa,
-      },
+      selection: { variables: query.variables, pressureLevelsHpa: query.pressureLevelsHpa },
       comparison: "analysis_minus_forecast",
       forecast: {
         model: forecast.model,
@@ -114,8 +106,16 @@ export class HistoricalForecastVerificationService {
       },
       pressureLevels: compareForecastToAnalysis(forecast.levels, analysis.levels),
       source: {
-        provider: analysis.source.provider,
-        access: analysis.source.access,
+        forecast: {
+          provider: forecast.source.provider,
+          access: forecast.source.access,
+          dataset: forecast.source.dataset,
+        },
+        reference: {
+          provider: analysis.source.provider,
+          access: analysis.source.access,
+          dataset: analysis.source.dataset,
+        },
         forecastArchiveAvailability: "online availability varies; older forecast data may require NCEI HAS",
       },
       caveat: CAVEAT,
@@ -130,7 +130,6 @@ export function compareForecastToAnalysis(
   const forecasts = new Map(forecastLevels.map((level) => [level.pressureHpa, level]));
   const analyses = new Map(analysisLevels.map((level) => [level.pressureHpa, level]));
   const pressures = [...new Set([...forecasts.keys(), ...analyses.keys()])].sort((a, b) => b - a);
-
   return pressures.map((pressureHpa) => ({
     pressureHpa,
     changes: compareLevel(forecasts.get(pressureHpa), analyses.get(pressureHpa)),
@@ -142,26 +141,17 @@ function compareLevel(forecast: HistoricalLevel | undefined, analysis: Historica
   const forecastRecord = forecast as unknown as Record<string, unknown>;
   const analysisRecord = analysis as unknown as Record<string, unknown>;
   const fields = [...new Set([...Object.keys(forecastRecord), ...Object.keys(analysisRecord)])]
-    .filter((field) => field !== "pressureHpa")
-    .sort();
-
+    .filter((field) => field !== "pressureHpa").sort();
   return fields.flatMap((field) => {
     const forecastValue = forecastRecord[field];
     const analysisValue = analysisRecord[field];
-    if (
-      typeof forecastValue !== "number"
-      || typeof analysisValue !== "number"
-      || !Number.isFinite(forecastValue)
-      || !Number.isFinite(analysisValue)
-    ) return [];
+    if (typeof forecastValue !== "number" || typeof analysisValue !== "number" || !Number.isFinite(forecastValue) || !Number.isFinite(analysisValue)) return [];
     const deltaKind = /direction.*deg/i.test(field) ? "circular_degrees" as const : "linear" as const;
     return [{
       field,
       forecast: forecastValue,
       analysis: analysisValue,
-      delta: deltaKind === "circular_degrees"
-        ? circularDegreeDelta(forecastValue, analysisValue)
-        : analysisValue - forecastValue,
+      delta: deltaKind === "circular_degrees" ? circularDegreeDelta(forecastValue, analysisValue) : analysisValue - forecastValue,
       deltaKind,
     }];
   });
