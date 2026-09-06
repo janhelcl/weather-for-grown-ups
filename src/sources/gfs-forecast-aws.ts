@@ -10,13 +10,12 @@ import {
 } from "../grib/gribberish-runtime.js";
 import type {
   HistoricalAnalysisAccess,
-  HistoricalAnalysisAreaDataSource,
   HistoricalAnalysisAreaRequest,
   HistoricalAnalysisAreaResponse,
-  HistoricalAnalysisDataSource,
   HistoricalAnalysisPointResponse,
   HistoricalAnalysisProvider,
   HistoricalAnalysisRequest,
+  HistoricalAnalysisSource,
 } from "./gfs-analysis.js";
 import {
   historicalAnalysisSelector,
@@ -27,12 +26,18 @@ import {
 import { GFS_S3_ARCHIVE_START } from "./gfs-s3.js";
 import { GfsS30p50SubsetClient } from "./gfs-s3-0p50-subset.js";
 
-const AWS_ANALYSIS_PROVENANCE = {
+const AWS_FORECAST_PROVENANCE = {
   provider: "NOAA AWS Open Data",
   access: "s3_range",
 } as const satisfies { provider: HistoricalAnalysisProvider; access: HistoricalAnalysisAccess };
 
-export interface AwsGfsAnalysisSourceOptions {
+export interface ArchivedGfsForecastCycle {
+  runTime: Date;
+  forecastHour: number;
+  validTime: Date;
+}
+
+export interface AwsGfsForecastAnalysisSourceOptions {
   accessPolicy?: UpstreamAccessPolicy;
   fetchFn?: typeof fetch;
   rangeConcurrency?: number;
@@ -40,17 +45,19 @@ export interface AwsGfsAnalysisSourceOptions {
 }
 
 /**
- * GFS Grid 4 analysis via NOAA AWS Open Data (`noaa-gfs-bdp-pds`) 0.50°
- * `f000` products with `.idx` byte-range subsetting. GRIB is decoded directly
- * into WFG's provider-neutral historical-analysis representation.
+ * One archived GFS 0.50° forecast step via NOAA AWS Open Data `.idx` byte
+ * ranges. Same typed interchange as gfs-analysis so verification and archived
+ * query stay on the provider-neutral contract.
  */
-export class AwsGfsAnalysisSource
-implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
+export class AwsGfsForecastAnalysisSource implements HistoricalAnalysisSource {
   private readonly client: GfsS30p50SubsetClient;
 
-  constructor(options: AwsGfsAnalysisSourceOptions = {}) {
+  constructor(
+    private readonly cycle: ArchivedGfsForecastCycle,
+    options: AwsGfsForecastAnalysisSourceOptions = {},
+  ) {
     this.client = new GfsS30p50SubsetClient({
-      product: "analysis",
+      product: "forecast",
       ...(options.accessPolicy === undefined ? {} : { accessPolicy: options.accessPolicy }),
       ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),
       rangeConcurrency: options.rangeConcurrency ?? UPSTREAM_ACCESS_POLICIES.noaaAws.maxConcurrency,
@@ -59,32 +66,39 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
   }
 
   async fetch(request: HistoricalAnalysisRequest): Promise<HistoricalAnalysisPointResponse> {
-    this.assertAwsEra(request.analysisTime);
+    this.assertCycle(request.analysisTime);
     const selectors = historicalAnalysisSelectors(request.variables);
-    const { dataset, bytes } = await this.client.fetchSubset(request.analysisTime, 0, selectors);
-    const messages = readGribMessagesFromBytes(bytes);
-    const decoded = decodePointMessages(messages, request.longitude, request.latitude);
+    const { dataset, bytes } = await this.client.fetchSubset(
+      this.cycle.runTime,
+      this.cycle.forecastHour,
+      selectors,
+    );
+    const decoded = decodePointMessages(
+      readGribMessagesFromBytes(bytes),
+      request.longitude,
+      request.latitude,
+    );
     const rows = rowsFromDecodedPointValues(decoded, selectors);
     if (rows.length === 0) {
       throw new Error(
-        `AWS GFS analysis subset decoded no values for ${request.variables.join(",")}`,
+        `AWS GFS forecast subset decoded no values for ${request.variables.join(",")}`,
       );
     }
     return {
       rows,
       dataset,
       cacheHit: false,
-      ...AWS_ANALYSIS_PROVENANCE,
+      ...AWS_FORECAST_PROVENANCE,
     };
   }
 
   async fetchArea(request: HistoricalAnalysisAreaRequest): Promise<HistoricalAnalysisAreaResponse> {
-    this.assertAwsEra(request.analysisTime);
+    this.assertCycle(request.analysisTime);
     const selector = historicalAnalysisSelector(request.variable);
-    const narrowed = this.narrowAreaSelector(selector, request.verticalCoordinate);
+    const narrowed = narrowAreaSelector(selector, request.verticalCoordinate);
     const { dataset, bytes } = await this.client.fetchSubset(
-      request.analysisTime,
-      0,
+      this.cycle.runTime,
+      this.cycle.forecastHour,
       [narrowed],
       {
         ...(narrowed.kind === "isobaric" && request.verticalCoordinate !== undefined
@@ -95,44 +109,48 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
     const messages = readGribMessagesFromBytes(bytes);
     if (messages.length !== 1) {
       throw new Error(
-        `AWS GFS analysis area subset expected exactly one GRIB record, found ${messages.length}`,
+        `AWS GFS forecast area subset expected exactly one GRIB record, found ${messages.length}`,
       );
     }
-    const points = gridPointsInBox(messages[0]!, {
-      westLongitude: request.westLongitude,
-      eastLongitude: request.eastLongitude,
-      southLatitude: request.southLatitude,
-      northLatitude: request.northLatitude,
-    });
     return {
       variable: request.variable,
-      points,
+      points: gridPointsInBox(messages[0]!, {
+        westLongitude: request.westLongitude,
+        eastLongitude: request.eastLongitude,
+        southLatitude: request.southLatitude,
+        northLatitude: request.northLatitude,
+      }),
       ...(request.verticalCoordinate === undefined
         ? {}
         : { verticalCoordinate: request.verticalCoordinate }),
       dataset,
       cacheHit: false,
-      ...AWS_ANALYSIS_PROVENANCE,
+      ...AWS_FORECAST_PROVENANCE,
     };
   }
 
-  private assertAwsEra(analysisTime: Date): void {
-    if (analysisTime < GFS_S3_ARCHIVE_START) {
+  private assertCycle(analysisTime: Date): void {
+    if (this.cycle.runTime < GFS_S3_ARCHIVE_START) {
       throw new Error(
-        `NOAA AWS GFS analysis Open Data begins at ${GFS_S3_ARCHIVE_START.toISOString()}`,
+        `NOAA AWS GFS forecast Open Data begins at ${GFS_S3_ARCHIVE_START.toISOString()}`,
+      );
+    }
+    if (analysisTime.getTime() !== this.cycle.validTime.getTime()) {
+      throw new Error(
+        `AWS GFS forecast source expected validTime ${this.cycle.validTime.toISOString()}, received ${analysisTime.toISOString()}`,
       );
     }
   }
+}
 
-  private narrowAreaSelector(
-    selector: HistoricalAnalysisSelector,
-    verticalCoordinate: number | undefined,
-  ): HistoricalAnalysisSelector {
-    if (verticalCoordinate === undefined || selector.kind === "isobaric") return selector;
-    if (selector.gribLevel !== undefined) return selector;
-    return {
-      ...selector,
-      gribLevel: `${verticalCoordinate} m above ground`,
-    };
-  }
+function narrowAreaSelector(
+  selector: HistoricalAnalysisSelector,
+  verticalCoordinate: number | undefined,
+): HistoricalAnalysisSelector {
+  if (verticalCoordinate === undefined || selector.kind === "isobaric") return selector;
+  if (selector.gribLevel !== undefined) return selector;
+  return {
+    ...selector,
+    gribLevel: `${verticalCoordinate} m above ground`,
+  };
 }

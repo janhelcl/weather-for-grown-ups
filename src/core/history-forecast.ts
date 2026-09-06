@@ -6,6 +6,7 @@ import {
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
 import {
+  CachedGfsAnalysisFileStore,
   CachedNceiGfsForecastHistorySource,
   CachedRdaGfsForecastHistorySource,
 } from "../cache/historical-gfs-cache.js";
@@ -24,7 +25,14 @@ import {
   type GfsGrid,
 } from "../schema/gfs-grid.js";
 import { ArchivedGfsForecastAnalysisAdapter } from "../sources/archived-gfs-analysis-adapter.js";
-import type { ArchivedGfsForecastDataSource } from "../sources/archived-gfs-forecast.js";
+import type {
+  ArchivedGfsForecastAccess,
+  ArchivedGfsForecastDataSource,
+  ArchivedGfsForecastProvider,
+  ArchivedGfsForecastSource,
+} from "../sources/archived-gfs-forecast.js";
+import type { HistoricalAnalysisSource } from "../sources/gfs-analysis.js";
+import { RoutedGfs0p50ForecastAnalysisSource } from "../sources/gfs-forecast-routed.js";
 import {
   NCEI_GFS_GRID4_FORECAST_START,
   NceiGfsForecastHistorySource,
@@ -33,6 +41,7 @@ import {
   RDA_GFS_0P25_FORECAST_START,
   RdaGfsForecastHistorySource,
 } from "../sources/rda-gfs-forecast-history.js";
+import { GFS_S3_ARCHIVE_START } from "../sources/gfs-s3.js";
 import { loadHistoricalProfileData } from "./history.js";
 import type { GridPoint } from "../types/decoded.js";
 
@@ -59,8 +68,8 @@ export interface ArchivedGfsForecastProfileResult {
   };
   levels: HistoricalProfileResult["levels"];
   source: {
-    provider: "NOAA NCEI" | "NCAR GDEX";
-    access: "ncei_thredds_ncss" | "gdex_thredds_ncss";
+    provider: ArchivedGfsForecastProvider;
+    access: ArchivedGfsForecastAccess;
     dataset: string;
     cacheHit: boolean;
   };
@@ -69,31 +78,49 @@ export interface ArchivedGfsForecastProfileResult {
 export interface ArchivedGfsForecastProfileServiceOptions {
   cacheDir?: string;
   nceiAccessPolicy?: UpstreamAccessPolicy;
+  awsAccessPolicy?: UpstreamAccessPolicy;
   gdexAccessPolicy?: UpstreamAccessPolicy;
   source?: ArchivedGfsForecastDataSource;
   rdaSource?: ArchivedGfsForecastDataSource;
+  routed0p50?: HistoricalAnalysisSource;
+  fetchFn?: typeof fetch;
   now?: () => Date;
 }
 
 export class ArchivedGfsForecastProfileService {
   private readonly nceiSource: ArchivedGfsForecastDataSource;
   private readonly rdaSource: ArchivedGfsForecastDataSource;
+  private readonly nceiAccessPolicy: UpstreamAccessPolicy;
+  private readonly awsAccessPolicy: UpstreamAccessPolicy;
+  private readonly fileStore: CachedGfsAnalysisFileStore;
+  private readonly injectedNcei: boolean;
+  private readonly routed0p50: HistoricalAnalysisSource | undefined;
+  private readonly fetchFn: typeof fetch | undefined;
   private readonly now: () => Date;
 
   constructor(options: ArchivedGfsForecastProfileServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
-    const nceiAccessPolicy = options.nceiAccessPolicy
+    this.nceiAccessPolicy = options.nceiAccessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.nceiThredds);
+    this.awsAccessPolicy = options.awsAccessPolicy
+      ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.noaaAws);
     const gdexAccessPolicy = options.gdexAccessPolicy
       ?? new FileAccessPolicy(join(cacheDir, "state"), UPSTREAM_ACCESS_POLICIES.gdex);
+    this.injectedNcei = options.source !== undefined;
     this.nceiSource = options.source ?? new CachedNceiGfsForecastHistorySource(
       join(cacheDir, "ncei-forecast-history"),
-      new NceiGfsForecastHistorySource({ limiter: nceiAccessPolicy }),
+      new NceiGfsForecastHistorySource({
+        limiter: this.nceiAccessPolicy,
+        ...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn }),
+      }),
     );
     this.rdaSource = options.rdaSource ?? new CachedRdaGfsForecastHistorySource(
       join(cacheDir, "rda-forecast-history"),
       new RdaGfsForecastHistorySource({ limiter: gdexAccessPolicy }),
     );
+    this.fileStore = new CachedGfsAnalysisFileStore(join(cacheDir, "gfs-forecast-fileserver"));
+    this.routed0p50 = options.routed0p50;
+    this.fetchFn = options.fetchFn;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -111,23 +138,13 @@ export class ArchivedGfsForecastProfileService {
         `GFS ${grid} forecast history begins at ${minimumTime.toISOString()} for this archive`,
       );
     }
-    const source = grid === "0p50" ? this.nceiSource : this.rdaSource;
-    const provenance = grid === "0p50"
-      ? { provider: "NOAA NCEI" as const, access: "ncei_thredds_ncss" as const }
-      : { provider: "NCAR GDEX" as const, access: "gdex_thredds_ncss" as const };
 
     const validTime = new Date(query.runTime.getTime() + forecastHour * 60 * 60 * 1_000);
     if (validTime > this.now()) throw new Error("Archived GFS forecast validTime must not be in the future");
 
-    const adapter = new ArchivedGfsForecastAnalysisAdapter({
-      source,
-      runTime: query.runTime,
-      forecastHour,
-      validTime,
-      ...provenance,
-    });
+    const source = this.analysisSource(grid, query.runTime, forecastHour, validTime);
     const loaded = await loadHistoricalProfileData({
-      source: adapter,
+      source,
       analysisTime: validTime,
       latitude: query.latitude,
       longitude: query.longitude,
@@ -151,10 +168,59 @@ export class ArchivedGfsForecastProfileService {
       },
       levels: loaded.levels,
       source: {
-        ...provenance,
+        provider: firstResponse.provider,
+        access: firstResponse.access,
         dataset: firstResponse.dataset,
         cacheHit: loaded.responses.every((response) => response.cacheHit),
       },
     };
   }
+
+  private analysisSource(
+    grid: GfsGrid,
+    runTime: Date,
+    forecastHour: number,
+    validTime: Date,
+  ): HistoricalAnalysisSource {
+    if (grid === "0p25") {
+      return new ArchivedGfsForecastAnalysisAdapter({
+        source: this.rdaSource,
+        runTime,
+        forecastHour,
+        validTime,
+        provider: "NCAR GDEX",
+        access: "gdex_thredds_ncss",
+      });
+    }
+    if (this.injectedNcei) {
+      return new ArchivedGfsForecastAnalysisAdapter({
+        source: this.nceiSource,
+        runTime,
+        forecastHour,
+        validTime,
+        provider: "NOAA NCEI",
+        access: "ncei_thredds_ncss",
+      });
+    }
+    if (this.routed0p50 !== undefined) return this.routed0p50;
+    return new RoutedGfs0p50ForecastAnalysisSource(
+      { runTime, forecastHour, validTime },
+      {
+        nceiAccessPolicy: this.nceiAccessPolicy,
+        awsAccessPolicy: this.awsAccessPolicy,
+        ncssForecastSource: this.nceiSource as ArchivedGfsForecastSource,
+        fileStore: this.fileStore,
+        ...(this.fetchFn === undefined ? {} : { fetchFn: this.fetchFn }),
+      },
+    );
+  }
+}
+
+export function archivedGfs0p50SourceMetadata(runTime: Date): {
+  provider: "NOAA NCEI" | "NOAA AWS Open Data";
+  access: "ncei_thredds_ncss" | "ncei_thredds_fileserver" | "s3_range";
+} {
+  return runTime >= GFS_S3_ARCHIVE_START
+    ? { provider: "NOAA AWS Open Data", access: "s3_range" }
+    : { provider: "NOAA NCEI", access: "ncei_thredds_fileserver" };
 }

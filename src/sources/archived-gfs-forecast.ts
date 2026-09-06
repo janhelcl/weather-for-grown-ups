@@ -34,3 +34,23 @@ export interface ArchivedGfsForecastAreaDataSource {
 
 export type ArchivedGfsForecastSource =
   ArchivedGfsForecastDataSource & ArchivedGfsForecastAreaDataSource;
+
+export const ARCHIVED_GFS_FORECAST_PROVIDERS = [
+  "NOAA NCEI",
+  "NOAA AWS Open Data",
+  "NCAR GDEX",
+] as const;
+export type ArchivedGfsForecastProvider = (typeof ARCHIVED_GFS_FORECAST_PROVIDERS)[number];
+
+export const ARCHIVED_GFS_FORECAST_ACCESS = [
+  "ncei_thredds_ncss",
+  "ncei_thredds_fileserver",
+  "gdex_thredds_ncss",
+  "s3_range",
+] as const;
+export type ArchivedGfsForecastAccess = (typeof ARCHIVED_GFS_FORECAST_ACCESS)[number];
+
+export interface ArchivedGfsForecastProvenance {
+  provider: ArchivedGfsForecastProvider;
+  access: ArchivedGfsForecastAccess;
+}

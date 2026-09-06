@@ -96,7 +96,7 @@ export const historicalForecastSkillResultSchema = z.object({
   source: z.object({
     forecastDataset: z.literal("gfs"),
     referenceDataset: z.literal("gfs-analysis"),
-    provider: z.literal("NOAA NCEI"),
+    provider: z.union([z.literal("NOAA NCEI"), z.literal("NOAA AWS Open Data")]),
     grid: z.literal("0p50"),
   }),
   caveat: z.literal("Skill statistics compare archived GFS forecasts with later GFS model analyses, not direct observations; each statistic reports its own sample count, failures remain explicit, and historical GFS model versions changed over time"),

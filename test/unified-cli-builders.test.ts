@@ -488,4 +488,23 @@ describe("unified CLI request builders", () => {
       kind: "mystery",
     })).toThrow("Expected --kind");
   });
+
+  it("defaults field-only datasets to temperature_2m instead of a pressure slice", () => {
+    const peArome = buildUnifiedQuery({
+      dataset: "pe-arome",
+      lat: 50.08,
+      lon: 14.43,
+      at: "2026-09-06T12:00:00Z",
+    });
+    expect(peArome.selection).toEqual({ fields: ["temperature_2m"] });
+    expect(queryAtmosphereSchema.parse(peArome).selection).toEqual({ fields: ["temperature_2m"] });
+
+    const arome = buildUnifiedQuery({
+      dataset: "arome",
+      lat: 48.7,
+      lon: 2.35,
+      at: "2026-09-06T12:00:00Z",
+    });
+    expect(arome.selection).toEqual({ fields: ["temperature_2m"] });
+  });
 });

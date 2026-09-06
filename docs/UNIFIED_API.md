@@ -8,7 +8,7 @@ WFG's public API is organized around a small operation vocabulary and a growing 
 
 | Public ID | Internal dataset | Role | Result semantics |
 | --- | --- | --- | --- |
-| `gfs` | `gfs_0p25` / `gfs_0p50` operational; grid-matched 0.25° GDEX or 0.5° NCEI archive for old explicit runs | forecast | deterministic physics model |
+| `gfs` | `gfs_0p25` / `gfs_0p50` operational; grid-matched 0.25° GDEX or 0.5° Grid 4 archive (AWS from 2021, NCEI before) for old explicit runs | forecast | deterministic physics model |
 | `aigfs` | `aigfs_0p25` NOAA operational AIGFS | forecast | deterministic AI model |
 | `aigefs` | `aigefs_0p25` NOAA operational AIGEFS | forecast | 31-member AI ensemble |
 | `hgefs` | `hgefs_0p25` NOAA operational hybrid population | forecast | 62-member GEFS + AIGEFS hybrid ensemble |
@@ -206,11 +206,11 @@ Run selection is capability-driven rather than syntactically pretending every fo
 The caller always asks for an atmospheric state valid at a time. Dataset-native time semantics stay in the result:
 
 - forecasts retain initialization/run and lead;
-- an old explicit GFS run transparently resolves to the archive matching `forecast.grid`: NCAR/GDEX d084001 for `0p25`, NOAA NCEI Grid 4 for `0p50`;
+- an old explicit GFS run transparently resolves to the archive matching `forecast.grid`: NCAR/GDEX d084001 for `0p25`, 0.5° Grid 4 for `0p50` (NOAA AWS Open Data from 2021-01-01, NCEI fileServer/NCSS before that);
 - historical analysis retains analysis time;
 - WFG never invents a forecast run/lead for analysis data.
 
-Archived forecasts preserve grid-native historical semantics. The 0.25° NCAR/GDEX d084001 archive begins 2015-01-15 and exposes 3-hour output through f240 followed by 12-hour output from f252 through f384. The 0.5° NOAA NCEI Grid 4 archive begins 2006-10-10 and exposes 3-hour output through f192. Direct online availability can vary; unavailable archive files fail clearly rather than being substituted with a different grid or product.
+Archived forecasts preserve grid-native historical semantics. The 0.25° NCAR/GDEX d084001 archive begins 2015-01-15 and exposes 3-hour output through f240 followed by 12-hour output from f252 through f384. The 0.5° Grid 4 archive begins 2006-10-10 and exposes 3-hour output through f192; recent cycles use the same NOAA AWS Open Data 0.50° objects as operational GFS, so `verify` against `gfs-analysis` does not depend on NCEI NCSS for post-2020 dates. Direct online availability can vary; unavailable archive files fail clearly rather than being substituted with a different grid or product.
 
 ### Selection
 
@@ -317,7 +317,7 @@ What GFS predicted in the past uses the same `gfs` dataset with an explicit old 
 }
 ```
 
-This means “what did the 2019-12-24 12Z GFS 0.25° run predict for 2019-12-26 18Z?” The result keeps `dataset: "gfs"` but exposes `internalDatasetId: "gfs_0p25_forecast_archive"` and NCAR/GDEX provenance. Select `grid: "0p50"` to query the NCEI Grid 4 archive instead.
+This means “what did the 2019-12-24 12Z GFS 0.25° run predict for 2019-12-26 18Z?” The result keeps `dataset: "gfs"` but exposes `internalDatasetId: "gfs_0p25_forecast_archive"` and NCAR/GDEX provenance. Select `grid: "0p50"` to query the 0.5° Grid 4 archive instead (AWS for 2021+, NCEI for earlier cycles).
 
 The same atmospheric question against historical analysis:
 

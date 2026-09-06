@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { HistoricalForecastVerificationService } from "../src/core/history-verification.js";
 import { HistoricalProfileService } from "../src/core/history.js";
 
 const POINT = { latitude: 50.08, longitude: 14.43 };
@@ -40,6 +41,20 @@ assert.equal(historical.source.access, "ncei_thredds_fileserver");
 assert.match(historical.source.dataset, /gfsanl_4_20170509_1200_000\.grb2$/);
 assertProfile(historical.levels);
 
+const verification = await new HistoricalForecastVerificationService().verify({
+  ...POINT,
+  validTime: recentAnalysisTime,
+  leadHours: 12,
+  variables: ["temperature"],
+  pressureLevelsHpa: [850],
+});
+assert.equal(verification.source.provider, "NOAA AWS Open Data");
+assert.equal(verification.source.access, "s3_range");
+assert.match(verification.forecast.dataset, /gfs\.t[0-9]{2}z\.pgrb2\.0p50\.f012$/);
+assert.match(verification.analysis.dataset, /gfs\.t00z\.pgrb2\.0p50\.f000$/);
+assert.equal(verification.pressureLevels[0]?.changes[0]?.field, "temperatureC");
+assert(Number.isFinite(verification.pressureLevels[0]?.changes[0]?.delta));
+
 console.log(JSON.stringify({
   checkedAt: new Date().toISOString(),
   contract: "gfs_analysis_routing",
@@ -50,6 +65,13 @@ console.log(JSON.stringify({
   historical: {
     analysisTime: historical.analysisTime,
     source: historical.source,
+  },
+  verify: {
+    validTime: verification.validTime,
+    forecastRun: verification.forecastRun,
+    forecastDataset: verification.forecast.dataset,
+    analysisDataset: verification.analysis.dataset,
+    source: verification.source,
   },
 }, null, 2));
 

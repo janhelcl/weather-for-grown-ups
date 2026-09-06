@@ -61,6 +61,7 @@ export class HistoricalForecastSkillService {
     const sampled = evenlySampleTimes(eligible, query.maxValidTimes);
     const evaluations: HistoricalForecastSkillResult["evaluations"] = [];
     const accumulators = new Map<string, ForecastSkillAccumulator>();
+    let provider: "NOAA NCEI" | "NOAA AWS Open Data" = "NOAA NCEI";
 
     for (const validTime of sampled) {
       for (const leadHours of query.leadHours) {
@@ -80,6 +81,7 @@ export class HistoricalForecastSkillService {
             leadHours,
             gridPoint: result.gridPoint,
           });
+          provider = result.source.provider;
           accumulateSkillPressureLevels(accumulators, leadHours, result.pressureLevels);
         } catch (error) {
           if (error instanceof z.ZodError) throw error;
@@ -129,7 +131,7 @@ export class HistoricalForecastSkillService {
       source: {
         forecastDataset: "gfs",
         referenceDataset: "gfs-analysis",
-        provider: "NOAA NCEI",
+        provider,
         grid: "0p50",
       },
       caveat: CAVEAT,

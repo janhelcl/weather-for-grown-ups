@@ -1,5 +1,11 @@
 # Releases
 
+## Unreleased
+
+Archived 0.5° GFS forecasts — including `verify` against `gfs-analysis` — use the same era routing as analysis: NOAA AWS Open Data `.idx` byte ranges from 2021-01-01, NCEI fileServer for earlier point cycles, and NCSS only as fallback or for pre-2021 area subsets. A recent 12-hour lead no longer depends on NCEI NCSS.
+
+`wfg query` / `diagnose` / composition commands without `--json` print catalog-style tables instead of `util.inspect`. Field-only datasets (`arome`, `pe-arome`) default to `--fields temperature_2m` so a bare query reaches the credential/capability check instead of a GFS-shaped pressure-variable rejection.
+
 ## v0.5.2 — 2026-09-06
 
 ### Actionable public failures

@@ -20,6 +20,10 @@ import {
   deriveProfileDiagnosticsFromLevels,
 } from "./pressure-diagnostics.js";
 import { InvalidRequestError } from "../failure.js";
+import type {
+  ArchivedGfsForecastAccess,
+  ArchivedGfsForecastProvider,
+} from "../sources/archived-gfs-forecast.js";
 
 const ARCHIVE_DIAGNOSTIC_CAVEAT =
   "Diagnostics are derived from archived GFS forecasts; model versions changed over time and this is not a homogeneous reforecast dataset" as const;
@@ -34,8 +38,8 @@ interface ArchivedPointState {
   levels?: ProfileLevel[];
   fields?: NonIsobaricFieldResult[];
   source: {
-    provider: "NOAA NCEI" | "NCAR GDEX";
-    access: "ncei_thredds_ncss" | "gdex_thredds_ncss";
+    provider: ArchivedGfsForecastProvider;
+    access: ArchivedGfsForecastAccess;
     dataset: string;
     cacheHit: boolean;
   };

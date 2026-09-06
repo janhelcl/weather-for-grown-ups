@@ -38,6 +38,7 @@ import {
   parseNumberList,
   parseStringList,
 } from "./shared.js";
+import { printAtmosphericResult } from "./print-result.js";
 
 const DEFAULT_UNIFIED_VARIABLES =
   "temperature,relative_humidity,u_wind,v_wind,geopotential_height";
@@ -382,7 +383,7 @@ export function buildUnifiedQuery(options: Record<string, any>): QueryAtmosphere
   const dataset = parseDataset(options.dataset);
   const geometry = parseGeometry(options);
   const time = parseTime(options);
-  const selection = parseSelection(options);
+  const selection = parseSelection(options, dataset);
 
   return {
     dataset,
@@ -548,15 +549,25 @@ function parseTime(options: Record<string, any>): QueryAtmosphereInput["time"] {
   };
 }
 
-function parseSelection(options: Record<string, any>): QueryAtmosphereInput["selection"] {
+function parseSelection(
+  options: Record<string, any>,
+  dataset?: PublicAtmosphericDataset,
+): QueryAtmosphereInput["selection"] {
   const fields = options.fields === undefined ? undefined : parseStringList(options.fields);
   const explicitPressure = options.vars !== undefined || options.levels !== undefined;
   if (fields !== undefined && !explicitPressure) return { fields };
+  if (!explicitPressure && fields === undefined && isFieldOnlyDataset(dataset)) {
+    return { fields: ["temperature_2m"] };
+  }
   return {
     variables: parseStringList(options.vars ?? DEFAULT_UNIFIED_VARIABLES),
     pressureLevelsHpa: parseNumberList(options.levels ?? DEFAULT_LEVELS, "--levels"),
     ...(fields === undefined ? {} : { fields }),
   };
+}
+
+function isFieldOnlyDataset(dataset: PublicAtmosphericDataset | undefined): boolean {
+  return dataset === "arome" || dataset === "pe-arome";
 }
 
 function forecastInput(
@@ -664,9 +675,5 @@ function reportCliProgress(progress: AtmosphericStepProgress): void {
 }
 
 function printResult(result: unknown, json: boolean): void {
-  if (json) {
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-  console.dir(result, { depth: null });
+  printAtmosphericResult(result, json);
 }
