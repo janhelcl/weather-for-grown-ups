@@ -1,21 +1,23 @@
 # Historical GFS mixed fields
 
-WFG exposes a deliberately bounded subset of NOAA NCEI GFS Grid 4 analysis fields using the **same field IDs and result vocabulary as operational GFS** where the historical quantity is physically comparable.
+WFG exposes a deliberately bounded subset of GFS Grid 4 analysis fields using the **same canonical field IDs and result vocabulary as operational GFS** where the historical quantity is physically comparable.
 
-The source is GFS model analysis on the historical 0.5° Grid 4 archive. It is not a direct observation and the long GFS archive is not a homogeneous climatological reanalysis. Field availability can change across model eras; WFG fails explicitly when a requested archived field is absent rather than silently substituting another product.
+The dataset is `gfs-analysis`: GFS model analysis on the historical 0.5° Grid 4 product. It is not a direct observation and the long record is not a homogeneous climatological reanalysis. Field availability can change across model eras; WFG fails explicitly when a requested archived field is absent instead of substituting another product.
+
+Source transport is not part of the field contract. The same request may resolve through NOAA AWS Open Data, NCEI fileServer or NCEI NCSS according to era and geometry; returned provenance records the route that actually served it. See [HISTORY.md](HISTORY.md#one-historical-product-several-transports).
 
 ## Supported fields
 
 Current historical non-isobaric IDs are:
 
-- surface: `surface_pressure`, `surface_geopotential_height`, `surface_temperature`, `surface_cape`, `surface_cin`
-- 2 m: `temperature_2m`, `relative_humidity_2m`, `specific_humidity_2m`, `dew_point_2m`
-- 10 m wind: `u_wind_10m`, `v_wind_10m`, `wind_10m`
-- 80 m: `temperature_80m`, `specific_humidity_80m`, `pressure_80m`, `u_wind_80m`, `v_wind_80m`, `wind_80m`
-- 100 m: `temperature_100m`, `u_wind_100m`, `v_wind_100m`, `wind_100m`
-- column: `precipitable_water`, `total_column_cloud_water`, `column_relative_humidity`, `total_column_ozone`
+- surface: `surface_pressure`, `surface_geopotential_height`, `surface_temperature`, `surface_cape`, `surface_cin`;
+- 2 m: `temperature_2m`, `relative_humidity_2m`, `specific_humidity_2m`, `dew_point_2m`;
+- 10 m wind: `u_wind_10m`, `v_wind_10m`, `wind_10m`;
+- 80 m: `temperature_80m`, `specific_humidity_80m`, `pressure_80m`, `u_wind_80m`, `v_wind_80m`, `wind_80m`;
+- 100 m: `temperature_100m`, `u_wind_100m`, `v_wind_100m`, `wind_100m`;
+- column: `precipitable_water`, `total_column_cloud_water`, `column_relative_humidity`, `total_column_ozone`.
 
-Derived wind uses the same U/V wind kernel as operational GFS. Returned fields use the standard WFG structure:
+Derived wind uses the same U/V wind kernel as operational GFS. Returned fields use the normal WFG structure:
 
 ```json
 {
@@ -29,11 +31,11 @@ Derived wind uses the same U/V wind kernel as operational GFS. Returned fields u
 }
 ```
 
-Historical analysis fields are currently **instantaneous**. Forecast-window products are not silently reinterpreted as analysis state. In particular, `total_precipitation` is deliberately not exposed by this analysis primitive because its accumulation semantics are different from an f000 analysis state.
+Historical analysis fields are currently **instantaneous**. Forecast-window products are not reinterpreted as analysis state. In particular, `total_precipitation` is deliberately absent from this analysis primitive because its accumulation semantics differ from an f000 analysis state.
 
-The modern operational GFS 20/30/40/50 m wind ladder is also not advertised for history merely for API symmetry. The archived Grid 4 product has different height availability, including 10/80/100 m in the supported era.
+The modern operational GFS 20/30/40/50 m wind ladder is also not advertised for history merely for API symmetry. The Grid 4 product has a different historical height inventory, including the supported 10/80/100 m fields above.
 
-## Single historical mixed-field query
+## Single mixed-field query
 
 CLI:
 
@@ -51,9 +53,9 @@ wfg query \
 
 MCP tool: `query_atmosphere`.
 
-Pressure variables are optional. If supplied, `variables` and `pressureLevelsHpa` must be supplied together. This allows one operation to return, for example, an 850/700/500 hPa profile together with 2 m temperature, 10 m wind and PWAT.
+Pressure variables are optional. If supplied, `variables` and `pressureLevelsHpa` must be supplied together. One operation can therefore return an 850/700/500 hPa profile together with 2 m temperature, 10 m wind and PWAT.
 
-NCEI variables that use compatible vertical axes are grouped into the same NCSS request. Incompatible axes are fetched separately and merged locally. All archive reads remain serial under WFG's file-backed NOAA courtesy limiter.
+Raw dependencies with compatible historical axes are grouped; incompatible axes are fetched separately and merged locally before shared derivations run. That composition is expressed through the provider-neutral historical source contract rather than an NCSS-specific request model.
 
 ## Historical mixed-field time series
 
@@ -76,12 +78,12 @@ wfg query \
 
 MCP tool: `query_atmosphere`.
 
-The time series uses the same bounds as historical pressure-profile time series: default `maxSteps=8`, hard maximum `16`. Only native 00/06/12/18 UTC analysis cycles are sampled, selected cycles are fetched serially, and each result step retains its exact NCEI dataset path and cache-hit flag.
+The time series uses the standard interactive-history bounds: default `maxSteps=8`, hard maximum `16`. Only native 00/06/12/18 UTC analysis cycles are sampled. Selected steps are composed serially, and each step keeps source/object provenance and cache state from the route that actually served it.
 
-This surface is intended for questions such as:
+This surface is useful for questions such as:
 
 - How did 2 m temperature, 10 m wind and the 850 hPa profile evolve across a past event?
 - How did PWAT and surface CAPE differ across comparable 12 UTC historical days?
 - What was the near-surface wind environment during a historical pressure-profile setup?
 
-For large multi-year corpus construction, use `wfg index build` / `wfg index backfill` instead of turning the bounded time-series operation into an archive scan.
+For multi-year corpus construction, use `wfg index build` / `wfg index backfill` instead of turning the bounded interactive query into an archive scan.
