@@ -1,33 +1,62 @@
 # Historical GFS analysis and verification
 
-WFG treats historical NOAA GFS Grid 4 analysis as another dataset in the same atmospheric query engine used by operational GFS and GEFS. Shared operations and meteorological kernels are reused where the archived quantity is physically comparable, while analysis time, 0.5° sampling, NCEI provenance and archive-access constraints remain explicit. History also adds analysis-native composition such as analog search and archived forecast verification.
+WFG treats historical GFS state as part of the same atmospheric engine as operational forecasts while keeping the scientific meaning explicit.
 
-## What this is
+The two important identities are:
 
-The history surface exposes **GFS Grid 4 fields on the 0.5° grid**. Analysis history uses exact 00, 06, 12 and 18 UTC cycles; NCEI's Grid 4 analysis archive begins in 2007.
+- `dataset: "gfs-analysis"` — the later assimilated/model state on the historical 0.5° Grid 4 product;
+- `dataset: "gfs"` with an old explicit `forecast.run` — an archived operational forecast, still identified publicly as GFS.
 
-An analysis is the model's assimilated atmospheric state at the analysis time. It is useful for questions such as:
+History is **not** a direct observation surface and the long GFS record is **not a homogeneous climatological reanalysis**. Model and assimilation changes across the record remain a scientific caveat regardless of which transport serves the bytes.
 
-- What did the GFS analysis show over Prague at 850 hPa on a historical day?
-- What did the vertical temperature, humidity and wind profile look like during a past event?
-- Which already materialized historical days had the most similar atmospheric profile over Prague?
-- What did GFS predict 24, 48 or 72 hours before a known event, and how did that forecast differ from the later analysis?
+## One historical product, several transports
 
-It is **not** a direct observation, and the long GFS record is **not a homogeneous climatological reanalysis**. Model versions, assimilation systems and available fields changed over time. WFG labels the products explicitly rather than presenting them as climatology or observations.
+Grid 4 analysis semantics are provider-neutral above the source layer. WFG routes the same `gfs-analysis` request by era and operation:
 
-## Supported variables
+- **2021-01-01 onward:** NOAA AWS Open Data 0.50° `f000` with `.idx` byte-range access;
+- **2007–2020 point/profile access:** NCEI THREDDS fileServer full-file download plus local decode;
+- **2007–2020 area access:** NCEI NCSS, because fileServer cannot subset a geographic box;
+- AWS/fileServer routes may fall back to NCSS for eligible data/upstream availability failures.
 
-The history surface intentionally uses a stable subset of the long archive:
+Public history semantics do not change when the route changes. Results report the provider/access path that actually served the request, along with the provider dataset/object identity and cache status where applicable.
 
-- raw/stable archive quantities: `temperature`, `relative_humidity`, `u_wind`, `v_wind`, `geopotential_height`, `vertical_velocity`, `absolute_vorticity`, `cloud_water_mixing_ratio`, `ozone_mixing_ratio`;
-- moisture reconstructed where needed: `specific_humidity`;
-- shared deterministic derivations: `wind`, `dew_point`, `potential_temperature`, `mixing_ratio`, `virtual_temperature`, `air_density`, `wet_bulb_temperature`, and `equivalent_potential_temperature`.
+The same Grid 4 routing state machine is reused by archived 0.5° GFS forecasts. Archived 0.25° GFS forecasts use the separate NCAR/GDEX product. See [ARCHITECTURE.md](ARCHITECTURE.md#important-routing-examples) for routing ownership and [UNIFIED_API.md](UNIFIED_API.md) for the public request contract.
 
-A requested pressure level must actually exist for every requested variable in that historical file. Older GFS files do not expose every modern pressure level for every field; WFG reports missing fields explicitly instead of silently interpolating them.
+## Analysis time semantics
 
-Older Grid 4 files also use different pressure axes for some variables. WFG groups compatible variables into one NCSS request and fetches incompatible axes separately before merging them by pressure level. For example, temperature, humidity, wind and geopotential height can share the full pressure profile while vertical velocity and absolute vorticity may require their own archive requests.
+`gfs-analysis` has no forecast initialization or lead axis. Its native time coordinate is an exact analysis cycle at:
 
-## Single analysis
+- 00 UTC;
+- 06 UTC;
+- 12 UTC;
+- 18 UTC.
+
+The online Grid 4 analysis surface begins in 2007. WFG does not synthesize a forecast run or lead hour for analysis data.
+
+## Supported pressure-profile variables
+
+The historical profile surface intentionally uses a stable subset of the long record.
+
+Raw/archive-backed quantities include:
+
+- `temperature`;
+- `relative_humidity`;
+- `u_wind`, `v_wind`;
+- `geopotential_height`;
+- `vertical_velocity`;
+- `absolute_vorticity`;
+- `cloud_water_mixing_ratio`;
+- `ozone_mixing_ratio`.
+
+WFG reconstructs `specific_humidity` where needed and exposes shared deterministic derivations such as `wind`, `dew_point`, `potential_temperature`, `mixing_ratio`, `virtual_temperature`, `air_density`, `wet_bulb_temperature`, and `equivalent_potential_temperature`.
+
+A requested pressure level must exist for the required raw quantity in that historical product. Older GFS files do not expose every modern pressure level/field combination. WFG fails explicitly instead of silently interpolating a missing archive surface.
+
+Different historical variables can use different pressure axes. The history service groups compatible raw dependencies, fetches the required source slices, and merges them by pressure level before shared derivations run. That composition is source-neutral; it is not an NCSS-specific public contract.
+
+For non-isobaric history fields, see [HISTORY_FIELDS.md](HISTORY_FIELDS.md). For parcel diagnostics, see [HISTORY_PARCEL.md](HISTORY_PARCEL.md).
+
+## Query one analysis
 
 ### CLI
 
@@ -41,8 +70,6 @@ wfg query \
   --levels 1000,925,850,700,500 \
   --json
 ```
-
-`--at` must be an exact GFS analysis cycle at 00, 06, 12 or 18 UTC.
 
 ### MCP
 
@@ -64,20 +91,16 @@ Tool: `query_atmosphere`
 }
 ```
 
-The result includes the requested point, sampled 0.5° grid point, normalized profile values, exact NCEI dataset path, cache status, and the analysis/climatology caveat.
+The result preserves the requested point, sampled 0.5° Grid 4 point, normalized profile, resolved source provenance and the analysis/climatology caveat.
 
-## Historical time series
+## Historical ranges
 
-Historical ranges are deliberately bounded because the NCEI archive is file-oriented: each selected analysis cycle is a separate immutable archive file. WFG exposes two controls rather than allowing an unbounded archive scan:
+Interactive history is deliberately bounded. Range queries expose:
 
-- `cycleHoursUtc` / `--cycles` chooses which native 00, 06, 12 and 18 UTC analyses to sample;
-- `maxSteps` / `--max-steps` caps the number of selected analyses before any archive request starts.
+- `hoursUtc` in MCP / `--cycles` in CLI to select native 00/06/12/18 UTC analysis hours;
+- `maxSteps` / `--max-steps` to cap the selected analyses before source access begins.
 
-The default maximum is **8 analyses** and the hard maximum is **16**. Sparse selection is useful for comparable daily samples; choosing only 12 UTC gives one profile per day instead of four.
-
-Archive cycles are fetched serially. Each step keeps its own exact archive dataset path and cache-hit flag.
-
-### CLI
+The default maximum is **8 analyses** and the hard maximum is **16**. Selecting only 12 UTC is therefore a convenient way to take one comparable daily sample.
 
 ```bash
 wfg query \
@@ -93,77 +116,49 @@ wfg query \
   --json
 ```
 
-### MCP
-
-Tool: `query_atmosphere`
+Equivalent MCP time selection:
 
 ```json
 {
-  "dataset": "gfs-analysis",
-  "geometry": {
-    "type": "point",
-    "latitude": 50.08,
-    "longitude": 14.43
-  },
   "time": {
     "from": "2017-05-09T00:00:00Z",
     "to": "2017-05-15T23:59:59Z",
     "hoursUtc": [12],
     "maxSteps": 7
-  },
-  "selection": {
-    "variables": ["temperature", "relative_humidity", "wind", "geopotential_height"],
-    "pressureLevelsHpa": [850, 700, 500]
   }
 }
 ```
 
-## Shared diagnostic and spatial operations
+Selected cycles are composed serially. Each step retains its own source/object identity and cache state; composed results retain the route(s) that actually served the request.
 
-Historical analysis now participates in the same core operation vocabulary as operational data for diagnostic series and bounded spatial composition.
+## Shared spatial and diagnostic operations
 
-### Diagnostic time series
+Historical analysis participates in the same public geometry/diagnostic vocabulary where the archived product can satisfy it.
 
-CLI: `diagnose --dataset gfs-analysis`  
+### Diagnostics
+
+CLI: `wfg diagnose --dataset gfs-analysis ...`  
 MCP: `diagnose_atmosphere`
 
-One selection may be a pressure-layer diagnostic, whole-profile diagnostic, or parcel diagnostic. The same physical kernels are evaluated at each selected 00/06/12/18 UTC analysis cycle. Results use `analysisTime`; WFG does not synthesize forecast initialization or lead-hour fields for analysis data.
+Layer, profile and parcel diagnostics reuse the same physical kernels as deterministic operational data. Diagnostic ranges evaluate those kernels at each selected analysis cycle.
 
 ### Multiple points
 
-CLI: `query --dataset gfs-analysis --point ...`  
-MCP: `query_atmosphere`
-
-Up to **10 points** may be queried at one analysis time. Pressure variables and the supported historical non-isobaric fields can be combined in the same request. Each result preserves requested coordinates, sampled 0.5° grid coordinates, dataset path and cache status.
-
-NCEI Grid 4 access is currently point-oriented. Historical multi-point queries therefore compose **serial NCSS point reads** under the NOAA courtesy limiter. They deliberately do not claim the shared-file reuse semantics available to operational GFS/GEFS on AWS.
+Up to **10 points** can be queried in one historical multi-point request. Pressure variables and supported non-isobaric fields can be combined. WFG composes bounded point requests through the resolved historical source; it does not claim operational-AWS-style shared-slice reuse when the selected historical route cannot provide it.
 
 ### Multiple points over time
 
-CLI: `query --dataset gfs-analysis --point ... --from ... --to ...`  
-MCP: `query_atmosphere`
-
-This composes the same multi-point selection across selected analysis cycles. Both the number of cycles and the total **point × analysis-step** matrix are bounded before archive access begins.
+The same point set can be composed across selected analysis cycles. WFG validates both the number of cycles and the total point × step matrix before archive access begins.
 
 ### Transects
 
-CLI: `query --dataset gfs-analysis --start ... --end ...`  
-MCP: `query_atmosphere`
+Historical transects use the same great-circle interpolation as the forecast datasets and delegate the samples to the historical multi-point primitive. They remain bounded to the historical point limit.
 
-Historical transects use the **same great-circle interpolation** as operational GFS and GEFS, then delegate all samples to the historical multi-point primitive. Because the NCEI path is point-oriented, historical transects are bounded to **10 samples**.
+### Area summaries
 
-### Area statistics
+Area queries operate on one scalar pressure variable or supported field at one analysis time, then reuse the shared deterministic spatial-distribution kernel for mean/min/max and optional percentiles, threshold fractions and extrema locations.
 
-CLI: `query --dataset gfs-analysis --west ... --east ... --south ... --north ...`  
-MCP: `query_atmosphere`
-
-Historical area summaries use **one native NCEI NCSS bbox/grid subset** over the 0.5° Grid 4 analysis. WFG returns the unweighted defined-grid-point mean, minimum and maximum, with optional spatial percentiles, threshold fractions and representative extrema locations using the same distribution kernel as operational deterministic GFS.
-
-Pressure-level selections are raw archive variables at one explicit pressure surface. Height-above-ground fields use the corresponding NCSS vertical coordinate. NCSS may otherwise choose the nearest vertical level, so WFG verifies the coordinate returned in the CSV and fails if it differs from the requested pressure/height instead of silently substituting a neighboring level.
-
-Derived vector/thermodynamic fields are deliberately excluded from this first area surface. Historical area queries therefore make one archive request rather than joining several full grids or fanning out into point requests.
-
-Example:
+The source route is era-dependent: recent areas can be served by AWS; pre-2021 areas require NCSS because NCEI fileServer has no geographic subset API. Exact vertical-level semantics remain enforced; WFG never substitutes a neighboring pressure/height level silently.
 
 ```bash
 wfg query \
@@ -179,25 +174,21 @@ wfg query \
   --json
 ```
 
-The MCP `query_atmosphere` operation accepts the same area geometry, valid time, scalar pressure-variable or field selection, and optional distribution controls.
-
 ## Materialized history and analog search
 
-Analog search does **not** scan years of NCEI files during one agent call. Historical profiles are first materialized into a deliberately simple local JSONL index.
+Analog search does **not** scan years of upstream archive data during one agent call. Historical profiles are materialized into a local JSONL index first.
 
-By default the index lives at:
+Default path:
 
 ```text
 ~/.cache/wfg/history-index/profiles.jsonl
 ```
 
-`WFG_CACHE_DIR` moves the normal WFG cache root. `WFG_HISTORY_INDEX_PATH` can point the history index at a specific JSONL file. The store is append-only; semantic duplicate records are deduplicated when read, and normal materialization avoids appending a duplicate that already exists.
+`WFG_CACHE_DIR` moves the normal cache root. `WFG_HISTORY_INDEX_PATH` can point the history index at a specific JSONL file.
 
-A semantic record key consists of the analysis time, sampled Grid 4 point and normalized variable/pressure selection. Analog candidates must match the target's **same sampled grid point and same selection**. This prevents apparently similar profiles from different locations or different feature sets from being mixed silently.
+A semantic record key includes analysis time, sampled Grid 4 point and normalized variable/pressure selection. Analog candidates must match the same sampled grid point and same selection.
 
-### Build a small index range
-
-`wfg index build` is the bounded interactive primitive. It uses the same 16-analysis maximum as interactive historical time-series queries.
+### Build a small range
 
 ```bash
 wfg index build \
@@ -213,11 +204,9 @@ wfg index build \
   --json
 ```
 
-Index construction is CLI-only administration and is not exposed as an MCP weather tool.
+`index build` uses the same 16-analysis interactive maximum and is CLI-only administration.
 
-### Backfill a large range
-
-`wfg index backfill` is the resumable corpus-building primitive. It can plan up to **50,000 selected cycles**, but each invocation has a separate fetch budget: **16 missing profiles by default, 256 maximum**. Profiles that already exist for the sampled Grid 4 cell and normalized selection are removed from the plan before any archive call.
+### Backfill a larger corpus
 
 ```bash
 wfg index backfill \
@@ -233,20 +222,9 @@ wfg index backfill \
   --json
 ```
 
-Backfill is CLI-only administration and is not exposed as an MCP weather tool.
+Backfill can plan up to **50,000 selected cycles**. One invocation attempts **16 missing profiles by default** and at most **256**. Already materialized records are removed from the plan before upstream access.
 
-The result reports `selectedCycleCount`, `alreadyMaterialized`, fetch attempts, cache hits versus upstream reads, newly materialized profiles, failures, `remaining`, and `nextAnalysisTime`. Repeating the same request therefore resumes from the local index without the caller maintaining a cursor.
-
-Useful controls:
-
-- `dryRun=true` / `--dry-run` plans the corpus without archive access or writes;
-- `order="newest_first"` / `--newest-first` fills recent history first;
-- `continueOnError=true` / `--continue-on-error` records isolated archive gaps and keeps using the current fetch budget;
-- a default run stops on the first profile/archive error so a schema or field-regime problem does not silently burn through hundreds of requests.
-
-This is **resumable bulk orchestration, not parallel archive scraping**. NCEI Grid 4 analysis is file-oriented, so a missing daily 12 UTC profile still requires an exact archive profile request. WFG keeps those reads serial and under the existing NOAA courtesy limiter. Raw NCEI responses are immutable and cached, so an interrupted run can reuse already downloaded responses even if the final JSONL append did not happen.
-
-NOAA ARL also publishes a quarter-degree GFS archive from June 2019, but that dataset is constructed from short-term forecasts rather than GFS analyses. WFG deliberately does not substitute it into the `gfs_grid4_analysis_0p5` index. Preserving provenance and analysis semantics is more important than making a backfill look faster.
+Useful controls are `--dry-run`, `--newest-first`, and `--continue-on-error`. Backfill is resumable bulk orchestration, not parallel archive scraping: source reads remain bounded/serial while immutable source artifacts are cached independently from the final JSONL index.
 
 ### Find analogs
 
@@ -264,21 +242,24 @@ wfg analogs \
 
 MCP tool: `find_analogs`.
 
-Candidate search is local. If the target analysis itself is not materialized and `fetchTargetIfMissing=true`, WFG fetches only that one target profile, stores it, then searches the local candidate set. Set `fetchTargetIfMissing=false` (CLI: `--no-fetch-target`) for a strictly offline lookup.
+Candidate search is local. If the target is missing and target fetching is enabled, WFG fetches only that target profile, materializes it, then searches the local candidates.
 
-Similarity uses **standardized Euclidean distance** over the selected pressure-level values. Feature scales are estimated from the target plus eligible local candidates so temperature, geopotential height and other differently scaled quantities do not compete in raw units. For `wind`, WFG uses the underlying **U/V components**, not direction degrees, avoiding the artificial discontinuity between directions such as 359° and 1°. If `wind` and `u_wind`/`v_wind` are selected together, duplicate component features are included only once.
-
-The returned distance is a model-state similarity score only. It is not a climatological percentile, a probability, or a statement that two days produced the same surface impacts.
+Similarity uses standardized Euclidean distance over the selected profile features. `wind` contributes U/V components rather than direction degrees, avoiding the 359°/1° discontinuity. The returned distance is model-state similarity, not a climatological percentile, probability or impact equivalence.
 
 ## Archived forecast verification
 
-The default verification mode compares **one archived Grid 4 forecast** with the later Grid 4 analysis on the same 0.5° grid point and valid time. This deliberately keeps the primitive atomic: one tool call verifies one lead. An agent can compose calls for 24/48/72-hour comparisons when it actually needs a verification curve, without every request automatically becoming several throttled archive reads.
+`verify_forecast` compares an archived GFS forecast against either:
 
-The input is anchored on the historical `validTime`; WFG derives the forecast run as `validTime - leadHours`. `leadHours` must be a multiple of 6 and is bounded to **0–192 hours**, so the verification target is always a native analysis cycle.
+- `gfs-analysis` — the later Grid 4 model analysis;
+- `igra` — NOAA IGRA v2.2 radiosonde observations.
 
-Changes are reported as **analysis − forecast**. Directional quantities such as wind direction use signed circular-degree differences rather than naïve subtraction.
+The public forecast identity remains `gfs`; archive transport is resolved below the verification service.
 
-### CLI
+### Atomic verification
+
+The request is anchored on historical valid time plus `leadHours`. For GFS-analysis verification, changes are **analysis − forecast**. Directional quantities use signed circular-degree differences.
+
+CLI example:
 
 ```bash
 wfg verify \
@@ -291,9 +272,7 @@ wfg verify \
   --json
 ```
 
-### MCP
-
-Tool: `verify_forecast`
+MCP equivalent:
 
 ```json
 {
@@ -311,29 +290,33 @@ Tool: `verify_forecast`
 }
 ```
 
-The result contains both normalized profiles, exact forecast and analysis dataset paths, cache status and per-pressure-level numeric changes.
+The result keeps forecast and reference provenance independent. A Grid 4 forecast and Grid 4 analysis can therefore resolve through different provider routes without losing which source actually served either side.
 
-NCEI documents Grid 4 forecast history beginning in 2006, but continuously online THREDDS availability is more limited than the analysis archive; older forecast data may require retrieval through NCEI HAS. WFG surfaces this distinction explicitly when an archived forecast is not available online.
+### IGRA reference
 
-With `referenceDataset: "gfs-analysis"`, verification is against **GFS analysis, not observations**. It answers how a forecast differed from the model's later assimilated state and long-period comparisons must account for changes in historical GFS versions.
+With `referenceDataset: "igra"`, WFG selects an explicit or nearby station, retrieves the nominal sounding, samples the archived forecast at the launch location, and compares only requested pressure levels present exactly in the sounding. It does not vertically interpolate sparse observations.
 
-With `referenceDataset: "igra"`, verification instead uses **NOAA IGRA v2.2 radiosonde observations**. WFG selects a nearby or explicit station, retrieves the exact nominal sounding, samples the archived GFS forecast at the sounding launch location, and compares only requested pressure levels that are present exactly in the sounding. It does not vertically interpolate sparse observations. The result reports matched and missing levels, station distance, sounding coordinates, source file and observation-minus-forecast changes. This is a point-observation-versus-model-grid comparison; balloon drift, instrument changes and station relocations remain explicit caveats.
+IGRA verification is observation-minus-forecast and preserves station identity, distance, coordinates and source-file provenance. Balloon drift, instrument changes and station relocations remain observational caveats.
 
-For a bounded skill summary, use a historical range and several lead times in the same `verify_forecast` operation. This range form works with either verification reference. WFG enumerates the selected nominal UTC cycles, samples at most eight times evenly across the period, and permits at most three leads (24 forecast evaluations total). Each successful atomic comparison contributes to lead × pressure × field statistics: sample count, signed bias, MAE and RMSE. Failed archive cases or unavailable soundings remain in the evaluation list, so a field with `count: 5` is never presented as if it had eight comparisons. With `gfs-analysis`, the statistics are native 0.5° Grid 4 analysis-minus-forecast deltas; with `igra`, they are observation-minus-forecast deltas and retain station provenance. Circular wind-direction metrics aggregate shortest signed angular errors.
+### Bounded skill summary
+
+The range form samples at most **8 nominal verification times** and accepts at most **3 leads**, for at most 24 atomic evaluations. Successful cases aggregate count, signed bias, MAE and RMSE by lead × pressure × field. Failed/unavailable cases remain explicit in the evaluation list so sample counts cannot masquerade as complete coverage.
+
+GFS-analysis statistics remain analysis-minus-forecast. IGRA statistics remain observation-minus-forecast. Circular direction errors use shortest signed angular differences.
 
 ## Materialized verification corpus
 
-Small interactive skill summaries deliberately remain bounded because live verification fans out into archived forecast plus reference reads. For larger questions, WFG now materializes **atomic verification cases** into a separate append-only JSONL corpus and aggregates them locally.
+For larger skill questions, WFG materializes atomic verification cases into a separate JSONL corpus.
 
-By default the corpus lives at:
+Default path:
 
 ```text
 ~/.cache/wfg/verification-index/evaluations.jsonl
 ```
 
-Set `WFG_VERIFICATION_INDEX_PATH` to move it. The corpus is separate from the historical-profile analog index because its semantic key includes verification reference, valid time, forecast lead, request point, selection, and IGRA controls where applicable.
+Use `WFG_VERIFICATION_INDEX_PATH` to move it.
 
-Backfill is resumable and NOAA-paced:
+Example backfill:
 
 ```bash
 wfg index verification-backfill \
@@ -350,9 +333,9 @@ wfg index verification-backfill \
   --json
 ```
 
-Each invocation skips already materialized atomic cases before archive access, then attempts only the configured fetch budget. `--dry-run`, `--newest-first`, and `--continue-on-error` mirror the history backfill controls. The planning limit is 250,000 atomic cases, while one invocation attempts at most 256 missing cases.
+Backfill skips already materialized semantic cases before archive access. `--dry-run`, `--newest-first`, and `--continue-on-error` mirror the history-index workflow. The planner is bounded to 250,000 atomic cases; one invocation attempts at most 256 missing cases.
 
-Once materialized, multi-year and seasonal skill summaries make **zero upstream requests**:
+Once materialized, summaries make zero upstream weather requests:
 
 ```bash
 wfg index verification-summary \
@@ -369,25 +352,25 @@ wfg index verification-summary \
   --json
 ```
 
-The summary uses the same lead × pressure × field bias/MAE/RMSE kernel as interactive verification. It reports expected versus materialized evaluation counts and an explicit coverage rate, so a partially backfilled corpus cannot masquerade as a complete seasonal sample. IGRA summaries also report the actual stations represented. Cases materialized once via nearest-station selection and once via an explicit station are deduplicated by their actual verification identity before aggregation.
+The summary reports expected versus materialized evaluation counts and coverage rate. `gfs-analysis` and IGRA records keep separate reference semantics and are never mixed.
 
-The same corpus supports `--reference gfs-analysis`; those records preserve native 0.5° Grid 4 analysis-minus-forecast semantics and are never mixed with observation-minus-forecast IGRA records.
+## Caching and provenance
 
-## Data access and caching
+Historical provider artifacts are immutable and cached locally. The normalized history/verification indexes are separate application-level stores.
 
-WFG uses NCEI's THREDDS NetCDF Subset Service (NCSS). Point/profile queries use grid-as-point mode, requesting selected pressure profiles without downloading full historical GRIB files. Area summaries use NCSS geographic bbox/grid subsets and aggregate the returned cells locally. Compatible point-profile variables are bundled together; variables using different historical pressure axes are fetched separately and merged locally.
+Two rules matter:
 
-Historical responses are cached because archive files are immutable. Cache misses use WFG's file-based NOAA request throttle; the default cooldown remains 11 seconds. Analysis time series, history materialization/backfill and forecast verification are therefore serial rather than bursty.
+1. **Cache identity follows the atmospheric/source product, not one transient endpoint.** A route change must not change the public history meaning.
+2. **Provenance follows the route that actually served the request.** `provider`, `access`, dataset/object identity and cache state are retained rather than assuming every Grid 4 request came from NCEI NCSS.
 
-The analog index remains source-format agnostic at the storage boundary: normalized records are JSONL. A future official bulk **analysis** source could feed the same records without changing analog-search semantics. It must not silently mix forecast, analysis and reanalysis products.
+Provider pacing/retry policy is owned by `access/`. Historical composition stays bounded and avoids bursty archive scans regardless of whether a particular step resolves through AWS, fileServer, NCSS, GDEX or IGRA.
 
-Analysis archive naming changes around June 2020: WFG handles historical `gfsanl_4_...` files and later `gfs_4_...` analysis files. Forecast history similarly handles `model-gfs-004-files-old` before June 2020 and `model-gfs-004-files` afterward.
+## Interpretation caveats
 
-## What comes next
+Use history for model-state reconstruction, analog search and forecast verification. Do not silently promote it into climatology.
 
-Historical analysis is now substantially integrated into the common engine. Natural follow-ons are:
-
-1. anomaly and percentile calculations against a deliberately chosen homogeneous reanalysis/climatology source;
-2. optional seasonal or impact-specific analog filters built on top of the generic model-state metric;
-3. broader station-network and seasonal skill aggregation once a dedicated verification index makes larger samples efficient;
-4. an alternative official bulk analysis transport if NOAA exposes one that preserves the same Grid 4 analysis semantics.
+- `gfs-analysis` is a model analysis, not direct observation.
+- The GFS archive spans multiple model and assimilation versions.
+- Archived operational forecasts are not a homogeneous reforecast population.
+- IGRA is a point observation network, not a gridded analysis.
+- Long-period percentiles, trends and return periods need a deliberately chosen homogeneous reanalysis/climatology source.
