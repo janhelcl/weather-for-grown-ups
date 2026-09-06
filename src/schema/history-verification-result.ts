@@ -1,6 +1,7 @@
 import * as z from "zod/v4";
 import {
-  historicalAnalysisSourceSummarySchema,
+  historicalAnalysisAccessSchema,
+  historicalAnalysisProviderSchema,
 } from "./history-result.js";
 import { historicalAnalysisTimeSchema, historicalGfsVariableIdSchema } from "./history.js";
 import { historicalVerificationLeadHoursSchema } from "./history-verification.js";
@@ -12,6 +13,12 @@ const numericChangeSchema = z.object({
   analysis: z.number(),
   delta: z.number(),
   deltaKind: z.enum(["linear", "circular_degrees"]),
+});
+
+export const historicalVerificationResolvedSourceSchema = z.object({
+  provider: historicalAnalysisProviderSchema,
+  access: historicalAnalysisAccessSchema,
+  dataset: z.string().min(1),
 });
 
 export const historicalForecastVerificationResultSchema = z.object({
@@ -47,7 +54,8 @@ export const historicalForecastVerificationResultSchema = z.object({
     changes: z.array(numericChangeSchema),
   })).min(1),
   source: z.object({
-    ...historicalAnalysisSourceSummarySchema.shape,
+    forecast: historicalVerificationResolvedSourceSchema,
+    reference: historicalVerificationResolvedSourceSchema,
     forecastArchiveAvailability: z.literal(
       "online availability varies; older forecast data may require NCEI HAS",
     ),

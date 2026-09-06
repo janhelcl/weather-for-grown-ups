@@ -48,10 +48,14 @@ const verification = await new HistoricalForecastVerificationService().verify({
   variables: ["temperature"],
   pressureLevelsHpa: [850],
 });
-assert.equal(verification.source.provider, "NOAA AWS Open Data");
-assert.equal(verification.source.access, "s3_range");
+assert.equal(verification.source.forecast.provider, "NOAA AWS Open Data");
+assert.equal(verification.source.forecast.access, "s3_range");
+assert.equal(verification.source.reference.provider, "NOAA AWS Open Data");
+assert.equal(verification.source.reference.access, "s3_range");
 assert.match(verification.forecast.dataset, /gfs\.t[0-9]{2}z\.pgrb2\.0p50\.f012$/);
 assert.match(verification.analysis.dataset, /gfs\.t00z\.pgrb2\.0p50\.f000$/);
+assert.equal(verification.source.forecast.dataset, verification.forecast.dataset);
+assert.equal(verification.source.reference.dataset, verification.analysis.dataset);
 assert.equal(verification.pressureLevels[0]?.changes[0]?.field, "temperatureC");
 assert(Number.isFinite(verification.pressureLevels[0]?.changes[0]?.delta));
 

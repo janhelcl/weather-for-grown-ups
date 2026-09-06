@@ -129,7 +129,11 @@ function atomicResult(input: any, delta: number) {
       pressureHpa: 850,
       changes: [{ field: "temperatureC", forecast: 10, analysis: 10 + delta, delta, deltaKind: "linear" }],
     }],
-    source: { provider: "NOAA NCEI", access: "ncei_thredds_ncss", forecastArchiveAvailability: "online availability varies; older forecast data may require NCEI HAS" },
+    source: {
+      forecast: { provider: "NOAA NCEI", access: "ncei_thredds_ncss", dataset: "forecast" },
+      reference: { provider: "NOAA NCEI", access: "ncei_thredds_ncss", dataset: "analysis" },
+      forecastArchiveAvailability: "online availability varies; older forecast data may require NCEI HAS",
+    },
     caveat: "Forecast verification against GFS model analysis, not direct observations; historical GFS model versions changed over time",
   } as any;
 }
