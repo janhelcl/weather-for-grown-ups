@@ -466,7 +466,8 @@ function analysisResult(validTime: string, leadHours: number, delta: number) {
       changes: [{ field: "temperatureC", forecast: 10, analysis: 10 + delta, delta, deltaKind: "linear" }],
     }],
     source: {
-      provider: "NOAA NCEI", access: "ncei_thredds_ncss",
+      forecast: { provider: "NOAA NCEI", access: "ncei_thredds_ncss", dataset: "forecast.grb2" },
+      reference: { provider: "NOAA NCEI", access: "ncei_thredds_ncss", dataset: "analysis.grb2" },
       forecastArchiveAvailability: "online availability varies; older forecast data may require NCEI HAS",
     },
     caveat: "Forecast verification against GFS model analysis, not direct observations; historical GFS model versions changed over time",
