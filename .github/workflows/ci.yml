@@ -39,6 +39,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - run: node scripts/check-release-metadata.mjs
       - run: npm install --no-audit --no-fund
       - run: npm run pack:check
       - name: Install packed package and invoke package-name bin
