@@ -68,10 +68,10 @@ function recentUtcCycle(daysAgo: number): string {
 
 function assertProfile(levels: ReadonlyArray<{
   pressureHpa: number;
-  temperatureC?: number;
-  relativeHumidityPct?: number;
-  windSpeedMs?: number;
-  geopotentialHeightGpm?: number;
+  temperatureC?: number | undefined;
+  relativeHumidityPct?: number | undefined;
+  windSpeedMs?: number | undefined;
+  geopotentialHeightGpm?: number | undefined;
 }>): void {
   assert.deepEqual(levels.map((level) => level.pressureHpa), [...PRESSURE_LEVELS]);
   for (const level of levels) {
