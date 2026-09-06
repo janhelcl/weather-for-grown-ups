@@ -1,294 +1,232 @@
 # Architecture
 
-Weather for Grown Ups is primarily a **numerical-weather-model access and meteorology product**, not a forecast interpretation layer.
+Weather for Grown Ups is a **numerical-weather-model access and meteorology engine**. It is not a forecast-interpretation layer.
+
+The architectural invariant is:
+
+> **One public atmospheric language; model and provider differences stay explicit behind it.**
 
 ```text
-NOAA GFS / AIGFS / GEFS / AIGEFS / HGEFS / NCEI historical GFS
-DWD ICON-D2 / ICON-D2-EPS
-Météo-France AROME / PE-AROME
-ECMWF IFS / AIFS / IFS ENS / AIFS ENS
-      ↓
-dataset-specific catalogs, model metadata, time semantics and source adapters
-      ↓
-normalized atmospheric states and mixed-field bundles
-      ↓
-shared meteorological kernels and composition primitives
-      ↓
-deterministic result OR member-first ensemble aggregation
-      ↓
-model-discriminated contracts
-      ↓
-CLI / MCP stdio / MCP Streamable HTTP
-      ↓
-agent interpretation
+CLI / MCP stdio / MCP HTTP
+          ↓
+public schemas + unified application services
+          ↓
+operation-specific registries
+          ↓
+dataset adapters / comparison strategies
+          ↓
+dataset-native application services
+          ↓
+source + access + cache + decoder boundaries
+          ↓
+NOAA / ECMWF / DWD / Météo-France products
 ```
 
-The core is the product. CLI and MCP are adapters over it, not independent implementations.
+The core is the product. CLI and MCP are transports over the same application services, not independent implementations.
 
-## Core design rule
+## Public contract
 
-> **Unify operations and physics; preserve model semantics.**
+Normal atmospheric access is organized as:
 
-A common operation does not imply a common source inventory or a flattened result shape. GFS, AIGFS, IFS and AIFS return deterministic forecast states. Historical Grid 4 returns deterministic analyzed states. GEFS, AIGEFS, ICON-D2-EPS, PE-AROME, IFS ENS and AIFS ENS return member-derived forecast distributions. HGEFS is explicitly hybrid: it pools GEFS physics members with AIGEFS AI members while retaining constituent identity and provenance.
+```text
+dataset × geometry × time × selection
+```
 
-The engine is organized around **operation × dataset** internally, while the public contract is intentionally organized around one query language: `dataset × geometry × time × selection`. Dataset-specific schemas, source adapters and services are implementation details behind that boundary; adding a model must extend the shared vocabulary and capability registry rather than create another public query namespace.
+Public dataset IDs are:
 
-Nonlinear diagnostics are evaluated independently on every ensemble member before aggregation, including both constituent populations inside HGEFS. WFG does not calculate CAPE, lapse rate, inversion structure or another nonlinear quantity from an ensemble-mean profile and pretend it represents the members.
+- `gfs`, `aigfs`, `aigefs`, `hgefs`;
+- `gefs`;
+- `ifs`, `ifs-ens`, `aifs`, `aifs-ens`;
+- `icon-d2`, `icon-d2-eps`;
+- `arome`, `pe-arome`;
+- `gfs-analysis`.
+
+The shared vocabulary does **not** imply identical inventories or result shapes. Unsupported combinations fail at the capability boundary instead of being coerced into fake symmetry.
+
+Historical GFS forecasts are not a second public dataset. An old explicit `forecast.run` keeps `dataset: "gfs"` and resolves to the grid-matched archive. GEFS retrospective forecasts likewise keep `dataset: "gefs"` and use `forecast.kind: "reforecast"` because a reforecast is a different forecast population, not a transport detail.
 
 ## Layer boundaries
 
-The implementation is split by responsibility rather than by whichever dataset was added first:
+### `schema/`: public grammar
 
-- `schema/` defines the public query vocabulary and result contracts. The shared `unified-api.ts` owns only common grammar and dataset-agnostic geometry/time rules; all dataset-sensitive modifier checks—including run-selector support, forecast-vs-analysis semantics, GFS source/grid overrides, GEFS reforecast constraints, and AI/hybrid inventory limits—live in `dataset-capability-validation.ts` behind a validator boundary. Adding a dataset or backend must not add routing branches to the shared schema.
-- `core/query-adapters/`, `core/diagnostic-adapters/`, and `core/specialized-adapters/` translate the common vocabulary into dataset-native application services. Public unified services validate once, dispatch through an operation-specific adapter registry, and wrap the result; they do not contain model-specific routing branches. Run comparison, verification, and analog search use the same rule rather than being exceptions.
-- `core/comparison-strategies/` is the dedicated semantic boundary for cross-dataset comparison. The registry is restrictive and the implementations are split by responsibility: pair-native strategies preserve established GFS/GEFS/IFS semantics, while normalized model-class strategies cover AI/hybrid families through one shared comparison service. `core/comparison-result-reader.ts` contains the heterogeneous unified-result normalization needed by those strategies so query orchestration does not accumulate dataset result-shape parsing. Every registered strategy declares the supported dataset pair, run and valid-time alignment, variable compatibility, comparison meaning, output shape and provenance shape. There is deliberately no universal fallback strategy.
-- `core/` owns meteorological/application composition: profiles, time series, spatial composition, diagnostic kernels, comparisons and archive services.
-- `sources/` owns provider/product semantics: URLs, object naming, upstream inventories, archive endpoints and ECMWF mirror selection. Source modules do not depend on public schemas, cache implementations or derived meteorological physics; source-safe domain identities such as GFS grid IDs live in `catalog/`. Provider sources are filesystem-free: historical NCEI/GDEX/IGRA clients return provider payloads and provenance only; they do not own artifact paths, TTLs or disk reuse.
-- `access/` owns transport policy: provider concurrency/pacing, retry/backoff and shared transport identity such as the package-versioned user agent. Cache code and meteorology code do not invent their own provider etiquette.
-- `cache/` owns local immutable artifact reuse for expensive upstream products. Cache hits must bypass upstream access policy; cache misses still pass through the source/provider policy. Historical archive/observation persistence is implemented as cache decorators over the raw provider sources, preserving source semantics while keeping storage policy independent.
-- `grib/` owns decoding and byte/index interpretation. Decoder-facing value contracts live in the neutral lower-level `types/` boundary so decoding never depends upward on application orchestration.
-- `derived/` owns model-independent physical transformations.
-- `cli/` and MCP are presentation/transport adapters over the same schemas and application services. Dataset and comparison discovery text is derived from the same public registries, and specialized CLI builders validate through the canonical schemas rather than maintaining a second supported-pair switch.
+`src/schema/` defines public request/result contracts.
 
-The dependency direction is intentionally inward: public surfaces depend on the single `core/unified-atmosphere-api.ts` composition entry; unified services depend on operation-specific adapter or comparison-strategy registries; adapters/strategies depend on dataset-native core services; core services depend on source/cache/decoder abstractions. Provider policy does not depend on meteorology, and meteorological kernels do not depend on provider transport.
+`unified-api.ts` owns the dataset-agnostic grammar: dataset, geometry, time, selection and shared modifiers. Dataset-specific validation lives behind `dataset-capability-validation.ts`, including:
 
-A practical rule for new datasets is: **add capabilities to the catalog and the relevant operation adapters; do not add a new public namespace or dataset branch to a unified dispatcher.** A practical rule for new comparisons is: **register an explicit scientifically meaningful strategy; never fall back to generic subtraction just because two datasets share field names.** A practical rule for new upstream backends is: **add or change a source/access implementation; do not change the public query language.**
+- run-selector support;
+- forecast-versus-analysis semantics;
+- GFS grid/source overrides;
+- GEFS reforecast constraints;
+- ensemble member populations;
+- model-specific variable/field/diagnostic inventories.
 
-## Atmospheric dataset capability boundary
+Adding a dataset must not create a second public query namespace or add model branches to the unified dispatcher.
 
-`src/catalog/models.ts` is the explicit atmospheric **dataset** capability registry. The registry uses explicit internal dataset IDs; public CLI/MCP callers use the short dataset IDs `gfs`, `aigfs`, `aigefs`, `hgefs`, `icon-d2`, `icon-d2-eps`, `arome`, `pe-arome`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`. Public metadata is derived from this registry so role/kind semantics cannot drift into a second source of truth. Public forecast-population variants such as operational GEFS versus GEFSv12 reforecast are declared as capability overrides alongside the public dataset mapping; shared capability discovery reads those declarations instead of branching on model names.
+### `catalog/`: capability truth
 
-| Dataset | Model class | Result kind | Shared query/diagnostic role | Run comparison | Registered dataset comparisons |
-| --- | --- | --- | --- | --- | --- |
-| GFS | physics | deterministic | Full deterministic atmospheric surface, including parcel diagnostics | ✅ | GEFS, IFS, AIGFS, ICON-D2 |
-| AIGFS | AI | deterministic | Shared deterministic query surface; layer/profile diagnostics where inventory supports them | — | GFS, AIFS |
-| GEFS | physics | ensemble | Member-first ensemble atmospheric surface and nonlinear diagnostics | ✅ distribution shift | GFS, IFS ENS, AIGEFS; HGEFS constituent view |
-| AIGEFS | AI | ensemble | Member-first AI ensemble surface; layer/profile diagnostics where inventory supports them | — | GEFS; HGEFS constituent view |
-| HGEFS | hybrid | ensemble | Application-level GEFS + AIGEFS member composition with constituent provenance | — | GEFS, AIGEFS |
-| ICON-D2 | physics | deterministic | Limited-area convection-permitting query surface with pressure/field operations and diagnostics where inventory supports them | — | IFS, GFS |
-| ICON-D2-EPS | physics | ensemble | 20-member limited-area member-first convection-permitting surface | — | IFS ENS |
-| AROME | physics | deterministic | Limited-area field-only surface on the explicit 0.01° EURW1S100 public product | — | IFS |
-| PE-AROME | physics | ensemble | 25-member limited-area member-first near-surface field ensemble | — | IFS ENS |
-| IFS | physics | deterministic | Full deterministic ECMWF atmospheric surface, including parcel diagnostics | ✅ | GFS, IFS ENS, AIFS, ICON-D2, AROME |
-| AIFS | AI | deterministic | Shared deterministic query surface; layer/profile diagnostics where inventory supports them | — | IFS, AIGFS |
-| IFS ENS | physics | ensemble | Member-first ECMWF ensemble surface and nonlinear diagnostics | ✅ distribution shift | GEFS, IFS, AIFS ENS, ICON-D2-EPS, PE-AROME |
-| AIFS ENS | AI | ensemble | Native 51-member AI ensemble surface; layer/profile diagnostics where inventory supports them | — | IFS ENS |
-| GFS analysis | physics | deterministic analysis | Shared historical analysis surface and diagnostics | — | Verification/analog workflows are separate |
+`src/catalog/models.ts` is the dataset capability registry. It carries role, deterministic/ensemble kind, provider, model class, spatial domain, native-grid semantics, cadence and forecast horizon.
 
-The capability registry describes the shared **core operation** behind the compact public vocabulary. Historical analog search and archived forecast verification remain specialized composition primitives, while index build/backfill is CLI-only administration rather than a normal atmospheric query.
+Variable, field and diagnostic catalogs define canonical IDs, raw dependencies, vertical/temporal semantics and dataset support. `search_catalog` and the CLI catalog read this local metadata; discovery does not probe upstream weather services.
 
-It also prevents two failure modes: mechanically copying deterministic behavior into an ensemble namespace, and claiming a model supports an operation whose required source fields or semantics are not actually implemented.
+The catalog is descriptive truth. Execution still validates the concrete request before source access.
 
-### Spatial domain and native-grid capability
+### Unified application services: validate once, dispatch once
 
-Regional NWP uses the same dataset capability boundary rather than adding a regional query namespace. Every atmospheric dataset declares:
+`src/core/unified-atmosphere-api.ts` is the public composition entry point.
 
-- a `spatialDomain`: global or a named limited-area domain with conservative geographic bounds;
-- a `nativeGrid`: grid type plus nominal resolution, with `mixed` available when one logical dataset genuinely combines different constituent grids;
-- its forecast horizon where applicable;
-- the set of native output cadences callers can encounter.
+- `UnifiedAtmosphereQueryService` normalizes the public query, validates the dataset/domain boundary, dispatches through `core/query-adapters/`, then wraps the result.
+- `UnifiedAtmosphereDiagnosticService` does the same through `core/diagnostic-adapters/`.
+- run comparison, verification and analog search dispatch through `core/specialized-adapters/`.
+- cross-dataset comparison dispatches through `core/comparison-strategies/`.
 
-`horizontalGridDegrees` remains compatibility metadata for regular latitude/longitude products; it is deliberately optional so future rotated, icosahedral or Lambert-conformal regional grids are not forced into a degree-grid fiction. HGEFS already exercises the truthful mixed-grid representation by retaining its GEFS 0.5° and AIGEFS 0.25° constituent grids separately.
+Unified services do not contain per-model routing switches. The registry chooses the dataset-native implementation.
 
-Catalog discovery consumes this registry directly. Callers can filter by global versus limited-area scope or ask which datasets fully cover a point or bounded area, while normal field/diagnostic filters continue to use the same canonical catalog. Discovery is local and does not probe upstream weather services.
+### Dataset adapters: translate, do not reinterpret
 
-Execution uses the same declaration before operation adapters run. Query and diagnostic services reject geometry outside a dataset's declared domain with `AtmosphericOutOfDomainError` and stable code `OUT_OF_DOMAIN`. This keeps spatial-coverage failure distinct from unsupported selections, unavailable runs, and source-access failures, while provider-specific source details stay below the public schema.
+Adapters translate the common request into an existing dataset-native service. They are allowed to choose the correct operation implementation for that dataset and geometry, but they do not redefine the public schema or meteorological meaning.
 
-## Normalized atmospheric boundary
+A useful rule is:
 
-Pressure-profile meteorology consumes normalized typed states rather than GRIB records directly.
+> **Adapters map shared intent to native capability; they never manufacture capability.**
 
-```text
-GFS forecast profile ---------------------┐
-                                           │
-IFS deterministic profile -----------------┤
-                                           │
-historical GFS analysis profile -----------├─> normalized pressure states ─> shared physics
-                                           │
-GEFS member profile ─> member -------------┤
-                                           │
-IFS ENS member profile ─> member ----------┘
-```
+This is especially important for regional models, AI products and historical data where upstream inventories differ materially.
 
-This keeps physical formulas model-independent while leaving model identity, source inventory, cycle semantics and result shape explicit.
+### `core/comparison-strategies/`: explicit scientific comparisons
 
-Ensemble datasets expose mixed pressure/non-isobaric **field bundles** where their native source inventory supports them. A bundle may combine pressure-level variables with fields such as 2 m temperature/RH, 10 m wind, precipitation, precipitable water, cloud cover, CAPE/CIN or MSLP. Raw dependencies are resolved by the dataset adapter; derived thermodynamics remain member-first.
+Cross-dataset comparison has a restrictive strategy registry. Every supported pair declares its alignment and comparison semantics. There is deliberately no generic “same field name, therefore subtract” fallback.
 
-## Shared meteorological kernels
+Strategies preserve:
 
-The shared core owns model-independent calculations including:
+- initialization and valid-time alignment;
+- native-grid sampling provenance;
+- deterministic-versus-ensemble meaning;
+- member-population identity;
+- scientifically valid field/pressure intersections.
+
+Independent ensembles are summarized independently. Member labels are never paired across models as if they were trajectories. HGEFS comparisons also retain constituent overlap rather than implying statistical independence.
+
+## Deterministic, ensemble and hybrid semantics
+
+Deterministic datasets normalize one atmospheric state and evaluate shared physics once.
+
+Ensemble datasets normalize **each selected member independently**, evaluate nonlinear diagnostics per member, and only then aggregate. WFG does not calculate CAPE, inversion structure, freezing levels or similar nonlinear quantities from an ensemble-mean profile and present that as member behavior.
+
+`src/core/ensemble-statistics.ts` centralizes mean, population standard deviation, min/max, caller-selected quantiles and raw member threshold fractions. Those fractions are **raw model-member evidence, not calibrated probability**.
+
+HGEFS is an application-level hybrid population: 31 GEFS physics members plus 31 AIGEFS AI members. Constituent identity and native-grid provenance remain visible.
+
+## Shared meteorology boundary
+
+Provider records are normalized before shared physical kernels run. Model-independent derivations live under `derived/` and shared diagnostic services in `core/`.
+
+The shared physics includes, among other things:
 
 - thermodynamic profile derivations;
-- environmental temperature lapse rate;
+- environmental lapse rate and potential-temperature gradients;
 - vector wind shear;
-- potential-temperature gradient;
-- freezing-level crossings;
-- sampled inversion layers;
+- freezing-level crossings and inversion structure;
 - parcel start-state construction;
 - LCL/LFC/EL;
 - pseudo-adiabatic parcel paths;
 - virtual-temperature buoyancy, CAPE and CIN.
 
-Deterministic datasets evaluate these once on their normalized state. Ensemble datasets evaluate supported kernels independently for each member and summarize only after those calculations are complete. HGEFS follows the same rule independently across its GEFS and AIGEFS populations before pooling the hybrid distribution.
-
-Parcel definitions remain explicit: `surface_2m`, `mixed_layer_100hpa`, and `most_unstable_300hpa`. Datasets advertise parcel diagnostics only when their native inventory can initialize the shared parcel kernel; AIGFS, AIGEFS, AIFS, AIFS ENS and HGEFS currently keep that boundary explicit rather than synthesizing missing state.
-
-## Ensemble statistics
-
-`src/core/ensemble-statistics.ts` centralizes numeric ensemble summaries:
-
-- arithmetic mean;
-- population standard deviation;
-- min/max;
-- caller-selected quantiles;
-- raw member threshold fractions.
-
-Where structures have variable length — freezing crossings or inversion layers, for example — WFG summarizes comparable descriptors and conditional distributions rather than averaging structures themselves.
-
-Member threshold/event fractions retain the interpretation that they are **raw model-member evidence, not calibrated probability**.
+Parcel definitions remain explicit: `surface_2m`, `mixed_layer_100hpa`, and `most_unstable_300hpa`. A dataset advertises parcel diagnostics only when its source inventory can initialize the shared parcel engine.
 
 ## Spatial and temporal composition
 
-WFG builds larger queries by composing smaller atmospheric primitives while preserving a fixed model cycle and stable sampling semantics.
+Larger requests compose bounded primitives while preserving native model semantics.
 
-### GFS
+- Multi-time forecasts pin one initialization that can satisfy the requested range.
+- Transects use shared great-circle interpolation and delegate to dataset-native point/multi-point access.
+- Area operations aggregate native sampled cells rather than returning unbounded grids.
+- Ensemble spatial/temporal operations remain member-first.
+- Historical analysis preserves exact 00/06/12/18 UTC analysis cycles and has no forecast initialization/lead axis.
 
-- multi-point requests reuse selected NOAA AWS messages across coordinates;
-- time series fix one run across the requested range;
-- transects generate great-circle samples and delegate to batch point queries;
-- diagnostic series reuse the corresponding single-time physical services;
-- bounded area queries decode a geographic subset locally and return statistics rather than raw grids;
-- run comparison holds valid time constant across consecutive initialization cycles.
+Composition is allowed to be serial or bounded-concurrent according to the source contract. The public result reports what was resolved; it does not pretend every backend has identical reuse or parallelism characteristics.
 
-### Historical GFS analysis
+## Source, access, cache and decoder boundaries
 
-Historical Grid 4 participates in the same profile, time-series, layer-diagnostic, profile-diagnostic, parcel, multi-point, multi-point-time-series, transect and area-summary operation boundaries as operational data. Its source adapter preserves exact 00/06/12/18 UTC analysis semantics, 0.5° sampling, NCEI provenance and bounded archive access.
+These concerns are separate because changing a transport must not change the atmospheric API.
 
-- diagnostic time series compose the same layer/profile/parcel kernels over selected analysis cycles;
-- multi-point requests are bounded to 10 coordinates and use the NCEI THREDDS/NCSS provider policy rather than the NOMADS courtesy interval;
-- multi-point time series bound both analysis steps and the point × step matrix;
-- transects reuse the same great-circle interpolation as GFS/GEFS and delegate samples to the historical multi-point primitive;
-- area statistics use one native NCEI NCSS bbox/grid subset, apply exact vertical-coordinate selection for pressure/height fields, verify the returned vertical coordinate, and reuse the same local spatial distribution kernel as operational GFS.
+### `sources/`: provider/product semantics
 
-### GEFS
+Source modules own product naming, URLs/object keys, upstream inventories, archive layouts and provider-specific payload decoding into source-neutral records. Source contracts expose provenance rather than leaking provider URLs upward as the domain model.
 
-GEFS composition is **member-first**.
+### `access/`: transport policy
 
-- raw and mixed-field point requests fetch one selected slice per member;
-- multi-point requests reuse each member slice across all requested coordinates;
-- multi-point time series repeat that reuse across native three-hour steps from one fixed cycle;
-- mixed-field transects delegate the full path to one member-first multi-point bundle operation;
-- area statistics compute the spatial statistic independently inside every member, then summarize those member-level statistics across the ensemble;
-- run comparison summarizes every model cycle independently and compares distributions, never treating repeated perturbation labels as trajectories across cycles.
+`src/access/` owns provider etiquette: concurrency/pacing, retry/backoff, `Retry-After`, shared user-agent identity and HTTP failure classification.
 
-This preserves separate **space**, **time**, and **ensemble-member** axes instead of flattening them into one sample.
+Provider policies are independent. NOMADS pacing is not inherited by NOAA AWS, NCEI, NCAR/GDEX, IGRA, ECMWF, DWD or Météo-France merely because they all provide weather data.
 
-### HGEFS
+### `cache/`: immutable reuse
 
-HGEFS is an application-level **hybrid composition**, not another download stack. The canonical member population is `gefs:c00..p30` plus `aigefs:c00..p30`. The service pins one common cycle, executes each constituent through its existing member-first implementation, then pools only meteorologically compatible normalized outputs. Constituent-native grids remain visible: pressure-level GEFS member access can be 0.5° while AIGEFS is 0.25°, so HGEFS never fabricates one common sampled grid point.
+Cache decorators own local immutable artifact reuse. A cache hit bypasses upstream access policy; a cache miss still goes through the provider/source policy. Cache keys represent the product/request identity, not whichever transient URL happened to serve it.
 
-### IFS
+### `grib/`: decoding
 
-Deterministic IFS uses the same public geometry/time vocabulary while preserving ECMWF-native cadence, fixed 0.25° model semantics and selected-message cache reuse. Multi-time operations pin one initialization capable of satisfying the complete range; point, multi-point, transect, area, diagnostics and run comparison all stay deterministic.
+The normal npm path uses the bundled `@mattnucc/gribberish` decoder for every dataset. Users do not need native `wgrib2`, CDO or other weather tooling for normal CLI/MCP use.
 
-### IFS ENS
+Native `wgrib2` remains an explicit compatibility/debug backend selected with `WGRIB2_PATH` or `WFG_DECODER=wgrib2`. The Docker image includes it as the reproducible fallback.
 
-IFS ENS composition is **member-first** across the 50 perturbed members `p01`–`p50`. Point, multi-point, time-series, transect, area and diagnostic operations evaluate each requested member independently before aggregation. Run comparison compares independently summarized distributions across cycles; it does not pair perturbation labels as trajectories. The deterministic post-Cycle-50r1 unperturbed control remains the separate `ifs` dataset.
+## Important routing examples
 
-## Catalogs and source contracts
+Routing details belong below the public query language and should be documented here or in the owning dataset document, not copied into every operation page.
 
-GFS, AIGFS, AIGEFS, GEFS, ICON-D2, ICON-D2-EPS, AROME, PE-AROME, IFS, AIFS, AIFS ENS, IFS ENS and historical GFS analysis keep dataset-specific source inventories because their upstream products are not identical. HGEFS deliberately has no duplicate member-source stack: it composes the GEFS and AIGEFS source-backed member services. Canonical field IDs and shared physical derivations converge where the quantity is genuinely comparable; unavailable fields remain explicit capability differences rather than being fabricated for symmetry.
+### Operational GFS
 
-Catalogs define:
+For normal `gfs` access, source selection is automatic:
 
-- canonical variable and field IDs;
-- pressure-level availability;
-- non-isobaric vertical semantics;
-- instantaneous / accumulation / average temporal semantics;
-- raw-vs-derived classification;
-- physical dependencies;
-- model-specific GRIB codes and source units.
+- point/profile, time-series, multi-point and transect work uses NOAA AWS Open Data `.idx` byte ranges;
+- bounded area work uses NOMADS geographic subsetting;
+- explicit `source` is a GFS-only override/debug control where the geometry can honor it.
 
-The unified catalog is searchable locally from CLI and MCP and reports dataset support for each canonical match. Discovery performs no upstream weather-data request.
+Old explicit runs preserve the public `gfs` identity and route to the selected grid's historical archive.
 
-## Run semantics
+### Archived GFS forecasts
 
-Run selection is query-aware.
+- 0.25° archived operational forecasts use NCAR/GDEX d084001 from its supported start date.
+- 0.5° Grid 4 forecasts use the same shared Grid 4 routing state machine as `gfs-analysis`: AWS from 2021-01-01, NCEI fileServer for earlier point access, and NCSS for pre-2021 area access or eligible fallback.
 
-GFS, AIGFS, AIGEFS, HGEFS, GEFS, deterministic IFS and IFS ENS use explicit 00/06/12/18Z initialization cycles. Multi-time operations resolve one cycle capable of satisfying the complete requested range and then keep that cycle fixed. GFS grid selection is orthogonal to run selection: `0p25` is the default and `0p50` is explicit. An old explicit run keeps the public `gfs` identity and routes to the matching historical forecast archive rather than changing datasets.
-
-ECMWF Open Data preserves different deterministic and ensemble horizons. Deterministic `ifs` uses `oper/fc`: 00/12Z runs publish 3-hourly through `f144`, then 6-hourly through `f240`; 06/18Z runs publish 3-hourly through `f90`. `ifs-ens` uses perturbed `enfo/ef`: 00/12Z runs publish 3-hourly through `f144`, then 6-hourly through `f360`; 06/18Z runs publish 3-hourly through `f144`. `latest` is resolved against the requested field inventory so partially published cycles are not mistaken for selection-capable runs.
-
-GEFS uses control `c00` plus `p01`–`p30` on a native three-hour cadence through `f384`. Pressure-level and mixed pressure/field operations use `pgrb2a` 0.5°. Field-only operations select `pgrb2s` 0.25° through `f240`, then fall back to `pgrb2a` 0.5°. Multi-time field operations choose one product from the complete range and keep that grid fixed.
-
-Historical Grid 4 analysis has no forecast initialization/lead axis: its native time coordinate is the exact 00/06/12/18 UTC analysis cycle. Shared operation dispatch preserves that distinction instead of synthesizing run or forecast-hour fields.
-
-Aligned dataset comparisons resolve one initialization cycle that can satisfy both sides at the requested valid time. The restrictive strategy registry now covers deterministic↔deterministic, deterministic↔ensemble, ensemble↔ensemble and hybrid↔constituent families across physics and AI datasets. Independent ensemble comparisons summarize each population separately without member pairing; HGEFS constituent comparisons explicitly retain the overlap between the constituent and hybrid distributions rather than implying statistical independence.
-
-## Data access and caching
-
-### GFS
-
-WFG supports operational GFS at both 0.25° and 0.5°. Source choice is an internal routing decision by default: point/profile, time-series, multi-point, transect, and run-comparison operations use NOAA AWS Open Data `.idx` inventories plus byte ranges, while bounded area operations use NOAA NOMADS because geographic subsetting materially reduces transfer. Explicit source overrides remain available only where the selected geometry can honor them; provenance always reports the resolved backend.
-
-Explicit historical GFS runs keep the public `gfs` identity and route by selected grid and era. 0.25° uses NCAR/GDEX d084001 through THREDDS/NCSS (archive start 2015-01-15). 0.5° Grid 4 uses the same era split as `gfs-analysis`: NOAA AWS Open Data 0.50° `.idx` byte ranges from 2021-01-01, and NCEI THREDDS fileServer (point) or NCSS (area, or fallback) before that. Both preserve forecast run, lead, valid time, grid and source provenance. Archive availability is not silently substituted across grids.
-
-Upstream access etiquette is source-specific rather than inherited from NOMADS. NOMADS uses one cross-process slot plus an 11-second minimum interval. NCEI THREDDS/NCSS uses two cross-process slots with no artificial delay, NCAR/GDEX uses four slots (below its published 10-stream ceiling), and IGRA uses four. NOAA AWS and ECMWF cloud/direct transports use their own bounded policies and do not inherit NOMADS pacing. Transient 429/5xx responses are retried with exponential backoff, jitter and `Retry-After` handling where applicable. CLI GFS time-range queries emit native-step progress on stderr, including the resolved source and cache-hit state, so courtesy-paced NOMADS misses are visible rather than looking hung.
+The result preserves run, lead, valid time, grid and the provider/access route that actually served the request.
 
 ### Historical GFS analysis
 
-Historical analysis uses the same 0.5° Grid 4 identity across backends. Cycles from 2021-01-01 use NOAA AWS Open Data 0.50° `f000` with `.idx` byte-range subsetting. 2007–2020 point queries use NCEI THREDDS fileServer full-file download and local decode; area queries for that era still use NCSS because fileServer has no subset/index API. NCSS remains a fallback on the AWS/fileServer routes so a repaired NCEI IAM policy comes back automatically. Archive reads are immutable and cached; cache misses follow the provider policy of the route that actually serves the request. Source and analysis provenance stay attached to every result.
+`gfs-analysis` is one 0.5° Grid 4 analysis dataset across several transports:
 
-### GEFS
+- from 2021-01-01: NOAA AWS Open Data 0.50° `f000` with `.idx` byte-range access;
+- 2007–2020 points: NCEI THREDDS fileServer full-file download plus local decode;
+- 2007–2020 areas: NCEI NCSS, because fileServer cannot subset;
+- AWS/fileServer routes may fall back to NCSS on eligible data/upstream availability failures.
 
-GEFS uses member-specific NOAA AWS `pgrb2a` 0.5° and `pgrb2s` 0.25° objects with `.idx` byte ranges. The source adapter selects the product from pressure-vs-field semantics and forecast horizon; the chosen product and `horizontalGridDegrees` are retained in result provenance. Immutable selected-message slices are cached locally with product-aware keys, then decoded and sampled/derived locally.
+The shared router decides transport by era and operation. Public history semantics do not change when the provider route changes, and provenance reports the route that actually served the request.
 
-Member work is bounded-concurrent. Multi-point and transect operations deliberately reuse upstream member slices rather than multiplying upstream transfer by point count.
+### ECMWF
 
-### Regional DWD / Météo-France
+IFS, IFS ENS, AIFS and AIFS ENS preserve ECMWF-native run cadence, horizon, product/member identity and indexed Open Data access. Multi-time operations pin a run capable of satisfying the complete range.
 
-Regional providers preserve their own packaging and access policy below the unified dataset boundary.
+### Regional providers
 
-ICON-D2 deterministic access uses DWD Open Data products while retaining the native ~2.1 km model-grid identity separately from regular-lat/lon delivery products. ICON-D2-EPS preserves the native 20-member all-member GRIB packaging that DWD publishes on its icosahedral-triangular grid (GRIB2 grid template 3.101). `src/grib/icon-d2-remap.ts` reproduces DWD's official conversion in-process: it reads the provider's `ICON_D2_002_EASY` bundle (a CDO lonlat target-grid description plus a SCRIP nearest-neighbour weights table in classic NetCDF-3), decodes each native message through the bundled decoder by patching section 3 in memory, gathers values through the provider index, and emits a regular 0.02° lat/lon GRIB2 message (grid template 3.0, simple packing that reuses the source reference value, scale factors and bit width so the provider's integer quantisation is preserved exactly). Sections 1, 2 and 4 are copied verbatim, which keeps DWD local parameters, statistical intervals and ensemble metadata intact. Members are then split by the perturbation number in section 4. The remap and split are cache concerns; no native executable is involved.
+ICON-D2/ICON-D2-EPS and AROME/PE-AROME keep native-model grid truth separate from public delivery/remap grids. Provider credentials, packaging, remapping, retries and endpoint details remain below the unified dataset boundary.
 
-AROME uses Météo-France's public EURW1S100 GRIB packages and keeps the 0.01° delivery grid distinct from the nominal ~1.3 km model mesh. PE-AROME uses authenticated targeted WCS requests with bearer credentials, one-member/one-field packaging and geographic subsetting. Credentials, endpoint details, retries, concurrency and immutable caching remain isolated in source/access layers.
+ICON-D2-EPS remapping is implemented in-process from DWD's official grid/weights artifacts; no native CDO dependency is required. PE-AROME bearer credentials and targeted WCS packaging remain isolated in the source/access layer.
 
-### IFS / IFS ENS
+## CLI / MCP parity
 
-ECMWF access uses official Open Data indexed byte ranges with bounded mirror retry/failover and immutable local caching. Deterministic and ENS products keep their native product, cadence, run and member provenance. The source layer resolves model-specific filenames/messages; the public query layer only sees canonical dataset, geometry, time and selection semantics.
+The CLI and MCP call the same services and schemas.
 
-## GRIB decoding
+CLI atmospheric commands are intentionally compact:
 
-The normal npm path uses the bundled GRIB2 decoder supplied by `@mattnucc/gribberish` for every dataset, so users do **not** need to install native `wgrib2`, CDO or any other weather tooling for CLI or MCP use.
+- `catalog`;
+- `query`;
+- `diagnose`;
+- `compare-runs`;
+- `compare-datasets`;
+- `verify`;
+- `analogs`;
+- `index ...` for local history/verification corpus administration;
+- `mcp` / `mcp-http` as transport launchers.
 
-Native `wgrib2` remains an explicit compatibility/debug backend selected through `WGRIB2_PATH` or `WFG_DECODER=wgrib2`. The Docker image includes native `wgrib2` as that reproducible fallback path.
-
-The rest of the codebase is isolated from decoder choice behind a narrow decoding abstraction and works with typed meteorological values rather than raw GRIB internals.
-
-## Public surfaces
-
-The public contract mirrors the core architecture instead of the order in which model-specific features were implemented.
-
-> **One query language for atmospheric state; datasets preserve their semantics.**
-
-Normal access is `dataset × geometry × time × selection`. Public dataset IDs are `gfs`, `aigfs`, `aigefs`, `hgefs`, `icon-d2`, `icon-d2-eps`, `arome`, `pe-arome`, `gefs`, `ifs`, `aifs`, `aifs-ens`, `ifs-ens`, and `gfs-analysis`; they map to the explicit internal dataset registry. Dataset-native result semantics remain unchanged.
-
-### CLI
-
-The CLI surface is compact:
-
-- `catalog --dataset ...` for cross-dataset discovery;
-- `query` for atmospheric state over point(s), time range, transect, or area where supported;
-- `diagnose` for shared layer/profile/parcel physics;
-- `compare-runs`, `compare-datasets`, `verify`, and `analogs` for composition operations;
-- `index build` and `index backfill` for local analog-index administration;
-- `mcp` and `mcp-http` as transport launchers for the MCP surface below.
-
-Commander is configured with `exitOverride` and silenced error output so that usage errors (unknown option/command, missing required option) and typed option parsers (`numberOption`, `parseNumberList`, `parseCoordinate` in `cli/shared.ts`) all flow through `runCli` into the public failure envelope. The CLI never prints Commander's own `error:` text.
-
-### MCP
-
-The MCP vocabulary is similarly small:
+MCP exposes the corresponding weather surface:
 
 - `search_catalog`;
 - `query_atmosphere`;
@@ -298,25 +236,41 @@ The MCP vocabulary is similarly small:
 - `verify_forecast`;
 - `find_analogs`.
 
-The first three are the normal atmospheric query language. Comparison, verification and analog search remain separate because they are genuine composition operations rather than another geometry/time shape. Dataset comparison is itself registry-driven and restrictive: a shared atmospheric vocabulary does not imply that every pair has a scientifically meaningful comparison strategy. Physics, AI and hybrid pairs declare alignment, comparison semantics, output shape and provenance explicitly; there is no universal subtraction fallback.
+Index construction/backfill stays CLI-only because it is local administration, not a weather query.
 
-The unified adapters validate the common request and then delegate through dataset-specific schemas/services internally, so unsupported combinations fail explicitly rather than being coerced into fake symmetry. Those dataset-native services are implementation details and are not registered as separate public MCP tools.
+Validation belongs to the application contract, not the transport. CLI and MCP failures are mapped through the same public failure model; MCP only redacts unclassified internal-error text at the remote boundary.
 
-Validation belongs to the application services, not the transport. MCP tools register their Zod contracts through `describedSchema` (`src/mcp-tool-schema.ts`), which hands the SDK the JSON Schema for `tools/list` but performs no validation of its own; the service's `schema.parse` then runs inside the handler and any failure becomes the same `isError` envelope the CLI prints. Request schemas are strict objects (unknown keys are rejected), geometry is a `type`-discriminated union, and registry-dispatched operations (`compare_datasets` by `datasets` pair, `verify_forecast` by time form) select one contract before validating so errors name the field under that contract instead of a union-wide "Invalid input". `toPublicFailure` reports the first issue with its field path and, for residual plain unions, flattens to the closest branch.
+## Dependency rule
 
-Both MCP transports instantiate the same tool catalog:
+The intended dependency direction is:
 
-- **stdio** for local process-spawned clients;
-- **Streamable HTTP** for hosted/remote clients.
+```text
+public transports
+  → unified application services
+    → adapter / strategy registries
+      → dataset-native application services
+        → source/cache/decoder interfaces and implementations
+          → provider transports
+```
 
-The HTTP launcher adds transport concerns only: `/mcp`, `/healthz`, loopback-safe defaults and Host/Origin protection. It does not define separate meteorological behavior.
+Default service constructors may assemble their concrete lower-level dependencies for standalone use, but the behavioral seams remain injectable. Higher layers must not bypass those seams to perform provider HTTP, caching or decoding themselves.
+
+For new work:
+
+- **new dataset:** extend catalog capability + relevant adapters;
+- **new comparison:** register an explicit strategy;
+- **new provider/backend:** add/change a source/access implementation;
+- **new physical derivation:** add it below the dataset adapters and reuse it across compatible datasets;
+- **new transport:** call the existing unified services.
 
 ## Core does not own
 
+WFG deliberately does not own:
+
 - activity-specific weather scores;
 - subjective forecast interpretation;
-- turbine power curves or energy-production models;
-- route/summit/flight safety decisions;
+- route, summit or flight safety decisions;
+- turbine/power-production models;
 - calibrated probability unless a dedicated calibration layer is explicitly designed and validated.
 
 Those belong to the consuming agent or a specialized application built on top of WFG.

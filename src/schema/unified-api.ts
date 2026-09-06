@@ -462,6 +462,17 @@ function validateDatasetModifiers(
   request: any,
   context: z.RefinementCtx,
 ): void {
+  if (request.source === "archive") {
+    const run = request.forecast?.run;
+    if (run === undefined || run === "latest" || run === "latest_complete") {
+      context.addIssue({
+        code: "custom",
+        path: ["forecast", "run"],
+        message: "source=archive requires an explicit GFS forecast.run",
+      });
+    }
+  }
+
   const metadata = publicDatasetMetadata(request.dataset as PublicAtmosphericDataset);
   validateDatasetCapabilityModifiers(request, context, metadata);
 }
