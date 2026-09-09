@@ -24,6 +24,9 @@ if (pkg.mcpName !== expectedMcpName) {
 if (server.name !== expectedMcpName) {
   throw new Error(`server.json name ${JSON.stringify(server.name)} does not match package.json mcpName ${JSON.stringify(pkg.mcpName)}`);
 }
+if (typeof server.description !== 'string' || server.description.length === 0 || server.description.length > 100) {
+  throw new Error('server.json description must contain 1-100 characters');
+}
 
 const npmPackage = server.packages?.find(
   (candidate) =>
