@@ -38,14 +38,103 @@ jobs:
         if: steps.version.outputs.published != 'true'
         run: |
           set -euo pipefail
+          name="$(node -p "require('./package.json').name")"
           tarball="$(npm pack --silent)"
           prefix="$(mktemp -d)"
           npm install --prefix "$prefix" --no-audit --no-fund "./$tarball"
+          package_dir="$prefix/node_modules/$name"
           "$prefix/node_modules/.bin/weather-for-grown-ups" --help
           test "$("$prefix/node_modules/.bin/weather-for-grown-ups" --version)" = "$(node -p "require('./package.json').version")"
+          test -f "$package_dir/server.json"
+          test -f "$package_dir/skills/weather-for-grown-ups/SKILL.md"
       - name: Publish to npm
         if: steps.version.outputs.published != 'true'
         run: npm publish
       - name: Version already published
         if: steps.version.outputs.published == 'true'
         run: echo "$GITHUB_REF_NAME is already on npm; nothing to publish."
+
+      - id: mcp_registry
+        name: Check whether MCP version is already published
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="$(node -p "require('./server.json').name")"
+          version="$(node -p "require('./server.json').version")"
+          encoded_name="$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$name")"
+          encoded_version="$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$version")"
+          url="https://registry.modelcontextprotocol.io/v0.1/servers/${encoded_name}/versions/${encoded_version}"
+          status="$(curl -sS -o /tmp/mcp-registry-version.json -w '%{http_code}' "$url")"
+          case "$status" in
+            200)
+              echo "published=true" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "published=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              cat /tmp/mcp-registry-version.json
+              echo "Unexpected MCP Registry HTTP status: $status" >&2
+              exit 1
+              ;;
+          esac
+      - name: Verify npm MCP ownership metadata
+        if: steps.mcp_registry.outputs.published != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          expected="$(node -p "require('./package.json').mcpName")"
+          for attempt in 1 2 3 4 5; do
+            actual="$(npm view "${name}@${version}" mcpName 2>/dev/null || true)"
+            if [ "$actual" = "$expected" ]; then
+              exit 0
+            fi
+            sleep $((attempt * 2))
+          done
+          echo "npm does not expose expected mcpName for ${name}@${version}: ${expected}" >&2
+          exit 1
+      - name: Install MCP Registry publisher
+        if: steps.mcp_registry.outputs.published != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz"
+          curl -fsSL "$url" -o /tmp/mcp-publisher.tar.gz
+          echo "a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc  /tmp/mcp-publisher.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/mcp-publisher.tar.gz mcp-publisher
+          ./mcp-publisher validate server.json
+      - name: Authenticate to MCP Registry
+        if: steps.mcp_registry.outputs.published != 'true'
+        run: ./mcp-publisher login github-oidc
+      - name: Publish to MCP Registry
+        if: steps.mcp_registry.outputs.published != 'true'
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          ./mcp-publisher publish 2>&1 | tee /tmp/mcp-publisher.log
+          publish_status="${PIPESTATUS[0]}"
+          set -e
+          if [ "$publish_status" -eq 0 ]; then
+            exit 0
+          fi
+
+          # A concurrent/retried run may have won the race after our initial check.
+          name="$(node -p "require('./server.json').name")"
+          version="$(node -p "require('./server.json').version")"
+          encoded_name="$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$name")"
+          encoded_version="$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$version")"
+          url="https://registry.modelcontextprotocol.io/v0.1/servers/${encoded_name}/versions/${encoded_version}"
+          status="$(curl -sS -o /tmp/mcp-registry-version-after-publish.json -w '%{http_code}' "$url")"
+          if [ "$status" = "200" ]; then
+            echo "${name}@${version} is present in the MCP Registry; treating the publish as complete."
+            exit 0
+          fi
+
+          cat /tmp/mcp-registry-version-after-publish.json
+          exit "$publish_status"
+      - name: MCP version already published
+        if: steps.mcp_registry.outputs.published == 'true'
+        run: echo "$GITHUB_REF_NAME is already in the official MCP Registry; nothing to publish."
