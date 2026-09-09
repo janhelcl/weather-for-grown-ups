@@ -6,6 +6,26 @@ Archived 0.5° GFS forecasts — including `verify` against `gfs-analysis` — u
 
 `wfg query` / `diagnose` / composition commands without `--json` print catalog-style tables instead of `util.inspect`. Field-only datasets (`arome`, `pe-arome`) default to `--fields temperature_2m` so a bare query reaches the credential/capability check instead of a GFS-shaped pressure-variable rejection.
 
+## v0.5.5 — 2026-09-09
+
+### Agent-native distribution
+
+WFG now ships one weather engine through aligned software, skill and tool distribution paths:
+
+- npm remains the canonical executable distribution; shell-capable agents should prefer the CLI with structured `--json` output;
+- `skills/weather-for-grown-ups/SKILL.md` is a portable Agent Skill that teaches the existing WFG semantics rather than defining another API, with MCP as the fallback when a suitable shell is unavailable;
+- `server.json` publishes `io.github.janhelcl/weather-for-grown-ups` to the official MCP Registry and launches the existing npm package through its `mcp` stdio transport.
+
+Both the Agent Skill and MCP manifest are included in the npm tarball.
+
+### One release, aligned metadata
+
+The tag-driven npm workflow now publishes npm first and then the same immutable version to the official MCP Registry using GitHub OIDC. Registry publication is retry-safe and requires npm to expose the expected `mcpName` ownership metadata first.
+
+Release validation keeps `package.json`, the lockfile root versions and `server.json` aligned; validates the manifest with the pinned official `mcp-publisher`; validates Agent Skill frontmatter; and checks the packed npm artifact contains both distribution files.
+
+v0.5.5 is the first WFG release prepared to ship npm, the Agent Skill and the official MCP Registry entry from one tag.
+
 ## v0.5.2 — 2026-09-06
 
 ### Actionable public failures
