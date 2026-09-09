@@ -179,6 +179,41 @@ export class IconD2ForecastService {
       : this.getDiagnosticTimeSeries(request);
   }
 
+  async resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date> {
+    const selection = expandedSelection(request);
+    const products = productsFor(selection);
+    return "at" in request.time
+      ? this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "valid_time",
+          validTime: new Date(request.time.at),
+          products,
+        })
+      : this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "time_range",
+          startTime: new Date(request.time.from),
+          endTime: new Date(request.time.to),
+          products,
+        });
+  }
+
+  async resolveDiagnosticRun(request: DiagnoseAtmosphereRequest): Promise<Date> {
+    if (request.diagnostic.kind === "parcel") {
+      throw new Error("ICON-D2 parcel diagnostics are not supported");
+    }
+    return "at" in request.time
+      ? this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "valid_time",
+          validTime: new Date(request.time.at),
+          products: { pressure: true, surface: false },
+        })
+      : this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "time_range",
+          startTime: new Date(request.time.from),
+          endTime: new Date(request.time.to),
+          products: { pressure: true, surface: false },
+        });
+  }
+
   private async getPoint(request: QueryAtmosphereRequest): Promise<IconD2ProfileResult> {
     if (request.geometry.type !== "point" || !("at" in request.time)) {
       throw new Error("Internal ICON-D2 routing error: expected point instant query");

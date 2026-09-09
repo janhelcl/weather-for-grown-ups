@@ -17,7 +17,6 @@ import type {
 } from "./types.js";
 import { AifsLatestRunResolver } from "./aifs-run.js";
 import { AifsForecastService } from "./aifs.js";
-import { mapConcurrent } from "./concurrency.js";
 import {
   summarizeEnsembleLayerDiagnostics,
   summarizeEnsembleProfileDiagnostics,
@@ -27,6 +26,10 @@ import {
   summarizeNumericDistribution,
 } from "./ensemble-statistics.js";
 import { InvalidRequestError } from "../failure.js";
+import {
+  executeMemberDiagnostics,
+  executeMemberQueries,
+} from "./ensemble-member-execution.js";
 
 const MODEL = "aifs_ens_0p25" as const;
 const DEFAULT_AIFS_ENS_MEMBER_CONCURRENCY = 4;
@@ -36,6 +39,8 @@ const MEMBER_SET = new Set<string>(AIFS_ENS_MEMBERS);
 export interface AifsEnsMemberService {
   query(request: QueryAtmosphereRequest): Promise<unknown>;
   diagnose(request: DiagnoseAtmosphereRequest): Promise<unknown>;
+  resolveQueryRun?(request: QueryAtmosphereRequest): Promise<Date>;
+  resolveDiagnosticRun?(request: DiagnoseAtmosphereRequest): Promise<Date>;
 }
 
 export interface AifsEnsForecastServiceOptions {
@@ -115,43 +120,28 @@ export class AifsEnsForecastService {
     request: QueryAtmosphereRequest,
     members: AifsEnsMember[],
   ): Promise<MemberResult[]> {
-    const firstMember = members[0]!;
-    const firstService = this.memberServiceFactory(firstMember);
-    const firstResult = await firstService.query(asAifsQuery(request));
-    const run = resultRun(firstResult, "AIFS ENS member query");
-    const rest = await mapConcurrent(
-      members.slice(1),
-      this.concurrency,
-      async (member) => ({
-        member,
-        result: await this.memberServiceFactory(member).query(
-          asAifsQuery(request, run),
-        ),
-      }),
-    );
-    return [{ member: firstMember, result: firstResult }, ...rest];
+    return executeMemberQueries({
+      members,
+      concurrency: this.concurrency,
+      serviceFactory: this.memberServiceFactory,
+      requestFactory: (runOverride) => asAifsQuery(request, runOverride),
+      context: "AIFS ENS member query",
+    });
   }
 
   private async diagnoseMembers(
     request: DiagnoseAtmosphereRequest,
     members: AifsEnsMember[],
   ): Promise<MemberResult[]> {
-    const firstMember = members[0]!;
-    const firstService = this.memberServiceFactory(firstMember);
-    const firstResult = await firstService.diagnose(asAifsDiagnostic(request));
-    const run = resultRun(firstResult, "AIFS ENS member diagnostic");
-    const rest = await mapConcurrent(
-      members.slice(1),
-      this.concurrency,
-      async (member) => ({
-        member,
-        result: await this.memberServiceFactory(member).diagnose(
-          asAifsDiagnostic(request, run),
-        ),
-      }),
-    );
-    return [{ member: firstMember, result: firstResult }, ...rest];
+    return executeMemberDiagnostics({
+      members,
+      concurrency: this.concurrency,
+      serviceFactory: this.memberServiceFactory,
+      requestFactory: (runOverride) => asAifsDiagnostic(request, runOverride),
+      context: "AIFS ENS member diagnostic",
+    });
   }
+
 }
 
 function asAifsQuery(

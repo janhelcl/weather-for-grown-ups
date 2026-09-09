@@ -150,7 +150,7 @@ WFG treats computational efficiency as part of the application architecture:
 
 - resolve shared state such as model initialization once per composed request;
 - execute independent time steps concurrently with a bounded worker pool;
-- do not put one complete member/range on the critical path merely to discover shared run state;
+- resolve ensemble initialization through the member service run-resolution seam, then fan out all selected members; never execute a complete first member/range merely to discover shared run state;
 - reuse one downloaded artifact across points, members or derived operations whenever the provider product permits it;
 - avoid nested concurrency policies that attempt to replace provider access control.
 

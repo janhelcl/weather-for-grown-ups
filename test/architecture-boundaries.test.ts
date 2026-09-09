@@ -206,6 +206,20 @@ describe("architecture boundaries", () => {
     }
   });
 
+  it("keeps ensemble run discovery out of full first-member execution", async () => {
+    const files = [
+      "src/core/aifs-ens.ts",
+      "src/core/aigefs.ts",
+      "src/core/icon-d2-eps.ts",
+      "src/core/pe-arome.ts",
+    ];
+    for (const path of files) {
+      const source = await readFile(path, "utf8");
+      expect(source, path).toContain("ensemble-member-execution.js");
+      expect(source, path).not.toContain("const firstResult = await firstService.query");
+    }
+  });
+
   it("keeps independent deterministic forecast ranges bounded-concurrent", async () => {
     const files = [
       "src/core/aifs.ts",

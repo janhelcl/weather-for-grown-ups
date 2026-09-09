@@ -133,6 +133,23 @@ export class AromeForecastService {
     return this.getAreaSummary(request);
   }
 
+  async resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date> {
+    const selection = expandedSelection(request);
+    const products = aromePackagesForFields(selection.fields);
+    return "at" in request.time
+      ? this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "valid_time",
+          validTime: new Date(request.time.at),
+          products,
+        })
+      : this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "time_range",
+          startTime: new Date(request.time.from),
+          endTime: new Date(request.time.to),
+          products,
+        });
+  }
+
   private async getPoint(request: QueryAtmosphereRequest): Promise<AromePointResult> {
     if (request.geometry.type !== "point" || !("at" in request.time)) {
       throw new Error("Internal AROME routing error: expected point instant query");

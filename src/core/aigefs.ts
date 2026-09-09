@@ -16,7 +16,6 @@ import type {
   ProfileLevel,
 } from "./types.js";
 import { AigfsForecastService } from "./aigfs.js";
-import { mapConcurrent } from "./concurrency.js";
 import {
   summarizeEnsembleLayerDiagnostics,
   summarizeEnsembleProfileDiagnostics,
@@ -26,6 +25,10 @@ import {
   summarizeNumericDistribution,
 } from "./ensemble-statistics.js";
 import { InvalidRequestError } from "../failure.js";
+import {
+  executeMemberDiagnostics,
+  executeMemberQueries,
+} from "./ensemble-member-execution.js";
 
 const MODEL = "aigefs_0p25" as const;
 const DEFAULT_AIGEFS_MEMBER_CONCURRENCY = 4;
@@ -35,6 +38,8 @@ const MEMBER_SET = new Set<string>(AIGEFS_MEMBERS);
 export interface AigefsMemberService {
   query(request: QueryAtmosphereRequest): Promise<unknown>;
   diagnose(request: DiagnoseAtmosphereRequest): Promise<unknown>;
+  resolveQueryRun?(request: QueryAtmosphereRequest): Promise<Date>;
+  resolveDiagnosticRun?(request: DiagnoseAtmosphereRequest): Promise<Date>;
 }
 
 export interface AigefsForecastServiceOptions {
@@ -111,43 +116,28 @@ export class AigefsForecastService {
     request: QueryAtmosphereRequest,
     members: AigefsMember[],
   ): Promise<MemberResult[]> {
-    const firstMember = members[0]!;
-    const firstService = this.memberServiceFactory(firstMember);
-    const firstResult = await firstService.query(asAigfsQuery(request));
-    const run = resultRun(firstResult, "AIGEFS member query");
-    const rest = await mapConcurrent(
-      members.slice(1),
-      this.concurrency,
-      async (member) => ({
-        member,
-        result: await this.memberServiceFactory(member).query(
-          asAigfsQuery(request, run),
-        ),
-      }),
-    );
-    return [{ member: firstMember, result: firstResult }, ...rest];
+    return executeMemberQueries({
+      members,
+      concurrency: this.concurrency,
+      serviceFactory: this.memberServiceFactory,
+      requestFactory: (runOverride) => asAigfsQuery(request, runOverride),
+      context: "AIGEFS member query",
+    });
   }
 
   private async diagnoseMembers(
     request: DiagnoseAtmosphereRequest,
     members: AigefsMember[],
   ): Promise<MemberResult[]> {
-    const firstMember = members[0]!;
-    const firstService = this.memberServiceFactory(firstMember);
-    const firstResult = await firstService.diagnose(asAigfsDiagnostic(request));
-    const run = resultRun(firstResult, "AIGEFS member diagnostic");
-    const rest = await mapConcurrent(
-      members.slice(1),
-      this.concurrency,
-      async (member) => ({
-        member,
-        result: await this.memberServiceFactory(member).diagnose(
-          asAigfsDiagnostic(request, run),
-        ),
-      }),
-    );
-    return [{ member: firstMember, result: firstResult }, ...rest];
+    return executeMemberDiagnostics({
+      members,
+      concurrency: this.concurrency,
+      serviceFactory: this.memberServiceFactory,
+      requestFactory: (runOverride) => asAigfsDiagnostic(request, runOverride),
+      context: "AIGEFS member diagnostic",
+    });
   }
+
 }
 
 function asAigfsQuery(

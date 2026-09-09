@@ -12,7 +12,6 @@ import { Wgrib2StatsDecoder } from "../grib/wgrib2-stats.js";
 import type { QueryAtmosphereRequest } from "../schema/unified-api.js";
 import { parsePeAromeRun } from "../sources/pe-arome.js";
 import { AromeForecastService } from "./arome.js";
-import { mapConcurrent } from "./concurrency.js";
 import {
   summarizeCircularDegrees,
   summarizeNumericDistribution,
@@ -20,6 +19,7 @@ import {
 import { PeAromeRunResolver } from "./pe-arome-run.js";
 import type { NonIsobaricFieldResult } from "./types.js";
 import { InvalidRequestError } from "../failure.js";
+import { executeMemberQueries } from "./ensemble-member-execution.js";
 
 const MODEL = "pe_arome_0p025" as const;
 const DEFAULT_PE_AROME_MEMBER_CONCURRENCY = 2;
@@ -30,6 +30,7 @@ const GRID_POINT_SCALE = AROME_TO_PE_AROME_GRID_RATIO * AROME_TO_PE_AROME_GRID_R
 
 export interface PeAromeMemberService {
   query(request: QueryAtmosphereRequest): Promise<unknown>;
+  resolveQueryRun?(request: QueryAtmosphereRequest): Promise<Date>;
 }
 
 export interface PeAromeForecastServiceOptions {
@@ -104,22 +105,16 @@ export class PeAromeForecastService {
     request: QueryAtmosphereRequest,
     members: PeAromeMember[],
   ): Promise<MemberResult[]> {
-    const firstMember = members[0]!;
-    const firstService = this.memberServiceFactory(firstMember);
-    const firstResult = await firstService.query(asAromeQuery(request));
-    const run = resultRun(firstResult, "PE-AROME member query");
-    const rest = await mapConcurrent(
-      members.slice(1),
-      this.concurrency,
-      async (member) => ({
-        member,
-        result: await this.memberServiceFactory(member).query(
-          asAromeQuery(request, run),
-        ),
-      }),
-    );
-    return [{ member: firstMember, result: firstResult }, ...rest];
+    return executeMemberQueries({
+      members,
+      concurrency: this.concurrency,
+      serviceFactory: this.memberServiceFactory,
+      requestFactory: (runOverride) => asAromeQuery(request, runOverride),
+      context: "PE-AROME member query",
+    });
   }
+
+
 }
 
 function asAromeQuery(

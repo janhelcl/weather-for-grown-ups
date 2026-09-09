@@ -172,6 +172,39 @@ export class AifsForecastService {
       : this.getDiagnosticTimeSeries(request);
   }
 
+  async resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date> {
+    const selection = prepareSelection(request);
+    return "at" in request.time
+      ? this.resolveRun(request.forecast?.run ?? "latest", new Date(request.time.at), selection)
+      : this.resolveRangeRun(
+          request.forecast?.run ?? "latest",
+          new Date(request.time.from),
+          new Date(request.time.to),
+          selection,
+        );
+  }
+
+  async resolveDiagnosticRun(request: DiagnoseAtmosphereRequest): Promise<Date> {
+    if (request.diagnostic.kind === "parcel") {
+      throw new Error("AIFS parcel diagnostics are not supported");
+    }
+    const pressureLevelsHpa = request.diagnostic.kind === "layer"
+      ? [request.diagnostic.lowerPressureHpa, request.diagnostic.upperPressureHpa]
+      : request.diagnostic.pressureLevelsHpa;
+    const requested = request.diagnostic.kind === "layer"
+      ? expandLayerDiagnosticVariables(request.diagnostic.diagnostics)
+      : expandProfileDiagnosticVariables(request.diagnostic.diagnostics);
+    const selection = selectionFrom(requested, pressureLevelsHpa, []);
+    return "at" in request.time
+      ? this.resolveRun(request.forecast?.run ?? "latest", new Date(request.time.at), selection)
+      : this.resolveRangeRun(
+          request.forecast?.run ?? "latest",
+          new Date(request.time.from),
+          new Date(request.time.to),
+          selection,
+        );
+  }
+
   private async getPoint(request: QueryAtmosphereRequest): Promise<AifsProfileResult> {
     if (request.geometry.type !== "point" || !("at" in request.time)) {
       throw new Error("Internal AIFS routing error: expected point instant query");
