@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
+import { ImmutableRangeCache } from "./immutable-range-cache.js";
 import {
   IfsOpenDataAccessPolicy,
   runIfsHttpWithRetry,
@@ -39,6 +40,7 @@ export class IfsOpenDataSubsetCache implements IfsSelectionSource {
   private readonly inFlight = new Map<string, Promise<IfsSubsetFile>>();
   private readonly indexInFlight = new Map<string, Promise<string>>();
   private readonly accessPolicy: IfsHttpAccessPolicy;
+  private readonly rangeCache: ImmutableRangeCache;
 
   constructor(
     private readonly rootDir: string,
@@ -52,6 +54,7 @@ export class IfsOpenDataSubsetCache implements IfsSelectionSource {
       cloudAccessPolicy,
       directAccessPolicy,
     );
+    this.rangeCache = new ImmutableRangeCache(join(rootDir, "ranges"));
   }
 
   async fetchSelection(request: IfsSelectionRequest): Promise<IfsSubsetFile> {
@@ -99,7 +102,12 @@ export class IfsOpenDataSubsetCache implements IfsSelectionSource {
     const chunks = await mapConcurrent(selected, this.rangeConcurrency, async (entry) => {
       const length = entry.length;
       if (length === undefined) throw new Error("ECMWF IFS index entry is missing byte length");
-      return this.fetchRange(gribUrl, entry.offset, length);
+      return this.rangeCache.getOrCreate(
+        gribUrl,
+        entry.offset,
+        length,
+        () => this.fetchRange(gribUrl, entry.offset, length),
+      );
     });
 
     const totalBytes = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
