@@ -57,6 +57,7 @@ import type {
 import type { PointCoordinate, VariableId } from "../schema/query.js";
 import type { IfsIndexSelector } from "../sources/ifs-open-data.js";
 import { computeAreaDistribution } from "./area-distribution.js";
+import { mapConcurrent } from "./concurrency.js";
 import {
   AifsLatestRunResolver,
   type AifsLatestRunProvider,
@@ -75,6 +76,7 @@ import { InvalidRequestError } from "../failure.js";
 
 const MODEL = "aifs_0p25" as const;
 const MAX_NATIVE_STEPS = 61;
+const DEFAULT_AIFS_STEP_CONCURRENCY = 4;
 const HOUR_MS = 3_600_000;
 const STANDARD_GRAVITY = 9.80665;
 
@@ -127,12 +129,14 @@ export interface AifsForecastServiceOptions {
   source?: AifsSelectionSource;
   decoder?: AifsPointDecoder;
   latestRunProvider?: AifsLatestRunProvider;
+  concurrency?: number;
 }
 
 export class AifsForecastService {
   private readonly source: AifsSelectionSource;
   private readonly decoder: AifsPointDecoder;
   private readonly latestRunProvider: AifsLatestRunProvider;
+  private readonly concurrency: number;
 
   constructor(options: AifsForecastServiceOptions = {}) {
     const cacheDir = options.cacheDir
@@ -141,6 +145,7 @@ export class AifsForecastService {
     this.source = options.source ?? new AifsOpenDataSubsetCache(join(cacheDir, "aifs-open-data"));
     this.decoder = options.decoder ?? new BundledAifsPointDecoder();
     this.latestRunProvider = options.latestRunProvider ?? new AifsLatestRunResolver({ cacheDir });
+    this.concurrency = options.concurrency ?? DEFAULT_AIFS_STEP_CONCURRENCY;
   }
 
   async query(request: QueryAtmosphereRequest): Promise<unknown> {
@@ -191,15 +196,17 @@ export class AifsForecastService {
       selection,
     );
     const forecastHours = boundedForecastHours(run, startTime, endTime, request.time.maxSteps);
-    const profiles: AifsProfileResult[] = [];
-    for (const forecastHour of forecastHours) {
-      profiles.push(await this.profileAt(
+    const point = request.geometry;
+    const profiles = await mapConcurrent<number, AifsProfileResult>(
+      forecastHours,
+      this.concurrency,
+      (forecastHour) => this.profileAt(
         run,
         aifsValidTime(run, forecastHour),
-        request.geometry,
+        point,
         selection,
-      ));
-    }
+      ),
+    );
     const first = profiles[0]!;
     return {
       model: MODEL,
@@ -251,15 +258,17 @@ export class AifsForecastService {
       );
     }
 
-    const batches: any[] = [];
-    for (const forecastHour of forecastHours) {
-      batches.push(await this.pointsAt(
+    const points = request.geometry.points;
+    const batches = await mapConcurrent<number, any>(
+      forecastHours,
+      this.concurrency,
+      (forecastHour) => this.pointsAt(
         run,
         aifsValidTime(run, forecastHour),
-        request.geometry.points,
+        points,
         selection,
-      ));
-    }
+      ) as Promise<any>,
+    );
     const first = batches[0]!;
     return {
       model: MODEL,
@@ -361,7 +370,7 @@ export class AifsForecastService {
         }))
       : rawPoints.map((point) => ({
           ...point,
-          value: normalizeFieldValue(selection.fieldIds[0]! as AifsRawFieldId, point.value),
+          value: normalizeGridFieldValue(selection.fieldIds[0]! as AifsRawFieldId, point.value),
         }));
     const computed = computeAreaDistribution(normalized, distributionOptions(request));
 
@@ -486,14 +495,15 @@ export class AifsForecastService {
       selection,
     );
     const forecastHours = boundedForecastHours(run, startTime, endTime, request.time.maxSteps);
-    const results: any[] = [];
-    for (const forecastHour of forecastHours) {
-      results.push(await this.getInstantDiagnostic({
+    const results = await mapConcurrent<number, any>(
+      forecastHours,
+      this.concurrency,
+      (forecastHour) => this.getInstantDiagnostic({
         ...request,
         time: { at: aifsValidTime(run, forecastHour).toISOString() },
         forecast: { ...request.forecast, run: run.toISOString() },
-      } as DiagnoseAtmosphereRequest, run));
-    }
+      } as DiagnoseAtmosphereRequest, run) as Promise<any>,
+    );
     const first = results[0]!;
     return {
       model: MODEL,
@@ -776,7 +786,7 @@ function applyRawPressureValue(
     case "temperature": level.temperatureC = value - 273.15; break;
     case "u_wind": level.uWindMs = value; break;
     case "v_wind": level.vWindMs = value; break;
-    case "geopotential_height": level.geopotentialHeightGpm = value / STANDARD_GRAVITY; break;
+    case "geopotential_height": level.geopotentialHeightGpm = value; break;
     case "specific_humidity": level.specificHumidityKgKg = value; break;
     case "vertical_velocity": level.verticalVelocityPaS = value; break;
   }
@@ -855,7 +865,7 @@ function buildFieldResult(
       temporal: source.temporalSemantics === "accumulation"
         ? accumulationTemporal(run, forecastHour)
         : { type: "instantaneous" },
-      values: { [output.field]: normalizeFieldValue(source.id, rawValue) },
+      values: { [output.field]: normalizeDecodedFieldValue(source.id, rawValue) },
     };
   }
 
@@ -914,15 +924,19 @@ function normalizePressureValue(id: AifsPressureVariableId, value: number): numb
   return value;
 }
 
-function normalizeFieldValue(id: AifsRawFieldId, value: number): number {
+function normalizeDecodedFieldValue(id: AifsRawFieldId, value: number): number {
   const definition = AIFS_FIELD_CATALOG[id];
   if (definition.kind !== "raw") throw new Error(`Internal AIFS raw field normalization error: ${id}`);
   const output = NON_ISOBARIC_FIELD_CATALOG[id].outputs[0]!;
   if (definition.sourceUnit === "K" && output.unit === "degC") return value - 273.15;
-  if (definition.sourceUnit === "m" && output.unit === "mm") return value * 1_000;
-  if (definition.sourceUnit === "fraction" && output.unit === "%") return value * 100;
-  if (id === "surface_geopotential_height") return value / STANDARD_GRAVITY;
+  // decodePointMessages already canonicalizes GRIB geopotential to gpm.
+  // GRIB2 cloud cover is percent and total precipitation is kg/m², numerically mm.
   return value;
+}
+
+function normalizeGridFieldValue(id: AifsRawFieldId, value: number): number {
+  if (id === "surface_geopotential_height") return value / STANDARD_GRAVITY;
+  return normalizeDecodedFieldValue(id, value);
 }
 
 function relativeHumidityFromDewPointPct(temperatureC: number, dewPointC: number): number {

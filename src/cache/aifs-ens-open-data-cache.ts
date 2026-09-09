@@ -30,10 +30,11 @@ import type {
   AifsSubsetFile,
 } from "./aifs-open-data-cache.js";
 
+const sharedIndexInFlight = new Map<string, Promise<string>>();
+
 export class AifsEnsOpenDataSubsetCache
   implements AifsSelectionSource, AifsAvailabilityProbe {
   private readonly inFlight = new Map<string, Promise<AifsSubsetFile>>();
-  private readonly indexInFlight = new Map<string, Promise<string>>();
   private readonly accessPolicy: IfsHttpAccessPolicy;
 
   constructor(
@@ -196,12 +197,12 @@ export class AifsEnsOpenDataSubsetCache
     } catch {
       // Published Open Data forecast files are immutable.
     }
-    const pending = this.indexInFlight.get(key);
+    const pending = sharedIndexInFlight.get(path);
     if (pending) return pending;
 
     const operation = this.downloadIndex(url, path)
-      .finally(() => this.indexInFlight.delete(key));
-    this.indexInFlight.set(key, operation);
+      .finally(() => sharedIndexInFlight.delete(path));
+    sharedIndexInFlight.set(path, operation);
     return operation;
   }
 

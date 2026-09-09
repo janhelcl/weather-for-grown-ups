@@ -60,7 +60,7 @@ export class AifsEnsForecastService {
     this.concurrency = options.concurrency ?? DEFAULT_AIFS_ENS_MEMBER_CONCURRENCY;
     this.memberServiceFactory = options.memberServiceFactory ?? ((member) => {
       const source = new AifsEnsOpenDataSubsetCache(
-        join(cacheDir, "aifs-ens-open-data", member),
+        join(cacheDir, "aifs-ens-open-data"),
         member,
       );
       return new AifsForecastService({

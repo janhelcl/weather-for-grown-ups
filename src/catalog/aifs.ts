@@ -141,11 +141,11 @@ export const AIFS_FIELD_CATALOG: Record<AifsFieldId, AifsFieldDefinition> = {
     dependencies: ["u_wind_100m", "v_wind_100m"],
     temporalSemantics: "instantaneous",
   },
-  total_precipitation: rawField("total_precipitation", "tp", "m", "accumulation"),
-  low_cloud_cover: rawField("low_cloud_cover", "lcc", "fraction"),
-  middle_cloud_cover: rawField("middle_cloud_cover", "mcc", "fraction"),
-  high_cloud_cover: rawField("high_cloud_cover", "hcc", "fraction"),
-  total_atmosphere_cloud_cover: rawField("total_atmosphere_cloud_cover", "tcc", "fraction"),
+  total_precipitation: rawField("total_precipitation", "tp", "kg/m^2", "accumulation"),
+  low_cloud_cover: rawField("low_cloud_cover", "lcc", "%"),
+  middle_cloud_cover: rawField("middle_cloud_cover", "mcc", "%"),
+  high_cloud_cover: rawField("high_cloud_cover", "hcc", "%"),
+  total_atmosphere_cloud_cover: rawField("total_atmosphere_cloud_cover", "tcc", "%"),
 };
 
 const pressureLevelSet = new Set<number>(AIFS_PRESSURE_LEVELS_HPA);

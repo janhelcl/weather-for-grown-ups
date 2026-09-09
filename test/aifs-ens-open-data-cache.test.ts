@@ -63,6 +63,41 @@ describe("AIFS ENS Open Data subset cache", () => {
     expect(fetchFn).toHaveBeenCalledTimes(3);
   });
 
+  it("shares the perturbed index across member cache instances", async () => {
+    const root = await tempRoot();
+    const index = [
+      '{"date":"20260831","time":"0000","step":"6","levtype":"pl","levelist":"850","param":"t","number":"1","_offset":100,"_length":4}',
+      '{"date":"20260831","time":"0000","step":"6","levtype":"pl","levelist":"850","param":"t","number":"2","_offset":200,"_length":4}',
+    ].join("\n");
+    let indexCalls = 0;
+    const fetchFn = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith(".index")) {
+        indexCalls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return new Response(index, { status: 200 });
+      }
+      return new Response(bytes("GRIB"), { status: 206 });
+    }) as typeof fetch;
+    const p01 = new AifsEnsOpenDataSubsetCache(
+      root, "p01", fetchFn, 1, immediatePolicy, immediatePolicy,
+    );
+    const p02 = new AifsEnsOpenDataSubsetCache(
+      root, "p02", fetchFn, 1, immediatePolicy, immediatePolicy,
+    );
+    const selectors = [
+      { key: "temperature@850", param: "t", levtype: "pl" as const, levelist: 850 },
+    ];
+
+    const [first, second] = await Promise.all([
+      p01.fetchSelection({ run, forecastHour: 6, selectors }),
+      p02.fetchSelection({ run, forecastHour: 6, selectors }),
+    ]);
+
+    expect(first.path).not.toBe(second.path);
+    expect(indexCalls).toBe(1);
+    expect(fetchFn).toHaveBeenCalledTimes(3);
+  });
+
   it("reads the dedicated control index without inventing a member number", async () => {
     const root = await tempRoot();
     const index =
