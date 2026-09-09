@@ -142,7 +142,19 @@ Larger requests compose bounded primitives while preserving native model semanti
 - Ensemble spatial/temporal operations remain member-first.
 - Historical analysis preserves exact 00/06/12/18 UTC analysis cycles and has no forecast initialization/lead axis.
 
-Composition is allowed to be serial or bounded-concurrent according to the source contract. The public result reports what was resolved; it does not pretend every backend has identical reuse or parallelism characteristics.
+Independent forecast steps are bounded-concurrent by default. Serial execution is reserved for an explicit provider/data dependency, never as an accidental implementation default. The public result reports what was resolved; it does not pretend every backend has identical reuse or parallelism characteristics.
+
+### Execution-efficiency invariants
+
+WFG treats computational efficiency as part of the application architecture:
+
+- resolve shared state such as model initialization once per composed request;
+- execute independent time steps concurrently with a bounded worker pool;
+- do not put one complete member/range on the critical path merely to discover shared run state;
+- reuse one downloaded artifact across points, members or derived operations whenever the provider product permits it;
+- avoid nested concurrency policies that attempt to replace provider access control.
+
+Application-level concurrency is an optimization limit, not permission to exceed an upstream contract. Every cache miss and retry still passes through `src/access/`, whose provider policy is the authoritative hard ceiling for concurrency and pacing. Raising a core worker count may increase useful overlap for cache hits, decoding or independent provider work, but it must never bypass `UpstreamAccessPolicy`.
 
 ## Source, access, cache and decoder boundaries
 

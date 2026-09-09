@@ -36,6 +36,7 @@ import {
   aromeValidTime,
 } from "../sources/arome.js";
 import { computeAreaDistribution } from "./area-distribution.js";
+import { mapConcurrent } from "./concurrency.js";
 import {
   AromeRunResolver,
   resolveAromeRun,
@@ -55,6 +56,7 @@ import { InvalidRequestError } from "../failure.js";
 
 const MODEL = "arome_0p01" as const;
 const MAX_NATIVE_STEPS = 52;
+export const DEFAULT_AROME_STEP_CONCURRENCY = 4;
 
 export interface AromePointDecoder {
   readonly engine?: GribDecoderName;
@@ -73,6 +75,7 @@ export interface AromeForecastServiceOptions {
   runProvider?: AromeRunProvider;
   areaDecoder?: Wgrib2StatsDecoder;
   areaGridDecoder?: Wgrib2GridDecoder;
+  concurrency?: number;
 }
 
 interface ExpandedSelection {
@@ -98,6 +101,7 @@ export class AromeForecastService {
   private readonly runProvider: AromeRunProvider;
   private readonly areaDecoder: Wgrib2StatsDecoder;
   private readonly areaGridDecoder: Wgrib2GridDecoder;
+  private readonly concurrency: number;
 
   constructor(options: AromeForecastServiceOptions = {}) {
     const cacheDir = options.cacheDir
@@ -108,6 +112,7 @@ export class AromeForecastService {
     this.runProvider = options.runProvider ?? new AromeRunResolver(this.cache);
     this.areaDecoder = options.areaDecoder ?? new Wgrib2StatsDecoder();
     this.areaGridDecoder = options.areaGridDecoder ?? new Wgrib2GridDecoder();
+    this.concurrency = options.concurrency ?? DEFAULT_AROME_STEP_CONCURRENCY;
   }
 
   async query(request: QueryAtmosphereRequest): Promise<unknown> {
@@ -162,15 +167,17 @@ export class AromeForecastService {
       request.time.maxSteps,
     );
 
-    const points: AromePointResult[] = [];
-    for (const forecastHour of forecastHours) {
-      points.push(await this.pointAt(
+    const point = request.geometry;
+    const points = await mapConcurrent(
+      forecastHours,
+      this.concurrency,
+      (forecastHour) => this.pointAt(
         run,
         aromeValidTime(run, forecastHour),
-        request.geometry,
+        point,
         selection,
-      ));
-    }
+      ),
+    );
     const first = points[0]!;
     return {
       model: MODEL,
@@ -231,15 +238,17 @@ export class AromeForecastService {
       );
     }
 
-    const batches: any[] = [];
-    for (const forecastHour of forecastHours) {
-      batches.push(await this.pointsAt(
+    const requestedPoints = request.geometry.points;
+    const batches = await mapConcurrent(
+      forecastHours,
+      this.concurrency,
+      (forecastHour) => this.pointsAt(
         run,
         aromeValidTime(run, forecastHour),
-        request.geometry.points,
+        requestedPoints,
         selection,
-      ));
-    }
+      ) as Promise<any>,
+    );
     const first = batches[0]!;
     return {
       model: MODEL,
