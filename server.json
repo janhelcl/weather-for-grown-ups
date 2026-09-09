@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.janhelcl/weather-for-grown-ups",
   "title": "Weather for Grown Ups",
-  "description": "Structured access to operational forecasts, ensembles, AI weather models, regional NWP, reforecasts, and historical analysis.",
+  "description": "Operational NWP, ensembles, AI weather models, regional forecasts, history, and verification.",
   "repository": {
     "url": "https://github.com/janhelcl/weather-for-grown-ups",
     "source": "github"
