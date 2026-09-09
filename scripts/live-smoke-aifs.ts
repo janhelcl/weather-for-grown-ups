@@ -19,6 +19,7 @@ const result = await new UnifiedAtmosphereQueryService().query({
       "wind_10m",
       "mean_sea_level_pressure",
       "total_precipitation",
+      "total_atmosphere_cloud_cover",
     ],
   },
   forecast: { run: safelyPublishedRun.toISOString() },
@@ -38,15 +39,24 @@ assert(profile.levels.every((level: any) => Number.isFinite(level.temperatureC))
 assert(profile.levels.every((level: any) => Number.isFinite(level.windSpeedMs)));
 assert(profile.levels.every((level: any) => Number.isFinite(level.specificHumidityKgKg)));
 assert(profile.levels.every((level: any) => Number.isFinite(level.geopotentialHeightGpm)));
+assert(profile.levels.every((level: any) =>
+  level.geopotentialHeightGpm > 500 && level.geopotentialHeightGpm < 10_000));
 
 for (const field of [
   "temperature_2m",
   "wind_10m",
   "mean_sea_level_pressure",
   "total_precipitation",
+  "total_atmosphere_cloud_cover",
 ]) {
   assert(profile.fields.some((item: any) => item.id === field), `missing AIFS field ${field}`);
 }
+const precipitation = profile.fields.find((item: any) => item.id === "total_precipitation");
+assert(precipitation.values.totalPrecipitationMm >= 0);
+assert(precipitation.values.totalPrecipitationMm < 1_000);
+const cloud = profile.fields.find((item: any) => item.id === "total_atmosphere_cloud_cover");
+assert(cloud.values.cloudCoverPct >= 0 && cloud.values.cloudCoverPct <= 100);
+
 assert.equal(profile.source.provider, "ECMWF Open Data");
 assert.equal(profile.source.access, "indexed_http_range");
 assert.equal(profile.source.product, "aifs_single_0p25_oper_fc");

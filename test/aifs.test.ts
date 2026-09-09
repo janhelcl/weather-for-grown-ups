@@ -432,6 +432,46 @@ describe("AIFS unified capability", () => {
     expect(fetchSelection).not.toHaveBeenCalled();
   });
 
+  it("runs AIFS time-range steps with bounded concurrency", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const fetchSelection = vi.fn(async (request: any) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      active -= 1;
+      return { path: `aifs-step-${request.forecastHour}`, cacheHit: false };
+    });
+    const decoder = {
+      engine: "gribberish" as const,
+      extractPoint: vi.fn(async (_path: string, longitude: number, latitude: number) => [{
+        code: "t",
+        pressureHpa: 850,
+        value: 280,
+        gridPoint: { latitude, longitude },
+      }] satisfies DecodedValue[]),
+    };
+    const service = new AifsForecastService({
+      source: { fetchSelection },
+      decoder,
+      concurrency: 2,
+    });
+
+    const result: any = await service.query(queryAtmosphereSchema.parse({
+      dataset: "aifs",
+      geometry: { type: "point", latitude: 50, longitude: 14 },
+      time: {
+        from: "2026-08-31T00:00:00Z",
+        to: "2026-08-31T18:00:00Z",
+      },
+      forecast: { run: "2026-08-31T00:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+    }));
+
+    expect(result.series.map((step: any) => step.forecastHour)).toEqual([0, 6, 12, 18]);
+    expect(maxActive).toBe(2);
+  });
+
   it("supports successful point-matrix queries and selection-aware latest run injection", async () => {
     const selections = new Map<string, readonly any[]>();
     let fileIndex = 0;
@@ -660,13 +700,14 @@ describe("AIFS unified capability", () => {
       { code: "t", pressureHpa: 850, value: 280, gridPoint },
       { code: "u", pressureHpa: 850, value: 3, gridPoint },
       { code: "v", pressureHpa: 850, value: 4, gridPoint },
-      { code: "z", pressureHpa: 850, value: 14_709.975, gridPoint },
+      { code: "HGT", pressureHpa: 850, value: 1_500, gridPoint },
       { code: "q", pressureHpa: 850, value: 0.005, gridPoint },
       { code: "2t", heightAboveGroundM: 2, value: 293.15, gridPoint },
       { code: "10u", heightAboveGroundM: 10, value: 6, gridPoint },
       { code: "10v", heightAboveGroundM: 10, value: 8, gridPoint },
-      { code: "tp", surface: true, value: 0.012, gridPoint },
+      { code: "APCP", surface: true, value: 12, gridPoint },
       { code: "2d", heightAboveGroundM: 2, value: 283.15, gridPoint },
+      { code: "TCDC", surface: true, value: 42, gridPoint },
     ];
     const service = new AifsForecastService({
       source: { fetchSelection },
@@ -681,12 +722,12 @@ describe("AIFS unified capability", () => {
       selection: {
         variables: ["temperature", "wind", "geopotential_height", "specific_humidity"],
         pressureLevelsHpa: [850],
-        fields: ["temperature_2m", "wind_10m", "total_precipitation", "relative_humidity_2m"],
+        fields: ["temperature_2m", "wind_10m", "total_precipitation", "relative_humidity_2m", "total_atmosphere_cloud_cover"],
       },
     }));
 
     expect(fetchSelection.mock.calls[0]?.[0].selectors.map((selector: any) => selector.param))
-      .toEqual(["t", "u", "v", "z", "q", "2t", "10u", "10v", "tp", "2d"]);
+      .toEqual(["t", "u", "v", "z", "q", "2t", "10u", "10v", "tp", "2d", "tcc"]);
     expect(result.model).toBe("aifs_0p25");
     expect(result.forecastHour).toBe(6);
     expect(result.levels[0]).toMatchObject({
@@ -709,6 +750,8 @@ describe("AIFS unified capability", () => {
       });
     expect(result.fields.find((field: any) => field.id === "relative_humidity_2m")
       .values.relativeHumidityPct).toBeGreaterThan(40);
+    expect(result.fields.find((field: any) => field.id === "total_atmosphere_cloud_cover")
+      .values.cloudCoverPct).toBe(42);
     expect(result.source).toMatchObject({
       provider: "ECMWF Open Data",
       access: "indexed_http_range",
@@ -729,10 +772,10 @@ function aifsFixtureValue(param: string, pressureHpa?: number): number {
     return 280;
   }
   if (param === "z") {
-    if (pressureHpa === 850) return 1_500 * 9.80665;
-    if (pressureHpa === 700) return 3_000 * 9.80665;
-    if (pressureHpa === 500) return 5_600 * 9.80665;
-    return 100 * 9.80665;
+    if (pressureHpa === 850) return 1_500;
+    if (pressureHpa === 700) return 3_000;
+    if (pressureHpa === 500) return 5_600;
+    return 100;
   }
   if (param === "u") {
     if (pressureHpa === 850) return 2;
@@ -756,10 +799,10 @@ function aifsFixtureValue(param: string, pressureHpa?: number): number {
   if (param === "10v") return 4;
   if (param === "100u") return 6;
   if (param === "100v") return 8;
-  if (param === "tp") return 0.012;
-  if (param === "lcc") return 0.2;
-  if (param === "mcc") return 0.3;
-  if (param === "hcc") return 0.4;
-  if (param === "tcc") return 0.5;
+  if (param === "tp") return 12;
+  if (param === "lcc") return 20;
+  if (param === "mcc") return 30;
+  if (param === "hcc") return 40;
+  if (param === "tcc") return 50;
   throw new Error(`Unhandled AIFS fixture parameter: ${param}`);
 }
