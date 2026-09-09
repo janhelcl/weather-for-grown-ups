@@ -22,6 +22,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: python scripts/tmp_execution_budget_patch.py
+      - run: python scripts/tmp_execution_budget_fix.py
       - run: npm run typecheck
       - run: npx vitest run test/execution-budget.test.ts test/time-series.test.ts test/points-time-series.test.ts test/ifs-spatiotemporal.test.ts test/gefs-ensemble.test.ts test/gefs-ensemble-timeseries.test.ts test/ifs-ens-member-bundle.test.ts test/ifs-ens-timeseries.test.ts test/aifs.test.ts test/aifs-ens.test.ts test/aigefs.test.ts test/icon-d2-eps.test.ts test/pe-arome.test.ts test/architecture-boundaries.test.ts
       - run: npm run build
@@ -29,7 +30,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/tmp-execution-budget.yml scripts/tmp_execution_budget_patch.py
-          git add src/core/execution-budget.ts src/core/time-series.ts src/core/points-time-series.ts src/core/ifs-spatiotemporal.ts src/core/aifs.ts src/core/gefs-ensemble.ts src/core/gefs-ensemble-timeseries.ts src/core/ifs-ens-member-bundle.ts src/core/ifs-ens-timeseries.ts src/core/aifs-ens.ts src/core/aigefs.ts src/core/icon-d2-eps.ts src/core/pe-arome.ts test/execution-budget.test.ts docs/ARCHITECTURE.md
+          git rm .github/workflows/tmp-execution-budget.yml scripts/tmp_execution_budget_patch.py scripts/tmp_execution_budget_fix.py
+          git add src/core/execution-budget.ts src/core/time-series.ts src/core/points-time-series.ts src/core/ifs-spatiotemporal.ts src/core/aifs.ts src/core/gefs-ensemble.ts src/core/gefs-ensemble-timeseries.ts src/core/ifs-ens-member-bundle.ts src/core/ifs-ens-timeseries.ts src/core/aifs-ens.ts src/core/aigefs.ts src/core/icon-d2-eps.ts src/core/pe-arome.ts test/execution-budget.test.ts test/time-series.test.ts test/points-time-series.test.ts docs/ARCHITECTURE.md
           git commit -m "perf: budget composed query fan-out"
           git push origin HEAD:perf/request-budget-and-batched-execution
