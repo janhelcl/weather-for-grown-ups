@@ -1,0 +1,205 @@
+name: Temporary AIFS bugfix
+
+on:
+  push:
+    branches:
+      - fix/aifs-decoder-units-and-concurrency
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Apply AIFS fixes
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"missing expected snippet in {path}: {old[:120]!r}")
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected one occurrence in {path}, found {text.count(old)}")
+              p.write_text(text.replace(old, new, 1))
+
+          # AIFS deterministic: use bounded concurrency for native steps.
+          replace_once(
+              "src/core/aifs.ts",
+              'import { computeAreaDistribution } from "./area-distribution.js";\n',
+              'import { computeAreaDistribution } from "./area-distribution.js";\nimport { mapConcurrent } from "./concurrency.js";\n',
+          )
+          replace_once(
+              "src/core/aifs.ts",
+              'const MAX_NATIVE_STEPS = 61;\nconst HOUR_MS = 3_600_000;\nconst STANDARD_GRAVITY = 9.80665;\n',
+              'const MAX_NATIVE_STEPS = 61;\nconst DEFAULT_AIFS_STEP_CONCURRENCY = 4;\nconst HOUR_MS = 3_600_000;\nconst STANDARD_GRAVITY = 9.80665;\n',
+          )
+          replace_once(
+              "src/core/aifs.ts",
+              'export interface AifsForecastServiceOptions {\n  cacheDir?: string;\n  source?: AifsSelectionSource;\n  decoder?: AifsPointDecoder;\n  latestRunProvider?: AifsLatestRunProvider;\n}\n',
+              'export interface AifsForecastServiceOptions {\n  cacheDir?: string;\n  source?: AifsSelectionSource;\n  decoder?: AifsPointDecoder;\n  latestRunProvider?: AifsLatestRunProvider;\n  concurrency?: number;\n}\n',
+          )
+          replace_once(
+              "src/core/aifs.ts",
+              '  private readonly source: AifsSelectionSource;\n  private readonly decoder: AifsPointDecoder;\n  private readonly latestRunProvider: AifsLatestRunProvider;\n',
+              '  private readonly source: AifsSelectionSource;\n  private readonly decoder: AifsPointDecoder;\n  private readonly latestRunProvider: AifsLatestRunProvider;\n  private readonly concurrency: number;\n',
+          )
+          replace_once(
+              "src/core/aifs.ts",
+              '    this.source = options.source ?? new AifsOpenDataSubsetCache(join(cacheDir, "aifs-open-data"));\n    this.decoder = options.decoder ?? new BundledAifsPointDecoder();\n    this.latestRunProvider = options.latestRunProvider ?? new AifsLatestRunResolver({ cacheDir });\n',
+              '    this.source = options.source ?? new AifsOpenDataSubsetCache(join(cacheDir, "aifs-open-data"));\n    this.decoder = options.decoder ?? new BundledAifsPointDecoder();\n    this.latestRunProvider = options.latestRunProvider ?? new AifsLatestRunResolver({ cacheDir });\n    this.concurrency = options.concurrency ?? DEFAULT_AIFS_STEP_CONCURRENCY;\n',
+          )
+          replace_once(
+              "src/core/aifs.ts",
+              '''    const forecastHours = boundedForecastHours(run, startTime, endTime, request.time.maxSteps);\n    const profiles: AifsProfileResult[] = [];\n    for (const forecastHour of forecastHours) {\n      profiles.push(await this.profileAt(\n        run,\n        aifsValidTime(run, forecastHour),\n        request.geometry,\n        selection,\n      ));\n    }\n''',
+              '''    const forecastHours = boundedForecastHours(run, startTime, endTime, request.time.maxSteps);\n    const profiles = await mapConcurrent(\n      forecastHours,\n      this.concurrency,\n      (forecastHour) => this.profileAt(\n        run,\n        aifsValidTime(run, forecastHour),\n        request.geometry,\n        selection,\n      ),\n    );\n''',
+          )
+          replace_once(
+              "src/core/aifs.ts",
+              '''    const batches: any[] = [];\n    for (const forecastHour of forecastHours) {\n      batches.push(await this.pointsAt(\n        run,\n        aifsValidTime(run, forecastHour),\n        request.geometry.points,\n        selection,\n      ));\n    }\n''',
+              '''    const batches = await mapConcurrent(\n      forecastHours,\n      this.concurrency,\n      (forecastHour) => this.pointsAt(\n        run,\n        aifsValidTime(run, forecastHour),\n        request.geometry.points,\n        selection,\n      ),\n    );\n''',
+          )
+          replace_once(
+              "src/core/aifs.ts",
+              '''    const forecastHours = boundedForecastHours(run, startTime, endTime, request.time.maxSteps);\n    const results: any[] = [];\n    for (const forecastHour of forecastHours) {\n      results.push(await this.getInstantDiagnostic({\n        ...request,\n        time: { at: aifsValidTime(run, forecastHour).toISOString() },\n        forecast: { ...request.forecast, run: run.toISOString() },\n      } as DiagnoseAtmosphereRequest, run));\n    }\n''',
+              '''    const forecastHours = boundedForecastHours(run, startTime, endTime, request.time.maxSteps);\n    const results = await mapConcurrent(\n      forecastHours,\n      this.concurrency,\n      (forecastHour) => this.getInstantDiagnostic({\n        ...request,\n        time: { at: aifsValidTime(run, forecastHour).toISOString() },\n        forecast: { ...request.forecast, run: run.toISOString() },\n      } as DiagnoseAtmosphereRequest, run),\n    );\n''',
+          )
+
+          # Point decoding already canonicalizes GRIB geopotential (GP -> HGT/gpm).
+          replace_once(
+              "src/core/aifs.ts",
+              '    case "geopotential_height": level.geopotentialHeightGpm = value / STANDARD_GRAVITY; break;\n',
+              '    case "geopotential_height": level.geopotentialHeightGpm = value; break;\n',
+          )
+          replace_once(
+              "src/core/aifs.ts",
+              '      values: { [output.field]: normalizeFieldValue(source.id, rawValue) },\n',
+              '      values: { [output.field]: normalizeDecodedFieldValue(source.id, rawValue) },\n',
+          )
+          replace_once(
+              "src/core/aifs.ts",
+              '          value: normalizeFieldValue(selection.fieldIds[0]! as AifsRawFieldId, point.value),\n',
+              '          value: normalizeGridFieldValue(selection.fieldIds[0]! as AifsRawFieldId, point.value),\n',
+          )
+          replace_once(
+              "src/core/aifs.ts",
+              '''function normalizeFieldValue(id: AifsRawFieldId, value: number): number {\n  const definition = AIFS_FIELD_CATALOG[id];\n  if (definition.kind !== "raw") throw new Error(`Internal AIFS raw field normalization error: ${id}`);\n  const output = NON_ISOBARIC_FIELD_CATALOG[id].outputs[0]!;\n  if (definition.sourceUnit === "K" && output.unit === "degC") return value - 273.15;\n  if (definition.sourceUnit === "m" && output.unit === "mm") return value * 1_000;\n  if (definition.sourceUnit === "fraction" && output.unit === "%") return value * 100;\n  if (id === "surface_geopotential_height") return value / STANDARD_GRAVITY;\n  return value;\n}\n''',
+              '''function normalizeDecodedFieldValue(id: AifsRawFieldId, value: number): number {\n  const definition = AIFS_FIELD_CATALOG[id];\n  if (definition.kind !== "raw") throw new Error(`Internal AIFS raw field normalization error: ${id}`);\n  const output = NON_ISOBARIC_FIELD_CATALOG[id].outputs[0]!;\n  if (definition.sourceUnit === "K" && output.unit === "degC") return value - 273.15;\n  // decodePointMessages already canonicalizes GRIB geopotential to gpm.\n  // GRIB2 cloud cover is percent and total precipitation is kg/m², numerically mm.\n  return value;\n}\n\nfunction normalizeGridFieldValue(id: AifsRawFieldId, value: number): number {\n  if (id === "surface_geopotential_height") return value / STANDARD_GRAVITY;\n  return normalizeDecodedFieldValue(id, value);\n}\n''',
+          )
+
+          # AIFS catalog should describe GRIB2/WMO units at the decode boundary.
+          replace_once(
+              "src/catalog/aifs.ts",
+              '  total_precipitation: rawField("total_precipitation", "tp", "m", "accumulation"),\n  low_cloud_cover: rawField("low_cloud_cover", "lcc", "fraction"),\n  middle_cloud_cover: rawField("middle_cloud_cover", "mcc", "fraction"),\n  high_cloud_cover: rawField("high_cloud_cover", "hcc", "fraction"),\n  total_atmosphere_cloud_cover: rawField("total_atmosphere_cloud_cover", "tcc", "fraction"),\n',
+              '  total_precipitation: rawField("total_precipitation", "tp", "kg/m^2", "accumulation"),\n  low_cloud_cover: rawField("low_cloud_cover", "lcc", "%"),\n  middle_cloud_cover: rawField("middle_cloud_cover", "mcc", "%"),\n  high_cloud_cover: rawField("high_cloud_cover", "hcc", "%"),\n  total_atmosphere_cloud_cover: rawField("total_atmosphere_cloud_cover", "tcc", "%"),\n',
+          )
+
+          # Unit fixtures model the actual AifsPointDecoder contract, not ECMWF MARS units.
+          replace_once(
+              "test/aifs.test.ts",
+              '''      { code: "z", pressureHpa: 850, value: 14_709.975, gridPoint },\n      { code: "q", pressureHpa: 850, value: 0.005, gridPoint },\n      { code: "2t", heightAboveGroundM: 2, value: 293.15, gridPoint },\n      { code: "10u", heightAboveGroundM: 10, value: 6, gridPoint },\n      { code: "10v", heightAboveGroundM: 10, value: 8, gridPoint },\n      { code: "tp", surface: true, value: 0.012, gridPoint },\n      { code: "2d", heightAboveGroundM: 2, value: 283.15, gridPoint },\n''',
+              '''      { code: "HGT", pressureHpa: 850, value: 1_500, gridPoint },\n      { code: "q", pressureHpa: 850, value: 0.005, gridPoint },\n      { code: "2t", heightAboveGroundM: 2, value: 293.15, gridPoint },\n      { code: "10u", heightAboveGroundM: 10, value: 6, gridPoint },\n      { code: "10v", heightAboveGroundM: 10, value: 8, gridPoint },\n      { code: "APCP", surface: true, value: 12, gridPoint },\n      { code: "2d", heightAboveGroundM: 2, value: 283.15, gridPoint },\n      { code: "TCDC", surface: true, value: 42, gridPoint },\n''',
+          )
+          replace_once(
+              "test/aifs.test.ts",
+              '        fields: ["temperature_2m", "wind_10m", "total_precipitation", "relative_humidity_2m"],\n',
+              '        fields: ["temperature_2m", "wind_10m", "total_precipitation", "relative_humidity_2m", "total_atmosphere_cloud_cover"],\n',
+          )
+          replace_once(
+              "test/aifs.test.ts",
+              '      .toEqual(["t", "u", "v", "z", "q", "2t", "10u", "10v", "tp", "2d"]);\n',
+              '      .toEqual(["t", "u", "v", "z", "q", "2t", "10u", "10v", "tp", "2d", "tcc"]);\n',
+          )
+          replace_once(
+              "test/aifs.test.ts",
+              '''    expect(result.fields.find((field: any) => field.id === "relative_humidity_2m")\n      .values.relativeHumidityPct).toBeGreaterThan(40);\n''',
+              '''    expect(result.fields.find((field: any) => field.id === "relative_humidity_2m")\n      .values.relativeHumidityPct).toBeGreaterThan(40);\n    expect(result.fields.find((field: any) => field.id === "total_atmosphere_cloud_cover")\n      .values.cloudCoverPct).toBe(42);\n''',
+          )
+          replace_once(
+              "test/aifs.test.ts",
+              '''  if (param === "z") {\n    if (pressureHpa === 850) return 1_500 * 9.80665;\n    if (pressureHpa === 700) return 3_000 * 9.80665;\n    if (pressureHpa === 500) return 5_600 * 9.80665;\n    return 100 * 9.80665;\n  }\n''',
+              '''  if (param === "z") {\n    if (pressureHpa === 850) return 1_500;\n    if (pressureHpa === 700) return 3_000;\n    if (pressureHpa === 500) return 5_600;\n    return 100;\n  }\n''',
+          )
+          replace_once("test/aifs.test.ts", '  if (param === "tp") return 0.012;\n', '  if (param === "tp") return 12;\n')
+          replace_once("test/aifs.test.ts", '  if (param === "lcc") return 0.2;\n  if (param === "mcc") return 0.3;\n  if (param === "hcc") return 0.4;\n  if (param === "tcc") return 0.5;\n', '  if (param === "lcc") return 20;\n  if (param === "mcc") return 30;\n  if (param === "hcc") return 40;\n  if (param === "tcc") return 50;\n')
+
+          # Regression: AIFS range steps must overlap, but stay bounded.
+          marker = '  it("supports successful point-matrix queries and selection-aware latest run injection", async () => {\n'
+          concurrency_test = '''  it("runs AIFS time-range steps with bounded concurrency", async () => {\n    let active = 0;\n    let maxActive = 0;\n    const fetchSelection = vi.fn(async (request: any) => {\n      active += 1;\n      maxActive = Math.max(maxActive, active);\n      await new Promise((resolve) => setTimeout(resolve, 15));\n      active -= 1;\n      return { path: `aifs-step-${request.forecastHour}`, cacheHit: false };\n    });\n    const decoder = {\n      engine: "gribberish" as const,\n      extractPoint: vi.fn(async (_path: string, longitude: number, latitude: number) => [{\n        code: "t",\n        pressureHpa: 850,\n        value: 280,\n        gridPoint: { latitude, longitude },\n      }] satisfies DecodedValue[]),\n    };\n    const service = new AifsForecastService({\n      source: { fetchSelection },\n      decoder,\n      concurrency: 2,\n    });\n\n    const result: any = await service.query(queryAtmosphereSchema.parse({\n      dataset: "aifs",\n      geometry: { type: "point", latitude: 50, longitude: 14 },\n      time: {\n        from: "2026-08-31T00:00:00Z",\n        to: "2026-08-31T18:00:00Z",\n      },\n      forecast: { run: "2026-08-31T00:00:00Z" },\n      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },\n    }));\n\n    expect(result.series.map((step: any) => step.forecastHour)).toEqual([0, 6, 12, 18]);\n    expect(maxActive).toBe(2);\n  });\n\n'''
+          replace_once("test/aifs.test.ts", marker, concurrency_test + marker)
+
+          # Live smoke: assert physical ranges so this exact regression cannot hide behind finite-number checks.
+          replace_once(
+              "scripts/live-smoke-aifs.ts",
+              '      "total_precipitation",\n',
+              '      "total_precipitation",\n      "total_atmosphere_cloud_cover",\n',
+          )
+          replace_once(
+              "scripts/live-smoke-aifs.ts",
+              '  "total_precipitation",\n]) {\n',
+              '  "total_precipitation",\n  "total_atmosphere_cloud_cover",\n]) {\n',
+          )
+          replace_once(
+              "scripts/live-smoke-aifs.ts",
+              'assert(profile.levels.every((level: any) => Number.isFinite(level.geopotentialHeightGpm)));\n\n',
+              '''assert(profile.levels.every((level: any) => Number.isFinite(level.geopotentialHeightGpm)));\nassert(profile.levels.every((level: any) =>\n  level.geopotentialHeightGpm > 500 && level.geopotentialHeightGpm < 10_000));\n\n''',
+          )
+          replace_once(
+              "scripts/live-smoke-aifs.ts",
+              'assert.equal(profile.source.provider, "ECMWF Open Data");\n',
+              '''const precipitation = profile.fields.find((item: any) => item.id === "total_precipitation");\nassert(precipitation.values.totalPrecipitationMm >= 0);\nassert(precipitation.values.totalPrecipitationMm < 1_000);\nconst cloud = profile.fields.find((item: any) => item.id === "total_atmosphere_cloud_cover");\nassert(cloud.values.cloudCoverPct >= 0 && cloud.values.cloudCoverPct <= 100);\n\nassert.equal(profile.source.provider, "ECMWF Open Data");\n''',
+          )
+
+          # AIFS ENS: perturbed members share one pf index. Share both disk cache and in-flight work.
+          replace_once(
+              "src/core/aifs-ens.ts",
+              '        join(cacheDir, "aifs-ens-open-data", member),\n',
+              '        join(cacheDir, "aifs-ens-open-data"),\n',
+          )
+          replace_once(
+              "src/cache/aifs-ens-open-data-cache.ts",
+              'export class AifsEnsOpenDataSubsetCache\n',
+              'const sharedIndexInFlight = new Map<string, Promise<string>>();\n\nexport class AifsEnsOpenDataSubsetCache\n',
+          )
+          replace_once(
+              "src/cache/aifs-ens-open-data-cache.ts",
+              '  private readonly indexInFlight = new Map<string, Promise<string>>();\n',
+              '',
+          )
+          replace_once(
+              "src/cache/aifs-ens-open-data-cache.ts",
+              '''    const pending = this.indexInFlight.get(key);\n    if (pending) return pending;\n\n    const operation = this.downloadIndex(url, path)\n      .finally(() => this.indexInFlight.delete(key));\n    this.indexInFlight.set(key, operation);\n''',
+              '''    const pending = sharedIndexInFlight.get(path);\n    if (pending) return pending;\n\n    const operation = this.downloadIndex(url, path)\n      .finally(() => sharedIndexInFlight.delete(path));\n    sharedIndexInFlight.set(path, operation);\n''',
+          )
+
+          cache_marker = '  it("reads the dedicated control index without inventing a member number", async () => {\n'
+          shared_cache_test = '''  it("shares the perturbed index across member cache instances", async () => {\n    const root = await tempRoot();\n    const index = [\n      '{"date":"20260831","time":"0000","step":"6","levtype":"pl","levelist":"850","param":"t","number":"1","_offset":100,"_length":4}',\n      '{"date":"20260831","time":"0000","step":"6","levtype":"pl","levelist":"850","param":"t","number":"2","_offset":200,"_length":4}',\n    ].join("\\n");\n    let indexCalls = 0;\n    const fetchFn = vi.fn(async (input: string | URL | Request) => {\n      if (String(input).endsWith(".index")) {\n        indexCalls += 1;\n        await new Promise((resolve) => setTimeout(resolve, 10));\n        return new Response(index, { status: 200 });\n      }\n      return new Response(bytes("GRIB"), { status: 206 });\n    }) as typeof fetch;\n    const p01 = new AifsEnsOpenDataSubsetCache(\n      root, "p01", fetchFn, 1, immediatePolicy, immediatePolicy,\n    );\n    const p02 = new AifsEnsOpenDataSubsetCache(\n      root, "p02", fetchFn, 1, immediatePolicy, immediatePolicy,\n    );\n    const selectors = [\n      { key: "temperature@850", param: "t", levtype: "pl" as const, levelist: 850 },\n    ];\n\n    const [first, second] = await Promise.all([\n      p01.fetchSelection({ run, forecastHour: 6, selectors }),\n      p02.fetchSelection({ run, forecastHour: 6, selectors }),\n    ]);\n\n    expect(first.path).not.toBe(second.path);\n    expect(indexCalls).toBe(1);\n    expect(fetchFn).toHaveBeenCalledTimes(3);\n  });\n\n'''
+          replace_once("test/aifs-ens-open-data-cache.test.ts", cache_marker, shared_cache_test + cache_marker)
+          PY
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test focused AIFS suites
+        run: npx vitest run test/aifs.test.ts test/aifs-ens.test.ts test/aifs-ens-open-data-cache.test.ts
+      - name: Build
+        run: npm run build
+      - name: Commit fixes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/tmp-fix-aifs-bugs.yml
+          git add src/core/aifs.ts src/catalog/aifs.ts test/aifs.test.ts scripts/live-smoke-aifs.ts src/core/aifs-ens.ts src/cache/aifs-ens-open-data-cache.ts test/aifs-ens-open-data-cache.test.ts
+          git commit -m "fix: correct AIFS decoding and range fan-out"
+          git push
