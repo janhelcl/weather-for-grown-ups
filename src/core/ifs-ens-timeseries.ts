@@ -16,7 +16,8 @@ import {
   IfsEnsLatestRunResolver,
   type IfsEnsLatestRangeRunProvider,
 } from "./ifs-ens-latest-run.js";
-import { IfsEnsMemberBundleService } from "./ifs-ens-member-bundle.js";
+import { DEFAULT_IFS_ENS_MEMBER_CONCURRENCY, IfsEnsMemberBundleService } from "./ifs-ens-member-bundle.js";
+import { nestedConcurrency } from "./execution-budget.js";
 import { ifsIndexSelectorsForSelection } from "./ifs-profile.js";
 import {
   ifsEnsForecastHoursInRange,
@@ -25,7 +26,7 @@ import {
 } from "./ifs-time.js";
 import { InvalidRequestError } from "../failure.js";
 
-export const DEFAULT_IFS_ENS_TIME_STEP_CONCURRENCY = 2;
+export const DEFAULT_IFS_ENS_TIME_STEP_CONCURRENCY = 4;
 
 export interface IfsEnsBundleGetter {
   getBundle(input: IfsEnsMemberBundleQueryInput): Promise<IfsEnsMemberBundleResult>;
@@ -43,9 +44,11 @@ export class IfsEnsTimeSeriesService {
   private readonly stepConcurrency: number;
 
   constructor(options: IfsEnsTimeSeriesServiceOptions = {}) {
-    this.bundleGetter = options.bundleGetter ?? new IfsEnsMemberBundleService();
-    this.latestRunRangeProvider = options.latestRunRangeProvider ?? new IfsEnsLatestRunResolver();
     this.stepConcurrency = options.stepConcurrency ?? DEFAULT_IFS_ENS_TIME_STEP_CONCURRENCY;
+    this.bundleGetter = options.bundleGetter ?? new IfsEnsMemberBundleService({
+      concurrency: nestedConcurrency(this.stepConcurrency, DEFAULT_IFS_ENS_MEMBER_CONCURRENCY),
+    });
+    this.latestRunRangeProvider = options.latestRunRangeProvider ?? new IfsEnsLatestRunResolver();
   }
 
   async getTimeSeries(input: IfsEnsTimeSeriesQueryInput): Promise<IfsEnsTimeSeriesResult> {

@@ -11,7 +11,8 @@ import { Wgrib2GridDecoder } from "../grib/wgrib2-grid.js";
 import { Wgrib2StatsDecoder } from "../grib/wgrib2-stats.js";
 import type { QueryAtmosphereRequest } from "../schema/unified-api.js";
 import { parsePeAromeRun } from "../sources/pe-arome.js";
-import { AromeForecastService } from "./arome.js";
+import { AromeForecastService, DEFAULT_AROME_STEP_CONCURRENCY } from "./arome.js";
+import { nestedConcurrency } from "./execution-budget.js";
 import {
   summarizeCircularDegrees,
   summarizeNumericDistribution,
@@ -64,6 +65,7 @@ export class PeAromeForecastService {
         decoder: new Wgrib2Decoder(),
         areaDecoder: new Wgrib2StatsDecoder(),
         areaGridDecoder: new Wgrib2GridDecoder(),
+        concurrency: nestedConcurrency(this.concurrency, DEFAULT_AROME_STEP_CONCURRENCY),
       });
     });
   }

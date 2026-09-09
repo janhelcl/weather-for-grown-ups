@@ -35,7 +35,7 @@ import { IfsEnsMemberSelectionSource } from "./ifs-ens-member-source.js";
 import { IfsProfileService, ifsIndexSelectorsForSelection } from "./ifs-profile.js";
 import { ifsEnsForecastHour, parseIfsRun } from "./ifs-time.js";
 
-export const DEFAULT_IFS_ENS_MEMBER_CONCURRENCY = 4;
+export const DEFAULT_IFS_ENS_MEMBER_CONCURRENCY = 8;
 
 export interface IfsEnsMemberBundleServiceOptions {
   cacheDir?: string;

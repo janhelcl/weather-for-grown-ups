@@ -76,7 +76,7 @@ import { InvalidRequestError } from "../failure.js";
 
 const MODEL = "aifs_0p25" as const;
 const MAX_NATIVE_STEPS = 61;
-const DEFAULT_AIFS_STEP_CONCURRENCY = 4;
+export const DEFAULT_AIFS_STEP_CONCURRENCY = 8;
 const HOUR_MS = 3_600_000;
 const STANDARD_GRAVITY = 9.80665;
 

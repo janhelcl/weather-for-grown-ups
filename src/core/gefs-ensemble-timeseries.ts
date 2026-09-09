@@ -7,14 +7,15 @@ import {
 } from "../schema/gefs-ensemble-timeseries.js";
 import type { GefsEnsembleQueryInput, GefsEnsembleResult } from "../schema/gefs-ensemble.js";
 import { mapConcurrent } from "./concurrency.js";
-import { GefsEnsembleService } from "./gefs-ensemble.js";
+import { DEFAULT_GEFS_MEMBER_CONCURRENCY, GefsEnsembleService } from "./gefs-ensemble.js";
+import { nestedConcurrency } from "./execution-budget.js";
 import {
   GefsLatestRunResolver,
   type GefsLatestRunRangeProvider,
 } from "./gefs-latest-run.js";
 import { gefsForecastHour, nativeGefsValidTimesInRange, parseGefsRun } from "./gefs-time.js";
 
-export const DEFAULT_GEFS_TIME_STEP_CONCURRENCY = 2;
+export const DEFAULT_GEFS_TIME_STEP_CONCURRENCY = 4;
 
 export interface GefsEnsembleGetter {
   getEnsemble(query: GefsEnsembleQueryInput): Promise<GefsEnsembleResult>;
@@ -32,9 +33,11 @@ export class GefsEnsembleTimeSeriesService {
   private readonly stepConcurrency: number;
 
   constructor(options: GefsEnsembleTimeSeriesServiceOptions = {}) {
-    this.ensembleGetter = options.ensembleGetter ?? new GefsEnsembleService();
-    this.latestRunRangeProvider = options.latestRunRangeProvider ?? new GefsLatestRunResolver();
     this.stepConcurrency = options.stepConcurrency ?? DEFAULT_GEFS_TIME_STEP_CONCURRENCY;
+    this.ensembleGetter = options.ensembleGetter ?? new GefsEnsembleService({
+      concurrency: nestedConcurrency(this.stepConcurrency, DEFAULT_GEFS_MEMBER_CONCURRENCY),
+    });
+    this.latestRunRangeProvider = options.latestRunRangeProvider ?? new GefsLatestRunResolver();
   }
 
   async getTimeSeries(input: GefsEnsembleTimeSeriesQueryInput): Promise<GefsEnsembleTimeSeriesResult> {

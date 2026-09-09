@@ -1,4 +1,5 @@
 import { mapConcurrent } from "./concurrency.js";
+import { nestedConcurrency } from "./execution-budget.js";
 import { IfsLatestRunResolver, type IfsLatestRangeRunProvider, type IfsLatestRunProvider } from "./ifs-latest-run.js";
 import { ifsIndexSelectorsForSelection, IfsProfileService } from "./ifs-profile.js";
 import {
@@ -30,7 +31,7 @@ import type { PointCoordinate } from "../schema/query.js";
 import { InvalidRequestError } from "../failure.js";
 
 export const DEFAULT_IFS_POINT_CONCURRENCY = 4;
-export const DEFAULT_IFS_TIME_CONCURRENCY = 3;
+export const DEFAULT_IFS_TIME_CONCURRENCY = 8;
 
 export interface IfsProfileGetter {
   getProfile(input: IfsPointQueryInput): Promise<IfsProfileResult>;
@@ -155,9 +156,15 @@ export class IfsPointsTimeSeriesService {
 
   constructor(options: IfsSpatiotemporalOptions = {}) {
     const resolver = new IfsLatestRunResolver();
-    this.pointsService = new IfsPointsService(options);
-    this.latestRangeRunProvider = options.latestRangeRunProvider ?? resolver;
     this.concurrency = options.timeConcurrency ?? DEFAULT_IFS_TIME_CONCURRENCY;
+    this.pointsService = new IfsPointsService({
+      ...options,
+      pointConcurrency: nestedConcurrency(
+        this.concurrency,
+        options.pointConcurrency ?? DEFAULT_IFS_POINT_CONCURRENCY,
+      ),
+    });
+    this.latestRangeRunProvider = options.latestRangeRunProvider ?? resolver;
   }
 
   async getPointsTimeSeries(input: IfsPointsTimeSeriesQueryInput): Promise<IfsPointsTimeSeriesResult> {

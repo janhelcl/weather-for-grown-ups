@@ -30,7 +30,8 @@ import { IconD2RunResolver } from "./icon-d2-run.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
 import { Wgrib2GridDecoder } from "../grib/wgrib2-grid.js";
 import { Wgrib2StatsDecoder } from "../grib/wgrib2-stats.js";
-import { IconD2ForecastService } from "./icon-d2.js";
+import { DEFAULT_ICON_D2_STEP_CONCURRENCY, IconD2ForecastService } from "./icon-d2.js";
+import { nestedConcurrency } from "./execution-budget.js";
 import {
   summarizeEnsembleLayerDiagnostics,
   summarizeEnsembleProfileDiagnostics,
@@ -106,6 +107,7 @@ export class IconD2EpsForecastService {
         decoder: new Wgrib2Decoder(undefined, "DWD"),
         areaDecoder: new Wgrib2StatsDecoder(undefined, undefined, "DWD"),
         areaGridDecoder: new Wgrib2GridDecoder(undefined, undefined, "DWD"),
+        concurrency: nestedConcurrency(this.concurrency, DEFAULT_ICON_D2_STEP_CONCURRENCY),
       });
     });
   }

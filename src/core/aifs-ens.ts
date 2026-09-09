@@ -16,7 +16,8 @@ import type {
   ProfileLevel,
 } from "./types.js";
 import { AifsLatestRunResolver } from "./aifs-run.js";
-import { AifsForecastService } from "./aifs.js";
+import { AifsForecastService, DEFAULT_AIFS_STEP_CONCURRENCY } from "./aifs.js";
+import { nestedConcurrency } from "./execution-budget.js";
 import {
   summarizeEnsembleLayerDiagnostics,
   summarizeEnsembleProfileDiagnostics,
@@ -32,7 +33,7 @@ import {
 } from "./ensemble-member-execution.js";
 
 const MODEL = "aifs_ens_0p25" as const;
-const DEFAULT_AIFS_ENS_MEMBER_CONCURRENCY = 4;
+export const DEFAULT_AIFS_ENS_MEMBER_CONCURRENCY = 8;
 const DEFAULT_QUANTILES = [0.1, 0.5, 0.9] as const;
 const MEMBER_SET = new Set<string>(AIFS_ENS_MEMBERS);
 
@@ -71,6 +72,7 @@ export class AifsEnsForecastService {
       return new AifsForecastService({
         source,
         latestRunProvider: new AifsLatestRunResolver({ probe: source, cacheDir }),
+        concurrency: nestedConcurrency(this.concurrency, DEFAULT_AIFS_STEP_CONCURRENCY),
       });
     });
   }

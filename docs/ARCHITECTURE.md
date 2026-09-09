@@ -158,6 +158,8 @@ WFG treats computational efficiency as part of the application architecture:
 
 Application-level concurrency is an optimization limit, not permission to exceed an upstream contract. Every cache miss and retry still passes through `src/access/`, whose provider policy is the authoritative hard ceiling for concurrency and pacing. Raising a core worker count may increase useful overlap for cache hits, decoding or independent provider work, but it must never bypass `UpstreamAccessPolicy`.
 
+Nested WFG orchestration uses `DEFAULT_COMPOSED_EXECUTION_BUDGET` from `src/core/execution-budget.ts` as a multiplicative fan-out budget. A parent time/member worker pool allocates the remaining child concurrency with `nestedConcurrency(...)`; standalone services may use more parallelism than the same service receives when nested. This budget protects the process from accidental `time × member × point` explosions. It is deliberately separate from provider enforcement: `src/access/` can and often does impose a stricter limit on actual upstream requests.
+
 ## Source, access, cache and decoder boundaries
 
 These concerns are separate because changing a transport must not change the atmospheric API.

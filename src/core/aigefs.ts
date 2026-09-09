@@ -15,7 +15,8 @@ import type {
   ProfileDiagnosticResult,
   ProfileLevel,
 } from "./types.js";
-import { AigfsForecastService } from "./aigfs.js";
+import { AigfsForecastService, DEFAULT_AIGFS_STEP_CONCURRENCY } from "./aigfs.js";
+import { nestedConcurrency } from "./execution-budget.js";
 import {
   summarizeEnsembleLayerDiagnostics,
   summarizeEnsembleProfileDiagnostics,
@@ -31,7 +32,7 @@ import {
 } from "./ensemble-member-execution.js";
 
 const MODEL = "aigefs_0p25" as const;
-const DEFAULT_AIGEFS_MEMBER_CONCURRENCY = 4;
+export const DEFAULT_AIGEFS_MEMBER_CONCURRENCY = 8;
 const DEFAULT_QUANTILES = [0.1, 0.5, 0.9] as const;
 const MEMBER_SET = new Set<string>(AIGEFS_MEMBERS);
 
@@ -68,6 +69,7 @@ export class AigefsForecastService {
           join(cacheDir, "aigefs-s3", member),
           member,
         ),
+        concurrency: nestedConcurrency(this.concurrency, DEFAULT_AIGFS_STEP_CONCURRENCY),
       }));
   }
 

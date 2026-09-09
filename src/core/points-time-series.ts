@@ -5,7 +5,8 @@ import {
   type BatchPointsQueryInput,
   type PointsTimeSeriesQueryInput,
 } from "../schema/query.js";
-import { BatchPointsService } from "./batch-points.js";
+import { BatchPointsService, DEFAULT_BATCH_POINT_CONCURRENCY } from "./batch-points.js";
+import { nestedConcurrency } from "./execution-budget.js";
 import { mapConcurrent } from "./concurrency.js";
 import {
   nativeForecastHoursInRange,
@@ -22,7 +23,7 @@ import type { BatchPointsResult, PointsTimeSeriesResult } from "./types.js";
 import type { AtmosphericProgressReporter } from "./progress.js";
 import { InvalidRequestError } from "../failure.js";
 
-export const DEFAULT_POINTS_TIME_SERIES_CONCURRENCY = 4;
+export const DEFAULT_POINTS_TIME_SERIES_CONCURRENCY = 8;
 
 export interface BatchPointsGetter {
   getPoints(query: BatchPointsQueryInput): Promise<BatchPointsResult>;
@@ -51,10 +52,11 @@ export class PointsTimeSeriesService {
 
   constructor(options: PointsTimeSeriesServiceOptions = {}) {
     this.latestRunProvider = options.latestRunProvider ?? new LatestRunResolver();
+    this.concurrency = options.concurrency ?? DEFAULT_POINTS_TIME_SERIES_CONCURRENCY;
     this.batchPointsGetter = options.batchPointsGetter ?? new BatchPointsService({
       latestRunProvider: this.latestRunProvider,
+      concurrency: nestedConcurrency(this.concurrency, DEFAULT_BATCH_POINT_CONCURRENCY),
     });
-    this.concurrency = options.concurrency ?? DEFAULT_POINTS_TIME_SERIES_CONCURRENCY;
     this.onProgress = options.onProgress;
   }
 

@@ -62,8 +62,8 @@ describe("TimeSeriesService", () => {
     expect(getProfile.mock.calls.every(([query]) => query.source === "s3")).toBe(true);
   });
 
-  it("defaults to bounded concurrency of four", () => {
-    expect(DEFAULT_TIME_SERIES_CONCURRENCY).toBe(4);
+  it("defaults to bounded concurrency of eight", () => {
+    expect(DEFAULT_TIME_SERIES_CONCURRENCY).toBe(8);
   });
 
   it("bounds concurrent profile operations", async () => {
