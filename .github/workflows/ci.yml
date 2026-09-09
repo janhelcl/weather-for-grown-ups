@@ -45,14 +45,18 @@ jobs:
       - name: Install packed package and invoke package-name bin
         run: |
           set -euo pipefail
+          name="$(node -p "require('./package.json').name")"
           tarball="$(npm pack --silent)"
           prefix="$(mktemp -d)"
           npm install --prefix "$prefix" --no-audit --no-fund "./$tarball"
+          package_dir="$prefix/node_modules/$name"
           "$prefix/node_modules/.bin/weather-for-grown-ups" --help
           test "$("$prefix/node_modules/.bin/weather-for-grown-ups" --version)" = "$(node -p "require('./package.json').version")"
           test -x "$prefix/node_modules/.bin/wfg"
           test -x "$prefix/node_modules/.bin/wfg-mcp"
           test -x "$prefix/node_modules/.bin/wfg-mcp-http"
+          test -f "$package_dir/server.json"
+          test -f "$package_dir/skills/weather-for-grown-ups/SKILL.md"
 
   docker:
     runs-on: ubuntu-latest

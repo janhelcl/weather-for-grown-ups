@@ -1,6 +1,7 @@
 {
   "name": "weather-for-grown-ups",
   "version": "0.5.4",
+  "mcpName": "io.github.janhelcl/weather-for-grown-ups",
   "description": "Unified agent-native access to global and regional NOAA/DWD/Météo-France/ECMWF atmospheric forecasts, ensembles, reforecasts, and historical GFS analysis.",
   "type": "module",
   "license": "MIT",
@@ -39,6 +40,8 @@
     "dist",
     "README.md",
     "docs",
+    "skills",
+    "server.json",
     "LICENSE"
   ],
   "engines": {
@@ -72,10 +75,11 @@
     "test:live:gefs-runs": "tsx scripts/live-smoke-gefs-run-comparison.ts",
     "test:live:area": "tsx scripts/live-smoke-area.ts",
     "test:live:all": "npm run test:live:bundled && npm run test:live:s3 && npm run test:live:aigfs && npm run test:live:aigefs && npm run test:live:hgefs && npm run test:live:icon-d2 && npm run test:live:icon-d2-eps && npm run test:live:arome && npm run test:live:gfs-routing && npm run test:live:ifs && npm run test:live:aifs && npm run test:live:aifs-ens && npm run test:live:gefs && npm run test:live:gefs-reforecast && npm run test:live:gefs-runs && npm run test:live:area && npm run test:live:igra && npm run test:live:igra-skill",
+    "test:distribution": "node scripts/check-release-metadata.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "pack:check": "npm pack --dry-run",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build && npm run test:smoke",
+    "prepublishOnly": "npm run test:distribution && npm run typecheck && npm test && npm run build && npm run test:smoke",
     "test:live:gfs-operational-parity": "tsx scripts/live-smoke-gfs-operational-parity.ts",
     "test:live:gfs-analysis-routing": "tsx scripts/live-smoke-gfs-analysis-routing.ts",
     "test:live:gfs-archive-equivalence": "tsx scripts/live-smoke-gfs-equivalence.ts",
@@ -99,7 +103,7 @@
     "execa": "^9.0.0",
     "zod": "^4.0.0",
     "netcdfjs": "^4.0.0",
-    "seek-bzip": "^2.0.0"
+    "seek-bzip": "^1.0.0"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "^2.0.0",
