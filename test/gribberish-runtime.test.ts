@@ -253,6 +253,37 @@ describe("bundled GRIB2 point decoding", () => {
   });
 });
 
+describe("bundled GRIB2 prepared-grid reuse", () => {
+  it("prepares one parsed message grid once across repeated point and area sampling", () => {
+    let coordinateReads = 0;
+    let dataReads = 0;
+    const message = fakeMessage({
+      key: "TMP:202608240600:850 in mb:Forecast",
+      values: [280, 281, 282, 283],
+    });
+    (message as any).latlngAdjusted = () => {
+      coordinateReads += 1;
+      return { latitude: [50, 50, 49, 49], longitude: [14, 15, 14, 15] };
+    };
+    (message as any).dataAdjusted = () => {
+      dataReads += 1;
+      return [280, 281, 282, 283];
+    };
+
+    decodePointMessages([message], 14, 50);
+    decodePointMessages([message], 15, 49);
+    gridPointsInBox(message, {
+      westLongitude: 14,
+      eastLongitude: 15,
+      southLatitude: 49,
+      northLatitude: 50,
+    });
+
+    expect(coordinateReads).toBe(1);
+    expect(dataReads).toBe(1);
+  });
+});
+
 describe("bundled GRIB2 exact message selection", () => {
   const instant = fakeMessage({
     key: "LCDC:202608240600: in low cloud layer:Forecast",

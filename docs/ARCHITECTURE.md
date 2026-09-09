@@ -152,6 +152,7 @@ WFG treats computational efficiency as part of the application architecture:
 - execute independent time steps concurrently with a bounded worker pool;
 - resolve ensemble initialization through the member service run-resolution seam, then fan out all selected members; never execute a complete first member/range merely to discover shared run state;
 - reuse one downloaded artifact across points, members or derived operations whenever the provider product permits it;
+- keep bounded in-process decoded-artifact reuse below orchestration so repeated point sampling does not re-read, re-parse or re-decompress identical GRIB cache artifacts;
 - avoid nested concurrency policies that attempt to replace provider access control.
 
 Application-level concurrency is an optimization limit, not permission to exceed an upstream contract. Every cache miss and retry still passes through `src/access/`, whose provider policy is the authoritative hard ceiling for concurrency and pacing. Raising a core worker count may increase useful overlap for cache hits, decoding or independent provider work, but it must never bypass `UpstreamAccessPolicy`.
