@@ -63,6 +63,16 @@ HTTP configuration:
 - `WFG_MCP_ALLOWED_HOSTS` — comma-separated accepted Host header hostnames; required for non-loopback binds
 - `WFG_MCP_ALLOWED_ORIGINS` — optional comma-separated browser Origin hostnames; when absent on a non-loopback bind, requests carrying an Origin header are rejected
 
+## Agent Skill
+
+WFG ships a portable Agent Skill in `skills/weather-for-grown-ups/SKILL.md`. Install it directly from the repository with the skills CLI:
+
+```bash
+npx skills add janhelcl/weather-for-grown-ups --skill weather-for-grown-ups
+```
+
+The skill teaches the agent the same WFG contract rather than defining another API. Shell-capable agents should prefer the CLI; when a suitable shell is not available, the skill maps the same operations onto the MCP tools. It also tells agents to discover capabilities through `catalog` / `search_catalog` instead of guessing model symmetry.
+
 ## Global npm install
 
 A global install is optional when repeated local CLI use is more convenient:
@@ -152,12 +162,14 @@ docker run --rm -p 3000:3000 \
 
 ## Publishing
 
-`npm run pack:check` builds the package and shows exactly what npm would publish. Normal CI also packs the tarball, installs it into a clean temporary prefix, and invokes the package-name executable so missing `files`, `bin`, or runtime dependency metadata is caught before release.
+`npm run pack:check` builds the package and shows exactly what npm would publish. Normal CI also packs the tarball, installs it into a clean temporary prefix, invokes the package-name executable, verifies that the Agent Skill and `server.json` are present, and validates `server.json` with the official MCP Registry publisher.
 
-Tags matching `v*` drive both release surfaces:
+A release keeps four distribution artifacts aligned:
 
 - `.github/workflows/release-image.yml` publishes the matching multi-architecture image to GitHub Container Registry.
-- `.github/workflows/release-npm.yml` verifies that a `vX.Y.Z` tag exactly matches the `X.Y.Z` version in `package.json`, verifies the packed npm payload, and publishes the package to npm.
+- `.github/workflows/release-npm.yml` verifies that a `vX.Y.Z` tag exactly matches the `X.Y.Z` versions in `package.json`, `package-lock.json`, and `server.json`, verifies the packed npm payload, and publishes the package to npm.
+- the same npm workflow publishes `io.github.janhelcl/weather-for-grown-ups` at that exact version to the official MCP Registry after npm is visible, using GitHub OIDC; reruns first check whether the immutable Registry version already exists.
+- `skills/weather-for-grown-ups/SKILL.md` is repository-native and is snapshotted by the release tag and included in the npm tarball. Skills clients install it from the GitHub repository, so there is no separate skill registry upload step.
 
 The npm workflow is set up for npm Trusted Publishing through GitHub Actions OIDC. Configure the package's npm Trusted Publisher with:
 
@@ -167,7 +179,7 @@ The npm workflow is set up for npm Trusted Publishing through GitHub Actions OID
 - workflow filename: `release-npm.yml`
 - allowed action: `npm publish`
 
-No long-lived npm publish token is stored in GitHub once Trusted Publishing is configured. The workflow uses GitHub's `id-token: write` permission and Node.js 24. npm automatically attaches provenance for a public package published from this public GitHub repository through Trusted Publishing.
+No long-lived npm or MCP Registry publish token is stored in GitHub. The workflow uses GitHub's `id-token: write` permission for both npm Trusted Publishing and MCP Registry GitHub OIDC. npm automatically attaches provenance for a public package published from this public GitHub repository through Trusted Publishing.
 
 ## Licensing note
 
