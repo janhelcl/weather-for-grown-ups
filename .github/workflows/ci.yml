@@ -40,6 +40,15 @@ jobs:
         with:
           node-version: 24
       - run: node scripts/check-release-metadata.mjs
+      - name: Validate MCP Registry manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz"
+          curl -fsSL "$url" -o /tmp/mcp-publisher.tar.gz
+          echo "a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc  /tmp/mcp-publisher.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/mcp-publisher.tar.gz mcp-publisher
+          ./mcp-publisher validate server.json
       - run: npm install --no-audit --no-fund
       - run: npm run pack:check
       - name: Install packed package and invoke package-name bin
