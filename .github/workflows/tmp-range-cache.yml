@@ -1,0 +1,35 @@
+name: temporary-immutable-range-cache
+
+on:
+  push:
+    branches:
+      - perf/request-budget-and-batched-execution
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/request-budget-and-batched-execution
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: python scripts/tmp_range_cache_patch.py
+      - run: npm run typecheck
+      - run: npx vitest run test/immutable-range-cache.test.ts test/aifs-open-data-cache.test.ts test/aifs-ens-open-data-cache.test.ts test/ifs-profile.test.ts test/ifs-ens-member-bundle.test.ts
+      - run: npm run build
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/tmp-range-cache.yml scripts/tmp_range_cache_patch.py
+          git add src/cache/immutable-range-cache.ts src/cache/aifs-open-data-cache.ts src/cache/aifs-ens-open-data-cache.ts src/cache/ifs-open-data-cache.ts test/immutable-range-cache.test.ts test/aifs-open-data-cache.test.ts docs/ARCHITECTURE.md
+          git commit -m "perf: reuse immutable GRIB ranges across selections"
+          git push origin HEAD:perf/request-budget-and-batched-execution
