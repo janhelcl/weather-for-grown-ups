@@ -14,12 +14,12 @@ Use WFG as a weather evidence engine. It returns numerical-model data, diagnosti
 
 ## Choose the interface
 
-1. If WFG MCP tools are already available in the host, use them.
-2. Otherwise, when a shell and Node.js 20+ are available, prefer the CLI:
+1. When a shell and Node.js 20+ are available, prefer the CLI, including for agents that could also use MCP:
    ```bash
    npx -y weather-for-grown-ups ...
    ```
-3. For repeated local use, an installed `wfg` or `weather-for-grown-ups` binary is equivalent.
+2. When a suitable shell is not available, use WFG MCP tools if the host exposes them.
+3. For repeated local CLI use, an installed `wfg` or `weather-for-grown-ups` binary is equivalent to the `npx` form.
 4. Do not start `mcp` just to answer through a shell. `mcp` and `mcp-http` are transport launchers for MCP hosts.
 
 CLI and MCP use the same schemas and application services.
