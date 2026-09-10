@@ -13,6 +13,7 @@ import {
   shouldUseArchivedGfsForecast,
 } from "../archived-gfs-query.js";
 import { BatchPointsService } from "../batch-points.js";
+import { selectAutomaticGfsPointSource } from "../gfs-point-source.js";
 import { PointsTimeSeriesService } from "../points-time-series.js";
 import type { AtmosphericProgressReporter } from "../progress.js";
 import { ProfileService } from "../profile.js";
@@ -82,7 +83,7 @@ export class GfsQueryAdapter implements AtmosphericQueryAdapter {
     if (request.geometry.type !== "point" || !("at" in request.time)) {
       throw new Error("Internal GFS routing error: expected point + instant");
     }
-    return this.profile.getProfile(profileQuerySchema.parse({
+    const parsed = profileQuerySchema.parse({
       latitude: request.geometry.latitude,
       longitude: request.geometry.longitude,
       run: request.forecast?.run ?? "latest",
@@ -90,14 +91,18 @@ export class GfsQueryAdapter implements AtmosphericQueryAdapter {
       validTime: request.time.at,
       ...sparseSelection(request),
       source: request.source ?? "s3",
-    }));
+    });
+    const query = request.source === undefined
+      ? { ...parsed, source: selectAutomaticGfsPointSource(parsed) }
+      : parsed;
+    return this.profile.getProfile(query);
   }
 
   private pointRange(request: QueryAtmosphereRequest): Promise<unknown> {
     if (request.geometry.type !== "point" || !("from" in request.time)) {
       throw new Error("Internal GFS routing error: expected point + range");
     }
-    return this.timeSeries.getTimeSeries(timeSeriesQuerySchema.parse({
+    const parsed = timeSeriesQuerySchema.parse({
       latitude: request.geometry.latitude,
       longitude: request.geometry.longitude,
       run: request.forecast?.run ?? "latest",
@@ -107,7 +112,11 @@ export class GfsQueryAdapter implements AtmosphericQueryAdapter {
       ...sparseSelection(request),
       source: request.source ?? "s3",
       ...(request.time.maxSteps === undefined ? {} : { maxSteps: request.time.maxSteps }),
-    }));
+    });
+    const query = request.source === undefined
+      ? { ...parsed, source: selectAutomaticGfsPointSource(parsed) }
+      : parsed;
+    return this.timeSeries.getTimeSeries(query);
   }
 
   private pointsInstant(request: QueryAtmosphereRequest): Promise<unknown> {
