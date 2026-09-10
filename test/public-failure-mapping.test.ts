@@ -3,7 +3,7 @@ import { resolveMeteoFranceBearerToken } from "../src/access/meteo-france-auth.j
 import { createCliProgram } from "../src/cli/program.js";
 import { runCli } from "../src/cli/run.js";
 import {
-  buildUnifiedDatasetComparison,
+  buildUnifiedAlignment,
   buildUnifiedQuery,
 } from "../src/cli/unified-atmosphere-command.js";
 import { nativeGefsValidTimesInRange } from "../src/core/gefs-time.js";
@@ -74,7 +74,7 @@ describe("QA-reported failures reach the public boundary with their real message
 
     expect(() => buildUnifiedQuery({ dataset: "ecmwf", lat: 50, lon: 14, at: "2026-09-06T12:00:00Z" }))
       .toThrow(InvalidRequestError);
-    expect(() => buildUnifiedDatasetComparison({ lat: 50, lon: 14, at: "2026-09-06T12:00:00Z", against: "nope" }))
+    expect(() => buildUnifiedAlignment({ lat: 50, lon: 14, at: "2026-09-06T12:00:00Z", source: ["gfs", "nope"], vars: "temperature", levels: "850" }))
       .toThrow(InvalidRequestError);
   });
 

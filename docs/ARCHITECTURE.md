@@ -235,8 +235,7 @@ CLI atmospheric commands are intentionally compact:
 - `catalog`;
 - `query`;
 - `diagnose`;
-- `compare-runs`;
-- `compare-datasets`;
+- `align`;
 - `verify`;
 - `analogs`;
 - `index ...` for local history/verification corpus administration;
@@ -247,8 +246,7 @@ MCP exposes the corresponding weather surface:
 - `search_catalog`;
 - `query_atmosphere`;
 - `diagnose_atmosphere`;
-- `compare_runs`;
-- `compare_datasets`;
+- `align_atmosphere`;
 - `verify_forecast`;
 - `find_analogs`.
 

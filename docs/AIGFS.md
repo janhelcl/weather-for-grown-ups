@@ -129,6 +129,4 @@ Changing `dataset` to another supported deterministic source asks the same atmos
 
 ## Comparison scope
 
-AIGFS is queryable now, but this first implementation deliberately does not bolt another pair-specific branch onto `compare_datasets`.
-
-GFS↔AIGFS, AIGFS↔AIFS and broader physics↔AI comparisons belong behind the comparison-strategy registry described in the roadmap. Query compatibility does not by itself imply scientifically meaningful comparison semantics.
+GFS↔AIGFS, AIGFS↔AIFS and broader physics↔AI questions use `align_atmosphere` with sources such as `gfs`, `aigfs`, `aifs`. WFG aligns the evidence by canonical quantity and valid time with `modelClass` provenance per source; it does not decide which model class is right. See [ALIGNMENT.md](ALIGNMENT.md).

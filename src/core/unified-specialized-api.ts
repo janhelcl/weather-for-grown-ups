@@ -1,66 +1,19 @@
 import {
-  compareAtmosphericDatasetsSchema,
-  compareAtmosphericRunsSchema,
   findAtmosphericAnalogsSchema,
   unifiedSpecializedResultSchema,
   verifyAtmosphericForecastSchema,
-  type CompareAtmosphericDatasetsInput,
-  type CompareAtmosphericRunsInput,
   type FindAtmosphericAnalogsInput,
   type UnifiedSpecializedResult,
   type VerifyAtmosphericForecastInput,
 } from "../schema/unified-specialized.js";
-import { createAtmosphericDatasetComparisonStrategyRegistry } from "./comparison-strategies/registry.js";
-import {
-  atmosphericDatasetComparisonKey,
-  type AtmosphericDatasetComparisonStrategyRegistry,
-} from "./comparison-strategies/types.js";
 import {
   createAtmosphericAnalogAdapterRegistry,
-  createAtmosphericRunComparisonAdapterRegistry,
   createAtmosphericVerificationAdapterRegistry,
 } from "./specialized-adapters/registry.js";
 import {
   type AtmosphericAnalogAdapterRegistry,
-  type AtmosphericRunComparisonAdapterRegistry,
   type AtmosphericVerificationAdapterRegistry,
 } from "./specialized-adapters/types.js";
-
-export interface UnifiedRunComparisonServiceOptions {
-  adapters?: Partial<AtmosphericRunComparisonAdapterRegistry>;
-}
-
-export class UnifiedRunComparisonService {
-  private readonly adapters: AtmosphericRunComparisonAdapterRegistry;
-
-  constructor(options: UnifiedRunComparisonServiceOptions = {}) {
-    this.adapters = createAtmosphericRunComparisonAdapterRegistry(options.adapters);
-  }
-
-  async compare(input: CompareAtmosphericRunsInput): Promise<UnifiedSpecializedResult> {
-    const request = compareAtmosphericRunsSchema.parse(input);
-    const result = await this.adapters[request.dataset].compare(request);
-    return wrap("compare_runs", [request.dataset], result);
-  }
-}
-
-export interface UnifiedDatasetComparisonServiceOptions {
-  strategies?: Partial<AtmosphericDatasetComparisonStrategyRegistry>;
-}
-
-export class UnifiedDatasetComparisonService {
-  private readonly strategies: AtmosphericDatasetComparisonStrategyRegistry;
-
-  constructor(options: UnifiedDatasetComparisonServiceOptions = {}) {
-    this.strategies = createAtmosphericDatasetComparisonStrategyRegistry(options.strategies);
-  }
-
-  async compare(input: CompareAtmosphericDatasetsInput): Promise<UnifiedSpecializedResult> {
-    const request = compareAtmosphericDatasetsSchema.parse(input);
-    const result = await this.strategies[atmosphericDatasetComparisonKey(request)].compare(request);
-    return wrap("compare_datasets", [...request.datasets], result);
-  }
-}
 
 export interface UnifiedForecastVerificationServiceOptions {
   adapters?: Partial<AtmosphericVerificationAdapterRegistry>;

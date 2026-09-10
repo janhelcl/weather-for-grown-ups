@@ -7,14 +7,15 @@ export {
   type UnifiedAtmosphereDiagnosticServiceOptions,
 } from "./unified-atmosphere-diagnostics.js";
 export {
+  UnifiedAtmosphereAlignmentService,
+  type AlignmentQueryService,
+  type UnifiedAtmosphereAlignmentServiceOptions,
+} from "./unified-atmosphere-alignment.js";
+export {
   UnifiedAnalogService,
-  UnifiedDatasetComparisonService,
   UnifiedForecastVerificationService,
-  UnifiedRunComparisonService,
   type UnifiedAnalogServiceOptions,
-  type UnifiedDatasetComparisonServiceOptions,
   type UnifiedForecastVerificationServiceOptions,
-  type UnifiedRunComparisonServiceOptions,
 } from "./unified-specialized-api.js";
 
 export {

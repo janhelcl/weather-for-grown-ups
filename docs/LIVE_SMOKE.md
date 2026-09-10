@@ -28,7 +28,7 @@ test:live:icon-d2-eps
 test:live:arome
 test:live:history
 test:live:gefs
-test:live:gefs-runs
+test:live:align
 test:live:area
 ```
 
@@ -111,7 +111,7 @@ The live cases intentionally use small member/point/time selections. Their purpo
 
 ### GEFS run comparison
 
-`npm run test:live:gefs-runs` verifies distribution evolution across consecutive model initializations while preserving the rule that repeated perturbation labels are not member trajectories across cycles.
+`npm run test:live:align` exercises `align_atmosphere` on live data: a mixed deterministic/ensemble/regional fan-out at one valid time, a run-to-run alignment of one model, and a range with `validTimes: union`. It asserts per-source provenance, canonical unit/delta labels, inline per-source failures and that no differences are computed by WFG.
 
 ### Area summaries
 

@@ -6,8 +6,7 @@ const SURFACE_OPERATIONS = [
   ["catalog", "search_catalog"],
   ["query", "query_atmosphere"],
   ["diagnose", "diagnose_atmosphere"],
-  ["compare-runs", "compare_runs"],
-  ["compare-datasets", "compare_datasets"],
+  ["align", "align_atmosphere"],
   ["verify", "verify_forecast"],
   ["analogs", "find_analogs"],
 ] as const;

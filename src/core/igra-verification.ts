@@ -15,7 +15,7 @@ import {
   type IgraObservationProfileQuery,
   type IgraObservationProfileResult,
 } from "./igra-observation.js";
-import { circularDegreeDelta } from "./run-comparison.js";
+import { circularDegreeDelta } from "../derived/wind.js";
 
 const HOUR_MS = 60 * 60 * 1_000;
 const CAVEAT =

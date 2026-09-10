@@ -2,11 +2,10 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { searchAtmosphereCatalog } from "./catalog/unified-search.js";
 import {
   UnifiedAnalogService,
+  UnifiedAtmosphereAlignmentService,
   UnifiedAtmosphereDiagnosticService,
   UnifiedAtmosphereQueryService,
-  UnifiedDatasetComparisonService,
   UnifiedForecastVerificationService,
-  UnifiedRunComparisonService,
 } from "./core/unified-atmosphere-api.js";
 import { toPublicFailure } from "./failure.js";
 import { describedSchema } from "./mcp-tool-schema.js";
@@ -19,27 +18,26 @@ import {
 import { queryAtmosphereInputSchema, type PublicQueryAtmosphereInput } from "./schema/unified-query-input.js";
 import { searchAtmosphereCatalogSchema, unifiedCatalogResultSchema, type SearchAtmosphereCatalogInput } from "./schema/unified-catalog.js";
 import {
-  ATMOSPHERIC_DATASET_COMPARISON_PAIRS,
-  compareAtmosphericDatasetsInputSchema,
-  compareAtmosphericRunsSchema,
+  alignAtmosphereResultSchema,
+  alignAtmosphereSchema,
+  type AlignAtmosphereInput,
+  type AlignAtmosphereResult,
+} from "./schema/unified-alignment.js";
+import {
   findAtmosphericAnalogsSchema,
   unifiedSpecializedResultSchema,
   verifyAtmosphericForecastInputSchema,
-  type CompareAtmosphericDatasetsInput,
-  type CompareAtmosphericRunsInput,
   type FindAtmosphericAnalogsInput,
   type VerifyAtmosphericForecastInput,
 } from "./schema/unified-specialized.js";
 
 const PUBLIC_DATASET_DESCRIPTION = PUBLIC_ATMOSPHERIC_DATASET_IDS.join(", ");
-const DATASET_COMPARISON_DESCRIPTION = ATMOSPHERIC_DATASET_COMPARISON_PAIRS.map(([left, right]) => `${left}↔${right}`).join(", ");
 const MCP_INTERNAL_ERROR_MESSAGE = "Unexpected internal error while handling the request";
 
 export function registerUnifiedAtmosphereTools(server: McpServer): void {
   const queryService = new UnifiedAtmosphereQueryService();
   const diagnosticService = new UnifiedAtmosphereDiagnosticService();
-  const runComparisonService = new UnifiedRunComparisonService();
-  const datasetComparisonService = new UnifiedDatasetComparisonService();
+  const alignmentService = new UnifiedAtmosphereAlignmentService();
   const verificationService = new UnifiedForecastVerificationService();
   const analogService = new UnifiedAnalogService();
 
@@ -61,17 +59,11 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
     inputSchema: describedSchema(diagnoseAtmosphereSchema), outputSchema: unifiedAtmosphereResultSchema,
   }, async (query) => { try { return toolResult(await diagnosticService.diagnose(query as DiagnoseAtmosphereInput)); } catch (error) { return toolError(error); } });
 
-  server.registerTool("compare_runs", {
-    title: "Compare forecast runs",
-    description: "Compare forecast initialization cycles for GFS, GEFS, deterministic ECMWF IFS, or ECMWF IFS ENS through one dataset-aware contract. Deterministic GFS and IFS return newer-minus-older changes; GEFS and IFS ENS return shifts between independently summarized ensemble distributions and never treat member labels as trajectories. IFS ENS can compare 6-hourly cycles or use a 12-hour stride for long-range 00/12Z ensemble comparisons.",
-    inputSchema: describedSchema(compareAtmosphericRunsSchema), outputSchema: unifiedSpecializedResultSchema,
-  }, async (query) => { try { return toolResult(await runComparisonService.compare(query as CompareAtmosphericRunsInput)); } catch (error) { return toolError(error); } });
-
-  server.registerTool("compare_datasets", {
-    title: "Compare atmospheric datasets",
-    description: `Compare only explicitly registered, scientifically compatible atmospheric dataset pairs at one point and valid time. Registered pairs: ${DATASET_COMPARISON_DESCRIPTION}. Pair contracts choose pressure-level or field selection explicitly. Global↔regional strategies require one shared explicit initialization cycle, sample each native grid independently at the requested coordinate, and never silently regrid or downscale. Ensemble comparisons preserve native populations and never pair member labels as trajectories. Differences, spread shifts, and raw member fractions are descriptive model evidence, not forecast error or calibrated uncertainty.`,
-    inputSchema: describedSchema(compareAtmosphericDatasetsInputSchema), outputSchema: unifiedSpecializedResultSchema,
-  }, async (query) => { try { return toolResult(await datasetComparisonService.compare(query as CompareAtmosphericDatasetsInput)); } catch (error) { return toolError(error); } });
+  server.registerTool("align_atmosphere", {
+    title: "Align atmospheric evidence across sources",
+    description: "Ask one point × time × selection question of several sources at once and receive one table keyed by canonical quantity and valid time. A source is the dataset-specific part of a query_atmosphere request (dataset plus forecast run/kind/grid, ensemble members/quantiles), so comparing runs of one model, physics against AI, deterministic against ensemble, or global against regional guidance is the same call. WFG owns retrieval, canonical units, run/lead/valid-time and sampled-grid provenance, and the alignment rules: each source samples its own native grid at the requested coordinate with no regridding, ensembles stay independent member-first distributions with no member pairing, directions are flagged circular, and accumulation windows that differ are flagged not comparable. Sources that cannot serve the selection are reported inline with the structured failure instead of being substituted. WFG does not compute or interpret differences; which guidance is warmer, disagrees, or matters remains the caller's statement.",
+    inputSchema: describedSchema(alignAtmosphereSchema), outputSchema: alignAtmosphereResultSchema,
+  }, async (query) => { try { return toolResult(redactEmbeddedInternalFailures(await alignmentService.align(query as AlignAtmosphereInput))); } catch (error) { return toolError(error); } });
 
   server.registerTool("verify_forecast", {
     title: "Verify an archived forecast",
@@ -84,6 +76,21 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
     description: "Find locally materialized historical analyses similar to one target atmospheric profile. The current dataset is gfs-analysis; similarity uses the existing standardized profile metric and U/V wind representation. This is model-state similarity, not climatological rarity or impact-specific similarity.",
     inputSchema: describedSchema(findAtmosphericAnalogsSchema), outputSchema: unifiedSpecializedResultSchema,
   }, async (query) => { try { return toolResult(await analogService.find(query as FindAtmosphericAnalogsInput)); } catch (error) { return toolError(error); } });
+}
+
+/**
+ * Per-source failures travel inside a successful alignment result, so they must
+ * honor the same MCP rule as toolError: unclassified internal text never leaves
+ * the process boundary.
+ */
+export function redactEmbeddedInternalFailures(result: AlignAtmosphereResult): AlignAtmosphereResult {
+  return {
+    ...result,
+    sources: result.sources.map((source) =>
+      source.status === "failed" && source.failure.code === "INTERNAL_ERROR"
+        ? { ...source, failure: { ...source.failure, message: MCP_INTERNAL_ERROR_MESSAGE } }
+        : source),
+  };
 }
 
 function toolResult(output: object) { return { content: [{ type: "text" as const, text: JSON.stringify(output) }], structuredContent: { ...output } }; }

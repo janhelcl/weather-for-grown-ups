@@ -7,12 +7,8 @@ import { toPublicFailure, type PublicFailure } from "../src/failure.js";
 import { describedSchema } from "../src/mcp-tool-schema.js";
 import { queryAtmosphereSchema } from "../src/schema/unified-api.js";
 import { searchAtmosphereCatalogSchema } from "../src/schema/unified-catalog.js";
-import {
-  ATMOSPHERIC_DATASET_COMPARISON_PAIRS,
-  compareAtmosphericDatasetsInputSchema,
-  compareAtmosphericDatasetsSchema,
-  verifyAtmosphericForecastSchema,
-} from "../src/schema/unified-specialized.js";
+import { alignAtmosphereSchema, MAX_ALIGNMENT_SOURCES } from "../src/schema/unified-alignment.js";
+import { verifyAtmosphericForecastSchema } from "../src/schema/unified-specialized.js";
 
 async function cliFailure(args: string[]): Promise<PublicFailure> {
   const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -105,55 +101,87 @@ describe("numeric CLI options fail with the flag name instead of NaN", () => {
   });
 });
 
-describe("compare_datasets dispatches to one registered pair contract", () => {
-  it("covers every registered pair", () => {
-    for (const [left, right] of ATMOSPHERIC_DATASET_COMPARISON_PAIRS) {
-      const failure = zodFailure(compareAtmosphericDatasetsSchema, { datasets: [left, right] });
-      expect(failure.message).not.toContain("Unsupported comparison pair");
-      expect(failure.message).toContain(`${left}↔${right} comparison`);
-    }
+describe("align_atmosphere validates each source with query_atmosphere semantics", () => {
+  const selection = { variables: ["temperature"], pressureLevelsHpa: [850] };
+
+  it("names the offending source index and field", () => {
+    const unknownDataset = zodFailure(alignAtmosphereSchema, {
+      sources: [{ dataset: "gfs" }, { dataset: "ecmwf" }], geometry: point, time: { at }, selection,
+    });
+    expect(unknownDataset.code).toBe("INVALID_REQUEST");
+    expect(unknownDataset.message).toContain("at sources.1.dataset");
+
+    const ensembleOnDeterministic = zodFailure(alignAtmosphereSchema, {
+      sources: [{ dataset: "gfs", ensemble: { quantiles: [0.5] } }, { dataset: "ifs" }],
+      geometry: point, time: { at }, selection,
+    });
+    expect(ensembleOnDeterministic.message).toContain("at sources.0.ensemble");
+
+    const unsupportedRun = zodFailure(alignAtmosphereSchema, {
+      sources: [{ dataset: "gfs" }, { dataset: "gefs", forecast: { run: "latest_complete" } }],
+      geometry: point, time: { at }, selection,
+    });
+    expect(unsupportedRun.message).toContain("at sources.1.forecast.run");
   });
 
-  it("names the offending field under the selected pair instead of a union-wide 'Invalid input'", () => {
-    const failure = zodFailure(compareAtmosphericDatasetsSchema, {
-      datasets: ["gfs", "gefs"],
-      geometry: point,
-      time: { at },
-      variable: "temperature",
-    });
-    expect(failure.code).toBe("INVALID_REQUEST");
-    expect(failure.message).toContain("at pressureLevelHpa");
-    expect(failure.message).toContain("gfs↔gefs comparison");
-    expect(failure.message).not.toBe("Request validation failed: Invalid input");
+  it("leaves dataset capability gaps on the shared selection or geometry to inline per-source failures", () => {
+    // AROME is field-only and ICON-D2 is regional: the request is still well-formed, the
+    // answer for those sources is "cannot serve this selection/point", reported inline.
+    expect(alignAtmosphereSchema.safeParse({
+      sources: [{ dataset: "gfs" }, { dataset: "arome" }, { dataset: "icon-d2" }],
+      geometry: { type: "point", latitude: -33.9, longitude: 151.2 },
+      time: { at }, selection,
+    }).success).toBe(true);
   });
 
-  it("explains reversed and unregistered pairs and lists the registered vocabulary", () => {
-    const reversed = zodFailure(compareAtmosphericDatasetsSchema, {
-      datasets: ["gefs", "gfs"], geometry: point, time: { at }, variable: "temperature", pressureLevelHpa: 850,
+  it("keeps the shared selection canonical and rejects unknown vocabulary at its path", () => {
+    const failure = zodFailure(alignAtmosphereSchema, {
+      sources: [{ dataset: "gfs" }, { dataset: "ifs" }],
+      geometry: point, time: { at },
+      selection: { variables: ["temp"], pressureLevelsHpa: [850] },
     });
-    expect(reversed.message).toContain("gefs↔gfs is registered as gfs↔gefs");
-
-    const unregistered = zodFailure(compareAtmosphericDatasetsSchema, {
-      datasets: ["gfs", "arome"], geometry: point, time: { at }, variable: "temperature", pressureLevelHpa: 850,
-    });
-    expect(unregistered.message).toContain("Unsupported comparison pair: gfs↔arome");
-    expect(unregistered.message).toContain("Registered pairs: gfs↔gefs");
-
-    const malformed = zodFailure(compareAtmosphericDatasetsSchema, { datasets: "gfs" });
-    expect(malformed.message).toContain("datasets must be a [left, right] pair");
+    expect(failure.message).toContain("at selection.variables.0");
+    expect(failure.message).toContain("search_catalog");
   });
 
-  it("requires datasets explicitly instead of defaulting to gfs↔gefs", () => {
-    const failure = zodFailure(compareAtmosphericDatasetsSchema, {
-      geometry: point, time: { at }, variable: "temperature", pressureLevelHpa: 850,
+  it("bounds the fan-out and rejects redundant or ambiguous sources", () => {
+    const one = zodFailure(alignAtmosphereSchema, { sources: [{ dataset: "gfs" }], geometry: point, time: { at }, selection });
+    expect(one.message).toContain("at sources");
+    expect(one.message).toMatch(/at least 2|>=2/);
+
+    const tooMany = zodFailure(alignAtmosphereSchema, {
+      sources: Array.from({ length: MAX_ALIGNMENT_SOURCES + 1 }, (_, index) => ({ dataset: "gfs", forecast: { run: `2026-09-0${(index % 9) + 1}T00:00:00Z` }, label: `s${index}` })),
+      geometry: point, time: { at }, selection,
     });
-    expect(failure.message).toContain("at datasets: datasets is required");
-    expect(failure.message).toContain("Registered pairs: gfs↔gefs");
+    expect(tooMany.message).toContain(`${MAX_ALIGNMENT_SOURCES}`);
+
+    const duplicate = zodFailure(alignAtmosphereSchema, {
+      sources: [{ dataset: "gfs" }, { dataset: "gfs" }], geometry: point, time: { at }, selection,
+    });
+    expect(duplicate.message).toContain("at sources.1");
+    expect(duplicate.message).toContain("selects the same dataset, forecast, ensemble and source as sources[0]");
+
+    const clashingLabels = zodFailure(alignAtmosphereSchema, {
+      sources: [{ dataset: "gfs", label: "a" }, { dataset: "ifs", label: "a" }], geometry: point, time: { at }, selection,
+    });
+    expect(clashingLabels.message).toContain("at sources.1.label");
   });
 
-  it("advertises the same pair contracts for discovery", () => {
-    const json = z.toJSONSchema(compareAtmosphericDatasetsInputSchema, { io: "input" }) as { anyOf?: unknown[] };
-    expect(json.anyOf).toHaveLength(ATMOSPHERIC_DATASET_COMPARISON_PAIRS.length);
+  it("does not expose member-level fan-out through alignment", () => {
+    const failure = zodFailure(alignAtmosphereSchema, {
+      sources: [{ dataset: "gfs" }, { dataset: "gefs", ensemble: { includeMembers: true } }],
+      geometry: point, time: { at }, selection,
+    });
+    expect(failure.message).toContain("at sources.1.ensemble");
+  });
+
+  it("is a point primitive: spatial geometries are rejected at geometry", () => {
+    const failure = zodFailure(alignAtmosphereSchema, {
+      sources: [{ dataset: "gfs" }, { dataset: "ifs" }],
+      geometry: { type: "bbox", north: 51, south: 50, west: 14, east: 15 },
+      time: { at }, selection,
+    });
+    expect(failure.message).toContain("at geometry");
   });
 });
 

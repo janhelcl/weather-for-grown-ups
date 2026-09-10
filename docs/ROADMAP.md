@@ -103,7 +103,7 @@ The restrictive comparison registry contains explicit point strategies for:
 
 Every strategy declares shared initialization/valid-time rules, compatible field or pressure intersections, domain requirements, independent point sampling, native-resolution provenance and no cross-dataset regridding. Ensemble pairs compare independent distributions without member pairing. There is no universal global-to-regional subtraction fallback.
 
-This remains a completed v0.5 capability, but its public abstraction is explicitly under review in the next roadmap. The scientific compatibility rules are valuable; dedicated comparison verbs and pair registries may not be the right long-term public surface.
+The scientific compatibility rules from this line (shared or explicit initialization, native-grid point sampling with no regridding, independent member-first distributions, sampled-grid provenance) now live in the generic alignment primitive; the dedicated comparison verbs and the pair registry were removed by agent-ergonomics item 1.
 
 ## 7. Regional and convective meteorology ✅
 
@@ -159,11 +159,11 @@ The goal of this line is:
 
 This roadmap should simplify the public surface where possible. There are no backward-compatibility constraints from an installed user base yet, so architectural cleanup should take precedence over preserving accidental interfaces.
 
-## 1. Rework comparison around composition, not analytical verbs
+## 1. Rework comparison around composition, not analytical verbs ✅
 
-Re-evaluate `compare-runs`, `compare-datasets` and the explicit pair registry as public concepts.
+`compare-runs`, `compare-datasets`, the pair registry and every pair-specific comparison service were deleted and replaced by one composition primitive, `wfg align` / `align_atmosphere` ([ALIGNMENT.md](ALIGNMENT.md)). A source is the dataset-specific part of a `query_atmosphere` request, so run-to-run, physics-vs-AI, deterministic-vs-ensemble and global-vs-regional questions are the same call. Compatibility is derived per source from the existing dataset capability validation; WFG returns canonical units, delta semantics, temporal-window comparability, run/lead/grid provenance and inline per-source failures, and computes no differences.
 
-The desired boundary is:
+The boundary that was implemented:
 
 - WFG owns retrieval, canonical variable semantics, units, run/valid-time provenance, grid metadata and the rules that determine whether two pieces of evidence can be meaningfully aligned;
 - WFG may expose a small generic alignment/join primitive where the alignment itself requires model knowledge;

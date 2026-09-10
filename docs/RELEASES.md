@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Comparison reworked around composition: `align` / `align_atmosphere`
+
+- **Breaking:** `wfg compare-runs`, `wfg compare-datasets`, `compare_runs`, `compare_datasets`, the dataset-pair registry and every pair-specific comparison service and schema are removed. Nothing replaces them one-to-one; the roadmap's first agent-ergonomics item asked for a smaller compositional surface.
+- New `wfg align` / `align_atmosphere` ([ALIGNMENT.md](ALIGNMENT.md)): one point × time × selection question asked of 2–8 sources, where a source is the dataset-specific part of a `query_atmosphere` request (`dataset` + `forecast` + `ensemble` + `source`). Run-to-run, physics-vs-AI, deterministic-vs-ensemble, global-vs-regional and member-subset questions are all the same call. CLI: repeatable `--source dataset[@run][;members=…][;quantiles=…][;label=…][;grid=…][;kind=…][;source=…]`.
+- WFG returns one table keyed by canonical quantity and valid time with `unit`, `deltaKind` (`linear` | `circular_degrees`), accumulation `window` and `comparable` flags, resolved run/lead/sampled-grid/native-grid/model-class provenance per source, `initialization: independent|shared` and `validTimes: intersection|union`. WFG computes no differences, ranks or verdicts; interpretation stays with the caller.
+- Compatibility is derived, not registered: each source is validated by the existing `query_atmosphere` dataset rules. Malformed source modifiers fail the request at `sources.<i>.forecast|ensemble|source`; a dataset that cannot serve the shared selection or point is reported inline as `status: "failed"` with its public failure and `unavailable / source_failed` cells. The request fails as a whole only if every source failed or `initialization: shared` is violated. Embedded `INTERNAL_ERROR` text is redacted over MCP like top-level failures.
+- Catalog operations `run_comparison` and `aligned_model_comparison` are replaced by `alignment`, advertised by every dataset with point queries (including GEFS reforecast).
+- `npm run test:live:align` replaces `test:live:gefs-runs`.
+
 Archived 0.5° GFS forecasts — including `verify` against `gfs-analysis` — use the same era routing as analysis: NOAA AWS Open Data `.idx` byte ranges from 2021-01-01, NCEI fileServer for earlier point cycles, and NCSS only as fallback or for pre-2021 area subsets. A recent 12-hour lead no longer depends on NCEI NCSS.
 
 `wfg query` / `diagnose` / composition commands without `--json` print catalog-style tables instead of `util.inspect`. Field-only datasets (`arome`, `pe-arome`) default to `--fields temperature_2m` so a bare query reaches the credential/capability check instead of a GFS-shaped pressure-variable rejection.

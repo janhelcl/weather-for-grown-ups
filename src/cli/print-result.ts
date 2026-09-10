@@ -3,9 +3,56 @@ export function printAtmosphericResult(result: unknown, json: boolean): void {
   if (json) { console.log(JSON.stringify(result, null, 2)); return; }
   if (!isRecord(result)) { console.dir(result, { depth: null }); return; }
   if (isUnifiedEnvelope(result)) { printUnifiedEnvelope(result); return; }
+  if (isAlignmentEnvelope(result)) { printAlignmentEnvelope(result); return; }
   if (isSpecializedEnvelope(result)) { printSpecializedEnvelope(result); return; }
   printRecordTables(result);
 }
+
+/** One row per source, then one table per quantity with a column per source label. */
+function printAlignmentEnvelope(envelope: AlignmentEnvelope): void {
+  console.log("Alignment:");
+  const alignment = isRecord(envelope.alignment) ? envelope.alignment : {};
+  console.table([{ initialization: alignment.initialization, sharedInitialization: alignment.sharedInitialization, validTimes: alignment.validTimes, sources: envelope.sources.length, quantities: envelope.quantities.length }]);
+  console.log("Sources:");
+  console.table(envelope.sources.map((source) => {
+    const record = isRecord(source) ? source : {};
+    return record.status === "ok"
+      ? { label: record.label, dataset: record.dataset, kind: record.kind, run: record.run, members: record.memberCount, gridPoint: summarizeValue(record.gridPoint), steps: Array.isArray(record.steps) ? record.steps.length : undefined, source: summarizeValue(record.source) }
+      : { label: record.label, dataset: record.dataset, status: record.status, failure: isRecord(record.failure) ? `${record.failure.code}: ${record.failure.message}` : undefined };
+  }));
+  const labels = envelope.sources.map((source) => String(isRecord(source) ? source.label : "?"));
+  for (const quantity of envelope.quantities) {
+    if (!isRecord(quantity)) continue;
+    const selection = isRecord(quantity.selection) ? quantity.selection : {};
+    const output = isRecord(quantity.output) ? quantity.output : {};
+    const title = selection.kind === "pressure"
+      ? `${selection.variable}@${selection.pressureLevelHpa}hPa`
+      : `${selection.field}`;
+    console.log(`${title} → ${output.field} [${output.unit}]${output.deltaKind === "circular_degrees" ? " (circular)" : ""}:`);
+    const series = Array.isArray(quantity.series) ? quantity.series : [];
+    console.table(series.map((step) => {
+      const record = isRecord(step) ? step : {};
+      const values = Array.isArray(record.values) ? record.values : [];
+      const row: Record<string, unknown> = { validTime: record.validTime };
+      labels.forEach((label, index) => { row[label] = summarizeCell(values[index]); });
+      if (record.comparable === false) row.comparable = `false (${record.reason})`;
+      return row;
+    }));
+  }
+}
+
+function summarizeCell(cell: unknown): unknown {
+  if (!isRecord(cell)) return cell;
+  switch (cell.kind) {
+    case "value": return cell.value;
+    case "distribution": return `mean ${round(cell.mean)} ±${round(cell.populationStdDev)} [${round(cell.min)}, ${round(cell.max)}] n=${cell.memberCount}`;
+    case "circular_direction": return `dir ${round(cell.meanDirectionDeg)}° R=${round(cell.resultantLength)} n=${cell.memberCount}`;
+    case "unavailable": return `— (${cell.reason})`;
+    default: return summarizeValue(cell);
+  }
+}
+
+function round(value: unknown): unknown { return typeof value === "number" ? Math.round(value * 100) / 100 : value; }
 
 function printUnifiedEnvelope(envelope: UnifiedEnvelope): void {
   console.log("Query:");
@@ -77,5 +124,7 @@ function omit(record: Record<string, unknown>, keys: readonly string[]): Record<
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null; }
 interface UnifiedEnvelope extends Record<string, unknown> { dataset: unknown; internalDatasetId: unknown; role: unknown; kind: unknown; geometryType: unknown; timeType: unknown; result: unknown; }
 interface SpecializedEnvelope extends Record<string, unknown> { operation: unknown; datasets: unknown; result: unknown; }
+interface AlignmentEnvelope extends Record<string, unknown> { operation: "align_atmosphere"; alignment: unknown; sources: unknown[]; quantities: unknown[]; }
+function isAlignmentEnvelope(value: Record<string, unknown>): value is AlignmentEnvelope { return value.operation === "align_atmosphere" && Array.isArray(value.sources) && Array.isArray(value.quantities); }
 function isUnifiedEnvelope(value: Record<string, unknown>): value is UnifiedEnvelope { return "dataset" in value && "internalDatasetId" in value && "geometryType" in value && "timeType" in value && "result" in value; }
 function isSpecializedEnvelope(value: Record<string, unknown>): value is SpecializedEnvelope { return "operation" in value && "datasets" in value && "result" in value; }

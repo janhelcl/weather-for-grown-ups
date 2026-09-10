@@ -64,8 +64,7 @@ describe("stdio MCP", () => {
       "search_catalog",
       "query_atmosphere",
       "diagnose_atmosphere",
-      "compare_runs",
-      "compare_datasets",
+      "align_atmosphere",
       "verify_forecast",
       "find_analogs",
     ]);

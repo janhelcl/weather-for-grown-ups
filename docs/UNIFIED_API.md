@@ -254,8 +254,7 @@ The compact public vocabulary is:
 | `search_catalog` | Discover canonical fields/diagnostics and dataset support; use `forecastKind: "reforecast"` with `datasets: ["gefs"]` for the retrospective capability subset |
 | `query_atmosphere` | Raw/derived atmospheric state over supported geometry and time |
 | `diagnose_atmosphere` | Layer, profile and parcel meteorology |
-| `compare_runs` | Compare consecutive GFS, GEFS, IFS, or IFS ENS forecast initialization cycles |
-| `compare_datasets` | Compare only registered aligned dataset pairs across physics, AI and hybrid model classes; pair-specific semantics remain explicit |
+| `align_atmosphere` | Ask one point × time × selection question of several dataset/run/member selections and receive one canonically aligned evidence table; WFG computes no differences |
 | `verify_forecast` | Compare an archived GFS forecast with later GFS analysis or an IGRA radiosonde |
 | `find_analogs` | Search materialized historical atmospheric analogs |
 
@@ -263,7 +262,7 @@ The compact public vocabulary is:
 
 `search_catalog` defaults to operational capabilities. To plan a GEFSv12 retrospective query, pass `datasets: ["gefs"]` and `forecastKind: "reforecast"`. The result contains only capabilities currently exposed by the reforecast path: the verified retrospective single-level fields, six native pressure variables, three layer diagnostics and two structural profile diagnostics. Derived pressure thermodynamics and parcel diagnostics remain absent because the retrospective source subset does not expose the dependencies needed to support them truthfully. The CLI equivalent is `wfg catalog --dataset gefs --forecast-kind reforecast`.
 
-`compare_datasets` preserves pair-specific semantics under one restrictive registry. Existing physics strategies remain GFS↔GEFS deterministic positioning, GFS↔IFS deterministic deltas, GEFS↔IFS ENS distribution shifts, and IFS↔IFS ENS deterministic-control positioning. The model-class line adds GFS↔AIGFS, IFS↔AIFS and AIGFS↔AIFS deterministic deltas; GEFS↔AIGEFS and IFS ENS↔AIFS ENS independent distribution shifts; and HGEFS↔GEFS / HGEFS↔AIGEFS hybrid-to-constituent distribution shifts. Cross-ensemble member labels are never paired as trajectories. IFS ENS retains its native 50 perturbations while AIFS ENS retains its dedicated control plus 50 perturbations. HGEFS constituent comparisons are explicitly overlapping rather than statistically independent because the constituent members are part of the hybrid population itself. Deterministic differences, ensemble spread/quantile shifts and raw member fractions are descriptive model evidence, not verification error or calibrated uncertainty. The regional line additionally registers IFS↔ICON-D2, IFS↔AROME, GFS↔ICON-D2, IFS ENS↔ICON-D2-EPS and IFS ENS↔PE-AROME as point-only cross-scale strategies. Those pairs require an explicit shared 00/06/12/18Z initialization, use only declared pressure/instantaneous-field intersections, sample each dataset on its own grid at the same requested coordinate, perform no comparison-layer regridding, and preserve both sampled grid points plus native-grid/source provenance. Unsupported dataset pairs fail at the registry boundary rather than falling through to generic subtraction.
+`align_atmosphere` is the only composition primitive ([ALIGNMENT.md](ALIGNMENT.md)). A source is the dataset-specific part of a `query_atmosphere` request (`dataset` plus `forecast`, `ensemble`, `source`), so comparing runs of one model, physics against AI, deterministic against ensemble or global against regional guidance is the same call with 2–8 sources. There is no pair registry: each source is validated by the same per-dataset capability rules as `query_atmosphere`, and sources that cannot serve the request are reported inline with a structured failure. WFG owns canonical units and delta semantics (`linear` vs `circular_degrees`), accumulation-window comparability, run/lead/valid-time and sampled-grid provenance, `initialization: independent|shared` and `validTimes: intersection|union`; each source samples its own native grid at the requested coordinate with no regridding, ensembles stay independent member-first distributions with no member pairing, and the result is descriptive model evidence, not verification error or calibrated uncertainty. Differences, ranks and verdicts are the caller's.
 
 `verify_forecast` has two reference semantics. The default `referenceDataset: "gfs-analysis"` preserves the original same-grid analysis-minus-forecast comparison. `referenceDataset: "igra"` uses NOAA IGRA v2.2 radiosonde observations: an explicit `stationId` may be supplied or WFG chooses the nearest station covering the requested year within `maxStationDistanceKm`; the forecast is sampled at the sounding location and only exact observed pressure levels are compared. IGRA therefore appears as a verification reference, not as a `query_atmosphere` dataset.
 
@@ -562,9 +561,15 @@ wfg diagnose \
   --json
 ```
 
-Specialized CLI operations are `compare-runs`, `compare-datasets`, `verify`, and `analogs`.
+Composition and specialized CLI operations are `align`, `verify`, and `analogs`.
 
-`wfg compare-datasets` requires both sides of the registered pair, in registered order: `--dataset <left> --against <right>` (`--dataset gfs --against gefs`, `--dataset ifs-ens --against pe-arome`). There are no implicit defaults, and `compare_datasets` likewise requires `datasets: [left, right]`. Reversed, missing or unregistered pairs fail with the registered list.
+`wfg align` takes a repeatable `--source dataset[@run][;members=…][;quantiles=…][;label=…][;grid=…][;kind=…][;source=…]` (2–8 sources) plus the usual point/time/selection flags, and `--initialization independent|shared`, `--valid-times intersection|union`:
+
+```bash
+wfg align --lat 50.08 --lon 14.43 --at 2026-09-10T12:00:00Z \
+  --source gfs --source gfs@2026-09-09T18:00:00Z --source ifs --source ifs-ens --source icon-d2 \
+  --vars temperature,wind --levels 850,500 --fields temperature_2m --quantiles 0.1,0.5,0.9 --json
+```
 
 Every numeric flag (`--lat`, `--levels`, `--quantiles`, `--gte`, …) rejects non-numeric input by name (`Expected --lat to be a number, received: abc`) rather than passing `NaN` down to the schema.
 
@@ -609,7 +614,7 @@ The envelope is the only failure shape on either surface:
 - **MCP argument validation** happens inside the tool handler, not in the SDK pre-check, so schema violations return the same `isError` envelope instead of a JSON-RPC `Invalid arguments` protocol error. Tool listing still advertises the full JSON Schema.
 - **MCP internal failures** never expose arbitrary plain-`Error` text such as local paths or decoder implementation details. Anything an agent is expected to act on must be a typed failure before it reaches the MCP boundary.
 - **Schema violations** report the first failing field in the message (`Request validation failed at geometry.latitude: …`), append `(+N more in details.issues)` when several fields fail, and list every issue with its path in `details.issues`. Unknown keys are rejected (`Unrecognized key: "pressureLevelHpa"`) rather than silently dropped, so misspelled options never degrade into defaults.
-- **Registry-dispatched operations** validate against the one contract the caller selected. `compare_datasets` dispatches on `datasets` to the registered pair (reporting reversed or unregistered pairs together with the registered list); `verify_forecast` dispatches on the time form (`time.at` vs `time.from`/`time.to`). Failures therefore name the field under that contract, e.g. `at pressureLevelHpa: … (gfs↔gefs comparison)`, never a union-wide `Invalid input`.
+- **Contract-dispatched operations** validate against the one contract the caller selected. `align_atmosphere` validates every source with the `query_atmosphere` dataset rules and reports issues at `sources.<i>.…` (`at sources.1.forecast.run: dataset=gefs does not support run=latest_complete`); `verify_forecast` dispatches on the time form (`time.at` vs `time.from`/`time.to`). Failures therefore name the field under that contract, never a union-wide `Invalid input`.
 - **Upstream HTTP failures** are classified once (`src/access/http-failure.ts`): 404 → `DATA_UNAVAILABLE`, 429 → `RATE_LIMITED`, 5xx → `UPSTREAM_UNAVAILABLE` (retryable), any other non-2xx → `UPSTREAM_UNAVAILABLE` (not retryable). Messages name the provider, the request that failed and the HTTP status; `details` carries `provider`, `status` and the redacted `url`.
 - **Time, cadence and horizon violations** (a valid time before the run, off-cadence step, forecast hour beyond the dataset horizon, unsupported run cycle) are `INVALID_REQUEST` with `run`, `validTime`, `forecastHour` and the applicable limit in `details`; "no published cycle" is `DATA_UNAVAILABLE`.
 

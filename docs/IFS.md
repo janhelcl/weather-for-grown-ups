@@ -114,7 +114,7 @@ wfg query \
   --json
 ```
 
-No IFS-specific MCP tool is added. The same `diagnose_atmosphere` / `wfg diagnose` surface supports IFS layer, whole-profile, and parcel diagnostics at one valid time or across a valid-time range. The generic `compare_runs` / `wfg compare-runs` operation also supports deterministic IFS cycles.
+No IFS-specific MCP tool is added. The same `diagnose_atmosphere` / `wfg diagnose` surface supports IFS layer, whole-profile, and parcel diagnostics at one valid time or across a valid-time range. The generic `align_atmosphere` / `wfg align` primitive puts deterministic IFS cycles, or IFS next to any other dataset, in one aligned evidence table.
 
 ## Canonical pressure variables
 
@@ -171,8 +171,6 @@ The IFS adapter fetches only the required pressure variables and keeps ECMWF run
 
 IFS bbox aggregation reuses WFG's deterministic spatial-distribution kernel over the native 0.25° grid. Like deterministic GFS area summaries, the area contract intentionally accepts one **raw** pressure variable at one pressure level or one **raw** field at a time. Results include an unweighted grid-point mean, min/max and defined-grid-point count, with optional spatial percentiles, threshold fractions and representative extrema locations. ECMWF unit normalization is applied before aggregation, and run-static fields such as surface geopotential are still fetched from their native source step.
 
-Run comparison evaluates consecutive six-hour ECMWF initialization cycles at one fixed valid time. Runs are returned oldest to newest and every numeric delta is `newer - older`. Directional fields use shortest circular degree deltas. Non-isobaric fields are compared only when their vertical and temporal semantics match; for example, total precipitation accumulated from different initialization times is reported as non-comparable rather than subtracting different accumulation windows. At long lead times, a 06/18Z short run that cannot reach the requested valid time causes an explicit failure instead of being silently skipped.
-
-IFS participates in the specialized aligned GFS-vs-IFS deterministic comparison branch of `compare_datasets`. The separate aligned GFS-vs-GEFS and GEFS-vs-IFS-ENS branches keep their model-pair-specific ensemble semantics rather than flattening all comparisons into one statistical contract.
+Cycle-to-cycle and cross-model questions go through `align_atmosphere` with IFS sources such as `ifs`, `ifs@2026-09-09T12:00:00Z`, `ifs-ens` or `gfs`. WFG labels directional quantities `circular_degrees`, flags total precipitation accumulated from different initialization times as `temporal_windows_differ` instead of subtracting different accumulation windows, and reports a 06/18Z short run that cannot reach the requested valid time as an inline per-source failure rather than silently skipping it. Differences themselves are the caller's to compute. See [ALIGNMENT.md](ALIGNMENT.md).
 
 This keeps the architecture rule intact: **unify operations and physics; preserve model semantics.**
