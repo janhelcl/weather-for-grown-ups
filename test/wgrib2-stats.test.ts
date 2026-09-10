@@ -48,6 +48,33 @@ describe("parseSelectedAreaInventoryLine", () => {
     });
   });
 
+  it("pins the selection to the requested lead when one object carries several steps", () => {
+    const precipitation = { code: "APCP", gribLevel: "surface", temporalSemantics: "accumulation" as const, forecastHour: 9 };
+    expect(parseSelectedAreaInventoryLine(
+      "1:0:d=2026091006:TOT_PREC:surface:0-9 hour acc fcst:",
+      precipitation,
+      "DWD",
+    )).toEqual({ record: 1, temporal: { type: "accumulation", startForecastHour: 0, endForecastHour: 9 } });
+    expect(parseSelectedAreaInventoryLine(
+      "2:0:d=2026091006:TOT_PREC:surface:0-9.25 hour acc fcst:",
+      precipitation,
+      "DWD",
+    )).toBeNull();
+
+    expect(parseSelectedAreaInventoryLine(
+      "17:1000:d=2026081912:LCDC:low cloud layer:6 hour fcst:",
+      { ...lowCloudInstant, forecastHour: 6 },
+    )).toEqual({ record: 17, temporal: { type: "instantaneous" } });
+    expect(parseSelectedAreaInventoryLine(
+      "17:1000:d=2026081912:LCDC:low cloud layer:6 hour fcst:",
+      { ...lowCloudInstant, forecastHour: 7 },
+    )).toBeNull();
+    expect(parseSelectedAreaInventoryLine(
+      "3:0:d=2026081912:LCDC:low cloud layer:anl:",
+      { ...lowCloudInstant, forecastHour: 0 },
+    )).toEqual({ record: 3, temporal: { type: "instantaneous" } });
+  });
+
   it("normalizes DWD VMAX_10M and preserves hourly maximum semantics", () => {
     expect(parseSelectedAreaInventoryLine(
       "52:9000:d=2026081912:VMAX_10M:10 m above ground:5-6 hour max fcst:",
