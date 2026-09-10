@@ -8,7 +8,7 @@ export function registerAvailabilityCommand(program: Command): void {
   program
     .command("availability")
     .description("Preflight domain, initialization and requested valid-time coverage without downloading forecast payloads")
-    .option("--dataset <id>", `Atmospheric dataset (${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")})`, "gfs")
+    .option(`--dataset <${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}>`, "Atmospheric dataset", "gfs")
     .option("--lat <number>", "Point latitude", numberOption("--lat"))
     .option("--lon <number>", "Point longitude", numberOption("--lon"))
     .option("--point <lat,lon>", "Multi-point coordinate; repeat as needed", collectPoint)
