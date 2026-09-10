@@ -36,6 +36,7 @@ import {
   type SelectedMessageTemporal,
 } from "../grib/wgrib2-stats.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
+import { sampleGribPoints } from "../grib/point-decoder.js";
 import type {
   DiagnoseAtmosphereRequest,
   QueryAtmosphereRequest,
@@ -87,6 +88,11 @@ export interface IconD2PointDecoder {
     latitude: number,
     forecastHour?: number,
   ): Promise<DecodedValue[]>;
+  extractPoints?(
+    path: string,
+    points: readonly { longitude: number; latitude: number }[],
+    forecastHour?: number,
+  ): Promise<DecodedValue[][]>;
 }
 
 export interface IconD2ForecastServiceOptions {
@@ -626,14 +632,16 @@ export class IconD2ForecastService {
   ): Promise<unknown> {
     const forecastHour = iconD2ForecastHour(run, validTime);
     const cached = await this.cache.fetch(dataRequest(run, forecastHour, selection));
+    const decodedByPoint = await sampleGribPoints(this.decoder, cached.path, points, forecastHour);
     const profiles: IconD2ProfileResult[] = [];
-    for (const point of points) {
+    for (let index = 0; index < points.length; index += 1) {
       profiles.push(await this.decodeProfile(
         cached,
         run,
         validTime,
-        point,
+        points[index]!,
         selection,
+        decodedByPoint[index]!,
       ));
     }
     return {
@@ -674,9 +682,10 @@ export class IconD2ForecastService {
     validTime: Date,
     point: PointCoordinate,
     selection: ExpandedSelection,
+    predecoded?: DecodedValue[],
   ): Promise<IconD2ProfileResult> {
     const forecastHour = iconD2ForecastHour(run, validTime);
-    const rawDecoded = await this.decoder.extractPoint(
+    const rawDecoded = predecoded ?? await this.decoder.extractPoint(
       cached.path,
       point.longitude,
       point.latitude,

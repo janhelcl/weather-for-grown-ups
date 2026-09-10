@@ -125,6 +125,30 @@ describe("BatchPointsService", () => {
     expect(getProfile).not.toHaveBeenCalled();
   });
 
+  it("samples every coordinate from one fetched GRIB artifact when getProfiles is available", async () => {
+    const getProfile = vi.fn(async (query: ProfileQueryInput) => profileFor(query));
+    const getProfiles = vi.fn(async (_base: ProfileQueryInput, requested: readonly { latitude: number; longitude: number }[]) =>
+      requested.map((point) => profileFor({
+        latitude: point.latitude,
+        longitude: point.longitude,
+        run: run.toISOString(),
+        validTime,
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+        source: "s3",
+      })),
+    );
+    const service = new BatchPointsService({
+      latestRunProvider: { resolveLatestRun: async () => run },
+      profileGetter: { getProfile, getProfiles },
+    });
+
+    const result = await service.getPoints(base);
+    expect(getProfiles).toHaveBeenCalledOnce();
+    expect(getProfile).not.toHaveBeenCalled();
+    expect(result.points.map((point) => point.requestedPoint)).toEqual(points);
+  });
+
   it("rejects a profile getter that changes away from the S3 source", async () => {
     const service = new BatchPointsService({
       latestRunProvider: { resolveLatestRun: async () => run },

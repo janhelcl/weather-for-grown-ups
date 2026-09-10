@@ -138,9 +138,9 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
       selectNonIsobaricByteRanges(records, fields),
     );
     if (ranges.length === 0) throw new Error("GEFS subset request selected no GRIB messages");
-    // Keep range fan-out bounded by fetching one selected GRIB message at a time per member.
-    // Member-first services already run members concurrently, so this prevents field count
-    // from multiplying aggregate AWS request concurrency.
+    // Keep range fan-out bounded by fetching one selected range at a time per member.
+    // Adjacent selected messages are already coalesced; member-first services already
+    // run members concurrently, so this prevents field count from multiplying AWS load.
     const chunks: Uint8Array[] = [];
     for (const range of ranges) chunks.push(await this.fetchRange(gribUrl, range));
     const totalBytes = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);

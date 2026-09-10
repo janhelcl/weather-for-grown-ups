@@ -1,5 +1,6 @@
 import { CommanderError } from "commander";
 import { formatPublicFailure, toPublicFailure, type PublicFailure } from "../failure.js";
+import { shutdownGribDecodePool } from "../grib/grib-decode-pool.js";
 import { createCliProgram } from "./program.js";
 
 export async function runCli(
@@ -19,6 +20,10 @@ export async function runCli(
       return;
     }
     reportFailure(toPublicFailure(error), args);
+  } finally {
+    // Decode workers keep the event loop alive even when unref'd (tsx loader
+    // IPC). CLI commands must terminate the pool or `wfg query` never exits.
+    shutdownGribDecodePool();
   }
 }
 

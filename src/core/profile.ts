@@ -26,16 +26,18 @@ import {
 } from "../derived/thermodynamics.js";
 import { deriveWind } from "../derived/wind.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
-import { operationalGfsModelId } from "../catalog/gfs-grid.js";
+import { sampleGribPoints } from "../grib/point-decoder.js";
+import { operationalGfsModelId, type GfsGrid } from "../catalog/gfs-grid.js";
 import {
   profileQuerySchema,
   type ProfileQueryInput,
   type ProfileSourceId,
   type VariableId,
+  type NonIsobaricFieldId,
 } from "../schema/query.js";
 import { GfsS3Source } from "../sources/gfs-s3.js";
 import { NomadsSource } from "../sources/nomads.js";
-import type { ProfileDataSource } from "../sources/types.js";
+import type { ProfileDataSource, ProfileSourceFile } from "../sources/types.js";
 import type { DecodedValue, ForecastInterval, GribDecoderName } from "../types/decoded.js";
 import { NomadsProfileSource, S3ProfileSource } from "./gfs-profile-sources.js";
 import { forecastHour, parseGfsRun } from "./forecast-hour.js";
@@ -55,6 +57,10 @@ import type {
 export interface PointDecoder {
   readonly engine?: GribDecoderName;
   extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]>;
+  extractPoints?(
+    path: string,
+    points: readonly { longitude: number; latitude: number }[],
+  ): Promise<DecodedValue[][]>;
 }
 
 export interface ProfileServiceOptions {
@@ -92,8 +98,29 @@ export class ProfileService {
     this.latestRunProvider = options.latestRunProvider ?? new LatestRunResolver();
   }
 
+  async getProfiles(
+    base: ProfileQueryInput,
+    points: readonly { latitude: number; longitude: number }[],
+  ): Promise<ProfileResult[]> {
+    if (points.length === 0) return [];
+    const first = points[0]!;
+    const prepared = await this.prepareProfile(profileQuerySchema.parse({
+      ...base,
+      latitude: first.latitude,
+      longitude: first.longitude,
+    }));
+    const decodedByPoint = await sampleGribPoints(this.decoder, prepared.cached.path, points);
+    return points.map((point, index) => this.finishProfile(prepared, point, decodedByPoint[index]!));
+  }
+
   async getProfile(input: ProfileQueryInput): Promise<ProfileResult> {
     const query = profileQuerySchema.parse(input);
+    const prepared = await this.prepareProfile(query);
+    const values = await this.decoder.extractPoint(prepared.cached.path, query.longitude, query.latitude);
+    return this.finishProfile(prepared, query, values);
+  }
+
+  private async prepareProfile(query: ReturnType<typeof profileQuerySchema.parse>): Promise<PreparedProfile> {
     const validTime = new Date(query.validTime);
     const requestedVariables = query.variables ?? [];
     const pressureLevelsHpa = query.pressureLevelsHpa ?? [];
@@ -116,7 +143,6 @@ export class ProfileService {
     const effectiveGrid = query.grid ?? "0p25";
     const fh = forecastHour(run, validTime, effectiveGrid);
     const source = this.sources[query.source];
-
     const cached = await source.fetch({
       run,
       ...(query.grid === undefined ? {} : { grid: query.grid }),
@@ -127,15 +153,34 @@ export class ProfileService {
       pressureLevelsHpa,
       fields,
     });
-    const values = await this.decoder.extractPoint(cached.path, query.longitude, query.latitude);
+    return {
+      run,
+      validTime,
+      fh,
+      effectiveGrid,
+      source,
+      cached,
+      requestedVariables,
+      pressureLevelsHpa,
+      requestedFields,
+      variables,
+      fields,
+    };
+  }
+
+  private finishProfile(
+    prepared: PreparedProfile,
+    point: { latitude: number; longitude: number },
+    values: DecodedValue[],
+  ): ProfileResult {
     const firstValue = values[0];
     if (!firstValue) throw new Error("No values decoded from GFS response");
 
-    assertPressureComplete(values, variables.map((variable) => variable.gfsCode), pressureLevelsHpa);
-    assertFieldsComplete(values, fields);
+    assertPressureComplete(values, prepared.variables.map((variable) => variable.gfsCode), prepared.pressureLevelsHpa);
+    assertFieldsComplete(values, prepared.fields);
 
     const levelMap = new Map<number, ProfileLevel>();
-    for (const pressureHpa of pressureLevelsHpa) levelMap.set(pressureHpa, { pressureHpa });
+    for (const pressureHpa of prepared.pressureLevelsHpa) levelMap.set(pressureHpa, { pressureHpa });
 
     for (const value of values) {
       if (value.pressureHpa === undefined) continue;
@@ -145,30 +190,44 @@ export class ProfileService {
     }
 
     for (const level of levelMap.values()) {
-      applyDerivedPressureValues(level, requestedVariables);
+      applyDerivedPressureValues(level, prepared.requestedVariables);
     }
 
-    const fieldResults = requestedFields.map((id) =>
-      buildFieldResult(NON_ISOBARIC_FIELD_CATALOG[id], values, run),
+    const fieldResults = prepared.requestedFields.map((id) =>
+      buildFieldResult(NON_ISOBARIC_FIELD_CATALOG[id], values, prepared.run),
     );
 
     return {
-      model: operationalGfsModelId(effectiveGrid),
-      run: run.toISOString(),
-      validTime: validTime.toISOString(),
-      forecastHour: fh,
-      requestedPoint: { latitude: query.latitude, longitude: query.longitude },
+      model: operationalGfsModelId(prepared.effectiveGrid),
+      run: prepared.run.toISOString(),
+      validTime: prepared.validTime.toISOString(),
+      forecastHour: prepared.fh,
+      requestedPoint: { latitude: point.latitude, longitude: point.longitude },
       gridPoint: firstValue.gridPoint,
       levels: [...levelMap.values()].sort((a, b) => b.pressureHpa - a.pressureHpa),
       ...(fieldResults.length > 0 ? { fields: fieldResults } : {}),
       source: {
-        provider: source.provider,
-        access: source.access,
+        provider: prepared.source.provider,
+        access: prepared.source.access,
         decoder: this.decoder.engine ?? "wgrib2",
-        cacheHit: cached.cacheHit,
+        cacheHit: prepared.cached.cacheHit,
       },
     };
   }
+}
+
+interface PreparedProfile {
+  run: Date;
+  validTime: Date;
+  fh: number;
+  effectiveGrid: GfsGrid;
+  source: ProfileDataSource;
+  cached: ProfileSourceFile;
+  requestedVariables: readonly VariableId[];
+  pressureLevelsHpa: number[];
+  requestedFields: readonly NonIsobaricFieldId[];
+  variables: ReturnType<typeof expandRequestedVariables>;
+  fields: ReturnType<typeof expandRequestedFields>;
 }
 
 export function applyDecodedPressureValue(level: ProfileLevel, value: DecodedValue): void {

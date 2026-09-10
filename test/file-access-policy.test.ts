@@ -45,7 +45,7 @@ describe("upstream access policy registry", () => {
 
   it("records bounded defaults for cloud object access without adding a courtesy delay", () => {
     expect(UPSTREAM_ACCESS_POLICIES.noaaAws).toMatchObject({
-      maxConcurrency: 8,
+      maxConcurrency: 16,
       minIntervalMs: 0,
     });
     expect(UPSTREAM_ACCESS_POLICIES.ecmwfCloud).toMatchObject({
@@ -135,6 +135,31 @@ describe("FileAccessPolicy", () => {
 
     await Promise.all([firstRun, secondRun]);
     expect(maxActive).toBe(1);
+  });
+
+  it("hands off a free slot to an in-process waiter without waiting for the poll interval", async () => {
+    const policy = new FileAccessPolicy(rootDir, {
+      id: "handoff-test",
+      maxConcurrency: 1,
+      minIntervalMs: 0,
+    }, 250);
+    const started = Date.now();
+    await Promise.all([
+      policy.run(async () => delay(20)),
+      policy.run(async () => delay(20)),
+    ]);
+    expect(Date.now() - started).toBeLessThan(150);
+  });
+
+  it("queues extra in-process work on a local permit instead of polling every waiter", async () => {
+    const policy = new FileAccessPolicy(rootDir, {
+      id: "local-queue-test",
+      maxConcurrency: 2,
+      minIntervalMs: 0,
+    }, 200);
+    const started = Date.now();
+    await Promise.all(Array.from({ length: 20 }, () => policy.run(async () => delay(5))));
+    expect(Date.now() - started).toBeLessThan(200);
   });
 
   it("rejects malformed provider policy definitions", () => {

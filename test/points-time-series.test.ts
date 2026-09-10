@@ -77,8 +77,8 @@ describe("PointsTimeSeriesService", () => {
     });
   });
 
-  it("defaults to eight concurrent forecast-file batches", () => {
-    expect(DEFAULT_POINTS_TIME_SERIES_CONCURRENCY).toBe(8);
+  it("defaults to sixteen concurrent forecast-file batches", () => {
+    expect(DEFAULT_POINTS_TIME_SERIES_CONCURRENCY).toBe(16);
   });
 
   it("bounds concurrent forecast-step batches", async () => {

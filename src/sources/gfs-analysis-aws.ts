@@ -3,8 +3,8 @@ import {
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
 import type { HttpRetryExecutionOptions } from "../access/http-retry.js";
+import { decodePointGribBytes } from "../grib/gribberish-point.js";
 import {
-  decodePointMessages,
   gridPointsInBox,
   readGribMessagesFromBytes,
 } from "../grib/gribberish-runtime.js";
@@ -62,9 +62,11 @@ implements HistoricalAnalysisDataSource, HistoricalAnalysisAreaDataSource {
     this.assertAwsEra(request.analysisTime);
     const selectors = historicalAnalysisSelectors(request.variables);
     const { dataset, bytes } = await this.client.fetchSubset(request.analysisTime, 0, selectors);
-    const messages = readGribMessagesFromBytes(bytes);
-    const decoded = decodePointMessages(messages, request.longitude, request.latitude);
-    const rows = rowsFromDecodedPointValues(decoded, selectors);
+    const [decoded] = await decodePointGribBytes(bytes, [{
+      longitude: request.longitude,
+      latitude: request.latitude,
+    }]);
+    const rows = rowsFromDecodedPointValues(decoded ?? [], selectors);
     if (rows.length === 0) {
       throw new Error(
         `AWS GFS analysis subset decoded no values for ${request.variables.join(",")}`,

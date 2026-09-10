@@ -2,6 +2,7 @@ import type { GribMessage } from "@mattnucc/gribberish";
 import { describe, expect, it } from "vitest";
 import {
   decodePointMessages,
+  decodePointMessagesMany,
   gridPointsInBox,
   summarizeMessageInBox,
 } from "../src/grib/gribberish-runtime.js";
@@ -71,5 +72,40 @@ describe("bundled GRIB2 regular-grid axes", () => {
     expect(() => decodePointMessages([
       regularGridMessage([280, 281, 282, Number.NaN]),
     ], 14.8, 49.2)).toThrow(/nearest GRIB2 grid point is undefined/i);
+  });
+
+  it("samples every coordinate from one unpacked grid", () => {
+    let dataReads = 0;
+    const message = regularGridMessage([270, 280, 290, 300]);
+    (message as { dataAdjusted: () => number[] }).dataAdjusted = () => {
+      dataReads += 1;
+      return [270, 280, 290, 300];
+    };
+
+    const [first, second] = decodePointMessagesMany([message], [
+      { longitude: 14, latitude: 50 },
+      { longitude: 15, latitude: 49 },
+    ]);
+
+    expect(dataReads).toBe(1);
+    expect(first?.[0]?.value).toBe(270);
+    expect(second?.[0]?.value).toBe(300);
+  });
+
+  it("finds the nearest neighbour on an unrolled 0-360 longitude axis", () => {
+    const message = {
+      ...regularGridMessage([1, 2, 3, 4]),
+      latlngAdjusted: () => ({
+        latitude: [50, 49],
+        longitude: [0, 359.5],
+      }),
+      dataAdjusted: () => [10, 20, 30, 40],
+    } as unknown as GribMessage;
+
+    const [decoded] = decodePointMessages([message], -0.1, 50);
+    expect(decoded).toMatchObject({
+      value: 10,
+      gridPoint: { latitude: 50, longitude: 0 },
+    });
   });
 });

@@ -172,7 +172,7 @@ Source modules own product naming, URLs/object keys, upstream inventories, archi
 
 `src/access/` owns provider etiquette: concurrency/pacing, retry/backoff, `Retry-After`, shared user-agent identity and HTTP failure classification.
 
-Provider policies are independent. NOMADS pacing is not inherited by NOAA AWS, NCEI, NCAR/GDEX, IGRA, ECMWF, DWD or Météo-France merely because they all provide weather data.
+Provider policies are independent. NOMADS pacing is not inherited by NOAA AWS, NCEI, NCAR/GDEX, IGRA, ECMWF, DWD or Météo-France merely because they all provide weather data. NOAA AWS range downloads hold a policy slot for the full GET, including the response body.
 
 ### `cache/`: immutable reuse
 
@@ -181,6 +181,8 @@ Cache decorators own local immutable artifact reuse. A cache hit bypasses upstre
 ### `grib/`: decoding
 
 The normal npm path uses the bundled `@mattnucc/gribberish` decoder for every dataset. Users do not need native `wgrib2`, CDO or other weather tooling for normal CLI/MCP use.
+
+Point decoding parses, samples and releases one GRIB message at a time so a profile cannot pin every expanded global grid in memory. Independent messages may unpack on a process-local worker pool; that pool is CPU overlap only and never performs HTTP. When several coordinates share one artifact, each message is unpacked once and every coordinate is sampled from that grid.
 
 Native `wgrib2` remains an explicit compatibility/debug backend selected with `WGRIB2_PATH` or `WFG_DECODER=wgrib2`. The Docker image includes it as the reproducible fallback.
 
@@ -193,6 +195,7 @@ Routing details belong below the public query language and should be documented 
 For normal `gfs` access, source selection is automatic:
 
 - point/profile, time-series, multi-point and transect work uses NOAA AWS Open Data `.idx` byte ranges;
+- selected messages that already touch in the provider object are fetched as one HTTP range, so adjacent inventory clusters do not pay a round-trip per message;
 - bounded area work uses NOMADS geographic subsetting;
 - explicit `source` is a GFS-only override/debug control where the geometry can honor it.
 

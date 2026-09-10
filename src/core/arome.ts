@@ -28,6 +28,7 @@ import {
   type SelectedMessageTemporal,
 } from "../grib/wgrib2-stats.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
+import { sampleGribPoints } from "../grib/point-decoder.js";
 import type { QueryAtmosphereRequest } from "../schema/unified-api.js";
 import type { PointCoordinate } from "../schema/query.js";
 import {
@@ -66,6 +67,11 @@ export interface AromePointDecoder {
     latitude: number,
     forecastHour?: number,
   ): Promise<DecodedValue[]>;
+  extractPoints?(
+    path: string,
+    points: readonly { longitude: number; latitude: number }[],
+    forecastHour?: number,
+  ): Promise<DecodedValue[][]>;
 }
 
 export interface AromeForecastServiceOptions {
@@ -398,9 +404,17 @@ export class AromeForecastService {
     const cached = await this.cache.fetch(
       dataRequest(run, forecastHour, selection, subsetForPoints(points)),
     );
+    const decodedByPoint = await sampleGribPoints(this.decoder, cached.path, points, forecastHour);
     const results: AromePointResult[] = [];
-    for (const point of points) {
-      results.push(await this.decodePoint(cached, run, validTime, point, selection));
+    for (let index = 0; index < points.length; index += 1) {
+      results.push(await this.decodePoint(
+        cached,
+        run,
+        validTime,
+        points[index]!,
+        selection,
+        decodedByPoint[index]!,
+      ));
     }
     return {
       model: MODEL,
@@ -436,9 +450,10 @@ export class AromeForecastService {
     validTime: Date,
     point: PointCoordinate,
     selection: ExpandedSelection,
+    predecoded?: DecodedValue[],
   ): Promise<AromePointResult> {
     const forecastHour = aromeForecastHour(run, validTime);
-    const rawDecoded = await this.decoder.extractPoint(
+    const rawDecoded = predecoded ?? await this.decoder.extractPoint(
       cached.path,
       point.longitude,
       point.latitude,

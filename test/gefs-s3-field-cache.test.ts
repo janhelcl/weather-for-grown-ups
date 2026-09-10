@@ -45,7 +45,7 @@ describe("GEFS non-isobaric subset cache", () => {
     expect(first.cacheHit).toBe(false);
     expect(second.cacheHit).toBe(true);
     expect(second.path).toBe(first.path);
-    expect(fetchFn).toHaveBeenCalledTimes(3); // one cached index + two exact field messages
+    expect(fetchFn).toHaveBeenCalledTimes(2); // one cached index + one coalesced adjacent field range
     expect(String(fetchFn.mock.calls[0]?.[0])).toContain("/atmos/pgrb2sp25/");
     expect(String(fetchFn.mock.calls[0]?.[0])).toContain(".pgrb2s.0p25.f003.idx");
   });

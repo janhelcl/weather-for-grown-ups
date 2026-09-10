@@ -46,7 +46,7 @@ describe("GEFS multi-field subset cache", () => {
     expect(first.cacheHit).toBe(false);
     expect(second.cacheHit).toBe(true);
     expect(second.path).toBe(first.path);
-    expect(fetchFn).toHaveBeenCalledTimes(5); // one index plus four selected GRIB byte ranges
-    expect(fetchFn.mock.calls.filter(([, init]) => (init?.headers as Record<string, string> | undefined)?.range)).toHaveLength(4);
+    expect(fetchFn).toHaveBeenCalledTimes(2); // one index plus one coalesced adjacent pressure cluster
+    expect(fetchFn.mock.calls.filter(([, init]) => (init?.headers as Record<string, string> | undefined)?.range)).toHaveLength(1);
   });
 });

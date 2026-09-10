@@ -145,7 +145,7 @@ export class AigefsS3SubsetCache implements AigfsSubsetCache {
           request.pressureLevelsHpa,
         )
       : selectNonIsobaricByteRanges(records, request.fields);
-    return coalesceAdjacentRanges(mergeByteRanges(ranges));
+    return mergeByteRanges(ranges);
   }
 
   private async fetchMemberIndex(
@@ -269,25 +269,6 @@ function subsetKey(member: AigefsMember, request: AigfsDataRequest): string {
     fields: [...new Set(request.fields.map((field) => field.id))].sort(),
   });
   return createHash("sha256").update(canonical).digest("hex");
-}
-
-function coalesceAdjacentRanges(ranges: readonly ByteRange[]): ByteRange[] {
-  const sorted = [...ranges].sort((left, right) => left.start - right.start);
-  const result: ByteRange[] = [];
-  for (const range of sorted) {
-    const previous = result.at(-1);
-    if (
-      previous !== undefined
-      && previous.end !== undefined
-      && range.start <= previous.end + 1
-    ) {
-      if (range.end === undefined) delete previous.end;
-      else previous.end = range.end;
-      continue;
-    }
-    result.push({ ...range });
-  }
-  return result;
 }
 
 async function exists(path: string): Promise<boolean> {

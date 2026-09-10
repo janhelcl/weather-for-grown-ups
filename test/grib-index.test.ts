@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  mergeByteRanges,
   parseGribIndex,
   selectAllPressureByteRanges,
   selectNamedLevelByteRanges,
@@ -208,5 +209,25 @@ describe("selectPressureByteRangesAtForecastHour", () => {
     expect(() => selectPressureByteRangesAtForecastHour(
       records, ["TMP"], [850], 12,
     )).toThrow(/TMP@850mb@f12/);
+  });
+});
+
+describe("mergeByteRanges", () => {
+  it("deduplicates by start and joins ranges that already touch", () => {
+    expect(mergeByteRanges(
+      [{ start: 0, end: 7 }, { start: 8, end: 15 }],
+      [{ start: 8, end: 15 }, { start: 32, end: 39 }],
+    )).toEqual([{ start: 0, end: 15 }, { start: 32, end: 39 }]);
+  });
+
+  it("does not swallow a gap of unselected bytes", () => {
+    expect(mergeByteRanges(
+      [{ start: 0, end: 7 }],
+      [{ start: 16, end: 23 }],
+    )).toEqual([{ start: 0, end: 7 }, { start: 16, end: 23 }]);
+  });
+
+  it("extends a closed range to EOF when the next selected message is open-ended", () => {
+    expect(mergeByteRanges([{ start: 0, end: 7 }, { start: 8 }])).toEqual([{ start: 0 }]);
   });
 });

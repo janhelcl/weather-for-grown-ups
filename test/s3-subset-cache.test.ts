@@ -22,6 +22,23 @@ const chunks: Record<string, string> = {
   "bytes=24-31": "GRIB3333", "bytes=32-39": "GRIB4444", "bytes=40-47": "GRIB5555",
 };
 
+function bodyForRange(range: string | null): string | undefined {
+  if (range === null) return undefined;
+  if (chunks[range] !== undefined) return chunks[range];
+  const match = /^bytes=(\d+)-(\d+)$/.exec(range);
+  if (match === null) return undefined;
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+  if ((end - start + 1) % 8 !== 0) return undefined;
+  const parts: string[] = [];
+  for (let offset = start; offset <= end; offset += 8) {
+    const piece = chunks[`bytes=${offset}-${offset + 7}`];
+    if (piece === undefined) return undefined;
+    parts.push(piece);
+  }
+  return parts.join("");
+}
+
 let rootDir: string;
 
 beforeEach(async () => { rootDir = await mkdtemp(join(tmpdir(), "wfg-s3-")); });
@@ -38,7 +55,7 @@ function makeFetch() {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     if (String(input).endsWith(".idx")) return new Response(indexText, { status: 200 });
     const range = new Headers(init?.headers).get("range");
-    const body = range === null ? undefined : chunks[range];
+    const body = bodyForRange(range);
     if (!body) return new Response("missing", { status: 416, statusText: "Range Not Satisfiable" });
     return new Response(new TextEncoder().encode(body), { status: 206 });
   });
@@ -68,7 +85,7 @@ describe("GfsS3SubsetCache", () => {
       .map(([, init]) => new Headers(init?.headers).get("range"))
       .filter((range): range is string => range !== null)
       .sort()).toEqual([
-        "bytes=0-7", "bytes=8-15",
+        "bytes=0-15",
       ]);
   });
 
@@ -106,7 +123,7 @@ describe("GfsS3SubsetCache", () => {
     const [first, second] = await Promise.all([cache.fetch(request()), cache.fetch(request())]);
     expect(first.path).toBe(second.path);
     expect([first.cacheHit, second.cacheHit].sort()).toEqual([false, true]);
-    expect(fetchFn.mock.calls.filter(([, init]) => new Headers(init?.headers).has("range"))).toHaveLength(2);
+    expect(fetchFn.mock.calls.filter(([, init]) => new Headers(init?.headers).has("range"))).toHaveLength(1);
   });
 
   it("writes safely when separate cache instances materialize the same subset concurrently", async () => {
@@ -129,7 +146,7 @@ describe("GfsS3SubsetCache", () => {
     const fetchFn = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       if (String(input).endsWith(".idx")) return new Response(indexText, { status: 200 });
       const range = new Headers(init?.headers).get("range");
-      const body = range === null ? undefined : chunks[range];
+      const body = bodyForRange(range);
       if (!body) return new Response("missing", { status: 416 });
       active += 1;
       maxActive = Math.max(maxActive, active);

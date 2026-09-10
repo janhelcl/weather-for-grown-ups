@@ -43,6 +43,7 @@ import {
   deriveWetBulbTemperatureC,
 } from "../derived/thermodynamics.js";
 import { deriveWind } from "../derived/wind.js";
+import { decodeBundledPointFile, decodeBundledPointFileMany } from "../grib/gribberish-point.js";
 import {
   decodePointMessages,
   gridPointsInBox,
@@ -50,6 +51,7 @@ import {
   type GribBox,
   type GribGridPoint,
 } from "../grib/gribberish-runtime.js";
+import { sampleGribPoints } from "../grib/point-decoder.js";
 import type {
   DiagnoseAtmosphereRequest,
   QueryAtmosphereRequest,
@@ -122,6 +124,10 @@ interface AifsProfileResult {
 export interface AifsPointDecoder {
   readonly engine?: GribDecoderName;
   extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]>;
+  extractPoints?(
+    path: string,
+    points: readonly { longitude: number; latitude: number }[],
+  ): Promise<DecodedValue[][]>;
 }
 
 export interface AifsForecastServiceOptions {
@@ -574,9 +580,17 @@ export class AifsForecastService {
   ): Promise<unknown> {
     const forecastHour = aifsForecastHour(run, validTime);
     const cached = await this.fetchSelection(run, forecastHour, selection);
+    const decodedByPoint = await sampleGribPoints(this.decoder, cached.path, points);
     const profiles: AifsProfileResult[] = [];
-    for (const point of points) {
-      profiles.push(await this.decodeProfile(cached, run, validTime, point, selection));
+    for (let index = 0; index < points.length; index += 1) {
+      profiles.push(await this.decodeProfile(
+        cached,
+        run,
+        validTime,
+        points[index]!,
+        selection,
+        decodedByPoint[index]!,
+      ));
     }
     return {
       model: MODEL,
@@ -629,8 +643,9 @@ export class AifsForecastService {
     validTime: Date,
     point: PointCoordinate,
     selection: ExpandedSelection,
+    predecoded?: DecodedValue[],
   ): Promise<AifsProfileResult> {
-    const decoded = await this.decoder.extractPoint(cached.path, point.longitude, point.latitude);
+    const decoded = predecoded ?? await this.decoder.extractPoint(cached.path, point.longitude, point.latitude);
     if (decoded.length !== selection.items.length) {
       throw new Error(
         `AIFS decoder returned ${decoded.length} values for ${selection.items.length} selected GRIB messages`,
@@ -724,7 +739,14 @@ class BundledAifsPointDecoder implements AifsPointDecoder {
   readonly engine = "gribberish" as const;
 
   async extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]> {
-    return decodePointMessages(await readGribMessages(path), longitude, latitude);
+    return decodeBundledPointFile(path, longitude, latitude);
+  }
+
+  extractPoints(
+    path: string,
+    points: readonly { longitude: number; latitude: number }[],
+  ): Promise<DecodedValue[][]> {
+    return decodeBundledPointFileMany(path, points);
   }
 }
 

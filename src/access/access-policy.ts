@@ -24,7 +24,7 @@ export interface UpstreamAccessPolicyDefinition {
  */
 export const UPSTREAM_ACCESS_POLICIES = {
   nomads: { id: "nomads", maxConcurrency: 1, minIntervalMs: 11_000 },
-  noaaAws: { id: "noaa-aws", maxConcurrency: 8, minIntervalMs: 0 },
+  noaaAws: { id: "noaa-aws", maxConcurrency: 16, minIntervalMs: 0 },
   ecmwfCloud: { id: "ecmwf-cloud", maxConcurrency: 8, minIntervalMs: 0 },
   ecmwfDirect: { id: "ecmwf-direct", maxConcurrency: 4, minIntervalMs: 0 },
   nceiThredds: { id: "ncei-thredds", maxConcurrency: 2, minIntervalMs: 0 },
@@ -41,6 +41,9 @@ interface State {
 
 export class FileAccessPolicy implements UpstreamAccessPolicy {
   private readonly staleLockMs: number;
+  private readonly releaseWaiters: Array<() => void> = [];
+  private localAvailable: number;
+  private readonly localWaiters: Array<() => void> = [];
 
   constructor(
     private readonly rootDir: string,
@@ -60,35 +63,42 @@ export class FileAccessPolicy implements UpstreamAccessPolicy {
       throw new Error("access policies with a minimum interval must use maxConcurrency=1");
     }
     this.staleLockMs = definition.staleLockMs ?? DEFAULT_ACCESS_POLICY_STALE_LOCK_MS;
+    this.localAvailable = definition.maxConcurrency;
   }
 
   async run<T>(operation: () => Promise<T>): Promise<T> {
     await mkdir(this.rootDir, { recursive: true });
-    const slot = await this.acquireSlot();
-    const stopHeartbeat = this.startHeartbeat(slot);
+    await this.acquireLocalPermit();
     try {
-      if (this.definition.minIntervalMs > 0) {
-        const state = await this.readState();
-        const waitMs = Math.max(
-          0,
-          state.lastRequestCompletedAt + this.definition.minIntervalMs - Date.now(),
-        );
-        if (waitMs > 0) await sleep(waitMs);
-      }
+      const slot = await this.acquireSlot();
+      const stopHeartbeat = this.startHeartbeat(slot);
       try {
-        return await operation();
-      } finally {
         if (this.definition.minIntervalMs > 0) {
-          await writeFile(
-            this.statePath(),
-            JSON.stringify({ lastRequestCompletedAt: Date.now() } satisfies State),
-            "utf8",
+          const state = await this.readState();
+          const waitMs = Math.max(
+            0,
+            state.lastRequestCompletedAt + this.definition.minIntervalMs - Date.now(),
           );
+          if (waitMs > 0) await sleep(waitMs);
         }
+        try {
+          return await operation();
+        } finally {
+          if (this.definition.minIntervalMs > 0) {
+            await writeFile(
+              this.statePath(),
+              JSON.stringify({ lastRequestCompletedAt: Date.now() } satisfies State),
+              "utf8",
+            );
+          }
+        }
+      } finally {
+        stopHeartbeat();
+        await rm(this.slotPath(slot), { recursive: true, force: true });
+        this.notifySlotReleased();
       }
     } finally {
-      stopHeartbeat();
-      await rm(this.slotPath(slot), { recursive: true, force: true });
+      this.releaseLocalPermit();
     }
   }
 
@@ -122,8 +132,54 @@ export class FileAccessPolicy implements UpstreamAccessPolicy {
           }
         }
       }
-      await sleep(this.pollMs);
+      await this.waitForSlotOrPoll();
     }
+  }
+
+  private notifySlotReleased(): void {
+    const waiter = this.releaseWaiters.shift();
+    waiter?.();
+  }
+
+  private waitForSlotOrPoll(): Promise<void> {
+    return new Promise((resolve) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout>;
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const onRelease = () => {
+        clearTimeout(timer);
+        settle();
+      };
+      timer = setTimeout(() => {
+        const index = this.releaseWaiters.indexOf(onRelease);
+        if (index >= 0) this.releaseWaiters.splice(index, 1);
+        settle();
+      }, this.pollMs);
+      this.releaseWaiters.push(onRelease);
+    });
+  }
+
+  private async acquireLocalPermit(): Promise<void> {
+    if (this.localAvailable > 0) {
+      this.localAvailable -= 1;
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      this.localWaiters.push(resolve);
+    });
+  }
+
+  private releaseLocalPermit(): void {
+    const waiter = this.localWaiters.shift();
+    if (waiter !== undefined) {
+      waiter();
+      return;
+    }
+    this.localAvailable += 1;
   }
 
   private slotPath(slot: number): string {

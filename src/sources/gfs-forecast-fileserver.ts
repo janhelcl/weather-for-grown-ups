@@ -8,10 +8,7 @@ import {
   RateLimitedError,
   UpstreamUnavailableError,
 } from "../failure.js";
-import {
-  decodePointMessages,
-  readGribMessagesFromBytes,
-} from "../grib/gribberish-runtime.js";
+import { decodePointGribBytes } from "../grib/gribberish-point.js";
 import type { ArchivedGfsForecastCycle } from "./gfs-forecast-aws.js";
 import type {
   HistoricalAnalysisAccess,
@@ -67,12 +64,12 @@ export class NceiGfsFileServerForecastSource implements HistoricalAnalysisDataSo
     this.assertCycle(request.analysisTime);
     const selectors = historicalAnalysisSelectors(request.variables);
     const { bytes, dataset, cacheHit } = await this.loadGrib();
+    const [decoded] = await decodePointGribBytes(bytes, [{
+      longitude: request.longitude,
+      latitude: request.latitude,
+    }]);
     const rows = rowsFromDecodedPointValues(
-      decodePointMessages(
-        readGribMessagesFromBytes(bytes),
-        request.longitude,
-        request.latitude,
-      ),
+      decoded ?? [],
       selectors,
     );
     if (rows.length === 0) {

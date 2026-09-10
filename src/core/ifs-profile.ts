@@ -31,7 +31,7 @@ import {
   deriveWetBulbTemperatureC,
 } from "../derived/thermodynamics.js";
 import { deriveWind } from "../derived/wind.js";
-import { decodePointMessages, readGribMessages } from "../grib/gribberish-runtime.js";
+import { decodeBundledPointFile, decodeBundledPointFileMany } from "../grib/gribberish-point.js";
 import {
   ifsPointQuerySchema,
   ifsProfileResultSchema,
@@ -47,6 +47,10 @@ import { ifsForecastHour, parseIfsRun } from "./ifs-time.js";
 export interface IfsPointDecoder {
   readonly engine?: GribDecoderName;
   extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]>;
+  extractPoints?(
+    path: string,
+    points: readonly { longitude: number; latitude: number }[],
+  ): Promise<DecodedValue[][]>;
 }
 
 export interface IfsProfileServiceOptions {
@@ -211,7 +215,14 @@ class BundledIfsPointDecoder implements IfsPointDecoder {
   readonly engine = "gribberish" as const;
 
   async extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]> {
-    return decodePointMessages(await readGribMessages(path), longitude, latitude);
+    return decodeBundledPointFile(path, longitude, latitude);
+  }
+
+  extractPoints(
+    path: string,
+    points: readonly { longitude: number; latitude: number }[],
+  ): Promise<DecodedValue[][]> {
+    return decodeBundledPointFileMany(path, points);
   }
 }
 
