@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { inspectAtmosphereCapabilities } from "./catalog/capability-inspection.js";
 import { searchAtmosphereCatalog } from "./catalog/unified-search.js";
+import { AtmosphericAvailabilityService } from "./core/atmospheric-availability.js";
 import {
   UnifiedAnalogService,
   UnifiedAtmosphereAlignmentService,
@@ -24,6 +25,11 @@ import {
   type InspectAtmosphereCapabilitiesInput,
 } from "./schema/capability-inspection.js";
 import {
+  atmosphereAvailabilityResultSchema,
+  inspectAtmosphereAvailabilitySchema,
+  type InspectAtmosphereAvailabilityInput,
+} from "./schema/availability-inspection.js";
+import {
   alignAtmosphereResultSchema,
   alignAtmosphereSchema,
   type AlignAtmosphereInput,
@@ -42,6 +48,7 @@ const MCP_INTERNAL_ERROR_MESSAGE = "Unexpected internal error while handling the
 
 export function registerUnifiedAtmosphereTools(server: McpServer): void {
   const queryService = new UnifiedAtmosphereQueryService();
+  const availabilityService = new AtmosphericAvailabilityService();
   const diagnosticService = new UnifiedAtmosphereDiagnosticService();
   const alignmentService = new UnifiedAtmosphereAlignmentService();
   const verificationService = new UnifiedForecastVerificationService();
@@ -55,9 +62,15 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("inspect_capabilities", {
     title: "Inspect exact atmospheric capabilities",
-    description: "Check declared contract support for one dataset and an optional planned operation, geometry, selection, diagnostic, run selector, ensemble selection or source override without fetching weather data. Returns a compact supported/unsupported decision, focused reasons, supported geometry types and canonical model metadata. This deliberately does not claim that a particular live initialization or valid-time window is currently available.",
+    description: "Check declared contract support for one dataset and an optional planned operation, geometry, selection, diagnostic, run selector, ensemble selection or source override without fetching weather data. Returns a compact supported/unsupported decision, focused reasons, supported geometry types and canonical model metadata. For live initialization and requested valid-time coverage, use inspect_availability.",
     inputSchema: describedSchema(inspectAtmosphereCapabilitiesSchema), outputSchema: capabilityInspectionResultSchema,
   }, async (query) => { try { return toolResult(inspectAtmosphereCapabilities(query as InspectAtmosphereCapabilitiesInput)); } catch (error) { return toolError(error); } });
+
+  server.registerTool("inspect_availability", {
+    title: "Inspect requested forecast-window availability",
+    description: "Preflight the same request shape as query_atmosphere before downloading forecast payloads. Checks declared domain/capabilities, resolves the latest suitable published initialization through dataset-native product/index probes, and reports complete, partial or absent requested valid-time coverage plus native cadence and horizon. Explicit run IDs are checked against their declared native window rather than falsely claimed as live-probed.",
+    inputSchema: describedSchema(inspectAtmosphereAvailabilitySchema), outputSchema: atmosphereAvailabilityResultSchema,
+  }, async (query) => { try { return toolResult(await availabilityService.inspect(query as InspectAtmosphereAvailabilityInput)); } catch (error) { return toolError(error); } });
 
   server.registerTool("query_atmosphere", {
     title: "Query atmospheric state",
