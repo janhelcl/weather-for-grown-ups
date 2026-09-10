@@ -90,7 +90,7 @@ function projectMemberProfile(
   evidenceHit: boolean,
 ): IfsProfileSample {
   const pressureLevels = new Set<number>(query.pressureLevelsHpa ?? []);
-  const requestedFields = new Set(query.fields ?? []);
+  const requestedFields = new Set<string>(query.fields ?? []);
   const fields = profile.fields?.filter((field) => requestedFields.has(field.id));
   const { fields: _cachedFields, ...base } = profile;
   return {
