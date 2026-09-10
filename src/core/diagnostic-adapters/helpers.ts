@@ -3,6 +3,16 @@ import { AtmosphericDiagnosticTimeSeriesService } from "../atmospheric-diagnosti
 import { AtmosphericLayerDiagnosticsService } from "../atmospheric-layer-diagnostics-service.js";
 import { AtmosphericParcelDiagnosticsService } from "../atmospheric-parcel-diagnostics-service.js";
 import { AtmosphericProfileDiagnosticsService } from "../atmospheric-profile-diagnostics-service.js";
+import { DiagnosticTimeSeriesService } from "../diagnostic-time-series.js";
+import { IfsDiagnosticTimeSeriesService } from "../ifs-diagnostic-timeseries.js";
+import { IfsDiagnosticsService } from "../ifs-diagnostics.js";
+import { LayerDiagnosticsService } from "../layer-diagnostics.js";
+import { ParcelDiagnosticsService } from "../parcel-diagnostics.js";
+import { ProfileDiagnosticsService } from "../profile-diagnostics.js";
+import {
+  GfsProfileEvidenceService,
+  IfsProfileEvidenceService,
+} from "../profile-evidence-service.js";
 
 export interface GenericDiagnosticAdapterOptions {
   layer?: Pick<AtmosphericLayerDiagnosticsService, "getLayerDiagnostics">;
@@ -21,11 +31,50 @@ export interface GenericDiagnosticServices {
 export function createGenericDiagnosticServices(
   options: GenericDiagnosticAdapterOptions,
 ): GenericDiagnosticServices {
+  const defaults = createEvidenceAwareDiagnosticServices();
   return {
-    layer: options.layer ?? new AtmosphericLayerDiagnosticsService(),
-    profile: options.profile ?? new AtmosphericProfileDiagnosticsService(),
-    parcel: options.parcel ?? new AtmosphericParcelDiagnosticsService(),
-    timeSeries: options.timeSeries ?? new AtmosphericDiagnosticTimeSeriesService(),
+    layer: options.layer ?? defaults.layer,
+    profile: options.profile ?? defaults.profile,
+    parcel: options.parcel ?? defaults.parcel,
+    timeSeries: options.timeSeries ?? defaults.timeSeries,
+  };
+}
+
+/**
+ * Build the shared diagnostic families over the same persistent profile
+ * evidence boundary used by normal GFS/IFS queries. The atmospheric wrappers
+ * still own model dispatch; only acquisition/materialization is shared.
+ */
+function createEvidenceAwareDiagnosticServices(): GenericDiagnosticServices {
+  const gfsProfile = new GfsProfileEvidenceService();
+  const gfsLayer = new LayerDiagnosticsService({ profileGetter: gfsProfile });
+  const gfsProfileDiagnostics = new ProfileDiagnosticsService({ profileGetter: gfsProfile });
+  const gfsParcel = new ParcelDiagnosticsService({ profileGetter: gfsProfile });
+
+  const ifsProfile = new IfsProfileEvidenceService();
+  const ifsDiagnostics = new IfsDiagnosticsService({ profileGetter: ifsProfile });
+
+  return {
+    layer: new AtmosphericLayerDiagnosticsService({
+      gfs: gfsLayer,
+      ifs: ifsDiagnostics,
+    }),
+    profile: new AtmosphericProfileDiagnosticsService({
+      gfs: gfsProfileDiagnostics,
+      ifs: ifsDiagnostics,
+    }),
+    parcel: new AtmosphericParcelDiagnosticsService({
+      gfs: gfsParcel,
+      ifs: ifsDiagnostics,
+    }),
+    timeSeries: new AtmosphericDiagnosticTimeSeriesService({
+      gfs: new DiagnosticTimeSeriesService({
+        layerDiagnosticsGetter: gfsLayer,
+        profileDiagnosticsGetter: gfsProfileDiagnostics,
+        parcelDiagnosticsGetter: gfsParcel,
+      }),
+      ifs: new IfsDiagnosticTimeSeriesService({ diagnostics: ifsDiagnostics }),
+    }),
   };
 }
 
