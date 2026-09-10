@@ -40,8 +40,8 @@ const MEMBER_SET = new Set<string>(AIFS_ENS_MEMBERS);
 export interface AifsEnsMemberService {
   query(request: QueryAtmosphereRequest): Promise<unknown>;
   diagnose(request: DiagnoseAtmosphereRequest): Promise<unknown>;
-  resolveQueryRun?(request: QueryAtmosphereRequest): Promise<Date>;
-  resolveDiagnosticRun?(request: DiagnoseAtmosphereRequest): Promise<Date>;
+  resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date>;
+  resolveDiagnosticRun(request: DiagnoseAtmosphereRequest): Promise<Date>;
 }
 
 export interface AifsEnsForecastServiceOptions {

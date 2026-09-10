@@ -512,6 +512,8 @@ describe("ICON-D2-EPS service guards and defaults", () => {
   it("rejects wrong dataset identities and unsupported parcel diagnostics before source access", async () => {
     const service = new IconD2EpsForecastService({
       memberServiceFactory: () => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-08-31T00:00:00.000Z")),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-31T00:00:00.000Z")),
         query: vi.fn(),
         diagnose: vi.fn(),
       }),
@@ -530,6 +532,8 @@ describe("ICON-D2-EPS service guards and defaults", () => {
   it("rejects unsupported or singleton member selections", async () => {
     const service = new IconD2EpsForecastService({
       memberServiceFactory: () => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-08-31T00:00:00.000Z")),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-31T00:00:00.000Z")),
         query: vi.fn(),
         diagnose: vi.fn(),
       }),
@@ -554,6 +558,8 @@ describe("ICON-D2-EPS service guards and defaults", () => {
   it("uses the full native population and default quantiles when ensemble modifiers are omitted", async () => {
     const service = new IconD2EpsForecastService({
       memberServiceFactory: () => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-08-31T00:00:00.000Z")),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-31T00:00:00.000Z")),
         query: vi.fn(async (request: any) => ({
           model: "icon_d2_0p02",
           run: "2026-08-31T00:00:00.000Z",
@@ -593,6 +599,8 @@ describe("ICON-D2-EPS member-first aggregation", () => {
     const service = new IconD2EpsForecastService({
       concurrency: 2,
       memberServiceFactory: (member) => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-08-31T00:00:00.000Z")),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-31T00:00:00.000Z")),
         query: vi.fn(async (request: any) => {
           calls.push({ member, request });
           const offset = member === "p01" ? 0 : 2;
@@ -769,7 +777,7 @@ describe("ICON-D2-EPS member-first aggregation", () => {
       member: "p01",
       request: {
         dataset: "icon-d2",
-        forecast: { run: "latest" },
+        forecast: { run: "2026-08-31T00:00:00.000Z" },
       },
     });
     expect(calls[1]).toMatchObject({
@@ -784,6 +792,8 @@ describe("ICON-D2-EPS member-first aggregation", () => {
   it("aggregates nonlinear diagnostics only after member-level derivation", async () => {
     const service = new IconD2EpsForecastService({
       memberServiceFactory: (member) => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-08-31T00:00:00.000Z")),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-31T00:00:00.000Z")),
         query: vi.fn(),
         diagnose: vi.fn(async () => ({
           model: "icon_d2_0p02",

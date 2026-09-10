@@ -220,6 +220,14 @@ describe("architecture boundaries", () => {
     }
   });
 
+  it("requires ensemble run resolution before member payload execution", async () => {
+    const source = await readFile("src/core/ensemble-member-execution.ts", "utf8");
+    expect(source).toContain("resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date>");
+    expect(source).toContain("resolveDiagnosticRun(request: DiagnoseAtmosphereRequest): Promise<Date>");
+    expect(source).not.toContain("resultRun(");
+    expect(source).not.toContain("firstResult");
+  });
+
   it("keeps independent deterministic forecast ranges bounded-concurrent", async () => {
     const files = [
       "src/core/aifs.ts",

@@ -54,8 +54,8 @@ const MEMBER_SET = new Set<string>(ICON_D2_EPS_MEMBERS);
 export interface IconD2EpsMemberService {
   query(request: QueryAtmosphereRequest): Promise<unknown>;
   diagnose(request: DiagnoseAtmosphereRequest): Promise<unknown>;
-  resolveQueryRun?(request: QueryAtmosphereRequest): Promise<Date>;
-  resolveDiagnosticRun?(request: DiagnoseAtmosphereRequest): Promise<Date>;
+  resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date>;
+  resolveDiagnosticRun(request: DiagnoseAtmosphereRequest): Promise<Date>;
 }
 
 export interface IconD2EpsForecastServiceOptions {

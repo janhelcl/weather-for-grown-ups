@@ -31,7 +31,7 @@ const GRID_POINT_SCALE = AROME_TO_PE_AROME_GRID_RATIO * AROME_TO_PE_AROME_GRID_R
 
 export interface PeAromeMemberService {
   query(request: QueryAtmosphereRequest): Promise<unknown>;
-  resolveQueryRun?(request: QueryAtmosphereRequest): Promise<Date>;
+  resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date>;
 }
 
 export interface PeAromeForecastServiceOptions {

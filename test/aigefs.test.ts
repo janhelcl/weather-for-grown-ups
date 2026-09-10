@@ -108,6 +108,8 @@ describe("AIGEFS member-first aggregation", () => {
     const service = new AigefsForecastService({
       concurrency: 2,
       memberServiceFactory: (member) => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
         query: vi.fn(async (request: any) => {
           calls.push({ member, request });
           const offset = member === "c00" ? 0 : 2;
@@ -195,7 +197,7 @@ describe("AIGEFS member-first aggregation", () => {
       member: "c00",
       request: {
         dataset: "aigfs",
-        forecast: { run: "latest" },
+        forecast: { run: "2026-08-30T00:00:00.000Z" },
       },
     });
     expect(calls[1]).toMatchObject({
@@ -210,6 +212,8 @@ describe("AIGEFS member-first aggregation", () => {
   it("derives nonlinear layer diagnostics inside each member before aggregation", async () => {
     const service = new AigefsForecastService({
       memberServiceFactory: (member) => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
         query: vi.fn(),
         diagnose: vi.fn(async () => ({
           model: "aigfs_0p25",
@@ -279,6 +283,8 @@ describe("AIGEFS composition coverage", () => {
       cacheHit: member === "c00",
     };
     return {
+      resolveQueryRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
+      resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
       query: vi.fn(async (request: any) => {
         if (request.geometry.type === "point") {
           if ("from" in request.time) {
@@ -647,6 +653,8 @@ describe("AIGEFS remaining guard branches", () => {
   it("rejects member grid disagreement before producing an ensemble point", async () => {
     const service = new AigefsForecastService({
       memberServiceFactory: (member) => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
         query: vi.fn(async () => ({
           model: "aigfs_0p25",
           run: "2026-08-30T00:00:00.000Z",
@@ -684,6 +692,8 @@ describe("AIGEFS default ensemble contract", () => {
   it("uses the full 31-member population and standard quantiles when ensemble controls are omitted", async () => {
     const service = new AigefsForecastService({
       memberServiceFactory: () => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
         query: vi.fn(async () => ({
           model: "aigfs_0p25",
           run: "2026-08-30T00:00:00.000Z",
@@ -729,6 +739,8 @@ describe("AIGEFS defensive aggregation coverage", () => {
   it("fails clearly when the run-resolving member returns no run", async () => {
     const service = new AigefsForecastService({
       memberServiceFactory: () => ({
+        resolveQueryRun: vi.fn(async () => undefined as any),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
         query: vi.fn(async () => ({})),
         diagnose: vi.fn(),
       } as any),
@@ -740,6 +752,8 @@ describe("AIGEFS defensive aggregation coverage", () => {
   it("fails clearly when a member omits a scalar required for aggregation", async () => {
     const service = new AigefsForecastService({
       memberServiceFactory: (member) => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
         query: vi.fn(async () => ({
           run: "2026-08-30T00:00:00.000Z",
           validTime: "2026-08-30T06:00:00.000Z",
@@ -762,6 +776,8 @@ describe("AIGEFS defensive aggregation coverage", () => {
   it("rejects a missing sampled grid point before aggregation", async () => {
     const service = new AigefsForecastService({
       memberServiceFactory: () => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
         query: vi.fn(async () => ({
           run: "2026-08-30T00:00:00.000Z",
           validTime: "2026-08-30T06:00:00.000Z",
@@ -780,6 +796,8 @@ describe("AIGEFS defensive aggregation coverage", () => {
   it("rejects unsupported members even for direct internal service callers", async () => {
     const service = new AigefsForecastService({
       memberServiceFactory: () => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
         query: vi.fn(),
         diagnose: vi.fn(),
       } as any),
@@ -793,6 +811,8 @@ describe("AIGEFS defensive aggregation coverage", () => {
   it("requires member extrema when extrema locations are requested", async () => {
     const service = new AigefsForecastService({
       memberServiceFactory: () => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
+        resolveDiagnosticRun: vi.fn(async () => new Date("2026-08-30T00:00:00.000Z")),
         query: vi.fn(async () => ({
           run: "2026-08-30T00:00:00.000Z",
           validTime: "2026-08-30T06:00:00.000Z",

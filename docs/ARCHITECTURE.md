@@ -150,7 +150,7 @@ WFG treats computational efficiency as part of the application architecture:
 
 - resolve shared state such as model initialization once per composed request;
 - execute independent time steps concurrently with a bounded worker pool;
-- resolve ensemble initialization through the member service run-resolution seam, then fan out all selected members; never execute a complete first member/range merely to discover shared run state;
+- resolve ensemble initialization through a required member-service run-resolution seam, then fan out all selected members; there is no payload-execution fallback for run discovery, and a complete first member/range must never sit on that critical path;
 - reuse one downloaded artifact across points, members or derived operations whenever the provider product permits it;
 - keep bounded in-process decoded-artifact reuse below orchestration so repeated point sampling does not re-read, re-parse or re-decompress identical GRIB cache artifacts;
 - for indexed immutable provider objects, cache selected byte ranges/messages beneath exact query-subset artifacts, so progressive selector sets reuse prior downloads and fetch only missing messages;

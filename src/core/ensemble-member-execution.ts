@@ -1,11 +1,14 @@
 import type { DiagnoseAtmosphereRequest, QueryAtmosphereRequest } from "../schema/unified-api.js";
 import { mapConcurrent } from "./concurrency.js";
 
-export interface ResolvableEnsembleMemberService {
+export interface ResolvableEnsembleQueryService {
   query(request: QueryAtmosphereRequest): Promise<unknown>;
-  diagnose?(request: DiagnoseAtmosphereRequest): Promise<unknown>;
-  resolveQueryRun?(request: QueryAtmosphereRequest): Promise<Date>;
-  resolveDiagnosticRun?(request: DiagnoseAtmosphereRequest): Promise<Date>;
+  resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date>;
+}
+
+export interface ResolvableEnsembleDiagnosticService extends ResolvableEnsembleQueryService {
+  diagnose(request: DiagnoseAtmosphereRequest): Promise<unknown>;
+  resolveDiagnosticRun(request: DiagnoseAtmosphereRequest): Promise<Date>;
 }
 
 export interface EnsembleMemberResult<M> {
@@ -13,7 +16,7 @@ export interface EnsembleMemberResult<M> {
   result: any;
 }
 
-export async function executeMemberQueries<M, S extends ResolvableEnsembleMemberService>(options: {
+export async function executeMemberQueries<M, S extends ResolvableEnsembleQueryService>(options: {
   members: readonly M[];
   concurrency: number;
   serviceFactory: (member: M) => S;
@@ -24,30 +27,19 @@ export async function executeMemberQueries<M, S extends ResolvableEnsembleMember
   if (firstMember === undefined) throw new Error(`${options.context} selected no members`);
   const firstService = options.serviceFactory(firstMember);
   const request = options.requestFactory();
-  const explicitRun = concreteRun(request.forecast?.run);
+  const run = concreteRun(request.forecast?.run)
+    ?? resolvedRun(await firstService.resolveQueryRun(request), options.context);
 
-  if (explicitRun !== undefined) {
-    return runAllMembers(options, firstMember, firstService, explicitRun, "query");
-  }
-  if (firstService.resolveQueryRun !== undefined) {
-    const run = (await firstService.resolveQueryRun(request)).toISOString();
-    return runAllMembers(options, firstMember, firstService, run, "query");
-  }
-
-  const firstResult = await firstService.query(request);
-  const run = resultRun(firstResult, options.context);
-  const rest = await mapConcurrent(
-    options.members.slice(1),
-    options.concurrency,
-    async (member) => ({
+  return mapConcurrent(options.members, options.concurrency, async (member) => {
+    const service = member === firstMember ? firstService : options.serviceFactory(member);
+    return {
       member,
-      result: await options.serviceFactory(member).query(options.requestFactory(run)),
-    }),
-  );
-  return [{ member: firstMember, result: firstResult }, ...rest];
+      result: await service.query(options.requestFactory(run)),
+    };
+  });
 }
 
-export async function executeMemberDiagnostics<M, S extends ResolvableEnsembleMemberService>(options: {
+export async function executeMemberDiagnostics<M, S extends ResolvableEnsembleDiagnosticService>(options: {
   members: readonly M[];
   concurrency: number;
   serviceFactory: (member: M) => S;
@@ -57,53 +49,16 @@ export async function executeMemberDiagnostics<M, S extends ResolvableEnsembleMe
   const firstMember = options.members[0];
   if (firstMember === undefined) throw new Error(`${options.context} selected no members`);
   const firstService = options.serviceFactory(firstMember);
-  if (firstService.diagnose === undefined) throw new Error(`${options.context} member service has no diagnostic operation`);
   const request = options.requestFactory();
-  const explicitRun = concreteRun(request.forecast?.run);
+  const run = concreteRun(request.forecast?.run)
+    ?? resolvedRun(await firstService.resolveDiagnosticRun(request), options.context);
 
-  if (explicitRun !== undefined) {
-    return runAllMembers(options, firstMember, firstService, explicitRun, "diagnose");
-  }
-  if (firstService.resolveDiagnosticRun !== undefined) {
-    const run = (await firstService.resolveDiagnosticRun(request)).toISOString();
-    return runAllMembers(options, firstMember, firstService, run, "diagnose");
-  }
-
-  const firstResult = await firstService.diagnose(request);
-  const run = resultRun(firstResult, options.context);
-  const rest = await mapConcurrent(
-    options.members.slice(1),
-    options.concurrency,
-    async (member) => {
-      const service = options.serviceFactory(member);
-      if (service.diagnose === undefined) throw new Error(`${options.context} member service has no diagnostic operation`);
-      return { member, result: await service.diagnose(options.requestFactory(run)) };
-    },
-  );
-  return [{ member: firstMember, result: firstResult }, ...rest];
-}
-
-async function runAllMembers<M, S extends ResolvableEnsembleMemberService>(
-  options: {
-    members: readonly M[];
-    concurrency: number;
-    serviceFactory: (member: M) => S;
-    requestFactory: (runOverride?: string) => QueryAtmosphereRequest | DiagnoseAtmosphereRequest;
-    context: string;
-  },
-  firstMember: M,
-  firstService: S,
-  run: string,
-  operation: "query" | "diagnose",
-): Promise<EnsembleMemberResult<M>[]> {
   return mapConcurrent(options.members, options.concurrency, async (member) => {
     const service = member === firstMember ? firstService : options.serviceFactory(member);
-    const request = options.requestFactory(run);
-    if (operation === "query") {
-      return { member, result: await service.query(request as QueryAtmosphereRequest) };
-    }
-    if (service.diagnose === undefined) throw new Error(`${options.context} member service has no diagnostic operation`);
-    return { member, result: await service.diagnose(request as DiagnoseAtmosphereRequest) };
+    return {
+      member,
+      result: await service.diagnose(options.requestFactory(run)),
+    };
   });
 }
 
@@ -113,14 +68,9 @@ function concreteRun(selector: string | undefined): string | undefined {
     : undefined;
 }
 
-function resultRun(result: unknown, context: string): string {
-  if (
-    typeof result !== "object"
-    || result === null
-    || !("run" in result)
-    || typeof (result as { run?: unknown }).run !== "string"
-  ) {
+function resolvedRun(run: Date, context: string): string {
+  if (!(run instanceof Date) || !Number.isFinite(run.getTime())) {
     throw new Error(`${context} did not return a resolved run`);
   }
-  return (result as { run: string }).run;
+  return run.toISOString();
 }

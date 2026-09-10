@@ -39,8 +39,8 @@ const MEMBER_SET = new Set<string>(AIGEFS_MEMBERS);
 export interface AigefsMemberService {
   query(request: QueryAtmosphereRequest): Promise<unknown>;
   diagnose(request: DiagnoseAtmosphereRequest): Promise<unknown>;
-  resolveQueryRun?(request: QueryAtmosphereRequest): Promise<Date>;
-  resolveDiagnosticRun?(request: DiagnoseAtmosphereRequest): Promise<Date>;
+  resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date>;
+  resolveDiagnosticRun(request: DiagnoseAtmosphereRequest): Promise<Date>;
 }
 
 export interface AigefsForecastServiceOptions {
