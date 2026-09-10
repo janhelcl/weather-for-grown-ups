@@ -7,7 +7,25 @@ def must_replace(path: str, old: str, new: str, label: str) -> None:
     text = p.read_text()
     if old not in text:
         raise SystemExit(f"pattern not found [{label}] in {path}")
-    p.write_text(text.replace(old, new))
+    p.write_text(text.replace(old, new, 1))
+
+
+def insert_composition_resolvers(path: str, describe_name: str, run: str) -> None:
+    p = Path(path)
+    text = p.read_text()
+    pattern = re.compile(
+        rf'(describe\("{re.escape(describe_name)}"[\s\S]*?function factory\([\s\S]*?return \{{\n)(\s+query:)',
+    )
+    replacement = (
+        r'\1'
+        f'      resolveQueryRun: vi.fn(async () => new Date("{run}")),\n'
+        f'      resolveDiagnosticRun: vi.fn(async () => new Date("{run}")),\n'
+        r'\2'
+    )
+    updated, count = pattern.subn(replacement, text, count=1)
+    if count != 1:
+        raise SystemExit(f"composition factory not found in {path}")
+    p.write_text(updated)
 
 
 # Make the shared execution seam strict: an ensemble member service must be able to
@@ -43,7 +61,7 @@ export async function executeMemberQueries<M, S extends ResolvableEnsembleQueryS
   const firstService = options.serviceFactory(firstMember);
   const request = options.requestFactory();
   const run = concreteRun(request.forecast?.run)
-    ?? (await firstService.resolveQueryRun(request)).toISOString();
+    ?? resolvedRun(await firstService.resolveQueryRun(request), options.context);
 
   return mapConcurrent(options.members, options.concurrency, async (member) => {
     const service = member === firstMember ? firstService : options.serviceFactory(member);
@@ -66,7 +84,7 @@ export async function executeMemberDiagnostics<M, S extends ResolvableEnsembleDi
   const firstService = options.serviceFactory(firstMember);
   const request = options.requestFactory();
   const run = concreteRun(request.forecast?.run)
-    ?? (await firstService.resolveDiagnosticRun(request)).toISOString();
+    ?? resolvedRun(await firstService.resolveDiagnosticRun(request), options.context);
 
   return mapConcurrent(options.members, options.concurrency, async (member) => {
     const service = member === firstMember ? firstService : options.serviceFactory(member);
@@ -81,6 +99,13 @@ function concreteRun(selector: string | undefined): string | undefined {
   return selector !== undefined && selector !== "latest" && selector !== "latest_complete"
     ? selector
     : undefined;
+}
+
+function resolvedRun(run: Date, context: string): string {
+  if (!(run instanceof Date) || !Number.isFinite(run.getTime())) {
+    throw new Error(`${context} did not return a resolved run`);
+  }
+  return run.toISOString();
 }
 ''')
 
@@ -99,8 +124,8 @@ t = p.read_text().replace(
 )
 p.write_text(t)
 
-# Test doubles must model the production contract too; otherwise tests would hide the same
-# architectural regression we are preventing.
+# Inline test doubles must model the production contract too; otherwise tests would hide the
+# same architectural regression we are preventing.
 fixtures = {
     "test/aifs-ens.test.ts": ("2026-08-31T00:00:00.000Z", True),
     "test/aigefs.test.ts": ("2026-08-30T00:00:00.000Z", True),
@@ -117,8 +142,35 @@ for path, (run, has_diagnostics) in fixtures.items():
     updated, count = factory_pattern.subn(insertion, text)
     if count == 0:
         raise SystemExit(f"no memberServiceFactory test doubles found in {path}")
-    # Aggregation assertions now expect every payload to receive the already-resolved run.
     updated = updated.replace('forecast: { run: "latest" },', f'forecast: {{ run: "{run}" }},')
+    p.write_text(updated)
+
+# Composition suites use named factory functions instead of inline memberServiceFactory doubles.
+insert_composition_resolvers(
+    "test/aifs-ens.test.ts",
+    "AIFS ENS composition coverage",
+    "2026-08-30T00:00:00.000Z",
+)
+insert_composition_resolvers(
+    "test/aigefs.test.ts",
+    "AIGEFS composition coverage",
+    "2026-08-30T00:00:00.000Z",
+)
+
+# Preserve the defensive contract test: injected runtime services may still violate their
+# static type, and the shared helper should fail with a domain error rather than a JS TypeError.
+for path, suite in [
+    ("test/aifs-ens.test.ts", "AIFS ENS defensive aggregation coverage"),
+    ("test/aigefs.test.ts", "AIGEFS defensive aggregation coverage"),
+]:
+    p = Path(path)
+    text = p.read_text()
+    pattern = re.compile(
+        rf'(describe\("{re.escape(suite)}"[\s\S]*?it\("fails clearly when the run-resolving member returns no run"[\s\S]*?resolveQueryRun: vi\.fn\(async \(\) => )new Date\("[^"]+"\)(\),)',
+    )
+    updated, count = pattern.subn(r'\1undefined as any\2', text, count=1)
+    if count != 1:
+        raise SystemExit(f"negative run-resolution fixture not found in {path}")
     p.write_text(updated)
 
 # Enforce that the shared helper itself cannot regain the fallback.
@@ -126,11 +178,8 @@ p = Path("test/architecture-boundaries.test.ts")
 t = p.read_text()
 needle = '''      expect(source, path).not.toContain("const firstResult = await firstService.query");
 '''
-replacement = '''      expect(source, path).not.toContain("const firstResult = await firstService.query");
-'''
 if needle not in t:
     raise SystemExit("ensemble architecture assertion missing")
-# Add helper-level assertions immediately after the wrapper loop test.
 marker = '''  it("keeps independent deterministic forecast ranges bounded-concurrent", async () => {'''
 addition = '''  it("requires ensemble run resolution before member payload execution", async () => {
     const source = await readFile("src/core/ensemble-member-execution.ts", "utf8");
