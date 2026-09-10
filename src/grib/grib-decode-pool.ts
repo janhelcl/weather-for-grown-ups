@@ -160,7 +160,7 @@ export function decodeWorkerCount(): number {
   const requested = Number(process.env.WFG_GRIB_DECODE_WORKERS);
   if (Number.isInteger(requested) && requested >= 0) return requested;
   try {
-    return Math.max(0, Math.min(8, availableParallelism() - 1));
+    return Math.max(0, Math.min(2, availableParallelism() - 1));
   } catch {
     return 0;
   }
