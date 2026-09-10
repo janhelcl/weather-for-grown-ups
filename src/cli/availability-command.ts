@@ -46,9 +46,12 @@ function printAvailability(result: Awaited<ReturnType<AtmosphericAvailabilitySer
   console.log(`${result.dataset}: ${result.coverage} (${result.basis})`);
   console.log(`Domain: ${result.domainCovered ? "covered" : "outside"}`);
   if (result.initialization !== undefined) console.log(`Initialization: ${result.initialization}`);
+  if (result.initializationValidTimeRange !== undefined) {
+    console.log(`Initialization valid times: ${result.initializationValidTimeRange.from} .. ${result.initializationValidTimeRange.to}`);
+  }
   if (result.availableRequestedTime !== undefined) {
     console.log(`Available requested time: ${result.availableRequestedTime.from} .. ${result.availableRequestedTime.to}`);
   }
-  console.log(`Native cadence: ${result.nativeCadenceHours.join(",")}h${result.maxForecastHour === undefined ? "" : `; nominal horizon: f${result.maxForecastHour}`}`);
+  console.log(`Native cadence over request: ${result.nativeCadenceHours.join(",")}h${result.maxForecastHour === undefined ? "" : `; horizon: f${result.maxForecastHour}`}`);
   for (const issue of result.issues) console.log(`- ${issue.path.join(".") || "request"}: ${issue.reason}`);
 }
