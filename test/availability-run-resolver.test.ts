@@ -7,6 +7,7 @@ import type { QueryAtmosphereRequest } from "../src/schema/unified-api.js";
 
 const HOUR_MS = 3_600_000;
 const RUN = new Date("2026-09-10T00:00:00Z");
+const PE_AROME_RUN = new Date("2026-09-10T03:00:00Z");
 const cacheDir = mkdtempSync(join(tmpdir(), "wfg-availability-resolver-"));
 const resolver = new DefaultAtmosphericAvailabilityRunResolver({
   cacheDir,
@@ -73,8 +74,15 @@ describe("DefaultAtmosphericAvailabilityRunResolver native windows", () => {
       .toEqual([0, 1, 2]);
     expect(hours(resolver.nativeValidTimes(request("arome", { at: RUN.toISOString() }), RUN, RUN, atHour(2))))
       .toEqual([0, 1, 2]);
-    expect(hours(resolver.nativeValidTimes(request("pe-arome", { at: RUN.toISOString() }), RUN, RUN, atHour(2))))
-      .toEqual([0, 1, 2]);
+    expect(hours(
+      resolver.nativeValidTimes(
+        request("pe-arome", { at: PE_AROME_RUN.toISOString() }),
+        PE_AROME_RUN,
+        PE_AROME_RUN,
+        atHour(2, PE_AROME_RUN),
+      ),
+      PE_AROME_RUN,
+    )).toEqual([0, 1, 2]);
     expect(resolver.nativeValidTimes(request("gfs-analysis", { at: RUN.toISOString() }), RUN, RUN, atHour(2)))
       .toEqual([]);
   });
@@ -136,6 +144,7 @@ describe("DefaultAtmosphericAvailabilityRunResolver explicit runs", () => {
       dataset: QueryAtmosphereRequest["dataset"];
       lead: number;
       members?: string[];
+      run?: Date;
     }> = [
       { dataset: "gfs", lead: 1 },
       { dataset: "gefs", lead: 3, members: ["c00"] },
@@ -149,16 +158,17 @@ describe("DefaultAtmosphericAvailabilityRunResolver explicit runs", () => {
       { dataset: "icon-d2", lead: 1 },
       { dataset: "icon-d2-eps", lead: 1, members: ["c00"] },
       { dataset: "arome", lead: 1 },
-      { dataset: "pe-arome", lead: 1, members: ["c00"] },
+      { dataset: "pe-arome", lead: 1, members: ["c00"], run: PE_AROME_RUN },
     ];
 
     for (const testCase of cases) {
+      const run = testCase.run ?? RUN;
       const resolved = await resolver.resolve(request(
         testCase.dataset,
-        { at: atHour(testCase.lead).toISOString() },
-        { run: RUN.toISOString(), members: testCase.members },
+        { at: atHour(testCase.lead, run).toISOString() },
+        { run: run.toISOString(), members: testCase.members },
       ));
-      expect(resolved.toISOString(), testCase.dataset).toBe(RUN.toISOString());
+      expect(resolved.toISOString(), testCase.dataset).toBe(run.toISOString());
     }
   });
 
