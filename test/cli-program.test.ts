@@ -5,6 +5,7 @@ import { WFG_VERSION } from "../src/version.js";
 const EXPECTED_COMMANDS = [
   "catalog",
   "capabilities",
+  "availability",
   "query",
   "diagnose",
   "align",
@@ -45,7 +46,7 @@ describe("CLI public surface", () => {
   it("uses dataset rather than model vocabulary", () => {
     const program = createCliProgram();
 
-    for (const name of ["catalog", "capabilities", "query", "diagnose"]) {
+    for (const name of ["catalog", "capabilities", "availability", "query", "diagnose"]) {
       const command = program.commands.find((candidate) => candidate.name() === name);
       expect(command?.options.some((option) => option.long === "--dataset")).toBe(true);
       expect(command?.options.some((option) => option.long === "--model")).toBe(false);
@@ -61,11 +62,14 @@ describe("CLI public surface", () => {
     const program = createCliProgram();
     const catalog = program.commands.find((command) => command.name() === "catalog");
     const capabilities = program.commands.find((command) => command.name() === "capabilities");
+    const availability = program.commands.find((command) => command.name() === "availability");
     const query = program.commands.find((command) => command.name() === "query");
 
     expect(catalog?.options.find((option) => option.long === "--dataset")?.flags)
       .toContain("gfs|aigfs|aigefs|hgefs|icon-d2|icon-d2-eps|arome|pe-arome|gefs|ifs|aifs|aifs-ens|ifs-ens|gfs-analysis|all");
     expect(capabilities?.options.find((option) => option.long === "--dataset")?.flags)
+      .toContain("gfs|aigfs|aigefs|hgefs|icon-d2|icon-d2-eps|arome|pe-arome|gefs|ifs|aifs|aifs-ens|ifs-ens|gfs-analysis");
+    expect(availability?.options.find((option) => option.long === "--dataset")?.flags)
       .toContain("gfs|aigfs|aigefs|hgefs|icon-d2|icon-d2-eps|arome|pe-arome|gefs|ifs|aifs|aifs-ens|ifs-ens|gfs-analysis");
     expect(query?.options.find((option) => option.long === "--source")?.flags)
       .toContain("nomads|s3|archive");
@@ -74,7 +78,7 @@ describe("CLI public surface", () => {
   it("exposes GFS grid selection on the canonical forecast-capable commands", () => {
     const program = createCliProgram();
 
-    for (const name of ["query", "diagnose", "verify"]) {
+    for (const name of ["availability", "query", "diagnose", "verify"]) {
       const command = program.commands.find((candidate) => candidate.name() === name);
       expect(command?.options.some((option) => option.long === "--grid")).toBe(true);
     }
