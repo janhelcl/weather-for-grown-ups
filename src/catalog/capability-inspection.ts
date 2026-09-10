@@ -13,17 +13,19 @@ import {
   type InspectAtmosphereCapabilitiesInput,
   type InspectAtmosphereCapabilitiesRequest,
 } from "../schema/capability-inspection.js";
+import type { UnifiedCatalogResult } from "../schema/unified-catalog.js";
 import {
   publicDatasetCapabilities,
   publicDatasetCoversGeometry,
-  publicDatasetMetadata,
   validateDatasetModifiers,
 } from "../schema/unified-api.js";
 
 const CAPABILITY_PROBE_TIME = { at: "2000-01-01T00:00:00Z" } as const;
+const CAPABILITY_PROBE_GEOMETRY = { type: "point", latitude: 0, longitude: 0 } as const;
 
 type CapabilityIssue = { path: Array<string | number>; reason: string };
 type GeometryType = "point" | "points" | "transect" | "area";
+type CatalogSection = UnifiedCatalogResult["matches"][number]["section"];
 
 export function inspectAtmosphereCapabilities(
   input: InspectAtmosphereCapabilitiesInput,
@@ -31,11 +33,13 @@ export function inspectAtmosphereCapabilities(
   const requested = inspectAtmosphereCapabilitiesSchema.parse(input);
   const forecastKind = requested.forecast?.kind;
   const capabilities = publicDatasetCapabilities(requested.dataset, forecastKind);
+  const geometries = geometryTypes(capabilities.operations);
   const unsupported: CapabilityIssue[] = [];
 
   collectDatasetModifierIssues(requested, unsupported);
   collectOperationIssues(requested, capabilities.operations, unsupported);
-  collectGeometryIssues(requested, geometryTypes(capabilities.operations), capabilities.spatialDomain, unsupported);
+  collectOperationShapeIssues(requested, unsupported);
+  collectGeometryIssues(requested, geometries, capabilities.spatialDomain, unsupported);
   collectCatalogSelectionIssues(requested, unsupported);
   collectPressureLevelIssues(requested, unsupported);
 
@@ -45,7 +49,7 @@ export function inspectAtmosphereCapabilities(
     dataset: requested.dataset,
     supported: deduplicated.length === 0,
     requested,
-    geometries: geometryTypes(capabilities.operations),
+    geometries,
     capabilities,
     unsupported: deduplicated,
   });
@@ -57,6 +61,7 @@ function collectDatasetModifierIssues(
 ): void {
   const probe = {
     ...requested,
+    geometry: requested.geometry ?? CAPABILITY_PROBE_GEOMETRY,
     time: requested.time ?? CAPABILITY_PROBE_TIME,
   };
   const schema = z.any().superRefine((value, context) => {
@@ -65,7 +70,10 @@ function collectDatasetModifierIssues(
   const parsed = schema.safeParse(probe);
   if (parsed.success) return;
   for (const issue of parsed.error.issues) {
-    issues.push({ path: issue.path, reason: issue.message });
+    issues.push({
+      path: issue.path.map((part) => typeof part === "symbol" ? (part.description ?? String(part)) : part),
+      reason: issue.message,
+    });
   }
 }
 
@@ -80,6 +88,62 @@ function collectOperationIssues(
     path: ["operation"],
     reason: `dataset=${requested.dataset} does not support operation=${operation}; supported operations: ${operations.join(", ")}`,
   });
+}
+
+function collectOperationShapeIssues(
+  requested: InspectAtmosphereCapabilitiesRequest,
+  issues: CapabilityIssue[],
+): void {
+  const operation = requested.operation;
+  if (operation === undefined) return;
+
+  const expectedGeometry = operationGeometry(operation);
+  if (
+    expectedGeometry !== undefined
+    && requested.geometry !== undefined
+    && requested.geometry.type !== expectedGeometry
+  ) {
+    issues.push({
+      path: ["geometry", "type"],
+      reason: `operation=${operation} requires geometry=${expectedGeometry}, received geometry=${requested.geometry.type}`,
+    });
+  }
+
+  const expectedTime = operationTimeShape(operation);
+  if (expectedTime !== undefined && requested.time !== undefined) {
+    const receivedTime = "from" in requested.time ? "range" : "instant";
+    if (receivedTime !== expectedTime) {
+      issues.push({
+        path: ["time"],
+        reason: `operation=${operation} requires ${expectedTime} valid time, received ${receivedTime}`,
+      });
+    }
+  }
+
+  const diagnosticKind = operationDiagnosticKind(operation);
+  if (diagnosticKind !== undefined && requested.selection !== undefined) {
+    issues.push({
+      path: ["selection"],
+      reason: `operation=${operation} expects a diagnostic selection, not a raw query selection`,
+    });
+  }
+  if (diagnosticKind === undefined && requested.diagnostic !== undefined && operation !== "diagnostic_timeseries") {
+    issues.push({
+      path: ["diagnostic"],
+      reason: `operation=${operation} does not consume a diagnostic selection`,
+    });
+  }
+  if (
+    diagnosticKind !== undefined
+    && diagnosticKind !== "any"
+    && requested.diagnostic !== undefined
+    && requested.diagnostic.kind !== diagnosticKind
+  ) {
+    issues.push({
+      path: ["diagnostic", "kind"],
+      reason: `operation=${operation} requires diagnostic.kind=${diagnosticKind}, received ${requested.diagnostic.kind}`,
+    });
+  }
 }
 
 function collectGeometryIssues(
@@ -118,28 +182,28 @@ function collectGeometryIssues(
       reason: `${geometry.type} queries currently support one valid time, not a time range`,
     });
   }
+
+  if (geometry.type === "area" && requested.selection !== undefined) {
+    const variableCount = requested.selection.variables?.length ?? 0;
+    const levelCount = requested.selection.pressureLevelsHpa?.length ?? 0;
+    const fieldCount = requested.selection.fields?.length ?? 0;
+    const pressureSelection = variableCount === 1 && levelCount === 1 && fieldCount === 0;
+    const fieldSelection = variableCount === 0 && levelCount === 0 && fieldCount === 1;
+    if (!pressureSelection && !fieldSelection) {
+      issues.push({
+        path: ["selection"],
+        reason: "area geometry requires exactly one pressure variable at one pressure level or exactly one field",
+      });
+    }
+  }
 }
 
 function collectCatalogSelectionIssues(
   requested: InspectAtmosphereCapabilitiesRequest,
   issues: CapabilityIssue[],
 ): void {
-  const forecastKind = requested.dataset === "gefs" ? requested.forecast?.kind : undefined;
-  const catalog = searchAtmosphereCatalog({
-    datasets: [requested.dataset],
-    ...(forecastKind === undefined ? {} : { forecastKind }),
-    sections: ["variables", "fields", "layer_diagnostics", "profile_diagnostics", "parcel_definitions"],
-    limit: 100,
-  });
-  const support = new Map<string, Set<string>>();
-  for (const match of catalog.matches) {
-    const ids = support.get(match.section) ?? new Set<string>();
-    ids.add(match.id);
-    support.set(match.section, ids);
-  }
-
   for (const variable of requested.selection?.variables ?? []) {
-    if (!support.get("variables")?.has(variable)) {
+    if (!catalogSupports(requested, "variables", variable)) {
       issues.push({
         path: ["selection", "variables"],
         reason: `dataset=${requested.dataset} does not expose pressure variable=${variable}`,
@@ -147,7 +211,7 @@ function collectCatalogSelectionIssues(
     }
   }
   for (const field of requested.selection?.fields ?? []) {
-    if (!support.get("fields")?.has(field)) {
+    if (!catalogSupports(requested, "fields", field)) {
       issues.push({
         path: ["selection", "fields"],
         reason: `dataset=${requested.dataset} does not expose field=${field}`,
@@ -158,21 +222,46 @@ function collectCatalogSelectionIssues(
   const diagnostic = requested.diagnostic;
   if (diagnostic?.kind === "layer") {
     for (const id of diagnostic.diagnostics) {
-      if (!support.get("layer_diagnostics")?.has(id)) {
-        issues.push({ path: ["diagnostic", "diagnostics"], reason: `dataset=${requested.dataset} does not expose layer diagnostic=${id}` });
+      if (!catalogSupports(requested, "layer_diagnostics", id)) {
+        issues.push({
+          path: ["diagnostic", "diagnostics"],
+          reason: `dataset=${requested.dataset} does not expose layer diagnostic=${id}`,
+        });
       }
     }
   } else if (diagnostic?.kind === "profile") {
     for (const id of diagnostic.diagnostics) {
-      if (!support.get("profile_diagnostics")?.has(id)) {
-        issues.push({ path: ["diagnostic", "diagnostics"], reason: `dataset=${requested.dataset} does not expose profile diagnostic=${id}` });
+      if (!catalogSupports(requested, "profile_diagnostics", id)) {
+        issues.push({
+          path: ["diagnostic", "diagnostics"],
+          reason: `dataset=${requested.dataset} does not expose profile diagnostic=${id}`,
+        });
       }
     }
   } else if (diagnostic?.kind === "parcel") {
-    if (!support.get("parcel_definitions")?.has(diagnostic.parcel)) {
-      issues.push({ path: ["diagnostic", "parcel"], reason: `dataset=${requested.dataset} does not expose parcel definition=${diagnostic.parcel}` });
+    if (!catalogSupports(requested, "parcel_definitions", diagnostic.parcel)) {
+      issues.push({
+        path: ["diagnostic", "parcel"],
+        reason: `dataset=${requested.dataset} does not expose parcel definition=${diagnostic.parcel}`,
+      });
     }
   }
+}
+
+function catalogSupports(
+  requested: InspectAtmosphereCapabilitiesRequest,
+  section: CatalogSection,
+  id: string,
+): boolean {
+  const forecastKind = requested.dataset === "gefs" ? requested.forecast?.kind : undefined;
+  const result = searchAtmosphereCatalog({
+    datasets: [requested.dataset],
+    ...(forecastKind === undefined ? {} : { forecastKind }),
+    sections: [section],
+    search: id,
+    limit: 10,
+  });
+  return result.matches.some((match) => match.section === section && match.id === id);
 }
 
 function collectPressureLevelIssues(
@@ -251,6 +340,59 @@ function inferOperation(requested: InspectAtmosphereCapabilitiesRequest): string
   }
 }
 
+function operationGeometry(operation: string): GeometryType | undefined {
+  switch (operation) {
+    case "profile":
+    case "timeseries":
+    case "layer_diagnostics":
+    case "profile_diagnostics":
+    case "diagnostic_timeseries":
+    case "parcel_diagnostics":
+    case "ensemble_distribution":
+    case "alignment":
+      return "point";
+    case "points":
+    case "points_timeseries":
+      return "points";
+    case "transect":
+      return "transect";
+    case "area_summary":
+      return "area";
+    default:
+      return undefined;
+  }
+}
+
+function operationTimeShape(operation: string): "instant" | "range" | undefined {
+  switch (operation) {
+    case "profile":
+    case "layer_diagnostics":
+    case "profile_diagnostics":
+    case "parcel_diagnostics":
+    case "points":
+    case "transect":
+    case "area_summary":
+    case "ensemble_distribution":
+      return "instant";
+    case "timeseries":
+    case "diagnostic_timeseries":
+    case "points_timeseries":
+      return "range";
+    default:
+      return undefined;
+  }
+}
+
+function operationDiagnosticKind(operation: string): "layer" | "profile" | "parcel" | "any" | undefined {
+  switch (operation) {
+    case "layer_diagnostics": return "layer";
+    case "profile_diagnostics": return "profile";
+    case "parcel_diagnostics": return "parcel";
+    case "diagnostic_timeseries": return "any";
+    default: return undefined;
+  }
+}
+
 function geometryTypes(operations: readonly string[]): GeometryType[] {
   const result = new Set<GeometryType>();
   if (operations.some((operation) => [
@@ -266,7 +408,7 @@ function geometryTypes(operations: readonly string[]): GeometryType[] {
   if (operations.some((operation) => operation === "points" || operation === "points_timeseries")) result.add("points");
   if (operations.includes("transect")) result.add("transect");
   if (operations.includes("area_summary")) result.add("area");
-  return ["point", "points", "transect", "area"].filter((geometry) => result.has(geometry as GeometryType)) as GeometryType[];
+  return (["point", "points", "transect", "area"] as const).filter((geometry) => result.has(geometry));
 }
 
 function deduplicateIssues(issues: CapabilityIssue[]): CapabilityIssue[] {
