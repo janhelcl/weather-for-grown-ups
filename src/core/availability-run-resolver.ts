@@ -7,7 +7,6 @@ import { PeAromeWcsCache } from "../cache/pe-arome-wcs-cache.js";
 import { AIFS_ENS_MEMBERS, type AifsEnsMember } from "../catalog/aifs-ens.js";
 import { AIGEFS_MEMBERS } from "../catalog/aigefs.js";
 import { GEFS_MAX_FORECAST_HOUR, GEFS_MEMBERS, type GefsMember } from "../catalog/gefs.js";
-import { ICON_D2_EPS_MEMBERS } from "../catalog/icon-d2-eps.js";
 import { PE_AROME_MEMBERS } from "../catalog/pe-arome.js";
 import { expandRequestedFields } from "../catalog/non-isobaric-fields.js";
 import { expandRequestedVariables } from "../catalog/variables.js";
@@ -17,6 +16,11 @@ import {
   aigfsNativeForecastHoursInRange,
   aigfsValidTime,
 } from "../sources/aigfs.js";
+import {
+  GEFS_REFORECAST_MAX_FORECAST_HOUR,
+  nativeGefsReforecastValidTimesInRange,
+  parseGefsReforecastRun,
+} from "../sources/gefs-reforecast-s3.js";
 import {
   ICON_D2_MAX_FORECAST_HOUR,
   iconD2NativeForecastHoursInRange,
@@ -40,13 +44,12 @@ import { AigfsForecastService } from "./aigfs.js";
 import { AromeForecastService } from "./arome.js";
 import {
   GFS_MAX_FORECAST_HOUR,
-  forecastHour,
   nativeForecastHoursInRange,
   parseGfsRun,
   validTimeForForecastHour,
 } from "./forecast-hour.js";
 import { GefsLatestRunResolver } from "./gefs-latest-run.js";
-import { gefsForecastHour, parseGefsRun } from "./gefs-time.js";
+import { parseGefsRun } from "./gefs-time.js";
 import { IfsEnsLatestRunResolver } from "./ifs-ens-latest-run.js";
 import { IfsLatestRunResolver } from "./ifs-latest-run.js";
 import { ifsIndexSelectorsForSelection } from "./ifs-profile.js";
@@ -86,25 +89,29 @@ export interface DefaultAtmosphericAvailabilityRunResolverOptions {
 export class DefaultAtmosphericAvailabilityRunResolver implements AtmosphericAvailabilityRunResolver {
   private readonly cacheDir: string;
   private readonly now: () => Date;
-  private readonly gfs = new LatestRunResolver();
+  private readonly gfs: LatestRunResolver;
   private readonly gefs: GefsLatestRunResolver;
   private readonly ifs: IfsLatestRunResolver;
   private readonly ifsEns: IfsEnsLatestRunResolver;
-  private readonly aigfs = new AigfsForecastService();
+  private readonly aigfs: AigfsForecastService;
   private readonly aifs: AifsForecastService;
-  private readonly iconD2 = new IconD2ForecastService();
-  private readonly arome = new AromeForecastService();
+  private readonly iconD2: IconD2ForecastService;
+  private readonly arome: AromeForecastService;
 
   constructor(options: DefaultAtmosphericAvailabilityRunResolverOptions = {}) {
     this.cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
     this.now = options.now ?? (() => new Date());
+    this.gfs = new LatestRunResolver(undefined, () => this.now().getTime());
     this.gefs = new GefsLatestRunResolver({ now: this.now });
     this.ifs = new IfsLatestRunResolver({ cacheDir: this.cacheDir, now: this.now });
     this.ifsEns = new IfsEnsLatestRunResolver({ cacheDir: this.cacheDir, now: this.now });
+    this.aigfs = new AigfsForecastService({ cacheDir: this.cacheDir });
     this.aifs = new AifsForecastService({
       cacheDir: this.cacheDir,
       latestRunProvider: new AifsLatestRunResolver({ cacheDir: this.cacheDir, now: this.now }),
     });
+    this.iconD2 = new IconD2ForecastService({ cacheDir: this.cacheDir });
+    this.arome = new AromeForecastService({ cacheDir: this.cacheDir });
   }
 
   async resolve(request: QueryAtmosphereRequest): Promise<Date> {
@@ -126,7 +133,9 @@ export class DefaultAtmosphericAvailabilityRunResolver implements AtmosphericAva
           .map((hour) => validTimeForForecastHour(run, hour));
       }
       case "gefs":
-        return fixedStepTimes(run, from, to, 3, GEFS_MAX_FORECAST_HOUR);
+        return request.forecast?.kind === "reforecast"
+          ? nativeGefsReforecastValidTimesInRange(run, from, to, Number.MAX_SAFE_INTEGER)
+          : fixedStepTimes(run, from, to, 3, GEFS_MAX_FORECAST_HOUR);
       case "ifs":
         return ifsForecastHoursInRange(run, from, to)
           .map((hour) => ifsValidTimeForForecastHour(run, hour));
@@ -172,7 +181,7 @@ export class DefaultAtmosphericAvailabilityRunResolver implements AtmosphericAva
       case "aigefs":
         return this.aigefsMemberService(request).resolveQueryRun(asDataset(request, "aigfs"));
       case "hgefs":
-        return this.aigefsMemberService(request).resolveQueryRun(asDataset(request, "aigfs"));
+        return this.aigefsMemberService(request, "c00").resolveQueryRun(asDataset(request, "aigfs"));
       case "aifs":
         return this.aifs.resolveQueryRun(request);
       case "aifs-ens":
@@ -201,8 +210,12 @@ export class DefaultAtmosphericAvailabilityRunResolver implements AtmosphericAva
     if (selector !== "latest" && selector !== "latest_complete") return parseGfsRun(selector);
     if (selector === "latest_complete") return resolveLatestCompleteRunForGrid(this.gfs, grid);
 
-    const variables = expandRequestedVariables(request.selection.variables ?? []);
-    const fields = expandRequestedFields(request.selection.fields ?? []);
+    const variables = expandRequestedVariables(
+      (request.selection.variables ?? []) as Parameters<typeof expandRequestedVariables>[0],
+    );
+    const fields = expandRequestedFields(
+      (request.selection.fields ?? []) as Parameters<typeof expandRequestedFields>[0],
+    );
     const selection = {
       variableCodes: variables.map((variable) => variable.gfsCode),
       pressureLevelsHpa: request.selection.pressureLevelsHpa ?? [],
@@ -221,6 +234,12 @@ export class DefaultAtmosphericAvailabilityRunResolver implements AtmosphericAva
 
   private async resolveGefs(request: QueryAtmosphereRequest): Promise<Date> {
     const selector = request.forecast?.run ?? "latest";
+    if (request.forecast?.kind === "reforecast") {
+      if (selector === "latest" || selector === "latest_complete") {
+        throw new Error("GEFSv12 reforecast availability requires an explicit 2000-2019 daily 00Z initialization");
+      }
+      return parseGefsReforecastRun(selector);
+    }
     if (selector !== "latest") return parseGefsRun(selector);
     const members = (request.ensemble?.members ?? GEFS_MEMBERS) as readonly GefsMember[];
     return "at" in request.time
@@ -254,8 +273,11 @@ export class DefaultAtmosphericAvailabilityRunResolver implements AtmosphericAva
         );
   }
 
-  private aigefsMemberService(request: QueryAtmosphereRequest): AigfsForecastService {
-    const member = String(request.ensemble?.members?.[0] ?? AIGEFS_MEMBERS[0]);
+  private aigefsMemberService(
+    request: QueryAtmosphereRequest,
+    forcedMember?: string,
+  ): AigfsForecastService {
+    const member = forcedMember ?? String(request.ensemble?.members?.[0] ?? AIGEFS_MEMBERS[0]);
     const probe = new AigefsS3SubsetCache(
       join(this.cacheDir, "availability", request.dataset, member),
       member as any,
@@ -299,7 +321,7 @@ export class DefaultAtmosphericAvailabilityRunResolver implements AtmosphericAva
   }
 
   private assertDeclaredWindow(request: QueryAtmosphereRequest, run: Date): void {
-    const maxHour = maxForecastHour(request.dataset, run);
+    const maxHour = maxForecastHour(request.dataset, run, request.forecast?.kind);
     const start = "at" in request.time ? new Date(request.time.at) : new Date(request.time.from);
     const end = "at" in request.time ? start : new Date(request.time.to);
     if (start.getTime() < run.getTime() || end.getTime() > run.getTime() + maxHour * HOUR_MS) {
@@ -327,10 +349,14 @@ function asDataset(
   } as QueryAtmosphereRequest;
 }
 
-function maxForecastHour(dataset: QueryAtmosphereRequest["dataset"], run: Date): number {
+function maxForecastHour(
+  dataset: QueryAtmosphereRequest["dataset"],
+  run: Date,
+  forecastKind?: "operational" | "reforecast",
+): number {
   switch (dataset) {
     case "gfs": return GFS_MAX_FORECAST_HOUR;
-    case "gefs": return GEFS_MAX_FORECAST_HOUR;
+    case "gefs": return forecastKind === "reforecast" ? GEFS_REFORECAST_MAX_FORECAST_HOUR : GEFS_MAX_FORECAST_HOUR;
     case "ifs": return ifsMaxForecastHour(run);
     case "ifs-ens": return ifsEnsMaxForecastHour(run);
     case "aigfs":
