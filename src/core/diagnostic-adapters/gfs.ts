@@ -2,6 +2,7 @@ import { operationalGfsModelId } from "../../schema/gfs-grid.js";
 import type { DiagnoseAtmosphereRequest } from "../../schema/unified-api.js";
 import { ArchivedGfsForecastDiagnosticService } from "../archived-gfs-diagnostics.js";
 import { shouldUseArchivedGfsForecast } from "../archived-gfs-query.js";
+import { selectAutomaticGfsDiagnosticSource } from "../gfs-point-source.js";
 import {
   createGenericDiagnosticServices,
   diagnosticInstantCommon,
@@ -36,13 +37,14 @@ export class GfsDiagnosticAdapter implements AtmosphericDiagnosticAdapter {
       return this.archived.diagnose(request);
     }
     const model = operationalGfsModelId(request.forecast?.grid ?? "0p25");
+    const source = request.source ?? selectAutomaticGfsDiagnosticSource(request.diagnostic);
     if ("at" in request.time) {
       const query = {
         ...diagnosticInstantCommon(request),
         ...request.diagnostic,
         run: request.forecast?.run ?? "latest",
         grid: request.forecast?.grid ?? "0p25",
-        source: request.source ?? "s3",
+        source,
       };
       return runGenericInstantDiagnostic(this.generic, request, model, query);
     }
@@ -52,7 +54,7 @@ export class GfsDiagnosticAdapter implements AtmosphericDiagnosticAdapter {
         ...diagnosticRangeCommon(request),
         run: request.forecast?.run ?? "latest",
         grid: request.forecast?.grid ?? "0p25",
-        source: request.source ?? "s3",
+        source,
       },
     } as any);
   }

@@ -30,10 +30,24 @@ for (const grid of ["0p25", "0p50"] as const) {
   });
 }
 
+const autoWide = await wideAutomaticProfile();
+assert.equal(autoWide.source.provider, "NOAA NOMADS");
+assert.equal(autoWide.source.access, "nomads_grib_filter");
+assert.equal(autoWide.source.decoder, "gribberish");
+assert.equal(autoWide.levels.length, 16);
+assert(autoWide.levels.every((level: any) => Number.isFinite(level.temperatureC)));
+assert(autoWide.levels.every((level: any) => Number.isFinite(level.uWindMs)));
+
 console.log(JSON.stringify({
   checkedAt: new Date().toISOString(),
   contract: "operational_nomads_vs_s3",
   summaries,
+  automaticWidePoint: {
+    run: autoWide.run,
+    validTime: autoWide.validTime,
+    pressureLevels: autoWide.levels.length,
+    source: autoWide.source,
+  },
 }, null, 2));
 
 async function profile(grid: Grid, source: Source): Promise<any> {
@@ -47,6 +61,21 @@ async function profile(grid: Grid, source: Source): Promise<any> {
     },
     forecast: { run: runIso, grid },
     source,
+  });
+  return wrapped.result as any;
+}
+
+async function wideAutomaticProfile(): Promise<any> {
+  const wrapped = await service.query({
+    dataset: "gfs",
+    geometry: { type: "point", latitude: 45.765, longitude: 11.73 },
+    time: { at: validTime },
+    selection: {
+      variables: ["temperature", "relative_humidity", "u_wind", "v_wind", "geopotential_height"],
+      pressureLevelsHpa: [1000, 975, 950, 925, 900, 850, 800, 750, 700, 650, 600, 550, 500, 450, 400, 350],
+      fields: ["temperature_2m", "total_precipitation", "low_cloud_cover_average"],
+    },
+    forecast: { run: runIso, grid: "0p25" },
   });
   return wrapped.result as any;
 }
