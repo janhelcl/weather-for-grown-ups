@@ -63,6 +63,7 @@ describe("stdio MCP", () => {
     expect(tools.map((tool) => tool.name)).toEqual([
       "search_catalog",
       "inspect_capabilities",
+      "inspect_availability",
       "query_atmosphere",
       "diagnose_atmosphere",
       "align_atmosphere",
@@ -96,6 +97,23 @@ describe("stdio MCP", () => {
       basis: "declared_capability",
       dataset: "icon-d2",
       supported: false,
+    });
+
+    // Availability rejection is also preflight-only and must stay offline outside the model domain.
+    const availability = await client.callTool({
+      name: "inspect_availability",
+      arguments: {
+        dataset: "icon-d2",
+        geometry: { type: "point", latitude: 40.7, longitude: -74 },
+        time: { at: "2026-09-06T12:00:00Z" },
+        selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      },
+    });
+    expect(availability.isError).not.toBe(true);
+    expect(availability.structuredContent).toMatchObject({
+      dataset: "icon-d2",
+      domainCovered: false,
+      coverage: "absent",
     });
 
     // Query rejection happens before source access, so this stays offline too.
