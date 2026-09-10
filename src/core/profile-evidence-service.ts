@@ -1,10 +1,9 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  expandRequestedFields,
-} from "../catalog/non-isobaric-fields.js";
+import { expandRequestedFields } from "../catalog/non-isobaric-fields.js";
 import {
   expandIfsPressureVariables,
+  type IfsPressureVariableId,
   type IfsRawPressureVariableId,
 } from "../catalog/ifs.js";
 import {
@@ -38,7 +37,7 @@ import {
   type IfsLatestRunProvider,
 } from "./ifs-latest-run.js";
 import { ifsIndexSelectorsForSelection, IfsProfileService } from "./ifs-profile.js";
-import { parseIfsRun } from "./ifs-time.js";
+import { ifsForecastHour, parseIfsRun } from "./ifs-time.js";
 import { applyDerivedPressureValues, ProfileService } from "./profile.js";
 import type { ProfileLevel, ProfileResult } from "./types.js";
 
@@ -141,6 +140,8 @@ export class IfsProfileEvidenceService {
           ifsIndexSelectorsForSelection(query),
         )
       : parseIfsRun(query.run);
+    ifsForecastHour(run, validTime);
+
     const resolved = { ...query, run: run.toISOString() };
     const identity = ifsIdentity(resolved);
     const selection = ifsSelection(resolved);
@@ -190,11 +191,12 @@ function projectGfsProfile(
       return level;
     });
   const fields = projectFields(profile.fields, query.fields ?? []);
+  const { fields: _cachedFields, ...base } = profile;
 
   return {
-    ...profile,
+    ...base,
     levels,
-    ...(fields.length === 0 ? { fields: undefined } : { fields }),
+    ...(fields.length === 0 ? {} : { fields }),
     source: { ...profile.source, cacheHit: true },
   };
 }
@@ -224,11 +226,11 @@ function ifsIdentity(query: ReturnType<typeof ifsPointQuerySchema.parse>): Profi
 
 function ifsSelection(query: ReturnType<typeof ifsPointQuerySchema.parse>): ProfileEvidenceSelection {
   return {
-    // Keep canonical variable identity here. IFS computes absolute vorticity and
-    // several thermodynamic variables while materializing a profile, so a
-    // cached result may only promise derived outputs that were actually built.
-    pressureVariables: query.variables ?? [],
+    pressureVariables: expandIfsPressureVariables(query.variables ?? []),
     pressureLevelsHpa: query.pressureLevelsHpa ?? [],
+    // Final IfsProfileResult contains canonical field results. Unlike pressure
+    // levels, raw field dependencies are not retained independently, so field
+    // reuse stays conservative until the requested canonical field exists.
     fields: query.fields ?? [],
   };
 }
@@ -237,17 +239,23 @@ function projectIfsProfile(
   profile: IfsProfileResult,
   query: ReturnType<typeof ifsPointQuerySchema.parse>,
 ): IfsProfileResult {
-  const allowedFields = ifsPressureOutputFields(query.variables ?? []);
+  const requestedVariables = query.variables ?? [];
+  const allowedFields = ifsPressureOutputFields(requestedVariables);
   const pressureLevels = new Set(query.pressureLevelsHpa ?? []);
   const levels = profile.levels
     .filter((level) => pressureLevels.has(level.pressureHpa))
-    .map((level) => projectLevel(level, allowedFields));
+    .map((level) => projectLevel(level, allowedFields))
+    .map((level) => {
+      applyDerivedPressureValues(level, requestedVariables as readonly VariableId[]);
+      return level;
+    });
   const fields = projectFields(profile.fields, query.fields ?? []);
+  const { fields: _cachedFields, ...base } = profile;
 
   return {
-    ...profile,
+    ...base,
     levels,
-    ...(fields.length === 0 ? { fields: undefined } : { fields }),
+    ...(fields.length === 0 ? {} : { fields }),
     source: { ...profile.source, cacheHit: true },
   };
 }
@@ -264,9 +272,7 @@ const IFS_RAW_OUTPUT_FIELD: Record<IfsRawPressureVariableId, string> = {
   divergence: "divergenceS1",
 };
 
-function ifsPressureOutputFields(
-  variables: readonly Parameters<typeof expandIfsPressureVariables>[0][number][],
-): Set<string> {
+function ifsPressureOutputFields(variables: readonly IfsPressureVariableId[]): Set<string> {
   const fields = new Set<string>();
   for (const raw of expandIfsPressureVariables(variables)) fields.add(IFS_RAW_OUTPUT_FIELD[raw]);
   for (const variable of variables) {
