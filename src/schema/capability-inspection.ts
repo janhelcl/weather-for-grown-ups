@@ -3,13 +3,26 @@ import { ATMOSPHERIC_OPERATION_IDS } from "../catalog/models.js";
 import {
   atmosphericDiagnosticSelectionSchema,
   atmosphericEnsembleOptionsSchema,
-  atmosphericForecastOptionsSchema,
   atmosphericGeometrySchema,
   atmosphericSelectionSchema,
   atmosphericTimeSchema,
   publicAtmosphericDatasetSchema,
 } from "./unified-api.js";
+import { gfsGridSchema } from "./gfs-grid.js";
+import { isoDateTimeSchema } from "./query.js";
 import { unifiedDatasetCapabilitiesSchema } from "./unified-catalog.js";
+
+const capabilityForecastSchema = z.strictObject({
+  kind: z.enum(["operational", "reforecast"]).optional(),
+  run: z.union([
+    z.literal("latest"),
+    z.literal("latest_complete"),
+    isoDateTimeSchema,
+  ]).optional().describe(
+    "Optional planned forecast initialization selector. Unlike an execution request, omission means 'do not test a particular run selector'.",
+  ),
+  grid: gfsGridSchema.optional(),
+});
 
 export const inspectAtmosphereCapabilitiesSchema = z.strictObject({
   dataset: publicAtmosphericDatasetSchema,
@@ -24,7 +37,7 @@ export const inspectAtmosphereCapabilitiesSchema = z.strictObject({
   ),
   selection: atmosphericSelectionSchema.optional(),
   diagnostic: atmosphericDiagnosticSelectionSchema.optional(),
-  forecast: atmosphericForecastOptionsSchema.optional(),
+  forecast: capabilityForecastSchema.optional(),
   ensemble: atmosphericEnsembleOptionsSchema.optional(),
   source: z.enum(["nomads", "s3", "archive"]).optional(),
 }).superRefine((query, context) => {
