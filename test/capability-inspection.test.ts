@@ -143,7 +143,7 @@ describe("inspectAtmosphereCapabilities", () => {
         kind: "layer",
         lowerPressureHpa: 850,
         upperPressureHpa: 500,
-        diagnostics: ["bulk_shear"],
+        diagnostics: ["wind_shear"],
       },
     });
 
