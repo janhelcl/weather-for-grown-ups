@@ -3,12 +3,8 @@ import { GEFS_PGRB2A_FIELD_CATALOG } from "../catalog/gefs-fields.js";
 import { findNamedNonIsobaricLevel } from "../catalog/non-isobaric-fields.js";
 import { ALL_SUPPORTED_GFS_CODES } from "../catalog/variables.js";
 import type { DecodedValue, GribDecoderName } from "../types/decoded.js";
-import {
-  canonicalGribCode,
-  decodePointMessages,
-  messagesAtForecastHour,
-  readGribMessages,
-} from "./gribberish-runtime.js";
+import { decodeBundledPointFile } from "./gribberish-point.js";
+import { canonicalGribCode } from "./gribberish-runtime.js";
 
 const GEFS_RAW_FIELDS = Object.values(GEFS_PGRB2A_FIELD_CATALOG).filter((definition) => definition.kind === "raw");
 const ALL_SUPPORTED_CODES = [...new Set([
@@ -64,15 +60,7 @@ export class Wgrib2Decoder {
     forecastHour?: number,
   ): Promise<DecodedValue[]> {
     if (this.executable === undefined) {
-      const messages = await readGribMessages(path);
-      const selected = forecastHour === undefined
-        ? messages
-        : messagesAtForecastHour(messages, forecastHour);
-      const decoded = decodePointMessages(selected, longitude, latitude);
-      if (decoded.length === 0) {
-        throw new Error("Bundled GRIB2 decoder returned no supported point values");
-      }
-      return decoded;
+      return decodeBundledPointFile(path, longitude, latitude, forecastHour);
     }
 
     let stdout: string;
