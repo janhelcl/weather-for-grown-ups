@@ -16,6 +16,8 @@ import {
 import { GfsQueryAdapter, type GfsQueryAdapterOptions } from "./gfs.js";
 import { IfsEnsQueryAdapter, type IfsEnsQueryAdapterOptions } from "./ifs-ens.js";
 import { IfsQueryAdapter, type IfsQueryAdapterOptions } from "./ifs.js";
+import { GefsMemberBundleEvidenceService } from "../gefs-evidence-service.js";
+import { GefsBundleTimeSeriesService } from "../gefs-bundle-timeseries.js";
 import type {
   AtmosphericQueryAdapter,
   AtmosphericQueryAdapterRegistry,
@@ -44,6 +46,7 @@ export interface AtmosphericQueryRegistryOptions extends DefaultAtmosphericQuery
 export function createAtmosphericQueryAdapterRegistry(
   options: AtmosphericQueryRegistryOptions = {},
 ): AtmosphericQueryAdapterRegistry {
+  const gefsBundle = options.gefsBundle ?? new GefsMemberBundleEvidenceService();
   const defaults: AtmosphericQueryAdapterRegistry = {
     aigfs: new AigfsQueryAdapter(options),
     aifs: new AifsQueryAdapter(options),
@@ -52,7 +55,13 @@ export function createAtmosphericQueryAdapterRegistry(
     arome: new AromeQueryAdapter(options),
     "pe-arome": new PeAromeQueryAdapter(options),
     gfs: new GfsQueryAdapter(options),
-    gefs: new GefsQueryAdapter(options),
+    gefs: new GefsQueryAdapter({
+      ...options,
+      gefsBundle,
+      gefsTimeSeries: options.gefsTimeSeries ?? new GefsBundleTimeSeriesService({
+        bundleGetter: gefsBundle,
+      }),
+    }),
     hgefs: new HgefsQueryAdapter(options),
     "icon-d2": new IconD2QueryAdapter(options),
     "icon-d2-eps": new IconD2EpsQueryAdapter(options),
