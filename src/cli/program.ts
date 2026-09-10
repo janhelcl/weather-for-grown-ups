@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { WFG_VERSION } from "../version.js";
+import { registerAvailabilityCommand } from "./availability-command.js";
 import { registerCapabilityCommand } from "./capability-command.js";
 import { registerIndexCommand } from "./index-command.js";
 import { registerCatalogCommand } from "./unified-catalog-command.js";
@@ -18,6 +19,7 @@ export function createCliProgram(): Command {
 
   registerCatalogCommand(program);
   registerCapabilityCommand(program);
+  registerAvailabilityCommand(program);
   registerUnifiedAtmosphereCommands(program);
   registerIndexCommand(program);
   registerTransportCommands(program);
