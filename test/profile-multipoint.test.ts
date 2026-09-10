@@ -59,10 +59,8 @@ describe("ProfileService multi-point artifact reuse", () => {
     expect(extractPoints).toHaveBeenCalledWith("/cache/global-fields.grib2", points, undefined);
     expect(extractPoint).not.toHaveBeenCalled();
     expect(result.map((profile) => profile.requestedPoint)).toEqual(points);
-    expect(result.map((profile) => profile.levels[0]?.temperatureC)).toEqual([
-      6.850000000000023,
-      7.850000000000023,
-    ]);
+    expect(result[0]?.levels[0]?.temperatureC).toBeCloseTo(6.85, 10);
+    expect(result[1]?.levels[0]?.temperatureC).toBeCloseTo(7.85, 10);
     expect(result.every((profile) => profile.source.cacheHit)).toBe(true);
   });
 
