@@ -93,6 +93,7 @@ describe("Streamable HTTP MCP", () => {
       const names = tools.map((tool) => tool.name);
       expect(names).toEqual([
         "search_catalog",
+        "inspect_capabilities",
         "query_atmosphere",
         "diagnose_atmosphere",
         "align_atmosphere",
