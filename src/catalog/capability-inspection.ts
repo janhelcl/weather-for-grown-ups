@@ -274,7 +274,7 @@ function collectPressureLevelIssues(
   if (requested.forecast?.kind === "reforecast") return;
 
   if (requested.dataset === "gefs") {
-    const byVariable = new Map(
+    const byVariable = new Map<string, Set<number>>(
       getGefsCatalog().variables.map((variable) => [
         variable.id,
         new Set<number>(variable.supportedPressureLevelsHpa),
