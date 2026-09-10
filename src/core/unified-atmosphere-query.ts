@@ -1,5 +1,6 @@
 import { publicDatasetMetadata, type UnifiedAtmosphereResult } from "../schema/unified-api.js";
 import { normalizeQueryAtmosphereInput, type PublicQueryAtmosphereInput } from "../schema/unified-query-input.js";
+import { assertAtmosphericQueryWithinBudget } from "./atmospheric-query-budget.js";
 import { createAtmosphericQueryAdapterRegistry } from "./query-adapters/registry.js";
 import type { AtmosphericProgressReporter } from "./progress.js";
 import type { AtmosphericQueryAdapterRegistry } from "./query-adapters/types.js";
@@ -23,6 +24,7 @@ export class UnifiedAtmosphereQueryService {
     const request = normalizeQueryAtmosphereInput(input);
     const metadata = publicDatasetMetadata(request.dataset);
     assertAtmosphericGeometryWithinDomain(request.dataset, metadata.internalDatasetId, request.geometry);
+    assertAtmosphericQueryWithinBudget(request);
     const result = await this.adapters[request.dataset].query(request);
     return wrapUnifiedAtmosphereResult(request, result);
   }
