@@ -104,11 +104,15 @@ export class ProfileService {
   ): Promise<ProfileResult[]> {
     if (points.length === 0) return [];
     const first = points[0]!;
-    const prepared = await this.prepareProfile(profileQuerySchema.parse({
+    const query = profileQuerySchema.parse({
       ...base,
       latitude: first.latitude,
       longitude: first.longitude,
-    }));
+    });
+    if (query.source !== "s3") {
+      throw new Error("Multi-point profile artifact reuse requires the NOAA AWS S3 source");
+    }
+    const prepared = await this.prepareProfile(query);
     const decodedByPoint = await sampleGribPoints(this.decoder, prepared.cached.path, points);
     return points.map((point, index) => this.finishProfile(prepared, point, decodedByPoint[index]!));
   }
