@@ -30,12 +30,12 @@ async function tempRoot(): Promise<string> {
 }
 
 describe("ProfileEvidenceCache", () => {
-  it("rejects invalid variant bounds", () => {
+  it("rejects invalid variant bounds through the generic evidence store", () => {
     expect(() => new ProfileEvidenceCache("unused", { maxVariants: 0 })).toThrow(
-      "profile evidence maxVariants must be a positive integer",
+      "atmospheric evidence maxVariants must be a positive integer",
     );
     expect(() => new ProfileEvidenceCache("unused", { maxVariants: 1.5 })).toThrow(
-      "profile evidence maxVariants must be a positive integer",
+      "atmospheric evidence maxVariants must be a positive integer",
     );
   });
 

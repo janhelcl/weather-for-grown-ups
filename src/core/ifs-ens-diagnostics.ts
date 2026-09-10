@@ -45,9 +45,11 @@ import {
   IfsEnsLatestRunResolver,
   type IfsEnsLatestRunProvider,
 } from "./ifs-ens-latest-run.js";
-import { IfsEnsMemberSelectionSource } from "./ifs-ens-member-source.js";
 import {
-  IfsProfileService,
+  IfsEnsMemberProfileEvidenceService,
+  type IfsEnsMemberProfileGetter,
+} from "./ifs-ens-profile-evidence-service.js";
+import {
   ifsIndexSelectorsForSelection,
   type IfsProfileSample,
 } from "./ifs-profile.js";
@@ -60,10 +62,6 @@ import {
 import type { ProfileLevel } from "./types.js";
 
 export const DEFAULT_IFS_ENS_DIAGNOSTIC_MEMBER_CONCURRENCY = 4;
-
-export interface IfsEnsMemberProfileGetter {
-  getProfile(member: IfsEnsMember, input: IfsPointQueryInput): Promise<IfsProfileSample>;
-}
 
 export interface IfsEnsDiagnosticsServiceOptions {
   cacheDir?: string;
@@ -86,7 +84,7 @@ export class IfsEnsDiagnosticsService {
   constructor(options: IfsEnsDiagnosticsServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
     const source = options.source ?? new IfsOpenDataSubsetCache(join(cacheDir, "ifs-open-data"));
-    this.profileGetter = options.profileGetter ?? new DefaultIfsEnsMemberProfileGetter(source);
+    this.profileGetter = options.profileGetter ?? new IfsEnsMemberProfileEvidenceService({ cacheDir, source });
     this.latestRunProvider = options.latestRunProvider ?? new IfsEnsLatestRunResolver({ cacheDir });
     this.concurrency = options.concurrency ?? DEFAULT_IFS_ENS_DIAGNOSTIC_MEMBER_CONCURRENCY;
   }
@@ -124,11 +122,7 @@ export class IfsEnsDiagnosticsService {
         query.upperPressureHpa,
         diagnostics,
       );
-      return {
-        member,
-        cacheHit: profile.source.cacheHit,
-        ...derived,
-      };
+      return { member, cacheHit: profile.source.cacheHit, ...derived };
     });
     const aggregate = summarizeEnsembleLayerDiagnostics(diagnostics, derivedMembers, quantiles);
 
@@ -270,10 +264,7 @@ export class IfsEnsDiagnosticsService {
         surfaceMoisture: "2m_temperature_dew_point_surface_pressure_to_specific_humidity_per_member",
         surfaceOrography: "same_cycle_f000_surface_geopotential_height",
       },
-      summary: summarizeEnsembleParcels(
-        derivedMembers.map((member) => member.parcel),
-        quantiles,
-      ),
+      summary: summarizeEnsembleParcels(derivedMembers.map((member) => member.parcel), quantiles),
       ...(query.includeMembers
         ? {
             members: derivedMembers.map(({ member, cacheHit, levels, parcel }) => ({
@@ -320,20 +311,6 @@ export class IfsEnsDiagnosticsService {
   }
 }
 
-class DefaultIfsEnsMemberProfileGetter implements IfsEnsMemberProfileGetter {
-  constructor(private readonly source: IfsSelectionSource) {}
-
-  getProfile(member: IfsEnsMember, input: IfsPointQueryInput): Promise<IfsProfileSample> {
-    const service = new IfsProfileService({
-      source: new IfsEnsMemberSelectionSource(this.source, ifsEnsMemberNumber(member)),
-    });
-    return service.getProfileSample(input, {
-      forecastHourResolver: ifsEnsForecastHour,
-      sourceProduct: "ifs_0p25_enfo_ef",
-    });
-  }
-}
-
 function assertMemberProfiles(
   samples: readonly MemberProfile[],
   run: Date,
@@ -350,22 +327,16 @@ function assertMemberProfiles(
       profile.run !== expectedRun
       || profile.validTime !== expectedValidTime
       || profile.forecastHour !== forecastHour
-    ) {
-      throw new Error("IFS ENS diagnostic member profile drifted in run, valid time, or forecast hour");
-    }
+    ) throw new Error("IFS ENS diagnostic member profile drifted in run, valid time, or forecast hour");
     if (
       profile.gridPoint.latitude !== first.profile.gridPoint.latitude
       || profile.gridPoint.longitude !== first.profile.gridPoint.longitude
-    ) {
-      throw new Error("IFS ENS diagnostic perturbations resolved to inconsistent grid points");
-    }
+    ) throw new Error("IFS ENS diagnostic perturbations resolved to inconsistent grid points");
     if (
       profile.source.product !== "ifs_0p25_enfo_ef"
       || profile.source.decoder !== first.profile.source.decoder
       || profile.source.horizontalGridDegrees !== 0.25
-    ) {
-      throw new Error("IFS ENS diagnostic perturbations resolved to inconsistent source provenance");
-    }
+    ) throw new Error("IFS ENS diagnostic perturbations resolved to inconsistent source provenance");
   }
   return first;
 }
