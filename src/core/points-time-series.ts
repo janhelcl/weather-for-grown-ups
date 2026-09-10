@@ -23,7 +23,7 @@ import type { BatchPointsResult, PointsTimeSeriesResult } from "./types.js";
 import type { AtmosphericProgressReporter } from "./progress.js";
 import { InvalidRequestError } from "../failure.js";
 
-export const DEFAULT_POINTS_TIME_SERIES_CONCURRENCY = 16;
+export const DEFAULT_POINTS_TIME_SERIES_CONCURRENCY = 8;
 
 export interface BatchPointsGetter {
   getPoints(query: BatchPointsQueryInput): Promise<BatchPointsResult>;
