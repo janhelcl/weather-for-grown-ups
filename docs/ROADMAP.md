@@ -103,6 +103,8 @@ The restrictive comparison registry contains explicit point strategies for:
 
 Every strategy declares shared initialization/valid-time rules, compatible field or pressure intersections, domain requirements, independent point sampling, native-resolution provenance and no cross-dataset regridding. Ensemble pairs compare independent distributions without member pairing. There is no universal global-to-regional subtraction fallback.
 
+This remains a completed v0.5 capability, but its public abstraction is explicitly under review in the next roadmap. The scientific compatibility rules are valuable; dedicated comparison verbs and pair registries may not be the right long-term public surface.
+
 ## 7. Regional and convective meteorology ✅
 
 The v0.5 release boundary adds a deliberately bounded set of provider-substantiated mesoscale fields without pretending inventories are symmetric.
@@ -145,19 +147,152 @@ This is worth adding opportunistically without making it the central regional ro
 
 The implementation should remain the public GEFS dataset, preserving the actual lead-dependent cadence/grid/product semantics rather than inventing a separate "extended GEFS" dataset identity.
 
-This extension remains opportunistic. It should not reopen or delay the completed regional line, and it should not distract from the model-skill roadmap.
+This extension remains opportunistic. It should not reopen or delay the completed regional line, and it should not distract from the next architectural cleanup.
 
-# Next major capability line: forecast verification and model skill
+# Immediate next roadmap: agent ergonomics and composability
 
-The next roadmap moves WFG from answering **what the models say** to answering **how forecast systems perform over comparable historical samples**.
+The next work is not another model family. A realistic Bassano convective-window investigation showed that WFG can support deep meteorological reasoning, but a capable agent still needed too many discovery calls, retries, duplicated data retrievals and local post-processing steps to get there.
+
+The goal of this line is:
+
+> **Keep WFG an evidence engine: make atmospheric evidence cheap to discover, retrieve, align and reuse without teaching WFG to own the caller's analysis.**
+
+This roadmap should simplify the public surface where possible. There are no backward-compatibility constraints from an installed user base yet, so architectural cleanup should take precedence over preserving accidental interfaces.
+
+## 1. Rework comparison around composition, not analytical verbs
+
+Re-evaluate `compare-runs`, `compare-datasets` and the explicit pair registry as public concepts.
+
+The desired boundary is:
+
+- WFG owns retrieval, canonical variable semantics, units, run/valid-time provenance, grid metadata and the rules that determine whether two pieces of evidence can be meaningfully aligned;
+- WFG may expose a small generic alignment/join primitive where the alignment itself requires model knowledge;
+- the calling agent owns statements such as which model is warmer, which guidance disagrees, whether the difference matters, and what conclusion follows.
+
+A run should remain a selector on a dataset, not require a separate analytical worldview. Cross-dataset compatibility should be derived from declared semantics wherever possible rather than from an expanding hand-maintained graph of model pairs.
+
+Existing comparison implementations may be deleted, collapsed or reused internally. The roadmap outcome is not required to preserve the current commands if a smaller compositional surface is cleaner.
+
+## 2. Eliminate unsafe memory behavior and bound ordinary queries
+
+A valid point/time-series request must never terminate Node with an out-of-memory/core-dump failure.
+
+Profile current GRIB acquisition, decoding, buffering and result assembly, especially for requests combining surface fields with several pressure variables and time steps. Fix pathological materialization and stream/subset where possible.
+
+If a genuinely excessive request cannot be served safely, reject it before expensive work with a structured WFG error that explains the limiting dimension. Increasing `NODE_OPTIONS` must not be a normal workaround.
+
+## 3. Reuse atmospheric evidence across query and diagnostics
+
+Repeated `query` / `diagnose` calls over the same dataset, run, location, times and pressure column should not repeatedly pay the full upstream acquisition and decode cost.
+
+Introduce a clean internal evidence/acquisition boundary so one retrieved atmospheric column or field bundle can feed:
+
+- raw profile/state views;
+- parcel diagnostics;
+- layer diagnostics;
+- profile diagnostics;
+- other scientifically compatible derived views.
+
+Caching and reuse remain implementation concerns below the public atmospheric schema. The goal is that asking one additional diagnostic over already-fetched evidence becomes cheap without creating a wrapper API around WFG.
+
+## 4. Make capability discovery compact and decision-oriented
+
+The catalog remains the source of truth, but agents should not have to inspect hundreds or thousands of lines to answer simple planning questions.
+
+Add compact capability inspection for questions such as:
+
+- does this dataset expose these fields/levels/diagnostics?;
+- what geometries are supported?;
+- what ensemble/member semantics are available?;
+- which requested selections are unsupported?;
+- what model metadata matters to this planned query?
+
+Search remains useful for exploration, but exact support checks should return focused machine-readable answers rather than broad catalog dumps.
+
+## 5. Make requested-window availability first-class
+
+For a dataset plus requested geometry/time window, expose enough planning metadata to determine before retrieval:
+
+- whether the location/area is in domain;
+- latest suitable initialization;
+- available valid-time range for that initialization;
+- native cadence over the requested range;
+- whether requested coverage is complete, partial or absent.
+
+This is especially important for regional models with short horizons. An agent should be able to learn immediately that a model covers Saturday morning but not the afternoon flying window without probing forecast requests until one fails.
+
+## 6. Make failures directly repairable
+
+Structured capability failures should tell the caller how to repair a request whenever WFG knows the answer.
+
+For example, an unsupported pressure selection should identify the unsupported levels and the supported alternatives relevant to that dataset. Missing fields should distinguish unsupported inventory from temporarily unavailable upstream data. Domain, horizon, cadence and member-selection failures should preserve similarly actionable context.
+
+Do not silently substitute another dataset, field, level, run or member population.
+
+## 7. Support richer evidence selection without collapsing semantics
+
+Investigate whether one atmospheric request can cleanly select a coherent bundle of evidence such as:
+
+~~~text
+point × time range × {
+  surface fields,
+  pressure variables,
+  parcel diagnostics,
+  layer/profile diagnostics
+}
+~~~
+
+The goal is fewer round trips for investigations that clearly need one atmospheric column plus several views of it, while retaining the conceptual distinction between raw model state and derived diagnostics.
+
+This should be implemented only if the shared query contract remains cleaner than a proliferation of special-purpose commands. Do not introduce activity-specific endpoints such as `paragliding` or `convective_window`.
+
+## 8. Normalize native ensemble vector summaries
+
+Wind is a first-class vector quantity and should not require callers to reconstruct ensemble direction statistics from separate `u` and `v` distributions.
+
+Where member evidence permits it, expose a consistent vector summary including at least:
+
+- vector-mean speed and meteorological direction;
+- scalar speed distribution/quantiles;
+- directional concentration/resultant length;
+- calm or near-calm fraction when a declared threshold is used.
+
+Keep raw component/member semantics available. Avoid mathematically invalid scalar averaging of direction.
+
+## 9. Tighten the agent skill around evidence saturation
+
+The skill should continue to encourage progressive investigation, but make the stop condition sharper:
+
+> Once independent deterministic guidance plus an appropriate uncertainty source establish the same conclusion, add another model or run only when it tests a material unresolved hypothesis.
+
+This is a small documentation/agent-guidance change, not a substitute for fixing WFG ergonomics. The product should make the efficient path natural rather than relying on prompt discipline to work around expensive APIs.
+
+## Agent-ergonomics roadmap definition of done
+
+The line is complete when:
+
+1. ordinary point/time-series/profile investigations cannot crash the process through uncontrolled memory growth;
+2. repeated diagnostics over the same atmospheric evidence reuse acquisition/decoding where scientifically compatible;
+3. an agent can check requested field/level/diagnostic support with compact structured output;
+4. an agent can determine domain and valid-time coverage for a planned regional/global query before expensive retrieval;
+5. invalid selections return enough structured information for a direct repair attempt;
+6. comparison semantics are reduced to the smallest WFG-owned compatibility/alignment boundary, with analytical interpretation left to callers;
+7. no hand-maintained comparison registry is required where the same compatibility can be truthfully derived from dataset/field metadata;
+8. ensemble wind/vector summaries are consistent enough that callers do not need ad-hoc vector-statistics code for normal investigations;
+9. CLI and MCP expose the same cleaned-up semantics from one application core;
+10. a representative multi-model convective-window investigation can be completed with materially fewer WFG invocations and without local memory workarounds.
+
+# Following major capability line: forecast verification and model skill
+
+After the agent-ergonomics cleanup, WFG can move from answering **what the models say** to answering **how forecast systems perform over comparable historical samples**.
 
 WFG already has the seed of this capability: atomic archived-GFS verification against later GFS analysis or IGRA radiosondes, a resumable local verification corpus, and bounded bias/MAE/RMSE summaries by lead/pressure/field. The next line should generalize that architecture rather than create a second, disconnected verification system.
 
-The central distinction remains:
+The central distinction should remain:
 
-- `compare_datasets`: how two forecasts differ for one aligned case;
-- `verify_forecast`: how one forecast performed against one reference case;
-- **model skill**: how forecast systems perform over an explicitly defined sample.
+- atmospheric queries retrieve model evidence;
+- `verify_forecast` evaluates one forecast against one reference case;
+- **model skill** summarizes how forecast systems perform over an explicitly defined historical sample.
 
 Historical skill is therefore a composition capability above the normal `dataset × geometry × time × selection` query language, not another model-specific namespace.
 
@@ -218,7 +353,7 @@ A pairwise skill comparison must:
 - preserve each model's native grid/source provenance;
 - avoid interpreting a lower error from a different sample as superior skill.
 
-This should be a dedicated specialized composition capability, distinct from single-case `compare_datasets`.
+This is a specialized historical evaluation operation, not a reason to restore generic single-case comparison verbs.
 
 ## 5. Ensemble and probabilistic verification
 
@@ -324,7 +459,7 @@ Every roadmap line must preserve:
 4. **Member-first ensemble physics.** Aggregate only after per-member nonlinear diagnostics.
 5. **Source/access separation.** Provider etiquette, authentication, retries, concurrency, caching and transport remain access-policy concerns.
 6. **CLI/MCP parity.** New normal capabilities appear through both surfaces from the same core.
-7. **Comparison meaning over convenience.** Comparison strategies encode scientifically meaningful alignment, not generic subtraction.
+7. **Composition over analytical verbs.** WFG owns meteorological semantics, compatibility and necessary alignment; calling agents own comparative interpretation wherever the evidence can be composed safely from lower-level primitives.
 8. **Domain boundaries stay explicit.** Atmospheric evidence, future wave evidence and any activity-specific interpretation remain separate concerns.
 
 The long-term value is not the number of model names. It is that an agent can ask the **same physical question across providers, model classes, uncertainty representations and spatial scales without learning another API**.
