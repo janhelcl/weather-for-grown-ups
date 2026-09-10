@@ -25,6 +25,14 @@ export class ImmutableRangeCache {
     if (!Number.isSafeInteger(length) || length <= 0) throw new Error("range length must be a positive integer");
     const identity = JSON.stringify({ url, start, length });
     const name = `${createHash("sha256").update(identity).digest("hex")}.range`;
-    return (await this.artifacts.getOrCreateBytes(name, loader)).value;
+    return (await this.artifacts.getOrCreateBytes(name, async () => {
+      const value = await loader();
+      if (value.byteLength !== length) {
+        throw new Error(
+          `immutable range loader returned ${value.byteLength} bytes; expected ${length}`,
+        );
+      }
+      return value;
+    })).value;
   }
 }
