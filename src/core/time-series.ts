@@ -18,7 +18,7 @@ import type { AtmosphericProgressReporter } from "./progress.js";
 import type { ProfileResult, TimeSeriesResult } from "./types.js";
 import { InvalidRequestError } from "../failure.js";
 
-export const DEFAULT_TIME_SERIES_CONCURRENCY = 16;
+export const DEFAULT_TIME_SERIES_CONCURRENCY = 8;
 
 export interface ProfileGetter {
   getProfile(query: ProfileQueryInput): Promise<ProfileResult>;
