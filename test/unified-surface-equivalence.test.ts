@@ -4,6 +4,7 @@ import { registerUnifiedAtmosphereTools } from "../src/mcp-unified-tool.js";
 
 const SURFACE_OPERATIONS = [
   ["catalog", "search_catalog"],
+  ["capabilities", "inspect_capabilities"],
   ["query", "query_atmosphere"],
   ["diagnose", "diagnose_atmosphere"],
   ["align", "align_atmosphere"],
