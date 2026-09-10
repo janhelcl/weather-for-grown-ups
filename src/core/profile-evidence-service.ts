@@ -182,7 +182,7 @@ function projectGfsProfile(
 ): ProfileResult {
   const requestedVariables = query.variables ?? [];
   const allowedFields = gfsPressureOutputFields(requestedVariables);
-  const pressureLevels = new Set(query.pressureLevelsHpa ?? []);
+  const pressureLevels = new Set<number>(query.pressureLevelsHpa ?? []);
   const levels = profile.levels
     .filter((level) => pressureLevels.has(level.pressureHpa))
     .map((level) => projectLevel(level, allowedFields))
@@ -241,7 +241,7 @@ function projectIfsProfile(
 ): IfsProfileResult {
   const requestedVariables = query.variables ?? [];
   const allowedFields = ifsPressureOutputFields(requestedVariables);
-  const pressureLevels = new Set(query.pressureLevelsHpa ?? []);
+  const pressureLevels = new Set<number>(query.pressureLevelsHpa ?? []);
   const levels = profile.levels
     .filter((level) => pressureLevels.has(level.pressureHpa))
     .map((level) => projectLevel(level, allowedFields))
@@ -281,7 +281,7 @@ function ifsPressureOutputFields(variables: readonly IfsPressureVariableId[]): S
   return fields;
 }
 
-function projectLevel(level: ProfileLevel, allowedFields: ReadonlySet<string>): ProfileLevel {
+function projectLevel(level: { pressureHpa: number }, allowedFields: ReadonlySet<string>): ProfileLevel {
   const projected: ProfileLevel = { pressureHpa: level.pressureHpa };
   const source = level as unknown as Record<string, unknown>;
   const target = projected as unknown as Record<string, unknown>;
