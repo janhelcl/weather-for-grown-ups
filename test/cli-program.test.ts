@@ -4,6 +4,7 @@ import { WFG_VERSION } from "../src/version.js";
 
 const EXPECTED_COMMANDS = [
   "catalog",
+  "capabilities",
   "query",
   "diagnose",
   "align",
@@ -44,7 +45,7 @@ describe("CLI public surface", () => {
   it("uses dataset rather than model vocabulary", () => {
     const program = createCliProgram();
 
-    for (const name of ["catalog", "query", "diagnose"]) {
+    for (const name of ["catalog", "capabilities", "query", "diagnose"]) {
       const command = program.commands.find((candidate) => candidate.name() === name);
       expect(command?.options.some((option) => option.long === "--dataset")).toBe(true);
       expect(command?.options.some((option) => option.long === "--model")).toBe(false);
@@ -59,10 +60,13 @@ describe("CLI public surface", () => {
   it("advertises the complete unified dataset and source vocabulary", () => {
     const program = createCliProgram();
     const catalog = program.commands.find((command) => command.name() === "catalog");
+    const capabilities = program.commands.find((command) => command.name() === "capabilities");
     const query = program.commands.find((command) => command.name() === "query");
 
     expect(catalog?.options.find((option) => option.long === "--dataset")?.flags)
       .toContain("gfs|aigfs|aigefs|hgefs|icon-d2|icon-d2-eps|arome|pe-arome|gefs|ifs|aifs|aifs-ens|ifs-ens|gfs-analysis|all");
+    expect(capabilities?.options.find((option) => option.long === "--dataset")?.flags)
+      .toContain("gfs|aigfs|aigefs|hgefs|icon-d2|icon-d2-eps|arome|pe-arome|gefs|ifs|aifs|aifs-ens|ifs-ens|gfs-analysis");
     expect(query?.options.find((option) => option.long === "--source")?.flags)
       .toContain("nomads|s3|archive");
   });
@@ -74,6 +78,9 @@ describe("CLI public surface", () => {
       const command = program.commands.find((candidate) => candidate.name() === name);
       expect(command?.options.some((option) => option.long === "--grid")).toBe(true);
     }
+    // Capability inspection can test a planned GFS grid without fetching data.
+    const capabilities = program.commands.find((candidate) => candidate.name() === "capabilities");
+    expect(capabilities?.options.some((option) => option.long === "--grid")).toBe(true);
     // align carries grid selection per source (`gfs;grid=0p50`) rather than as a global flag.
     const align = program.commands.find((candidate) => candidate.name() === "align");
     expect(align?.options.find((option) => option.long === "--source")?.description).toContain("grid=");
