@@ -27,6 +27,49 @@ describe("immutable range cache", () => {
     expect(calls).toBe(1);
   });
 
+  it("treats serving origin as transport identity for the same immutable object", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wfg-range-cache-"));
+    roots.push(root);
+    const cache = new ImmutableRangeCache(root);
+    let calls = 0;
+    const load = async () => {
+      calls += 1;
+      return new TextEncoder().encode("GRIBdata");
+    };
+
+    const first = await cache.getOrCreate(
+      "https://mirror-a.example/20260910/00z/model/file.grib2",
+      100,
+      8,
+      load,
+    );
+    const second = await cache.getOrCreate(
+      "https://mirror-b.example/20260910/00z/model/file.grib2",
+      100,
+      8,
+      load,
+    );
+
+    expect(second).toEqual(first);
+    expect(calls).toBe(1);
+  });
+
+  it("keeps query strings in logical object identity", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wfg-range-cache-"));
+    roots.push(root);
+    const cache = new ImmutableRangeCache(root);
+    let calls = 0;
+    const loader = async () => new Uint8Array([++calls, 0, 0, 0]);
+
+    expect(await cache.getOrCreate("https://example.test/file?version=1", 0, 4, loader)).toEqual(
+      new Uint8Array([1, 0, 0, 0]),
+    );
+    expect(await cache.getOrCreate("https://example.test/file?version=2", 0, 4, loader)).toEqual(
+      new Uint8Array([2, 0, 0, 0]),
+    );
+    expect(calls).toBe(2);
+  });
+
   it("keeps distinct ranges distinct", async () => {
     const root = await mkdtemp(join(tmpdir(), "wfg-range-cache-"));
     roots.push(root);
