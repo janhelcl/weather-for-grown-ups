@@ -206,6 +206,43 @@ describe("architecture boundaries", () => {
     }
   });
 
+  it("keeps ensemble run discovery out of full first-member execution", async () => {
+    const files = [
+      "src/core/aifs-ens.ts",
+      "src/core/aigefs.ts",
+      "src/core/icon-d2-eps.ts",
+      "src/core/pe-arome.ts",
+    ];
+    for (const path of files) {
+      const source = await readFile(path, "utf8");
+      expect(source, path).toContain("ensemble-member-execution.js");
+      expect(source, path).not.toContain("const firstResult = await firstService.query");
+    }
+  });
+
+  it("requires ensemble run resolution before member payload execution", async () => {
+    const source = await readFile("src/core/ensemble-member-execution.ts", "utf8");
+    expect(source).toContain("resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date>");
+    expect(source).toContain("resolveDiagnosticRun(request: DiagnoseAtmosphereRequest): Promise<Date>");
+    expect(source).not.toContain("resultRun(");
+    expect(source).not.toContain("firstResult");
+  });
+
+  it("keeps independent deterministic forecast ranges bounded-concurrent", async () => {
+    const files = [
+      "src/core/aifs.ts",
+      "src/core/aigfs.ts",
+      "src/core/arome.ts",
+      "src/core/icon-d2.ts",
+      "src/core/ifs-spatiotemporal.ts",
+      "src/core/time-series.ts",
+    ];
+    for (const path of files) {
+      const source = await readFile(path, "utf8");
+      expect(source, path).not.toMatch(/for\s*\(const forecastHour of forecastHours\)\s*\{[\s\S]{0,160}?await/);
+    }
+  });
+
   it("keeps the public unified API module as a composition barrel", async () => {
     const api = await readFile("src/core/unified-atmosphere-api.ts", "utf8");
     expect(api).toContain("./unified-atmosphere-query.js");

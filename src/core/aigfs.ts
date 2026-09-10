@@ -43,6 +43,7 @@ import type {
   VariableId,
 } from "../schema/query.js";
 import { computeAreaDistribution } from "./area-distribution.js";
+import { mapConcurrent } from "./concurrency.js";
 import {
   AigfsRunResolver,
   resolveAigfsRun,
@@ -74,6 +75,7 @@ import { InvalidRequestError } from "../failure.js";
 
 const MODEL = "aigfs_0p25" as const;
 const MAX_NATIVE_STEPS = 65;
+export const DEFAULT_AIGFS_STEP_CONCURRENCY = 4;
 
 export interface AigfsPointDecoder {
   readonly engine?: GribDecoderName;
@@ -87,6 +89,7 @@ export interface AigfsForecastServiceOptions {
   runProvider?: AigfsRunProvider;
   areaDecoder?: Wgrib2StatsDecoder;
   areaGridDecoder?: Wgrib2GridDecoder;
+  concurrency?: number;
 }
 
 interface ExpandedSelection {
@@ -120,6 +123,7 @@ export class AigfsForecastService {
   private readonly runProvider: AigfsRunProvider;
   private readonly areaDecoder: Wgrib2StatsDecoder;
   private readonly areaGridDecoder: Wgrib2GridDecoder;
+  private readonly concurrency: number;
 
   constructor(options: AigfsForecastServiceOptions = {}) {
     const cacheDir = options.cacheDir
@@ -130,6 +134,7 @@ export class AigfsForecastService {
     this.runProvider = options.runProvider ?? new AigfsRunResolver(this.cache);
     this.areaDecoder = options.areaDecoder ?? new Wgrib2StatsDecoder();
     this.areaGridDecoder = options.areaGridDecoder ?? new Wgrib2GridDecoder();
+    this.concurrency = options.concurrency ?? DEFAULT_AIGFS_STEP_CONCURRENCY;
   }
 
   async query(request: QueryAtmosphereRequest): Promise<unknown> {
@@ -160,6 +165,41 @@ export class AigfsForecastService {
     return "at" in request.time
       ? this.getInstantDiagnostic(request)
       : this.getDiagnosticTimeSeries(request);
+  }
+
+  async resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date> {
+    const selection = expandedSelection(request);
+    const products = productsFor(selection);
+    return "at" in request.time
+      ? this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "valid_time",
+          validTime: new Date(request.time.at),
+          products,
+        })
+      : this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "time_range",
+          startTime: new Date(request.time.from),
+          endTime: new Date(request.time.to),
+          products,
+        });
+  }
+
+  async resolveDiagnosticRun(request: DiagnoseAtmosphereRequest): Promise<Date> {
+    if (request.diagnostic.kind === "parcel") {
+      throw new Error("AIGFS parcel diagnostics are not supported");
+    }
+    return "at" in request.time
+      ? this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "valid_time",
+          validTime: new Date(request.time.at),
+          products: { pressure: true, surface: false },
+        })
+      : this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "time_range",
+          startTime: new Date(request.time.from),
+          endTime: new Date(request.time.to),
+          products: { pressure: true, surface: false },
+        });
   }
 
   private async getPoint(request: QueryAtmosphereRequest): Promise<AigfsProfileResult> {
@@ -201,15 +241,17 @@ export class AigfsForecastService {
       request.time.maxSteps,
     );
 
-    const profiles: AigfsProfileResult[] = [];
-    for (const forecastHour of forecastHours) {
-      profiles.push(await this.profileAt(
+    const point = request.geometry;
+    const profiles = await mapConcurrent(
+      forecastHours,
+      this.concurrency,
+      (forecastHour) => this.profileAt(
         run,
         aigfsValidTime(run, forecastHour),
-        request.geometry,
+        point,
         selection,
-      ));
-    }
+      ),
+    );
     const first = profiles[0]!;
     return {
       model: MODEL,
@@ -270,15 +312,17 @@ export class AigfsForecastService {
       );
     }
 
-    const batches: any[] = [];
-    for (const forecastHour of forecastHours) {
-      batches.push(await this.pointsAt(
+    const points = request.geometry.points;
+    const batches = await mapConcurrent(
+      forecastHours,
+      this.concurrency,
+      (forecastHour) => this.pointsAt(
         run,
         aigfsValidTime(run, forecastHour),
-        request.geometry.points,
+        points,
         selection,
-      ));
-    }
+      ) as Promise<any>,
+    );
     const first = batches[0]!;
     return {
       model: MODEL,
@@ -522,14 +566,15 @@ export class AigfsForecastService {
       request.time.maxSteps,
     );
 
-    const results: any[] = [];
-    for (const forecastHour of forecastHours) {
-      results.push(await this.getInstantDiagnostic({
+    const results = await mapConcurrent(
+      forecastHours,
+      this.concurrency,
+      (forecastHour) => this.getInstantDiagnostic({
         ...request,
         time: { at: aigfsValidTime(run, forecastHour).toISOString() },
         forecast: { ...request.forecast, run: run.toISOString() },
-      } as DiagnoseAtmosphereRequest, run));
-    }
+      } as DiagnoseAtmosphereRequest, run) as Promise<any>,
+    );
     const first = results[0]!;
     return {
       model: MODEL,

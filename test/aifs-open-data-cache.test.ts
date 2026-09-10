@@ -55,6 +55,19 @@ describe("AIFS Open Data subset cache", () => {
     expect(temperature.cacheHit).toBe(false);
     expect(new TextDecoder().decode(await readFile(temperature.path))).toBe("GRIBtemp");
 
+    const combined = await cache.fetchSelection({
+      run,
+      forecastHour: 6,
+      selectors: [
+        { key: "temperature@850", param: "t", levtype: "pl", levelist: 850 },
+        { key: "temperature_2m", param: "2t", levtype: "sfc" },
+      ],
+    });
+    expect(combined.cacheHit).toBe(false);
+    expect(new TextDecoder().decode(await readFile(combined.path))).toBe("GRIBtempGRIB2met");
+    // The first message came from the message/range cache; only the new 2 m field hit upstream.
+    expect(rangeCalls).toBe(2);
+
     const surfaceTemperature = await cache.fetchSelection({
       run,
       forecastHour: 6,
@@ -64,6 +77,7 @@ describe("AIFS Open Data subset cache", () => {
     });
     expect(surfaceTemperature.cacheHit).toBe(false);
     expect(new TextDecoder().decode(await readFile(surfaceTemperature.path))).toBe("GRIB2met");
+    expect(rangeCalls).toBe(2);
 
     const cached = await cache.fetchSelection({
       run,

@@ -76,7 +76,7 @@ import { InvalidRequestError } from "../failure.js";
 
 const MODEL = "aifs_0p25" as const;
 const MAX_NATIVE_STEPS = 61;
-const DEFAULT_AIFS_STEP_CONCURRENCY = 4;
+export const DEFAULT_AIFS_STEP_CONCURRENCY = 8;
 const HOUR_MS = 3_600_000;
 const STANDARD_GRAVITY = 9.80665;
 
@@ -170,6 +170,39 @@ export class AifsForecastService {
     return "at" in request.time
       ? this.getInstantDiagnostic(request)
       : this.getDiagnosticTimeSeries(request);
+  }
+
+  async resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date> {
+    const selection = prepareSelection(request);
+    return "at" in request.time
+      ? this.resolveRun(request.forecast?.run ?? "latest", new Date(request.time.at), selection)
+      : this.resolveRangeRun(
+          request.forecast?.run ?? "latest",
+          new Date(request.time.from),
+          new Date(request.time.to),
+          selection,
+        );
+  }
+
+  async resolveDiagnosticRun(request: DiagnoseAtmosphereRequest): Promise<Date> {
+    if (request.diagnostic.kind === "parcel") {
+      throw new Error("AIFS parcel diagnostics are not supported");
+    }
+    const pressureLevelsHpa = request.diagnostic.kind === "layer"
+      ? [request.diagnostic.lowerPressureHpa, request.diagnostic.upperPressureHpa]
+      : request.diagnostic.pressureLevelsHpa;
+    const requested = request.diagnostic.kind === "layer"
+      ? expandLayerDiagnosticVariables(request.diagnostic.diagnostics)
+      : expandProfileDiagnosticVariables(request.diagnostic.diagnostics);
+    const selection = selectionFrom(requested, pressureLevelsHpa, []);
+    return "at" in request.time
+      ? this.resolveRun(request.forecast?.run ?? "latest", new Date(request.time.at), selection)
+      : this.resolveRangeRun(
+          request.forecast?.run ?? "latest",
+          new Date(request.time.from),
+          new Date(request.time.to),
+          selection,
+        );
   }
 
   private async getPoint(request: QueryAtmosphereRequest): Promise<AifsProfileResult> {

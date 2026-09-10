@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import {
   parseMessagesFromBuffer,
   type GribMessage,
@@ -46,6 +46,27 @@ export interface GribGridStatistics {
 
 type GribCoordinateLayout = "axes" | "points";
 
+interface ParsedGribCacheEntry {
+  signature: string;
+  messages: GribMessage[];
+}
+
+interface PreparedGrid {
+  latitude: readonly number[];
+  longitude: readonly number[];
+  data: readonly number[];
+  layout: GribCoordinateLayout;
+}
+
+// GRIB subset files are immutable cache artifacts in normal WFG operation. Keep a small
+// in-process LRU so point/ensemble composition does not repeatedly read and parse the same
+// artifact. File metadata invalidates the entry for tests or non-cache callers that replace
+// a path in place.
+const PARSED_GRIB_CACHE_LIMIT = 8;
+const parsedGribCache = new Map<string, ParsedGribCacheEntry>();
+const parsedGribInFlight = new Map<string, Promise<GribMessage[]>>();
+const preparedGridCache = new WeakMap<GribMessage, PreparedGrid>();
+
 const NAMED_VERTICAL_ALIASES: ReadonlyArray<readonly [string, string]> = [
   ["entire atmosphere as a single layer", "entire atmosphere (considered as a single layer)"],
   ["entire atmosphere as single layer", "entire atmosphere (considered as a single layer)"],
@@ -70,10 +91,38 @@ const NAMED_VERTICAL_ALIASES: ReadonlyArray<readonly [string, string]> = [
 ];
 
 export async function readGribMessages(path: string): Promise<GribMessage[]> {
-  const bytes = await readFile(path);
-  const messages = parseMessagesWithKnownLocalAliases(bytes);
-  if (messages.length === 0) throw new Error(`Bundled GRIB2 decoder found no readable messages in ${path}`);
-  return messages;
+  const info = await stat(path);
+  const signature = `${info.size}:${info.mtimeMs}`;
+  const cached = parsedGribCache.get(path);
+  if (cached?.signature === signature) {
+    // Refresh LRU position without copying the parsed messages.
+    parsedGribCache.delete(path);
+    parsedGribCache.set(path, cached);
+    return cached.messages;
+  }
+
+  const inFlightKey = `${path}:${signature}`;
+  const pending = parsedGribInFlight.get(inFlightKey);
+  if (pending !== undefined) return pending;
+
+  const operation = (async () => {
+    const bytes = await readFile(path);
+    const messages = parseMessagesWithKnownLocalAliases(bytes);
+    if (messages.length === 0) {
+      throw new Error(`Bundled GRIB2 decoder found no readable messages in ${path}`);
+    }
+    parsedGribCache.delete(path);
+    parsedGribCache.set(path, { signature, messages });
+    while (parsedGribCache.size > PARSED_GRIB_CACHE_LIMIT) {
+      const oldest = parsedGribCache.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      parsedGribCache.delete(oldest);
+    }
+    return messages;
+  })().finally(() => parsedGribInFlight.delete(inFlightKey));
+
+  parsedGribInFlight.set(inFlightKey, operation);
+  return operation;
 }
 
 export function readGribMessagesFromBytes(bytes: Uint8Array): GribMessage[] {
@@ -223,9 +272,10 @@ export function temporalForSelector(message: GribMessage, selector: GribMessageS
 }
 
 export function gridPointsInBox(message: GribMessage, box: GribBox): GribGridPoint[] {
-  const coordinates = message.latlngAdjusted(true, false);
-  const data = message.dataAdjusted(true, false);
-  const layout = coordinateLayout(message, coordinates.latitude, coordinates.longitude, data);
+  const prepared = preparedGrid(message);
+  const coordinates = { latitude: prepared.latitude, longitude: prepared.longitude };
+  const data = prepared.data;
+  const layout = prepared.layout;
   const points: GribGridPoint[] = [];
 
   if (layout === "axes") {
@@ -302,9 +352,10 @@ export function summarizeMessageInBox(message: GribMessage, box: GribBox): GribG
 }
 
 function nearestPoint(message: GribMessage, longitude: number, latitude: number): GribGridPoint {
-  const coordinates = message.latlngAdjusted(true, false);
-  const data = message.dataAdjusted(true, false);
-  const layout = coordinateLayout(message, coordinates.latitude, coordinates.longitude, data);
+  const prepared = preparedGrid(message);
+  const coordinates = { latitude: prepared.latitude, longitude: prepared.longitude };
+  const data = prepared.data;
+  const layout = prepared.layout;
   const targetLongitude = toSignedLongitude(longitude);
 
   if (layout === "axes") {
@@ -389,6 +440,21 @@ function nearestAxisIndex(values: readonly number[], distance: (value: number) =
     }
   }
   return bestIndex;
+}
+
+function preparedGrid(message: GribMessage): PreparedGrid {
+  const cached = preparedGridCache.get(message);
+  if (cached !== undefined) return cached;
+  const coordinates = message.latlngAdjusted(true, false);
+  const data = message.dataAdjusted(true, false);
+  const prepared: PreparedGrid = {
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude,
+    data,
+    layout: coordinateLayout(message, coordinates.latitude, coordinates.longitude, data),
+  };
+  preparedGridCache.set(message, prepared);
+  return prepared;
 }
 
 function coordinateLayout(

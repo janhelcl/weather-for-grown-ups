@@ -30,7 +30,7 @@ import {
   type GefsAtmosProduct,
 } from "../sources/gefs-s3.js";
 
-export const DEFAULT_GEFS_MEMBER_CONCURRENCY = 6;
+export const DEFAULT_GEFS_MEMBER_CONCURRENCY = 8;
 
 export interface GefsPointDecoder {
   readonly engine?: GribDecoderName;

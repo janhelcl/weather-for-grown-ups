@@ -142,7 +142,23 @@ Larger requests compose bounded primitives while preserving native model semanti
 - Ensemble spatial/temporal operations remain member-first.
 - Historical analysis preserves exact 00/06/12/18 UTC analysis cycles and has no forecast initialization/lead axis.
 
-Composition is allowed to be serial or bounded-concurrent according to the source contract. The public result reports what was resolved; it does not pretend every backend has identical reuse or parallelism characteristics.
+Independent forecast steps are bounded-concurrent by default. Serial execution is reserved for an explicit provider/data dependency, never as an accidental implementation default. The public result reports what was resolved; it does not pretend every backend has identical reuse or parallelism characteristics.
+
+### Execution-efficiency invariants
+
+WFG treats computational efficiency as part of the application architecture:
+
+- resolve shared state such as model initialization once per composed request;
+- execute independent time steps concurrently with a bounded worker pool;
+- resolve ensemble initialization through a required member-service run-resolution seam, then fan out all selected members; there is no payload-execution fallback for run discovery, and a complete first member/range must never sit on that critical path;
+- reuse one downloaded artifact across points, members or derived operations whenever the provider product permits it;
+- keep bounded in-process decoded-artifact reuse below orchestration so repeated point sampling does not re-read, re-parse or re-decompress identical GRIB cache artifacts;
+- for indexed immutable provider objects, cache selected byte ranges/messages beneath exact query-subset artifacts, so progressive selector sets reuse prior downloads and fetch only missing messages;
+- avoid nested concurrency policies that attempt to replace provider access control.
+
+Application-level concurrency is an optimization limit, not permission to exceed an upstream contract. Every cache miss and retry still passes through `src/access/`, whose provider policy is the authoritative hard ceiling for concurrency and pacing. Raising a core worker count may increase useful overlap for cache hits, decoding or independent provider work, but it must never bypass `UpstreamAccessPolicy`.
+
+Nested WFG orchestration uses `DEFAULT_COMPOSED_EXECUTION_BUDGET` from `src/core/execution-budget.ts` as a multiplicative fan-out budget. A parent time/member worker pool allocates the remaining child concurrency with `nestedConcurrency(...)`; standalone services may use more parallelism than the same service receives when nested. This budget protects the process from accidental `time × member × point` explosions. It is deliberately separate from provider enforcement: `src/access/` can and often does impose a stricter limit on actual upstream requests.
 
 ## Source, access, cache and decoder boundaries
 

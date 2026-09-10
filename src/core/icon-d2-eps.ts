@@ -30,8 +30,8 @@ import { IconD2RunResolver } from "./icon-d2-run.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
 import { Wgrib2GridDecoder } from "../grib/wgrib2-grid.js";
 import { Wgrib2StatsDecoder } from "../grib/wgrib2-stats.js";
-import { IconD2ForecastService } from "./icon-d2.js";
-import { mapConcurrent } from "./concurrency.js";
+import { DEFAULT_ICON_D2_STEP_CONCURRENCY, IconD2ForecastService } from "./icon-d2.js";
+import { nestedConcurrency } from "./execution-budget.js";
 import {
   summarizeEnsembleLayerDiagnostics,
   summarizeEnsembleProfileDiagnostics,
@@ -41,6 +41,10 @@ import {
   summarizeNumericDistribution,
 } from "./ensemble-statistics.js";
 import { InvalidRequestError } from "../failure.js";
+import {
+  executeMemberDiagnostics,
+  executeMemberQueries,
+} from "./ensemble-member-execution.js";
 
 const MODEL = "icon_d2_eps_2p1km" as const;
 const DEFAULT_ICON_D2_EPS_MEMBER_CONCURRENCY = 4;
@@ -50,6 +54,8 @@ const MEMBER_SET = new Set<string>(ICON_D2_EPS_MEMBERS);
 export interface IconD2EpsMemberService {
   query(request: QueryAtmosphereRequest): Promise<unknown>;
   diagnose(request: DiagnoseAtmosphereRequest): Promise<unknown>;
+  resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date>;
+  resolveDiagnosticRun(request: DiagnoseAtmosphereRequest): Promise<Date>;
 }
 
 export interface IconD2EpsForecastServiceOptions {
@@ -101,6 +107,7 @@ export class IconD2EpsForecastService {
         decoder: new Wgrib2Decoder(undefined, "DWD"),
         areaDecoder: new Wgrib2StatsDecoder(undefined, undefined, "DWD"),
         areaGridDecoder: new Wgrib2GridDecoder(undefined, undefined, "DWD"),
+        concurrency: nestedConcurrency(this.concurrency, DEFAULT_ICON_D2_STEP_CONCURRENCY),
       });
     });
   }
@@ -150,43 +157,28 @@ export class IconD2EpsForecastService {
     request: QueryAtmosphereRequest,
     members: IconD2EpsMember[],
   ): Promise<MemberResult[]> {
-    const firstMember = members[0]!;
-    const firstService = this.memberServiceFactory(firstMember);
-    const firstResult = await firstService.query(asIconD2Query(request));
-    const run = resultRun(firstResult, "ICON-D2-EPS member query");
-    const rest = await mapConcurrent(
-      members.slice(1),
-      this.concurrency,
-      async (member) => ({
-        member,
-        result: await this.memberServiceFactory(member).query(
-          asIconD2Query(request, run),
-        ),
-      }),
-    );
-    return [{ member: firstMember, result: firstResult }, ...rest];
+    return executeMemberQueries({
+      members,
+      concurrency: this.concurrency,
+      serviceFactory: this.memberServiceFactory,
+      requestFactory: (runOverride) => asIconD2Query(request, runOverride),
+      context: "ICON-D2-EPS member query",
+    });
   }
 
   private async diagnoseMembers(
     request: DiagnoseAtmosphereRequest,
     members: IconD2EpsMember[],
   ): Promise<MemberResult[]> {
-    const firstMember = members[0]!;
-    const firstService = this.memberServiceFactory(firstMember);
-    const firstResult = await firstService.diagnose(asIconD2Diagnostic(request));
-    const run = resultRun(firstResult, "ICON-D2-EPS member diagnostic");
-    const rest = await mapConcurrent(
-      members.slice(1),
-      this.concurrency,
-      async (member) => ({
-        member,
-        result: await this.memberServiceFactory(member).diagnose(
-          asIconD2Diagnostic(request, run),
-        ),
-      }),
-    );
-    return [{ member: firstMember, result: firstResult }, ...rest];
+    return executeMemberDiagnostics({
+      members,
+      concurrency: this.concurrency,
+      serviceFactory: this.memberServiceFactory,
+      requestFactory: (runOverride) => asIconD2Diagnostic(request, runOverride),
+      context: "ICON-D2-EPS member diagnostic",
+    });
   }
+
 }
 
 function asIconD2Query(

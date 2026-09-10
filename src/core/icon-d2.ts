@@ -45,6 +45,7 @@ import type {
   VariableId,
 } from "../schema/query.js";
 import { computeAreaDistribution } from "./area-distribution.js";
+import { mapConcurrent } from "./concurrency.js";
 import {
   IconD2RunResolver,
   resolveIconD2Run,
@@ -76,6 +77,7 @@ import { InvalidRequestError } from "../failure.js";
 
 const MODEL = "icon_d2_0p02" as const;
 const MAX_NATIVE_STEPS = 49;
+export const DEFAULT_ICON_D2_STEP_CONCURRENCY = 4;
 
 export interface IconD2PointDecoder {
   readonly engine?: GribDecoderName;
@@ -94,6 +96,7 @@ export interface IconD2ForecastServiceOptions {
   runProvider?: IconD2RunProvider;
   areaDecoder?: Wgrib2StatsDecoder;
   areaGridDecoder?: Wgrib2GridDecoder;
+  concurrency?: number;
 }
 
 interface ExpandedSelection {
@@ -132,6 +135,7 @@ export class IconD2ForecastService {
   private readonly runProvider: IconD2RunProvider;
   private readonly areaDecoder: Wgrib2StatsDecoder;
   private readonly areaGridDecoder: Wgrib2GridDecoder;
+  private readonly concurrency: number;
 
   constructor(options: IconD2ForecastServiceOptions = {}) {
     const cacheDir = options.cacheDir
@@ -142,6 +146,7 @@ export class IconD2ForecastService {
     this.runProvider = options.runProvider ?? new IconD2RunResolver(this.cache);
     this.areaDecoder = options.areaDecoder ?? new Wgrib2StatsDecoder();
     this.areaGridDecoder = options.areaGridDecoder ?? new Wgrib2GridDecoder();
+    this.concurrency = options.concurrency ?? DEFAULT_ICON_D2_STEP_CONCURRENCY;
   }
 
   async query(request: QueryAtmosphereRequest): Promise<unknown> {
@@ -172,6 +177,41 @@ export class IconD2ForecastService {
     return "at" in request.time
       ? this.getInstantDiagnostic(request)
       : this.getDiagnosticTimeSeries(request);
+  }
+
+  async resolveQueryRun(request: QueryAtmosphereRequest): Promise<Date> {
+    const selection = expandedSelection(request);
+    const products = productsFor(selection);
+    return "at" in request.time
+      ? this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "valid_time",
+          validTime: new Date(request.time.at),
+          products,
+        })
+      : this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "time_range",
+          startTime: new Date(request.time.from),
+          endTime: new Date(request.time.to),
+          products,
+        });
+  }
+
+  async resolveDiagnosticRun(request: DiagnoseAtmosphereRequest): Promise<Date> {
+    if (request.diagnostic.kind === "parcel") {
+      throw new Error("ICON-D2 parcel diagnostics are not supported");
+    }
+    return "at" in request.time
+      ? this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "valid_time",
+          validTime: new Date(request.time.at),
+          products: { pressure: true, surface: false },
+        })
+      : this.resolveRun(request.forecast?.run ?? "latest", {
+          type: "time_range",
+          startTime: new Date(request.time.from),
+          endTime: new Date(request.time.to),
+          products: { pressure: true, surface: false },
+        });
   }
 
   private async getPoint(request: QueryAtmosphereRequest): Promise<IconD2ProfileResult> {
@@ -213,15 +253,17 @@ export class IconD2ForecastService {
       request.time.maxSteps,
     );
 
-    const profiles: IconD2ProfileResult[] = [];
-    for (const forecastHour of forecastHours) {
-      profiles.push(await this.profileAt(
+    const point = request.geometry;
+    const profiles = await mapConcurrent(
+      forecastHours,
+      this.concurrency,
+      (forecastHour) => this.profileAt(
         run,
         iconD2ValidTime(run, forecastHour),
-        request.geometry,
+        point,
         selection,
-      ));
-    }
+      ),
+    );
     const first = profiles[0]!;
     return {
       model: MODEL,
@@ -282,15 +324,17 @@ export class IconD2ForecastService {
       );
     }
 
-    const batches: any[] = [];
-    for (const forecastHour of forecastHours) {
-      batches.push(await this.pointsAt(
+    const points = request.geometry.points;
+    const batches = await mapConcurrent(
+      forecastHours,
+      this.concurrency,
+      (forecastHour) => this.pointsAt(
         run,
         iconD2ValidTime(run, forecastHour),
-        request.geometry.points,
+        points,
         selection,
-      ));
-    }
+      ) as Promise<any>,
+    );
     const first = batches[0]!;
     return {
       model: MODEL,
@@ -534,14 +578,15 @@ export class IconD2ForecastService {
       request.time.maxSteps,
     );
 
-    const results: any[] = [];
-    for (const forecastHour of forecastHours) {
-      results.push(await this.getInstantDiagnostic({
+    const results = await mapConcurrent(
+      forecastHours,
+      this.concurrency,
+      (forecastHour) => this.getInstantDiagnostic({
         ...request,
         time: { at: iconD2ValidTime(run, forecastHour).toISOString() },
         forecast: { ...request.forecast, run: run.toISOString() },
-      } as DiagnoseAtmosphereRequest, run));
-    }
+      } as DiagnoseAtmosphereRequest, run) as Promise<any>,
+    );
     const first = results[0]!;
     return {
       model: MODEL,

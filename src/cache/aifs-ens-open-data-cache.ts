@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
+import { ImmutableRangeCache } from "./immutable-range-cache.js";
 import {
   IfsOpenDataAccessPolicy,
   runIfsHttpWithRetry,
@@ -36,6 +37,7 @@ export class AifsEnsOpenDataSubsetCache
   implements AifsSelectionSource, AifsAvailabilityProbe {
   private readonly inFlight = new Map<string, Promise<AifsSubsetFile>>();
   private readonly accessPolicy: IfsHttpAccessPolicy;
+  private readonly rangeCache: ImmutableRangeCache;
 
   constructor(
     private readonly rootDir: string,
@@ -50,6 +52,7 @@ export class AifsEnsOpenDataSubsetCache
       cloudAccessPolicy,
       directAccessPolicy,
     );
+    this.rangeCache = new ImmutableRangeCache(join(rootDir, "ranges"));
   }
 
   async fetchSelection(request: AifsSelectionRequest): Promise<AifsSubsetFile> {
@@ -167,7 +170,12 @@ export class AifsEnsOpenDataSubsetCache
       if (length === undefined) {
         throw new Error("ECMWF AIFS ENS index entry is missing byte length");
       }
-      return this.fetchRange(gribUrl, entry.offset, length);
+      return this.rangeCache.getOrCreate(
+        gribUrl,
+        entry.offset,
+        length,
+        () => this.fetchRange(gribUrl, entry.offset, length),
+      );
     });
 
     const totalBytes = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);

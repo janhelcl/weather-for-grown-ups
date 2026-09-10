@@ -204,6 +204,7 @@ describe("PE-AROME member-first unified aggregation", () => {
     const service = new PeAromeForecastService({
       concurrency: 2,
       memberServiceFactory: (member) => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-09-01T09:00:00.000Z")),
         query: vi.fn(async (request: any) => {
           calls.push({ member, request });
           const offset = member === "c00" ? 0 : 2;
@@ -268,7 +269,7 @@ describe("PE-AROME member-first unified aggregation", () => {
       member: "c00",
       request: {
         dataset: "arome",
-        forecast: { run: "latest" },
+        forecast: { run: "2026-09-01T09:00:00.000Z" },
       },
     });
     expect(calls[1]).toMatchObject({
@@ -283,6 +284,7 @@ describe("PE-AROME member-first unified aggregation", () => {
   it("defaults to the native population and rejects invalid member selections", async () => {
     const service = new PeAromeForecastService({
       memberServiceFactory: () => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-09-01T09:00:00.000Z")),
         query: vi.fn(async () => ({
           model: "arome_0p01",
           run: "2026-09-01T09:00:00.000Z",

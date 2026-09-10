@@ -6,6 +6,7 @@ describe("PE-AROME area ensemble aggregation", () => {
     const calls: Array<{ member: string; request: any }> = [];
     const service = new PeAromeForecastService({
       memberServiceFactory: (member) => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-09-01T09:00:00.000Z")),
         query: vi.fn(async (request: any) => {
           calls.push({ member, request });
           const offset = member === "c00" ? 0 : 2;
@@ -88,12 +89,14 @@ describe("PE-AROME area ensemble aggregation", () => {
         maxMemberGridPoints: 100,
       },
     });
+    expect(calls[0].request.forecast.run).toBe("2026-09-01T09:00:00.000Z");
     expect(calls[1].request.forecast.run).toBe("2026-09-01T09:00:00.000Z");
   });
 
   it("rejects area selections that exceed member-grid safety limits", async () => {
     const service = new PeAromeForecastService({
       memberServiceFactory: () => ({
+        resolveQueryRun: vi.fn(async () => new Date("2026-09-01T09:00:00.000Z")),
         query: vi.fn(async () => ({
           model: "arome_0p01",
           run: "2026-09-01T09:00:00.000Z",
