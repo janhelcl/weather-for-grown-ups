@@ -35,6 +35,10 @@ export const DEFAULT_GEFS_MEMBER_CONCURRENCY = 8;
 export interface GefsPointDecoder {
   readonly engine?: GribDecoderName;
   extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]>;
+  extractPoints?(
+    path: string,
+    points: readonly { longitude: number; latitude: number }[],
+  ): Promise<DecodedValue[][]>;
 }
 
 export interface GefsEnsembleServiceOptions {

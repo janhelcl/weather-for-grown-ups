@@ -7,6 +7,7 @@ import {
   type GefsMemberSource,
 } from "../cache/gefs-s3-subset-cache.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
+import { sampleGribPoints } from "../grib/point-decoder.js";
 import {
   gefsBatchPointsQuerySchema,
   gefsBatchPointsResultSchema,
@@ -174,13 +175,10 @@ export class GefsBatchPointsService {
       pressureLevelHpa,
     });
 
-    const samples: MemberPointSample[] = [];
-    // Keep point decoding sequential inside one member. Member processing is
-    // already bounded-concurrent, so this caps simultaneous wgrib2 processes.
-    for (const requestedPoint of points) {
-      const decoded = await this.decoder.extractPoint(file.path, requestedPoint.longitude, requestedPoint.latitude);
-      samples.push(this.readPoint(decoded, requestedPoint, member, variable, pressureLevelHpa));
-    }
+    const decodedByPoint = await sampleGribPoints(this.decoder, file.path, points);
+    const samples = points.map((requestedPoint, index) =>
+      this.readPoint(decodedByPoint[index]!, requestedPoint, member, variable, pressureLevelHpa),
+    );
 
     return { member, cacheHit: file.cacheHit, points: samples };
   }

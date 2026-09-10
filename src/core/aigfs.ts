@@ -34,6 +34,7 @@ import {
   type SelectedMessageTemporal,
 } from "../grib/wgrib2-stats.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
+import { sampleGribPoints } from "../grib/point-decoder.js";
 import type {
   DiagnoseAtmosphereRequest,
   QueryAtmosphereRequest,
@@ -80,6 +81,10 @@ export const DEFAULT_AIGFS_STEP_CONCURRENCY = 4;
 export interface AigfsPointDecoder {
   readonly engine?: GribDecoderName;
   extractPoint(path: string, longitude: number, latitude: number): Promise<DecodedValue[]>;
+  extractPoints?(
+    path: string,
+    points: readonly { longitude: number; latitude: number }[],
+  ): Promise<DecodedValue[][]>;
 }
 
 export interface AigfsForecastServiceOptions {
@@ -612,14 +617,16 @@ export class AigfsForecastService {
   ): Promise<unknown> {
     const forecastHour = aigfsForecastHour(run, validTime);
     const cached = await this.cache.fetch(dataRequest(run, forecastHour, selection));
+    const decodedByPoint = await sampleGribPoints(this.decoder, cached.path, points);
     const profiles: AigfsProfileResult[] = [];
-    for (const point of points) {
+    for (let index = 0; index < points.length; index += 1) {
       profiles.push(await this.decodeProfile(
         cached,
         run,
         validTime,
-        point,
+        points[index]!,
         selection,
+        decodedByPoint[index]!,
       ));
     }
     return {
@@ -659,8 +666,9 @@ export class AigfsForecastService {
     validTime: Date,
     point: PointCoordinate,
     selection: ExpandedSelection,
+    predecoded?: DecodedValue[],
   ): Promise<AigfsProfileResult> {
-    const decoded = await this.decoder.extractPoint(cached.path, point.longitude, point.latitude);
+    const decoded = predecoded ?? await this.decoder.extractPoint(cached.path, point.longitude, point.latitude);
     const firstValue = decoded[0];
     if (firstValue === undefined) throw new Error("AIGFS decoder returned no grid point");
 

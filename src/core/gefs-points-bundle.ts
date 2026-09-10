@@ -6,6 +6,7 @@ import {
 } from "../cache/gefs-s3-subset-cache.js";
 import { sortGefsMembers, type GefsMember } from "../catalog/gefs.js";
 import { Wgrib2Decoder } from "../grib/wgrib2.js";
+import { sampleGribPoints } from "../grib/point-decoder.js";
 import {
   gefsPointsBundleQuerySchema,
   gefsPointsBundleResultSchema,
@@ -51,7 +52,7 @@ export interface GefsPointsBundleServiceOptions {
 /**
  * Fetch one mixed selected-message file per member, then sample every requested
  * coordinate locally from those immutable files. Upstream selected-file work
- * scales with members; local wgrib2 point extraction scales with members × points.
+ * scales with members; each member file is unpacked once for all coordinates.
  */
 export class GefsPointsBundleService {
   private readonly source: GefsMemberSelectionSource;
@@ -110,21 +111,22 @@ export class GefsPointsBundleService {
       return { member, path: file.path, cacheHit: file.cacheHit };
     });
 
-    const points = [];
-    for (const point of query.points) {
-      const samples = await mapConcurrent(memberFiles, this.decodeConcurrency, async (file) => {
-        const decoded = await this.decoder.extractPoint(file.path, point.longitude, point.latitude);
-        return decodeGefsMemberBundle({
-          member: file.member,
-          cacheHit: file.cacheHit,
-          decoded,
-          run,
-          selection,
-        });
-      });
+    const decodedMembers = await mapConcurrent(memberFiles, this.decodeConcurrency, async (file) => ({
+      file,
+      decodedByPoint: await sampleGribPoints(this.decoder, file.path, query.points),
+    }));
+
+    const points = query.points.map((point, pointIndex) => {
+      const samples = decodedMembers.map(({ file, decodedByPoint }) => decodeGefsMemberBundle({
+        member: file.member,
+        cacheHit: file.cacheHit,
+        decoded: decodedByPoint[pointIndex]!,
+        run,
+        selection,
+      }));
       const gridPoint = assertMemberBundlesShareGrid(samples, "GEFS multi-point bundle");
       const summaries = summarizeGefsMemberBundles(samples, selection, quantiles);
-      points.push({
+      return {
         requestedPoint: { ...point },
         gridPoint,
         ...summaries,
@@ -138,8 +140,8 @@ export class GefsPointsBundleService {
               })),
             }
           : {}),
-      });
-    }
+      };
+    });
 
     return gefsPointsBundleResultSchema.parse({
       model: "gefs_0p50",

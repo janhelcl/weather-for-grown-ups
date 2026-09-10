@@ -11,6 +11,7 @@ import {
 import type { RawGefsFieldDefinition } from "../catalog/gefs-fields.js";
 import type { RawVariableDefinition } from "../catalog/variables.js";
 import {
+  coalesceAdjacentByteRanges,
   parseGribIndex,
   selectNonIsobaricByteRangesAtForecastHour,
   selectPressureByteRangesAtForecastHour,
@@ -182,7 +183,9 @@ export class GefsReforecastS3SubsetCache implements GefsReforecastSelectionSourc
           }
           throw error;
         }
-        for (const range of ranges) chunks.push(await this.fetchRange(gribUrl, range));
+        for (const range of coalesceAdjacentByteRanges(ranges)) {
+          chunks.push(await this.fetchRange(gribUrl, range));
+        }
       }
     }
 

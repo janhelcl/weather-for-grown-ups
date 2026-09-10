@@ -21,6 +21,10 @@ export const DEFAULT_BATCH_POINT_CONCURRENCY = 8;
 
 export interface BatchProfileGetter {
   getProfile(query: ProfileQueryInput): Promise<ProfileResult>;
+  getProfiles?(
+    base: ProfileQueryInput,
+    points: readonly PointCoordinate[],
+  ): Promise<ProfileResult[]>;
 }
 
 export interface BatchPointsServiceOptions {
@@ -62,11 +66,16 @@ export class BatchPointsService {
         : parseGfsRun(query.run);
     const fh = forecastHour(run, validTime, query.grid);
 
-    const profiles = await mapConcurrent(
-      query.points,
-      this.concurrency,
-      async (point) => this.profileGetter.getProfile(profileQuery(point, query, run, validTime)),
-    );
+    const profiles = this.profileGetter.getProfiles === undefined
+      ? await mapConcurrent(
+          query.points,
+          this.concurrency,
+          async (point) => this.profileGetter.getProfile(profileQuery(point, query, run, validTime)),
+        )
+      : await this.profileGetter.getProfiles(
+          profileQuery(query.points[0]!, query, run, validTime),
+          query.points,
+        );
 
     for (const profile of profiles) {
       if (profile.run !== run.toISOString() || profile.validTime !== validTime.toISOString() || profile.forecastHour !== fh) {

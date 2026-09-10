@@ -25,9 +25,10 @@ assert.equal(recent.source.access, "s3_range");
 assert.match(recent.source.dataset, /gfs\.t00z\.pgrb2\.0p50\.f000$/);
 assertProfile(recent.levels);
 
-// Older Grid-4 point analyses remain available through NCEI's direct
-// fileServer/full-file route and are decoded locally. NCSS is not the primary
-// transport for this path.
+// Older Grid-4 point analyses prefer NCEI's direct fileServer/full-file route
+// and may fall back to NCSS when that upstream is unavailable. Unit routing
+// tests enforce the primary preference; this live check validates that either
+// documented NCEI transport still returns the intended Grid-4 analysis.
 const historicalAnalysisTime = "2017-05-09T12:00:00Z";
 const historical = await service.getHistoricalProfile({
   ...POINT,
@@ -37,7 +38,11 @@ const historical = await service.getHistoricalProfile({
 });
 
 assert.equal(historical.source.provider, "NOAA NCEI");
-assert.equal(historical.source.access, "ncei_thredds_fileserver");
+assert(
+  historical.source.access === "ncei_thredds_fileserver"
+    || historical.source.access === "ncei_thredds_ncss",
+  `unexpected historical NCEI access path: ${historical.source.access}`,
+);
 assert.match(historical.source.dataset, /gfsanl_4_20170509_1200_000\.grb2$/);
 assertProfile(historical.levels);
 

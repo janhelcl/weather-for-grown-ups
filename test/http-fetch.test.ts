@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchWithRetry } from "../src/access/http-fetch.js";
+import { fetchBinaryWithRetry, fetchWithRetry } from "../src/access/http-fetch.js";
 
 describe("fetchWithRetry", () => {
   it("runs every HTTP attempt through the supplied access policy", async () => {
@@ -69,5 +69,52 @@ describe("fetchWithRetry", () => {
       jitterRatio: 0,
     })).rejects.toThrow("bad application input");
     expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("fetchBinaryWithRetry", () => {
+  it("keeps the access-policy slot until the response body is read", async () => {
+    let inBody = 0;
+    let maxInBody = 0;
+    let locked = Promise.resolve();
+    const run = async <T>(operation: () => Promise<T>) => {
+      const wait = locked;
+      let unlock: () => void = () => undefined;
+      locked = new Promise<void>((resolve) => {
+        unlock = resolve;
+      });
+      await wait;
+      try {
+        return await operation();
+      } finally {
+        unlock();
+      }
+    };
+    const fetchFn = vi.fn(async () => ({
+      status: 206,
+      statusText: "Partial Content",
+      headers: { get: () => null },
+      arrayBuffer: async () => {
+        inBody += 1;
+        maxInBody = Math.max(maxInBody, inBody);
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        inBody -= 1;
+        return new Uint8Array([71, 82, 73, 66]).buffer;
+      },
+    })) as unknown as typeof fetch;
+
+    await Promise.all([
+      fetchBinaryWithRetry("https://example.test/range", undefined, {
+        fetchFn,
+        accessPolicy: { run },
+      }),
+      fetchBinaryWithRetry("https://example.test/range", undefined, {
+        fetchFn,
+        accessPolicy: { run },
+      }),
+    ]);
+
+    expect(maxInBody).toBe(1);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 });

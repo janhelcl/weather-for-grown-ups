@@ -1,12 +1,13 @@
 import { readFile, stat } from "node:fs/promises";
 import {
+  GribMessage,
   parseMessagesFromBuffer,
-  type GribMessage,
 } from "@mattnucc/gribberish";
 import type { DecodedValue, ForecastInterval } from "../types/decoded.js";
 import {
   knownDwdLocalParameter,
   scanGrib2Messages,
+  type Grib2MessageSlice,
 } from "./dwd-local-parameters.js";
 
 
@@ -39,6 +40,23 @@ export interface GribGridPoint {
   longitude: number;
   latitude: number;
   value: number;
+}
+
+export interface GribPointSample {
+  longitude: number;
+  latitude: number;
+}
+
+/**
+ * Reuse one regular-grid latitude/longitude axis across messages in a single
+ * decode. Messages in one provider object share a grid; skipping repeated
+ * axis expansion is a large saving on global products.
+ */
+export interface SharedGribGridAxes {
+  rows: number;
+  cols: number;
+  latitude: readonly number[];
+  longitude: readonly number[];
 }
 
 export interface GribGridStatistics {
@@ -200,6 +218,42 @@ function withGribCodeAlias(message: GribMessage, alias: string): GribMessage {
   });
 }
 
+/**
+ * Parse one scanned GRIB2 envelope. Point decoding uses this so a profile
+ * bundle never materializes every expanded grid at once.
+ */
+export function parseGribMessageChunk(fileBytes: Uint8Array, chunk: Grib2MessageSlice): GribMessage[] {
+  const local = knownDwdLocalParameter(
+    chunk.discipline,
+    chunk.center,
+    chunk.category,
+    chunk.parameter,
+    chunk.firstFixedSurfaceType,
+  );
+  if (
+    local !== undefined
+    && chunk.categoryOffset !== undefined
+    && chunk.parameterOffset !== undefined
+  ) {
+    const chunkBytes = Uint8Array.from(fileBytes.subarray(chunk.start, chunk.end));
+    chunkBytes[chunk.categoryOffset - chunk.start] = local.surrogate[0];
+    chunkBytes[chunk.parameterOffset - chunk.start] = local.surrogate[1];
+    const parsed = parseMessagesFromBuffer(chunkBytes);
+    if (parsed.length === 0) {
+      throw new Error(
+        `Bundled GRIB2 decoder could not normalize DWD local parameter ${local.alias}`,
+      );
+    }
+    return parsed.map((message) => withGribCodeAlias(message, local.alias));
+  }
+
+  try {
+    return [GribMessage.parseFromBuffer(fileBytes, chunk.start)];
+  } catch {
+    return parseMessagesFromBuffer(fileBytes.subarray(chunk.start, chunk.end));
+  }
+}
+
 export function messagesAtForecastHour(
   messages: readonly GribMessage[],
   forecastHour: number,
@@ -214,35 +268,60 @@ export function decodePointMessages(
   messages: readonly GribMessage[],
   longitude: number,
   latitude: number,
+  sharedAxes?: SharedGribGridAxes,
 ): DecodedValue[] {
-  const values: DecodedValue[] = [];
+  return decodePointMessagesMany(messages, [{ longitude, latitude }], sharedAxes)[0] ?? [];
+}
+
+/**
+ * Unpack each message once and sample every requested coordinate from that
+ * expanded grid. Multi-point and transect composition should use this instead
+ * of calling {@link decodePointMessages} per coordinate.
+ */
+export function decodePointMessagesMany(
+  messages: readonly GribMessage[],
+  points: readonly GribPointSample[],
+  sharedAxes?: SharedGribGridAxes,
+): DecodedValue[][] {
+  const valuesByPoint: DecodedValue[][] = points.map(() => []);
+  if (points.length === 0) return valuesByPoint;
+  const axes = sharedAxes ?? { rows: 0, cols: 0, latitude: [], longitude: [] };
+
   for (const message of messages) {
-    const normalized = normalizeDecodedCodeValue(message.varAbbrev, 0);
-    const vertical = normalized.code === "CEILING"
-      ? { namedVertical: "cloud ceiling" as const }
-      : isDwdMslHeightCode(normalized.code)
-        ? { namedVertical: "mean sea level" as const }
-        : isDwdMeanLayerCode(normalized.code)
-          ? { namedVertical: "mean layer" as const }
-          : isDwdUpdraftHelicityCode(normalized.code)
-            ? { namedVertical: "2-8 km above mean sea level" as const }
-            : verticalFromKey(message.key);
+    const vertical = decodedVertical(message);
     if (vertical === null) continue;
-    const sample = nearestPoint(message, longitude, latitude);
+    const prepared = preparedGrid(message, axes);
     const interval = forecastInterval(message);
     const semantics = interval === undefined ? "instantaneous" : statisticalSemantics(message.key);
-    const normalizedValue = normalizeDecodedCodeValue(message.varAbbrev, sample.value);
-    values.push({
-      code: normalizedValue.code,
-      ...vertical,
-      ...(semantics === "accumulation" && interval !== undefined ? { accumulation: interval } : {}),
-      ...(semantics === "average" && interval !== undefined ? { average: interval } : {}),
-      ...(semantics === "maximum" && interval !== undefined ? { maximum: interval } : {}),
-      value: normalizedValue.value,
-      gridPoint: { latitude: sample.latitude, longitude: sample.longitude },
-    });
+    for (let index = 0; index < points.length; index += 1) {
+      const point = points[index]!;
+      const sample = nearestPointFromPrepared(message, prepared, point.longitude, point.latitude);
+      const normalizedValue = normalizeDecodedCodeValue(message.varAbbrev, sample.value);
+      valuesByPoint[index]!.push({
+        code: normalizedValue.code,
+        ...vertical,
+        ...(semantics === "accumulation" && interval !== undefined ? { accumulation: interval } : {}),
+        ...(semantics === "average" && interval !== undefined ? { average: interval } : {}),
+        ...(semantics === "maximum" && interval !== undefined ? { maximum: interval } : {}),
+        value: normalizedValue.value,
+        gridPoint: { latitude: sample.latitude, longitude: sample.longitude },
+      });
+    }
   }
-  return values;
+  return valuesByPoint;
+}
+
+function decodedVertical(
+  message: GribMessage,
+): Omit<DecodedValue, "code" | "value" | "gridPoint" | "accumulation" | "average" | "maximum"> | null {
+  const normalized = normalizeDecodedCodeValue(message.varAbbrev, 0);
+  if (normalized.code === "CEILING") return { namedVertical: "cloud ceiling" };
+  if (isDwdMslHeightCode(normalized.code)) return { namedVertical: "mean sea level" };
+  if (isDwdMeanLayerCode(normalized.code)) return { namedVertical: "mean layer" };
+  if (isDwdUpdraftHelicityCode(normalized.code)) {
+    return { namedVertical: "2-8 km above mean sea level" };
+  }
+  return verticalFromKey(message.key);
 }
 
 export function selectMessage(
@@ -281,11 +360,46 @@ export function temporalForSelector(message: GribMessage, selector: GribMessageS
 }
 
 export function gridPointsInBox(message: GribMessage, box: GribBox): GribGridPoint[] {
+  const points: GribGridPoint[] = [];
+  forEachDefinedPointInBox(message, box, (longitude, latitude, value) => {
+    points.push({ longitude, latitude, value });
+  });
+  if (points.length === 0) throw new Error("Requested bbox contains no defined GFS grid points");
+  return points;
+}
+
+export function summarizeMessageInBox(message: GribMessage, box: GribBox): GribGridStatistics {
+  let definedGridPoints = 0;
+  let sum = 0;
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  forEachDefinedPointInBox(message, box, (_longitude, _latitude, value) => {
+    definedGridPoints += 1;
+    sum += value;
+    if (value < min) min = value;
+    if (value > max) max = value;
+  });
+  if (definedGridPoints === 0) throw new Error("Requested bbox contains no defined GFS grid points");
+  const totalGridPoints = message.gridShape.rows * message.gridShape.cols;
+  return {
+    totalGridPoints,
+    undefinedGridPoints: totalGridPoints - definedGridPoints,
+    definedGridPoints,
+    mean: sum / definedGridPoints,
+    min,
+    max,
+  };
+}
+
+function forEachDefinedPointInBox(
+  message: GribMessage,
+  box: GribBox,
+  visit: (longitude: number, latitude: number, value: number) => void,
+): void {
   const prepared = preparedGrid(message);
   const coordinates = { latitude: prepared.latitude, longitude: prepared.longitude };
   const data = prepared.data;
   const layout = prepared.layout;
-  const points: GribGridPoint[] = [];
 
   if (layout === "axes") {
     const { rows, cols } = message.gridShape;
@@ -306,11 +420,7 @@ export function gridPointsInBox(message: GribMessage, box: GribBox): GribGridPoi
         ) continue;
         const value = data[row * cols + col];
         if (value === undefined || !Number.isFinite(value)) continue;
-        points.push({
-          longitude: toSignedLongitude(pointLongitude),
-          latitude: pointLatitude,
-          value,
-        });
+        visit(toSignedLongitude(pointLongitude), pointLatitude, value);
       }
     }
   } else {
@@ -327,41 +437,17 @@ export function gridPointsInBox(message: GribMessage, box: GribBox): GribGridPoi
         || !Number.isFinite(pointLongitude)
         || !contains(box, pointLongitude, pointLatitude)
       ) continue;
-      points.push({
-        longitude: toSignedLongitude(pointLongitude),
-        latitude: pointLatitude,
-        value,
-      });
+      visit(toSignedLongitude(pointLongitude), pointLatitude, value);
     }
   }
-
-  if (points.length === 0) throw new Error("Requested bbox contains no defined GFS grid points");
-  return points;
 }
 
-export function summarizeMessageInBox(message: GribMessage, box: GribBox): GribGridStatistics {
-  const points = gridPointsInBox(message, box);
-  let sum = 0;
-  let min = Number.POSITIVE_INFINITY;
-  let max = Number.NEGATIVE_INFINITY;
-  for (const point of points) {
-    sum += point.value;
-    min = Math.min(min, point.value);
-    max = Math.max(max, point.value);
-  }
-  const totalGridPoints = message.gridShape.rows * message.gridShape.cols;
-  return {
-    totalGridPoints,
-    undefinedGridPoints: totalGridPoints - points.length,
-    definedGridPoints: points.length,
-    mean: sum / points.length,
-    min,
-    max,
-  };
-}
-
-function nearestPoint(message: GribMessage, longitude: number, latitude: number): GribGridPoint {
-  const prepared = preparedGrid(message);
+function nearestPointFromPrepared(
+  message: GribMessage,
+  prepared: PreparedGrid,
+  longitude: number,
+  latitude: number,
+): GribGridPoint {
   const coordinates = { latitude: prepared.latitude, longitude: prepared.longitude };
   const data = prepared.data;
   const layout = prepared.layout;
@@ -451,16 +537,40 @@ function nearestAxisIndex(values: readonly number[], distance: (value: number) =
   return bestIndex;
 }
 
-function preparedGrid(message: GribMessage): PreparedGrid {
+function preparedGrid(message: GribMessage, sharedAxes?: SharedGribGridAxes): PreparedGrid {
   const cached = preparedGridCache.get(message);
   if (cached !== undefined) return cached;
-  const coordinates = message.latlngAdjusted(true, false);
-  const data = message.dataAdjusted(true, false);
+  // Do not roll a global [0, 360) longitude axis into [-180, 180). Rolling
+  // copies the unpacked field; nearest-neighbour search already wraps.
+  const data = message.dataAdjusted(false, false);
+  const { rows, cols } = message.gridShape;
+  let latitude: readonly number[];
+  let longitude: readonly number[];
+  if (
+    sharedAxes !== undefined
+    && sharedAxes.rows === rows
+    && sharedAxes.cols === cols
+    && sharedAxes.latitude.length > 0
+    && message.isRegularGrid === true
+  ) {
+    latitude = sharedAxes.latitude;
+    longitude = sharedAxes.longitude;
+  } else {
+    const coordinates = message.latlngAdjusted(false, false);
+    latitude = coordinates.latitude;
+    longitude = coordinates.longitude;
+    if (sharedAxes !== undefined && message.isRegularGrid === true) {
+      sharedAxes.rows = rows;
+      sharedAxes.cols = cols;
+      sharedAxes.latitude = latitude;
+      sharedAxes.longitude = longitude;
+    }
+  }
   const prepared: PreparedGrid = {
-    latitude: coordinates.latitude,
-    longitude: coordinates.longitude,
+    latitude,
+    longitude,
     data,
-    layout: coordinateLayout(message, coordinates.latitude, coordinates.longitude, data),
+    layout: coordinateLayout(message, latitude, longitude, data),
   };
   preparedGridCache.set(message, prepared);
   return prepared;

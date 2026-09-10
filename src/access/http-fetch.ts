@@ -35,3 +35,32 @@ export async function fetchWithRetry(
 
   return result.response;
 }
+
+/**
+ * Like `fetchWithRetry`, but the access-policy slot covers header and body so
+ * concurrent range workers cannot overlap more transfers than `maxConcurrency`.
+ */
+export async function fetchBinaryWithRetry(
+  input: string | URL,
+  init: RequestInit | undefined,
+  options: RetryableFetchOptions = {},
+): Promise<{ response: Response; bytes: Uint8Array }> {
+  const fetchFn = options.fetchFn ?? globalThis.fetch;
+  const run = <T>(operation: () => Promise<T>) =>
+    options.accessPolicy?.run(operation) ?? operation();
+
+  return run(async () => {
+    const result = await runWithHttpRetry(async () => {
+      const response = await fetchFn(input, init);
+      return {
+        status: response.status,
+        retryAfter: response.headers.get("retry-after"),
+        response,
+      };
+    }, options);
+    return {
+      response: result.response,
+      bytes: new Uint8Array(await result.response.arrayBuffer()),
+    };
+  });
+}

@@ -234,10 +234,39 @@ export function selectNamedLevelByteRanges(
   return rangesForStarts(records, selectedStarts);
 }
 
+/** Deduplicate by start offset, then join ranges that already touch on disk. */
 export function mergeByteRanges(...groups: ByteRange[][]): ByteRange[] {
   const byStart = new Map<number, ByteRange>();
   for (const range of groups.flat()) byStart.set(range.start, range);
-  return [...byStart.values()].sort((a, b) => a.start - b.start);
+  return coalesceAdjacentByteRanges([...byStart.values()]);
+}
+
+/**
+ * Join selected GRIB messages that already touch in the provider object into
+ * one HTTP range. Adjacent messages are common in GFS/GEFS inventories
+ * (HGT/TMP/RH, UGRD/VGRD). Strict adjacency downloads no extra bytes and does
+ * not insert unselected messages that the decoder would otherwise unpack.
+ */
+export function coalesceAdjacentByteRanges(ranges: readonly ByteRange[]): ByteRange[] {
+  const sorted = [...ranges].sort((left, right) => left.start - right.start);
+  const coalesced: ByteRange[] = [];
+  for (const range of sorted) {
+    const previous = coalesced.at(-1);
+    if (previous !== undefined && previous.end === undefined && range.start >= previous.start) {
+      continue;
+    }
+    if (
+      previous !== undefined
+      && previous.end !== undefined
+      && range.start <= previous.end + 1
+    ) {
+      if (range.end === undefined) delete previous.end;
+      else previous.end = Math.max(previous.end, range.end);
+      continue;
+    }
+    coalesced.push({ ...range });
+  }
+  return coalesced;
 }
 
 function matchesTemporalSemantics(

@@ -8,10 +8,7 @@ import {
   RateLimitedError,
   UpstreamUnavailableError,
 } from "../failure.js";
-import {
-  decodePointMessages,
-  readGribMessagesFromBytes,
-} from "../grib/gribberish-runtime.js";
+import { decodePointGribBytes } from "../grib/gribberish-point.js";
 import {
   GFS_ANALYSIS_START,
   type HistoricalAnalysisAccess,
@@ -72,12 +69,11 @@ export class NceiGfsFileServerAnalysisSource implements HistoricalAnalysisDataSo
     this.assertEra(request.analysisTime);
     const selectors = historicalAnalysisSelectors(request.variables);
     const { bytes, dataset, cacheHit } = await this.loadGrib(request.analysisTime);
-    const decoded = decodePointMessages(
-      readGribMessagesFromBytes(bytes),
-      request.longitude,
-      request.latitude,
-    );
-    const rows = rowsFromDecodedPointValues(decoded, selectors);
+    const [decoded] = await decodePointGribBytes(bytes, [{
+      longitude: request.longitude,
+      latitude: request.latitude,
+    }]);
+    const rows = rowsFromDecodedPointValues(decoded ?? [], selectors);
     if (rows.length === 0) {
       throw new Error(
         `NCEI fileServer GFS analysis decoded no values for ${request.variables.join(",")}`,

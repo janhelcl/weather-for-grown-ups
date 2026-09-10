@@ -2,7 +2,7 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
-import { fetchWithRetry } from "../access/http-fetch.js";
+import { fetchBinaryWithRetry, fetchWithRetry } from "../access/http-fetch.js";
 import { upstreamHttpFailure } from "../access/http-failure.js";
 import type { HttpRetryExecutionOptions } from "../access/http-retry.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
@@ -117,7 +117,7 @@ export class GfsS30p50SubsetClient {
 
   private async fetchRange(url: string, range: ByteRange): Promise<Uint8Array> {
     const rangeValue = `bytes=${range.start}-${range.end ?? ""}`;
-    const response = await fetchWithRetry(
+    const { response, bytes } = await fetchBinaryWithRetry(
       url,
       {
         headers: {
@@ -139,7 +139,6 @@ export class GfsS30p50SubsetClient {
         statusText: response.statusText,
       });
     }
-    const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length < 4 || new TextDecoder().decode(bytes.subarray(0, 4)) !== "GRIB") {
       throw new Error(`NOAA AWS ${this.product} range did not start with a GRIB message (${rangeValue})`);
     }

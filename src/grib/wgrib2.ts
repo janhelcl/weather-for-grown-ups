@@ -3,8 +3,8 @@ import { GEFS_PGRB2A_FIELD_CATALOG } from "../catalog/gefs-fields.js";
 import { findNamedNonIsobaricLevel } from "../catalog/non-isobaric-fields.js";
 import { ALL_SUPPORTED_GFS_CODES } from "../catalog/variables.js";
 import type { DecodedValue, GribDecoderName } from "../types/decoded.js";
-import { decodeBundledPointFile } from "./gribberish-point.js";
-import { canonicalGribCode } from "./gribberish-runtime.js";
+import { decodeBundledPointFile, decodeBundledPointFileMany } from "./gribberish-point.js";
+import { canonicalGribCode, type GribPointSample } from "./gribberish-runtime.js";
 
 const GEFS_RAW_FIELDS = Object.values(GEFS_PGRB2A_FIELD_CATALOG).filter((definition) => definition.kind === "raw");
 const ALL_SUPPORTED_CODES = [...new Set([
@@ -93,6 +93,22 @@ export class Wgrib2Decoder {
       throw new Error(`wgrib2 returned no supported point values. Output: ${stdout.slice(0, 500)}`);
     }
 
+    return decoded;
+  }
+
+  async extractPoints(
+    path: string,
+    points: readonly GribPointSample[],
+    forecastHour?: number,
+  ): Promise<DecodedValue[][]> {
+    if (points.length === 0) return [];
+    if (this.executable === undefined) {
+      return decodeBundledPointFileMany(path, points, forecastHour);
+    }
+    const decoded: DecodedValue[][] = [];
+    for (const point of points) {
+      decoded.push(await this.extractPoint(path, point.longitude, point.latitude, forecastHour));
+    }
     return decoded;
   }
 }
