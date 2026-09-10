@@ -7,10 +7,7 @@ import {
   diagnoseAtmosphereSchema,
   queryAtmosphereSchema,
 } from "../src/schema/unified-api.js";
-import {
-  compareAtmosphericDatasetsSchema,
-  compareAtmosphericRunsSchema,
-} from "../src/schema/unified-specialized.js";
+import { alignAtmosphereSchema } from "../src/schema/unified-alignment.js";
 
 const point = { type: "point" as const, latitude: 50.08, longitude: 14.43 };
 const pressureSelection = {
@@ -183,30 +180,27 @@ describe("unified atmospheric schema capability branches", () => {
       forecast: { run: "newest" },
     })).toThrow();
 
-    expect(compareAtmosphericRunsSchema.parse({
-      dataset: "gfs",
+    // Alignment sources carry the same per-dataset run selector rules as query_atmosphere.
+    const aligned = alignAtmosphereSchema.parse({
+      sources: [
+        { dataset: "gfs", forecast: { run: "latest_complete" } },
+        { dataset: "gfs", forecast: { run: "2026-08-28T00:00:00Z" } },
+      ],
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       selection: pressureSelection,
-      anchorRun: "latest_complete",
-    }).anchorRun).toBe("latest_complete");
+    });
+    expect(aligned.sources[0]?.forecast?.run).toBe("latest_complete");
 
-    expect(() => compareAtmosphericRunsSchema.parse({
-      dataset: "gefs",
+    expect(() => alignAtmosphereSchema.parse({
+      sources: [
+        { dataset: "gfs" },
+        { dataset: "gefs", forecast: { run: "latest_complete" } },
+      ],
       geometry: point,
       time: { at: "2026-08-28T12:00:00Z" },
       selection: pressureSelection,
-      anchorRun: "latest_complete",
-    })).toThrow("run=latest_complete is not supported by dataset(s): gefs");
-
-    expect(() => compareAtmosphericDatasetsSchema.parse({
-      datasets: ["gfs", "gefs"],
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      variable: "temperature",
-      pressureLevelHpa: 850,
-      run: "latest_complete",
-    })).toThrow("run=latest_complete is not supported by dataset(s): gefs");
+    })).toThrow("dataset=gefs does not support run=latest_complete");
   });
 
   it("accepts implemented IFS point, spatial and diagnostic capabilities", () => {

@@ -2,14 +2,11 @@ import { readFile, readdir } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { createAtmosphericDiagnosticAdapterRegistry } from "../src/core/diagnostic-adapters/registry.js";
 import { createAtmosphericQueryAdapterRegistry } from "../src/core/query-adapters/registry.js";
-import { createAtmosphericDatasetComparisonStrategyRegistry } from "../src/core/comparison-strategies/registry.js";
 import {
   createAtmosphericAnalogAdapterRegistry,
-  createAtmosphericRunComparisonAdapterRegistry,
   createAtmosphericVerificationAdapterRegistry,
 } from "../src/core/specialized-adapters/registry.js";
 import { PUBLIC_ATMOSPHERIC_DATASET_IDS } from "../src/schema/unified-api.js";
-import { ATMOSPHERIC_DATASET_COMPARISON_PAIRS } from "../src/schema/unified-specialized.js";
 
 describe("architecture boundaries", () => {
   it("keeps one query and diagnostic adapter registered for every public atmospheric dataset", () => {
@@ -19,14 +16,6 @@ describe("architecture boundaries", () => {
   });
 
   it("keeps specialized operation variants behind explicit adapter registries", () => {
-    expect(Object.keys(createAtmosphericRunComparisonAdapterRegistry()).sort()).toEqual(
-      ["gefs", "gfs", "ifs", "ifs-ens"],
-    );
-    expect(Object.keys(createAtmosphericDatasetComparisonStrategyRegistry()).sort()).toEqual(
-      ATMOSPHERIC_DATASET_COMPARISON_PAIRS
-        .map(([left, right]) => `${left}:${right}`)
-        .sort(),
-    );
     expect(Object.keys(createAtmosphericVerificationAdapterRegistry()).sort()).toEqual(
       ["gfs-analysis", "igra"],
     );
@@ -47,7 +36,7 @@ describe("architecture boundaries", () => {
         /core\/(?:gfs|gefs|ifs|history|archived-gfs)-(?!unified)[^"']+\.js/,
       );
       if (surface === cli) {
-        expect(surface).toContain("compareAtmosphericRunsSchema.parse");
+        expect(surface).toContain("alignAtmosphereSchema.parse");
         expect(surface).not.toContain("parseForecastDataset");
       }
     }
@@ -72,11 +61,9 @@ describe("architecture boundaries", () => {
   it("keeps dataset-native routing out of the public specialized services", async () => {
     const service = await readFile("src/core/unified-specialized-api.ts", "utf8");
     expect(service).toContain("specialized-adapters/registry.js");
-    expect(service).toContain("comparison-strategies/registry.js");
-    expect(service).toContain("adapters?: Partial<AtmosphericRunComparisonAdapterRegistry>");
-    expect(service).toContain("strategies?: Partial<AtmosphericDatasetComparisonStrategyRegistry>");
+    expect(service).toContain("adapters?: Partial<AtmosphericVerificationAdapterRegistry>");
     expect(service).not.toMatch(
-      /from ["']\.\/(?:gfs|gefs|ifs|history|igra|run-comparison)[^"']*\.js/,
+      /from ["']\.\/(?:gfs|gefs|ifs|history|igra)[^"']*\.js/,
     );
     expect(service).not.toMatch(/request\.(?:dataset|referenceDataset)\s*===/);
   });
@@ -86,7 +73,6 @@ describe("architecture boundaries", () => {
       ...await tsFiles("src/core/query-adapters"),
       ...await tsFiles("src/core/diagnostic-adapters"),
       ...await tsFiles("src/core/specialized-adapters"),
-      ...await tsFiles("src/core/comparison-strategies"),
     ];
     for (const path of files) {
       const source = await readFile(path, "utf8");
@@ -96,31 +82,28 @@ describe("architecture boundaries", () => {
     }
   });
 
-  it("keeps comparison strategy responsibilities separated", async () => {
-    const [barrel, pairNative, modelClass] = await Promise.all([
-      readFile("src/core/comparison-strategies/strategies.ts", "utf8"),
-      readFile("src/core/comparison-strategies/pair-native-strategies.ts", "utf8"),
-      readFile("src/core/comparison-strategies/model-class-strategies.ts", "utf8"),
+  it("keeps alignment a composition over the public query service with no pair registry", async () => {
+    const [alignment, evidence, schema] = await Promise.all([
+      readFile("src/core/unified-atmosphere-alignment.ts", "utf8"),
+      readFile("src/core/atmospheric-evidence.ts", "utf8"),
+      readFile("src/schema/unified-alignment.ts", "utf8"),
     ]);
 
-    expect(barrel).not.toContain("class ");
-    expect(pairNative).not.toContain("ModelClassComparisonService");
-    expect(modelClass).toContain("ModelClassComparisonService");
-    expect(modelClass).not.toMatch(
-      /GfsGefsComparisonService|GfsIfsComparisonService|GefsIfsEnsComparisonService|IfsIfsEnsComparisonService/,
-    );
-  });
-
-  it("isolates heterogeneous comparison-result reading from query orchestration", async () => {
-    const [service, reader] = await Promise.all([
-      readFile("src/core/model-class-comparison.ts", "utf8"),
-      readFile("src/core/comparison-result-reader.ts", "utf8"),
-    ]);
-
-    expect(service).toContain("./comparison-result-reader.js");
-    expect(service).not.toContain("Record<string, any>");
-    expect(reader).not.toContain("UnifiedAtmosphereQueryService");
-    expect(reader).not.toMatch(/from ["']\.\.\/(?:access|sources|cache|grib)\//);
+    // Alignment fans out through the same service every caller uses; it never touches
+    // dataset-native services, providers or decoders, and never enumerates dataset pairs.
+    expect(alignment).toContain("./unified-atmosphere-query.js");
+    expect(alignment).toContain("mapConcurrent");
+    expect(alignment).not.toMatch(/from ["']\.\/(?:gfs|gefs|ifs|aigfs|aigefs|aifs|arome|icon|history)[^"']*\.js/);
+    expect(alignment).not.toMatch(/from ["']\.\.\/(?:access|sources|cache|grib)\//);
+    expect(alignment).not.toMatch(/dataset\s*===\s*["']/);
+    expect(alignment).not.toMatch(/PAIRS|pairs:/);
+    // Heterogeneous result reading is isolated from orchestration.
+    expect(alignment).toContain("./atmospheric-evidence.js");
+    expect(evidence).not.toContain("UnifiedAtmosphereQueryService");
+    expect(evidence).not.toMatch(/from ["']\.\.\/(?:access|sources|cache|grib)\//);
+    // Compatibility is derived from the query contract, not re-declared.
+    expect(schema).toContain("validateDatasetModifiers");
+    expect(schema).not.toMatch(/dataset\s*===\s*["']/);
   });
 
   it("keeps dataset-specific capability validation out of the shared unified schema", async () => {

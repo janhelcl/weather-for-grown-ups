@@ -458,7 +458,12 @@ function validateCommonAtmosphericRequest(
   }
 }
 
-function validateDatasetModifiers(
+/**
+ * Dataset-specific modifier rules (run selectors, ensemble controls, grid, source,
+ * field-only capabilities). Shared with align_atmosphere so every alignment source
+ * is validated by exactly the query_atmosphere contract rather than a copy.
+ */
+export function validateDatasetModifiers(
   request: any,
   context: z.RefinementCtx,
 ): void {

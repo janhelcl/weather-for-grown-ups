@@ -11,7 +11,7 @@ export function createMcpServer(): McpServer {
     {
       instructions: [
         `WFG exposes one atmospheric query language across public datasets: ${PUBLIC_DATASET_DESCRIPTION}.`,
-        "Use search_catalog to discover canonical fields, diagnostics and dataset capabilities before querying. Use query_atmosphere for atmospheric state, diagnose_atmosphere for layer/profile/parcel physics, compare_runs for forecast-cycle changes, compare_datasets for registered cross-model comparisons, verify_forecast for archived GFS verification, and find_analogs for local historical analog search.",
+        "Use search_catalog to discover canonical fields, diagnostics and dataset capabilities before querying. Use query_atmosphere for atmospheric state, diagnose_atmosphere for layer/profile/parcel physics, align_atmosphere to ask the same question of several datasets, runs or member populations and receive one canonically aligned evidence table, verify_forecast for archived GFS verification, and find_analogs for local historical analog search.",
         "The public vocabulary is shared, but dataset-native semantics stay explicit: deterministic, ensemble, AI, hybrid, regional, reforecast and historical-analysis products keep their own grids, cadence, members, provenance and capability boundaries. Unsupported combinations fail rather than being coerced into fake symmetry.",
         "Ensemble member fractions, distributions and spread are raw model evidence, not calibrated probability. WFG supplies atmospheric evidence and diagnostics; activity-specific interpretation and safety decisions remain downstream.",
       ].join(" "),

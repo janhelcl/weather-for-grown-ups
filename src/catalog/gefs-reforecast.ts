@@ -16,6 +16,7 @@ export const GEFS_REFORECAST_OPERATION_IDS = [
   "points",
   "points_timeseries",
   "ensemble_distribution",
+  "alignment",
 ] as const satisfies readonly AtmosphericOperationId[];
 
 export const GEFS_REFORECAST_STANDARD_MEMBERS = [

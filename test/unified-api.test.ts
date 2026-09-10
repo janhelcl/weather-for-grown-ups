@@ -7,7 +7,6 @@ import {
   createAtmosphericDiagnosticAdapterRegistry,
   type AtmosphericDiagnosticRegistryOptions,
 } from "../src/core/diagnostic-adapters/registry.js";
-import { createAtmosphericDatasetComparisonStrategyRegistry } from "../src/core/comparison-strategies/registry.js";
 import { searchAtmosphereCatalog } from "../src/catalog/unified-search.js";
 import {
   UnifiedAtmosphereDiagnosticService,
@@ -15,9 +14,7 @@ import {
 } from "../src/core/unified-atmosphere-api.js";
 import {
   UnifiedAnalogService,
-  UnifiedDatasetComparisonService,
   UnifiedForecastVerificationService,
-  UnifiedRunComparisonService,
 } from "../src/core/unified-specialized-api.js";
 import {
   queryAtmosphereSchema,
@@ -443,7 +440,7 @@ describe("unified catalog branch coverage", () => {
     });
     expect(reforecast.datasetCapabilities[0]?.operations).toContain("profile");
     expect(reforecast.datasetCapabilities[0]?.operations).not.toContain("area_summary");
-    expect(reforecast.datasetCapabilities[0]?.operations).not.toContain("run_comparison");
+    expect(reforecast.datasetCapabilities[0]?.operations).toContain("alignment");
   });
 
   it("discovers datasets by spatial scope and declared point/area coverage", () => {
@@ -636,120 +633,6 @@ describe("unified catalog branch coverage", () => {
 });
 
 describe("unified specialized operations", () => {
-  it("dispatches run comparisons by dataset through shared-request adapters", async () => {
-    const routes = Object.fromEntries(
-      ["gfs", "gefs", "ifs", "ifs-ens"].map((dataset) => [
-        dataset,
-        { compare: vi.fn(async (request) => ({ route: dataset, request })) },
-      ]),
-    ) as any;
-    const service = new UnifiedRunComparisonService({ adapters: routes });
-
-    for (const dataset of ["gfs", "ifs"] as const) {
-      const result = await service.compare({
-        dataset,
-        geometry: point,
-        time: { at: "2026-08-28T12:00:00Z" },
-        selection,
-      });
-      expect((result.result as any).route).toBe(dataset);
-    }
-
-    for (const dataset of ["gefs", "ifs-ens"] as const) {
-      const result = await service.compare({
-        dataset,
-        geometry: point,
-        time: { at: "2026-08-28T12:00:00Z" },
-        selection,
-        ensemble: { quantiles: [0.1, 0.9] },
-      });
-      expect((result.result as any).route).toBe(dataset);
-    }
-  });
-
-  it("validates run-comparison constraints before adapter dispatch", async () => {
-    const adapter = { compare: vi.fn() };
-    const service = new UnifiedRunComparisonService({
-      adapters: { gefs: adapter as any, gfs: adapter as any },
-    });
-    await expect(service.compare({
-      dataset: "gefs",
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection,
-      gfsGrid: "0p50",
-    })).rejects.toThrow("gfsGrid is only valid for GFS run comparison");
-
-    await expect(service.compare({
-      dataset: "gefs",
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      selection,
-      ensemble: { includeMembers: true },
-    })).rejects.toThrow("includeMembers/maxMemberSamples are not applicable");
-
-    expect(adapter.compare).not.toHaveBeenCalled();
-  });
-
-  it("dispatches each dataset comparison pair through its strategy", async () => {
-    const defaults = createAtmosphericDatasetComparisonStrategyRegistry();
-    const pairs = {
-      "gfs:gefs": {
-        metadata: defaults["gfs:gefs"].metadata,
-        compare: vi.fn(async () => ({ route: "gfs:gefs" })),
-      },
-      "gfs:ifs": {
-        metadata: defaults["gfs:ifs"].metadata,
-        compare: vi.fn(async () => ({ route: "gfs:ifs" })),
-      },
-      "gefs:ifs-ens": {
-        metadata: defaults["gefs:ifs-ens"].metadata,
-        compare: vi.fn(async () => ({ route: "gefs:ifs-ens" })),
-      },
-      "ifs:ifs-ens": {
-        metadata: defaults["ifs:ifs-ens"].metadata,
-        compare: vi.fn(async () => ({ route: "ifs:ifs-ens" })),
-      },
-    };
-    const service = new UnifiedDatasetComparisonService({ strategies: pairs });
-
-    const gfsGefs = await service.compare({
-      datasets: ["gfs", "gefs"],
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      variable: "temperature",
-      pressureLevelHpa: 850,
-    });
-    expect((gfsGefs.result as any).route).toBe("gfs:gefs");
-
-    const gfsIfs = await service.compare({
-      datasets: ["gfs", "ifs"],
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      variable: "temperature",
-      pressureLevelHpa: 850,
-    });
-    expect((gfsIfs.result as any).route).toBe("gfs:ifs");
-
-    const gefsIfsEns = await service.compare({
-      datasets: ["gefs", "ifs-ens"],
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      variable: "temperature",
-      pressureLevelHpa: 850,
-    });
-    expect((gefsIfsEns.result as any).route).toBe("gefs:ifs-ens");
-
-    const ifsIfsEns = await service.compare({
-      datasets: ["ifs", "ifs-ens"],
-      geometry: point,
-      time: { at: "2026-08-28T12:00:00Z" },
-      variable: "temperature",
-      pressureLevelHpa: 850,
-    });
-    expect((ifsIfsEns.result as any).route).toBe("ifs:ifs-ens");
-  });
-
   it("dispatches verification by reference dataset and analogs by analysis dataset", async () => {
     const analysis = { verify: vi.fn(async () => ({ route: "analysis" })) };
     const igra = { verify: vi.fn(async () => ({ route: "igra" })) };

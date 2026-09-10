@@ -8,7 +8,6 @@ import { GefsLatestRunResolver } from "../src/core/gefs-latest-run.js";
 import { GefsLayerDiagnosticsService } from "../src/core/gefs-layer-diagnostics.js";
 import { GefsProfileDiagnosticsService } from "../src/core/gefs-profile-diagnostics.js";
 import { latestGefsCycleAtOrBefore } from "../src/core/gefs-time.js";
-import { GfsGefsComparisonService } from "../src/core/gfs-gefs-comparison.js";
 
 const members = ["c00", "p01", "p02"] as const;
 const endTime = latestGefsCycleAtOrBefore(new Date());
@@ -29,7 +28,6 @@ const timeSeriesService = new GefsEnsembleTimeSeriesService({
   ensembleGetter: ensembleService,
   latestRunRangeProvider: latestRunResolver,
 });
-const comparisonService = new GfsGefsComparisonService({ ensembleGetter: ensembleService });
 
 const result = await ensembleService.getEnsemble({
   latitude: 50.08,
@@ -282,34 +280,6 @@ assert.equal(series.source.provider, "NOAA AWS Open Data");
 assert.equal(series.source.access, "s3_range");
 assert.equal(series.source.product, "pgrb2a_0p50");
 
-const comparison = await comparisonService.compare({
-  latitude: 50.08,
-  longitude: 14.43,
-  run: run.toISOString(),
-  validTime: endTime.toISOString(),
-  variable: "temperature",
-  pressureLevelHpa: 850,
-  members: [...members],
-  quantiles: [0.1, 0.5, 0.9],
-});
-
-assert.equal(comparison.run, run.toISOString());
-assert.equal(comparison.validTime, endTime.toISOString());
-assert.equal(comparison.forecastHour, result.forecastHour);
-assert.equal(comparison.deterministicGfs.model, "gfs_0p25");
-assert.equal(comparison.gefs.model, "gefs_0p50");
-assert(Number.isFinite(comparison.deterministicGfs.value));
-assert(Number.isFinite(comparison.comparison.deterministicMinusEnsembleMean));
-assert(
-  comparison.comparison.standardizedDifference === null ||
-  Number.isFinite(comparison.comparison.standardizedDifference),
-);
-assert.equal(comparison.gefs.summary.memberCount, members.length);
-assert.equal(
-  comparison.comparison.interpretation,
-  "raw_model_vs_raw_ensemble_distribution_not_calibrated_uncertainty",
-);
-
 console.log(JSON.stringify({
   run: result.run,
   pointEnsemble: {
@@ -364,14 +334,6 @@ console.log(JSON.stringify({
     quantiles: step.summary.quantiles,
     thresholdFractionGte0C: step.summary.threshold?.fraction,
   })),
-  gfsVsGefs: {
-    deterministicGfsTemperatureC: comparison.deterministicGfs.value,
-    gefsMeanC: comparison.gefs.summary.mean,
-    gefsPopulationStdDevC: comparison.gefs.summary.populationStdDev,
-    standardizedDifference: comparison.comparison.standardizedDifference,
-    rangePosition: comparison.comparison.rangePosition,
-    fractionMembersAtOrBelowDeterministic: comparison.comparison.fractionMembersAtOrBelowDeterministic,
-  },
   profileCacheHit: profile.source.allCacheHit,
   seriesCacheHit: series.source.allCacheHit,
 }, null, 2));

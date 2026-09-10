@@ -6,8 +6,7 @@ const EXPECTED_COMMANDS = [
   "catalog",
   "query",
   "diagnose",
-  "compare-runs",
-  "compare-datasets",
+  "align",
   "verify",
   "analogs",
   "index",
@@ -45,11 +44,16 @@ describe("CLI public surface", () => {
   it("uses dataset rather than model vocabulary", () => {
     const program = createCliProgram();
 
-    for (const name of ["catalog", "query", "diagnose", "compare-runs", "compare-datasets"]) {
+    for (const name of ["catalog", "query", "diagnose"]) {
       const command = program.commands.find((candidate) => candidate.name() === name);
       expect(command?.options.some((option) => option.long === "--dataset")).toBe(true);
       expect(command?.options.some((option) => option.long === "--model")).toBe(false);
     }
+    // align takes N dataset-shaped sources; the dataset vocabulary lives inside --source.
+    const align = program.commands.find((candidate) => candidate.name() === "align");
+    expect(align?.options.some((option) => option.long === "--source")).toBe(true);
+    expect(align?.options.some((option) => option.long === "--model")).toBe(false);
+    expect(align?.options.some((option) => option.long === "--dataset")).toBe(false);
   });
 
   it("advertises the complete unified dataset and source vocabulary", () => {
@@ -66,10 +70,13 @@ describe("CLI public surface", () => {
   it("exposes GFS grid selection on the canonical forecast-capable commands", () => {
     const program = createCliProgram();
 
-    for (const name of ["query", "diagnose", "compare-runs", "compare-datasets", "verify"]) {
+    for (const name of ["query", "diagnose", "verify"]) {
       const command = program.commands.find((candidate) => candidate.name() === name);
       expect(command?.options.some((option) => option.long === "--grid")).toBe(true);
     }
+    // align carries grid selection per source (`gfs;grid=0p50`) rather than as a global flag.
+    const align = program.commands.find((candidate) => candidate.name() === "align");
+    expect(align?.options.find((option) => option.long === "--source")?.description).toContain("grid=");
   });
 
   it("keeps radiosonde verification inside the canonical verify command", () => {

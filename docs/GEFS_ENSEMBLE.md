@@ -343,28 +343,23 @@ WFG computes the requested spatial statistic independently within every member, 
 
 MCP: `query_atmosphere`.
 
-### Run comparison
+### Run-to-run and GFS-vs-GEFS alignment
 
 ```bash
-wfg compare-runs \
-  --dataset gefs \
+wfg align \
   --lat 50.08 --lon 14.43 \
   --at 2026-08-24T18:00:00Z \
+  --source gefs --source gefs@2026-08-24T00:00:00Z --source gefs@2026-08-23T18:00:00Z \
+  --source gfs \
   --vars temperature \
   --levels 850 \
-  --cycles 3 \
+  --quantiles 0.1,0.5,0.9 \
   --json
 ```
 
-Each initialization is summarized independently. WFG compares distribution descriptors across cycles and deliberately does not treat `p01(new) - p01(old)` as a physical member trajectory.
+Each GEFS initialization is summarized independently as its own member-first distribution and placed in one table next to deterministic GFS. WFG does not treat `p01(new) - p01(old)` as a physical member trajectory and computes no differences or confidence verdicts; it labels units, delta semantics and provenance so the caller can.
 
-MCP: `compare_runs`. See [GEFS_RUN_COMPARISON.md](GEFS_RUN_COMPARISON.md).
-
-### Aligned GFS-vs-GEFS comparison
-
-`compare-datasets` / `compare_datasets` resolves one initialization cycle capable of satisfying both datasets and places deterministic GFS inside the GEFS member distribution without inventing a binary confidence judgment.
-
-See [GFS_GEFS_COMPARISON.md](GFS_GEFS_COMPARISON.md).
+MCP: `align_atmosphere`. See [ALIGNMENT.md](ALIGNMENT.md).
 
 ## Run selection and consistency
 

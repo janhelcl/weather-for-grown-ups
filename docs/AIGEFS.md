@@ -75,7 +75,7 @@ The current AIGEFS capability set covers point, native-cadence time range, multi
 
 Parcel diagnostics remain intentionally unsupported because the operational AI surface inventory does not provide the complete parcel-initialization state required by WFG's shared parcel kernel.
 
-Run comparison and cross-dataset comparison are also not advertised yet. Those belong behind the comparison-strategy registry in the roadmap rather than another pair-specific branch.
+Run-to-run and cross-dataset questions use the generic `align_atmosphere` primitive with `aigefs` as one source; nothing AIGEFS-specific is needed. See [ALIGNMENT.md](ALIGNMENT.md).
 
 ## Data access
 

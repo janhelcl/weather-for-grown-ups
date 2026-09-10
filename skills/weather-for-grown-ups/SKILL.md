@@ -1,6 +1,6 @@
 ---
 name: weather-for-grown-ups
-description: Query operational and historical numerical weather prediction with Weather for Grown Ups (WFG), including deterministic forecasts, ensembles, AI and hybrid weather models, regional NWP, profiles, transects, diagnostics, model and run comparisons, verification, and analogs. Use when a task needs structured NWP evidence rather than a consumer-weather summary.
+description: Query operational and historical numerical weather prediction with Weather for Grown Ups (WFG), including deterministic forecasts, ensembles, AI and hybrid weather models, regional NWP, profiles, transects, diagnostics, alignment of models and runs, verification, and analogs. Use when a task needs structured NWP evidence rather than a consumer-weather summary.
 license: MIT
 compatibility: Requires network access. Prefer the WFG CLI when a shell and Node.js 20+ are available; use WFG MCP tools when the host already exposes them.
 metadata:
@@ -10,7 +10,7 @@ metadata:
 
 # Weather for Grown Ups
 
-Use WFG as a weather evidence engine. It returns numerical-model data, diagnostics, comparisons, verification, and provenance. Interpretation belongs to the calling agent or application.
+Use WFG as a weather evidence engine. It returns numerical-model data, diagnostics, aligned multi-source evidence, verification, and provenance. Interpretation belongs to the calling agent or application.
 
 ## Choose the interface
 
@@ -69,8 +69,7 @@ Always use `--json` for CLI calls whose output will be reasoned over or passed t
 | Discover fields and capabilities | `catalog` | `search_catalog` |
 | Query atmospheric state | `query` | `query_atmosphere` |
 | Derive layer/profile/parcel meteorology | `diagnose` | `diagnose_atmosphere` |
-| Compare forecast cycles | `compare-runs` | `compare_runs` |
-| Compare registered model pairs | `compare-datasets` | `compare_datasets` |
+| Align several datasets, runs or member populations side by side | `align` | `align_atmosphere` |
 | Verify archived forecasts | `verify` | `verify_forecast` |
 | Search historical analogs | `analogs` | `find_analogs` |
 
@@ -91,7 +90,7 @@ npx -y weather-for-grown-ups <command> --help
 - Ensemble spread and member fractions are raw model evidence, not automatically calibrated uncertainty or probability.
 - Keep archived forecasts distinct from later analyses and observations.
 - For regional models, respect the published domain and native-resolution semantics.
-- For cross-model comparisons, use only registered WFG comparison paths rather than inventing pointwise symmetry between incompatible products.
+- For cross-model, cross-run or cross-scale questions, use `align` / `align_atmosphere` with one source per dataset/run/member selection. WFG returns one table with canonical units, `deltaKind` (`linear` vs `circular_degrees`), `comparable` flags for differing accumulation windows, per-source run/grid provenance and inline per-source failures; computing and judging the differences is your job. Do not subtract quantities WFG marks non-comparable, do not pair ensemble members across sources, and report sampled-grid distance when native grids differ.
 - On `INVALID_REQUEST`, use the structured error details to repair the request. On `DATA_UNAVAILABLE`, `OUT_OF_DOMAIN`, `UPSTREAM_UNAVAILABLE`, or `RATE_LIMITED`, preserve the failure meaning rather than hiding it behind a different query.
 
 ## Presenting results

@@ -162,9 +162,8 @@ describe("unified dataset capability registry", () => {
       "points_timeseries",
       "transect",
       "area_summary",
-      "run_comparison",
       "ensemble_distribution",
-      "aligned_model_comparison",
+      "alignment",
     ]));
   });
 });

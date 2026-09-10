@@ -62,8 +62,9 @@ Météo-France also publishes other AROME public products, including a separate 
 Consequently, the current AROME capability advertises:
 
 - no pressure-level variables;
-- no layer/profile/parcel diagnostics;
-- no cross-dataset comparison strategy yet.
+- no layer/profile/parcel diagnostics.
+
+AROME can still be one source in `align_atmosphere` for field selections; a pressure selection is reported as an inline per-source failure there, exactly as it fails on `query_atmosphere`.
 
 A pressure request fails at the dataset capability boundary with an explicit message. This is intentional: one query language means common grammar, not fabricated source symmetry.
 

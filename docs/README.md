@@ -48,17 +48,12 @@ Regional-model capabilities not called out above remain discoverable through the
 
 ## Operations
 
-- [Run comparison](RUN_COMPARISON.md)
+- [Alignment across datasets, runs and members](ALIGNMENT.md)
 - [Diagnostic time series](DIAGNOSTIC_TIME_SERIES.md)
 - [Transects](TRANSECT.md)
 - [Area summary](AREA_SUMMARY.md) · [area distribution](AREA_DISTRIBUTION.md)
-- [GFS ↔ GEFS](GFS_GEFS_COMPARISON.md)
-- [GFS ↔ IFS](GFS_IFS_COMPARISON.md)
-- [GEFS ↔ IFS ENS](GEFS_IFS_ENS_COMPARISON.md)
-- [IFS ↔ IFS ENS](IFS_IFS_ENS_COMPARISON.md)
-- [Global ↔ regional](CROSS_SCALE_COMPARISON.md)
 
-GEFS-specific deep dives: [field bundles](GEFS_FIELD_BUNDLES.md) · [multi-point](GEFS_MULTI_POINT.md) · [multi-point time series](GEFS_MULTI_POINT_TIME_SERIES.md) · [profile diagnostics](GEFS_PROFILE_DIAGNOSTICS.md) · [diagnostic time series](GEFS_DIAGNOSTIC_TIME_SERIES.md) · [run comparison](GEFS_RUN_COMPARISON.md) · [transects](GEFS_TRANSECT.md)
+GEFS-specific deep dives: [field bundles](GEFS_FIELD_BUNDLES.md) · [multi-point](GEFS_MULTI_POINT.md) · [multi-point time series](GEFS_MULTI_POINT_TIME_SERIES.md) · [profile diagnostics](GEFS_PROFILE_DIAGNOSTICS.md) · [diagnostic time series](GEFS_DIAGNOSTIC_TIME_SERIES.md) · [transects](GEFS_TRANSECT.md)
 
 ## Engineering
 

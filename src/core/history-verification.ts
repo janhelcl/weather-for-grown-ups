@@ -5,7 +5,7 @@ import type { HistoricalProfileResult } from "../schema/history-result.js";
 import { NCEI_GFS_GRID4_FORECAST_START } from "../sources/ncei-gfs-forecast-history.js";
 import { ArchivedGfsForecastProfileService, type ArchivedGfsForecastProfileQuery, type ArchivedGfsForecastProfileResult } from "./history-forecast.js";
 import { HistoricalProfileService } from "./history.js";
-import { circularDegreeDelta } from "./run-comparison.js";
+import { circularDegreeDelta } from "../derived/wind.js";
 
 const HOUR_MS = 60 * 60 * 1_000;
 const CAVEAT = "Forecast verification against GFS model analysis, not direct observations; historical GFS model versions changed over time" as const;

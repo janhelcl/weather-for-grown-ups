@@ -76,13 +76,13 @@ Start with the question. Let the agent build the forecast investigation from scr
 
 > Is a frontal passage expected near Prague tomorrow? If so, when does it arrive, what changes through the column, and how consistent are the models?
 
-`GFS + IFS → time evolution → pressure profiles → GEFS + IFS ENS → run comparison`
+`GFS + IFS → time evolution → pressure profiles → GEFS + IFS ENS → align latest vs previous runs`
 
 ### 03 — AI vs physics
 
 > How do AIFS and IFS describe the atmosphere over Prague tomorrow? Where do they disagree through time and height, and is that disagreement large relative to their ensemble uncertainty?
 
-`IFS ↔ AIFS → pressure profiles → IFS ENS ↔ AIFS ENS → aligned comparison`
+`align IFS, AIFS → pressure profiles → align IFS ENS, AIFS ENS`
 
 ### 04 — Plan a paragliding day
 

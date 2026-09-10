@@ -18,7 +18,7 @@ A good default when the user wants more than a consumer forecast but has not alr
 
 > Is a frontal passage expected near Prague tomorrow? If so, when does it arrive, what changes through the column, and how consistent are the models?
 
-`GFS + IFS → time evolution → pressure profiles → GEFS + IFS ENS → run comparison`
+`GFS + IFS → time evolution → pressure profiles → GEFS + IFS ENS → align latest vs previous runs`
 
 Establish whether the transition exists before reasoning about its timing or structure.
 
@@ -28,7 +28,7 @@ Establish whether the transition exists before reasoning about its timing or str
 
 > How do AIFS and IFS describe the atmosphere over Prague tomorrow? Where do they disagree through time and height, and is that disagreement large relative to their ensemble uncertainty?
 
-`IFS ↔ AIFS → pressure profiles → IFS ENS ↔ AIFS ENS → aligned comparison`
+`align IFS, AIFS → pressure profiles → align IFS ENS, AIFS ENS`
 
 Compare forecast-system disagreement with within-system spread rather than treating either deterministic run as truth.
 
@@ -38,7 +38,7 @@ Compare forecast-system disagreement with within-system spread rather than treat
 
 `IFS ↔ ICON-D2 → nearby points → spatial context → native-grid provenance`
 
-Use the registered cross-scale comparison rather than blindly subtracting independently sampled grids.
+Use `align` with `ifs` and `icon-d2` sources; it keeps both sampled grid points and native-grid provenance so you can judge which differences survive the sampling gap instead of blindly subtracting independently sampled grids.
 
 ## Spatial structure
 
@@ -46,7 +46,7 @@ Use the registered cross-scale comparison rather than blindly subtracting indepe
 
 > How does wind evolve tomorrow afternoon along a transect from Scotland to Denmark? Is there a coherent ramp, where is the strongest transition, and how uncertain is the timing?
 
-`transect → time evolution → ensemble spread → model comparison`
+`transect → time evolution → ensemble spread → align models`
 
 Use spatial structure first; avoid drawing a regional conclusion from one point.
 
@@ -111,7 +111,7 @@ question
   → smallest relevant deterministic evidence
   → vertical or spatial structure if needed
   → ensemble evidence if uncertainty matters
-  → run/model comparison if disagreement matters
+  → align runs/models if disagreement matters
   → history/verification if past performance matters
 ```
 

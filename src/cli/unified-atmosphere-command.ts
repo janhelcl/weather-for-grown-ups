@@ -1,11 +1,10 @@
 import type { Command } from "commander";
 import {
   UnifiedAnalogService,
+  UnifiedAtmosphereAlignmentService,
   UnifiedAtmosphereDiagnosticService,
   UnifiedAtmosphereQueryService,
-  UnifiedDatasetComparisonService,
   UnifiedForecastVerificationService,
-  UnifiedRunComparisonService,
 } from "../core/unified-atmosphere-api.js";
 import {
   PUBLIC_ATMOSPHERIC_DATASET_IDS,
@@ -16,13 +15,11 @@ import {
   type QueryAtmosphereInput,
 } from "../schema/unified-api.js";
 import {
-  ATMOSPHERIC_RUN_COMPARISON_DATASET_IDS,
-  compareAtmosphericDatasetsSchema,
-  compareAtmosphericRunsSchema,
-  type CompareAtmosphericDatasetsInput,
-  type CompareAtmosphericRunsInput,
-  type VerifyAtmosphericForecastInput,
-} from "../schema/unified-specialized.js";
+  MAX_ALIGNMENT_SOURCES,
+  alignAtmosphereSchema,
+  type AlignAtmosphereInput,
+} from "../schema/unified-alignment.js";
+import type { VerifyAtmosphericForecastInput } from "../schema/unified-specialized.js";
 import type { PointCoordinate } from "../schema/query.js";
 import type { AtmosphericStepProgress } from "../core/progress.js";
 import { InvalidRequestError } from "../failure.js";
@@ -30,8 +27,6 @@ import {
   DEFAULT_LEVELS,
   collectPoint,
   numberOption,
-  parseAigefsMembers,
-  parseAifsEnsMembers,
   parseCoordinate,
   parseGefsMembers,
   parseIfsEnsMembers,
@@ -48,8 +43,7 @@ const DEFAULT_IGRA_VERIFICATION_VARIABLES =
 export function registerUnifiedAtmosphereCommands(program: Command): void {
   registerQueryCommand(program);
   registerDiagnoseCommand(program);
-  registerCompareRunsCommand(program);
-  registerCompareDatasetsCommand(program);
+  registerAlignCommand(program);
   registerVerifyCommand(program);
   registerAnalogsCommand(program);
 }
@@ -136,145 +130,133 @@ function registerDiagnoseCommand(program: Command): void {
     });
 }
 
-function registerCompareRunsCommand(program: Command): void {
+function registerAlignCommand(program: Command): void {
   program
-    .command("compare-runs")
-    .description("Compare forecast initialization cycles for supported atmospheric datasets")
-    .option(
-      `--dataset <${ATMOSPHERIC_RUN_COMPARISON_DATASET_IDS.join("|")}>`,
-      "Forecast dataset",
-      "gfs",
-    )
+    .command("align")
+    .description("Align one point × time × selection question across several dataset/run/member sources into one canonical evidence table")
     .requiredOption("--lat <number>", "Latitude", numberOption("--lat"))
     .requiredOption("--lon <number>", "Longitude", numberOption("--lon"))
-    .requiredOption("--at <iso>", "Forecast valid time")
-    .option("--vars <list>", "Pressure-level variables", "temperature")
-    .option("--levels <list>", "Pressure levels in hPa", "850")
-    .option("--fields <list>", "Deterministic GFS/IFS non-isobaric fields")
-    .option("--anchor-run <iso|latest>", "Newest initialization cycle to compare", "latest")
-    .option("--grid <0p25|0p50>", "GFS horizontal grid")
-    .option("--cycles <number>", "Number of consecutive cycles", numberOption("--cycles"), 3)
-    .option("--members <list>", "Dataset-native ensemble member IDs; use catalog/search_catalog for the supported population")
-    .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
-    .option("--gte <number>", "Ensemble threshold in normalized units", numberOption("--gte"))
-    .option("--cycle-stride-hours <6|12>", "IFS ENS only: initialization-cycle stride", numberOption("--cycle-stride-hours"))
+    .option("--at <iso>", "One atmospheric valid time")
+    .option("--from <iso>", "Inclusive valid-time range start")
+    .option("--to <iso>", "Inclusive valid-time range end")
+    .option("--max-steps <number>", "Maximum time steps per source", numberOption("--max-steps"))
+    .option(
+      "--source <spec>",
+      `Repeatable (2-${MAX_ALIGNMENT_SOURCES}). dataset[@run][;members=c00,p01][;quantiles=0.1,0.9][;label=name][;grid=0p25|0p50][;kind=operational|reforecast][;source=nomads|s3|archive]. Example: --source gfs --source gfs@2026-09-09T18:00:00Z --source ifs-ens`,
+      collectAlignmentSource,
+    )
+    .option("--vars <list>", "Comma-separated pressure-level variables")
+    .option("--levels <list>", "Comma-separated pressure levels in hPa")
+    .option("--fields <list>", "Comma-separated non-isobaric fields")
+    .option("--quantiles <list>", "Quantiles applied to every ensemble source without its own quantiles")
+    .option("--initialization <independent|shared>", "shared fails unless every forecast source resolves to the same run", "independent")
+    .option("--valid-times <intersection|union>", "Time-range axis across sources", "intersection")
     .option("--json", "Output JSON")
     .action(async (options) => {
-      const result = await new UnifiedRunComparisonService().compare(
-        buildUnifiedRunComparison(options),
+      const result = await new UnifiedAtmosphereAlignmentService().align(buildUnifiedAlignment(options));
+      printResult(result, Boolean(options.json));
+    });
+}
+
+export function collectAlignmentSource(value: string, previous: string[] | undefined): string[] {
+  return [...(previous ?? []), value];
+}
+
+/**
+ * `--source` spec grammar: `dataset[@run][;key=value...]` with keys run, members,
+ * quantiles, label, grid, kind, source. Everything after the dataset is optional.
+ */
+export function parseAlignmentSource(spec: string): NonNullable<AlignAtmosphereInput["sources"]>[number] {
+  const segments = String(spec).split(";").map((segment) => segment.trim()).filter(Boolean);
+  const head = segments.shift();
+  if (head === undefined) {
+    throw new InvalidRequestError("Expected --source dataset[@run][;key=value], received an empty spec", {
+      details: { option: "--source", received: spec },
+    });
+  }
+  const atIndex = head.indexOf("@");
+  const datasetText = (atIndex === -1 ? head : head.slice(0, atIndex)).trim().toLowerCase();
+  const parsedDataset = publicAtmosphericDatasetSchema.safeParse(datasetText);
+  if (!parsedDataset.success) {
+    throw new InvalidRequestError(
+      `Expected --source dataset to be one of ${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}, received: ${datasetText}`,
+      { details: { option: "--source", received: spec } },
+    );
+  }
+  const dataset = parsedDataset.data;
+  const modifiers: Record<string, string> = {};
+  if (atIndex !== -1) modifiers.run = head.slice(atIndex + 1).trim();
+  for (const segment of segments) {
+    const equals = segment.indexOf("=");
+    if (equals === -1) {
+      throw new InvalidRequestError(`Expected --source modifier key=value, received: ${segment}`, {
+        details: { option: "--source", received: spec },
+      });
+    }
+    const key = segment.slice(0, equals).trim();
+    const modifierValue = segment.slice(equals + 1).trim();
+    if (!ALIGNMENT_SOURCE_KEYS.has(key)) {
+      throw new InvalidRequestError(
+        `Unknown --source modifier "${key}"; supported: ${[...ALIGNMENT_SOURCE_KEYS].join(", ")}`,
+        { details: { option: "--source", received: spec } },
       );
-      printResult(result, Boolean(options.json));
-    });
-}
-
-function registerCompareDatasetsCommand(program: Command): void {
-  program
-    .command("compare-datasets")
-    .description("Compare scientifically compatible aligned forecast datasets")
-    .requiredOption("--lat <number>", "Latitude", numberOption("--lat"))
-    .requiredOption("--lon <number>", "Longitude", numberOption("--lon"))
-    .requiredOption("--at <iso>", "Forecast valid time")
-    .requiredOption(
-      "--dataset <id>",
-      "Left-side dataset of a registered comparison pair, in registered order (e.g. gfs with --against gefs)",
-    )
-    .requiredOption(
-      "--against <id>",
-      "Right-side dataset of the registered comparison pair; see catalog/search_catalog or the compare_datasets tool description for the registry",
-    )
-    .option("--var <id>", "Canonical pressure-level variable")
-    .option("--level <hpa>", "Pressure level in hPa", numberOption("--level"))
-    .option("--field <id>", "Canonical non-isobaric field for registered field comparisons")
-    .option(
-      "--run <iso|latest>",
-      "Shared aligned initialization; global↔regional comparisons require an explicit ISO cycle",
-      "latest",
-    )
-    .option("--grid <0p25|0p50>", "GFS horizontal grid; GFS comparison branches only")
-    .option("--members <list>", "GFS↔GEFS only: GEFS members (c00,p01..p30)")
-    .option("--gefs-members <list>", "GEFS members for cross-ensemble comparisons")
-    .option("--aigefs-members <list>", "AIGEFS members (c00,p01..p30)")
-    .option("--ifs-ens-members <list>", "IFS ENS perturbations (p01..p50)")
-    .option("--aifs-ens-members <list>", "AIFS ENS members (c00,p01..p50)")
-    .option("--icon-d2-eps-members <list>", "ICON-D2-EPS members (p01..p20)")
-    .option("--pe-arome-members <list>", "PE-AROME members (c00,p01..p24)")
-    .option(
-      "--hgefs-members <list>",
-      "HGEFS population-qualified members (gefs:c00..p30,aigefs:c00..p30)",
-    )
-    .option("--quantiles <list>", "Ensemble quantiles from 0 to 1")
-    .option("--gte <number>", "Compare raw ensemble member fractions at or above this threshold", numberOption("--gte"))
-    .option("--json", "Output JSON")
-    .action(async (options) => {
-      const request = buildUnifiedDatasetComparison(options);
-      const result = await new UnifiedDatasetComparisonService().compare(request);
-      printResult(result, Boolean(options.json));
-    });
-}
-
-
-export function buildUnifiedDatasetComparison(
-  options: Record<string, any>,
-): CompareAtmosphericDatasetsInput {
-  const against = String(options.against).trim().toLowerCase();
-  if (!publicAtmosphericDatasetSchema.safeParse(against).success) {
-    throw new InvalidRequestError(
-      `Expected --against ${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}, received: ${options.against}`,
-      { details: { option: "--against", received: options.against } },
-    );
+    }
+    modifiers[key] = modifierValue;
   }
 
-  const left = String(options.dataset).trim().toLowerCase();
-  if (!publicAtmosphericDatasetSchema.safeParse(left).success) {
-    throw new InvalidRequestError(
-      `Expected --dataset ${PUBLIC_ATMOSPHERIC_DATASET_IDS.join("|")}, received: ${options.dataset}`,
-      { details: { option: "--dataset", received: options.dataset } },
-    );
-  }
-
-  // Both sides are explicit; the pair schema reports reversed or unregistered
-  // pairs together with the registered list.
-
-  const request = {
-    datasets: [left, against],
-    geometry: { type: "point", latitude: options.lat, longitude: options.lon },
-    time: { at: options.at },
-    ...(options.var === undefined ? {} : { variable: String(options.var) }),
-    ...(options.level === undefined ? {} : { pressureLevelHpa: options.level }),
-    ...(options.field === undefined ? {} : { field: String(options.field) }),
-    run: options.run ?? "latest",
-    ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
-    ...(options.members === undefined
-      ? {}
-      : { members: parseGefsMembers(options.members) }),
-    ...(options.gefsMembers === undefined
-      ? {}
-      : { gefsMembers: parseGefsMembers(options.gefsMembers) }),
-    ...(options.aigefsMembers === undefined
-      ? {}
-      : { aigefsMembers: parseAigefsMembers(options.aigefsMembers) }),
-    ...(options.ifsEnsMembers === undefined
-      ? {}
-      : { ifsEnsMembers: parseIfsEnsMembers(options.ifsEnsMembers) }),
-    ...(options.aifsEnsMembers === undefined
-      ? {}
-      : { aifsEnsMembers: parseAifsEnsMembers(options.aifsEnsMembers) }),
-    ...(options.hgefsMembers === undefined
-      ? {}
-      : { hgefsMembers: parseStringList(options.hgefsMembers) }),
-    ...(options.iconD2EpsMembers === undefined
-      ? {}
-      : { iconD2EpsMembers: parseStringList(options.iconD2EpsMembers) }),
-    ...(options.peAromeMembers === undefined
-      ? {}
-      : { peAromeMembers: parseStringList(options.peAromeMembers) }),
-    ...(options.quantiles === undefined
-      ? {}
-      : { quantiles: parseNumberList(options.quantiles, "--quantiles") }),
-    ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
+  const forecast = {
+    ...(modifiers.kind === undefined ? {} : { kind: modifiers.kind as "operational" | "reforecast" }),
+    ...(modifiers.run === undefined ? {} : { run: modifiers.run }),
+    ...(modifiers.grid === undefined ? {} : { grid: modifiers.grid as "0p25" | "0p50" }),
   };
+  const ensemble = {
+    ...(modifiers.members === undefined ? {} : { members: parseEnsembleMembers(dataset, modifiers.members) }),
+    ...(modifiers.quantiles === undefined
+      ? {}
+      : { quantiles: parseNumberList(modifiers.quantiles, "--source quantiles") }),
+  };
+  return {
+    dataset,
+    ...(modifiers.label === undefined ? {} : { label: modifiers.label }),
+    ...(Object.keys(forecast).length === 0 ? {} : { forecast }),
+    ...(Object.keys(ensemble).length === 0 ? {} : { ensemble }),
+    ...(modifiers.source === undefined ? {} : { source: modifiers.source as "nomads" | "s3" | "archive" }),
+  };
+}
 
-  return compareAtmosphericDatasetsSchema.parse(request);
+const ALIGNMENT_SOURCE_KEYS = new Set(["run", "members", "quantiles", "label", "grid", "kind", "source"]);
+
+export function buildUnifiedAlignment(options: Record<string, any>): AlignAtmosphereInput {
+  const specs: string[] = options.source ?? [];
+  if (specs.length < 2) {
+    throw new InvalidRequestError(
+      "Alignment needs at least two --source specs, e.g. --source gfs --source ifs",
+      { details: { option: "--source", received: specs } },
+    );
+  }
+  const sharedQuantiles = options.quantiles === undefined
+    ? undefined
+    : parseNumberList(options.quantiles, "--quantiles");
+  const sources = specs.map(parseAlignmentSource).map((source) => {
+    if (
+      sharedQuantiles === undefined
+      || source.ensemble?.quantiles !== undefined
+      || publicDatasetMetadata(source.dataset).kind !== "ensemble"
+    ) return source;
+    return { ...source, ensemble: { ...(source.ensemble ?? {}), quantiles: sharedQuantiles } };
+  });
+  const alignment = {
+    ...(options.initialization === undefined ? {} : { initialization: options.initialization }),
+    ...(options.validTimes === undefined ? {} : { validTimes: options.validTimes }),
+  };
+  const request = {
+    sources,
+    geometry: { type: "point" as const, latitude: options.lat, longitude: options.lon },
+    time: parseTime(options),
+    selection: parseSelection({ vars: options.vars, levels: options.levels, fields: options.fields }),
+    ...(Object.keys(alignment).length === 0 ? {} : { alignment }),
+  };
+  return alignAtmosphereSchema.parse(request) as AlignAtmosphereInput;
 }
 
 function registerVerifyCommand(program: Command): void {
@@ -396,44 +378,6 @@ export function buildUnifiedQuery(options: Record<string, any>): QueryAtmosphere
     ...aggregateInput(options),
     ...limitsInput(options),
   };
-}
-
-export function buildUnifiedRunComparison(
-  options: Record<string, any>,
-): CompareAtmosphericRunsInput {
-  const dataset = parseDataset(options.dataset);
-  const selection = parseSelection({
-    vars: options.vars,
-    levels: options.levels,
-    fields: options.fields,
-  });
-  const request = {
-    dataset,
-    geometry: { type: "point", latitude: options.lat, longitude: options.lon },
-    time: { at: options.at },
-    selection,
-    anchorRun: options.anchorRun ?? "latest",
-    ...(options.grid === undefined ? {} : { gfsGrid: options.grid }),
-    cycles: options.cycles ?? 3,
-    ...(options.members === undefined && options.quantiles === undefined
-      ? {}
-      : {
-          ensemble: {
-            ...(options.members === undefined
-              ? {}
-              : { members: parseEnsembleMembers(dataset, options.members) }),
-            ...(options.quantiles === undefined
-              ? {}
-              : { quantiles: parseNumberList(options.quantiles, "--quantiles") }),
-          },
-        }),
-    ...(options.gte === undefined ? {} : { thresholdGte: options.gte }),
-    ...(options.cycleStrideHours === undefined
-      ? {}
-      : { cycleStrideHours: options.cycleStrideHours }),
-  };
-
-  return compareAtmosphericRunsSchema.parse(request);
 }
 
 export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAtmosphereInput {

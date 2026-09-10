@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildUnifiedAlignment,
   buildUnifiedDiagnostic,
   buildUnifiedQuery,
-  buildUnifiedRunComparison,
+  parseAlignmentSource,
 } from "../src/cli/unified-atmosphere-command.js";
 import {
   diagnoseAtmosphereSchema,
   queryAtmosphereSchema,
 } from "../src/schema/unified-api.js";
-import { compareAtmosphericRunsSchema } from "../src/schema/unified-specialized.js";
+import { alignAtmosphereSchema } from "../src/schema/unified-alignment.js";
 
 describe("unified CLI request builders", () => {
   it("builds a deterministic point forecast with explicit pressure selection", () => {
@@ -188,27 +189,57 @@ describe("unified CLI request builders", () => {
     });
   });
 
-  it("uses IFS ENS member semantics for compare-runs as well as query", () => {
-    const request = buildUnifiedRunComparison({
+  it("parses alignment source specs as dataset selectors with modifiers", () => {
+    expect(parseAlignmentSource("gfs")).toEqual({ dataset: "gfs" });
+    expect(parseAlignmentSource("gfs@2026-08-28T00:00:00Z")).toEqual({
+      dataset: "gfs",
+      forecast: { run: "2026-08-28T00:00:00Z" },
+    });
+    expect(parseAlignmentSource("gfs;grid=0p50;source=s3;label=coarse")).toEqual({
+      dataset: "gfs",
+      label: "coarse",
+      source: "s3",
+      forecast: { grid: "0p50" },
+    });
+    expect(parseAlignmentSource("ifs-ens;members=p31,p50;quantiles=0.1,0.9")).toEqual({
       dataset: "ifs-ens",
+      ensemble: { members: ["p31", "p50"], quantiles: [0.1, 0.9] },
+    });
+    expect(parseAlignmentSource("gefs;kind=reforecast;run=2019-05-20T00:00:00Z")).toEqual({
+      dataset: "gefs",
+      forecast: { kind: "reforecast", run: "2019-05-20T00:00:00Z" },
+    });
+    expect(() => parseAlignmentSource("ecmwf")).toThrow(/Expected --source dataset to be one of/);
+    expect(() => parseAlignmentSource("gfs;colour=blue")).toThrow(/Unknown --source modifier/);
+  });
+
+  it("builds an alignment request that reuses query time/selection semantics and shared quantiles", () => {
+    const request = buildUnifiedAlignment({
+      source: ["gfs", "ifs-ens;members=p31,p50", "gefs"],
       lat: 50.08,
       lon: 14.43,
       at: "2026-08-28T12:00:00Z",
       vars: "temperature",
       levels: "850",
-      anchorRun: "latest",
-      cycles: 3,
-      members: "p31,p50",
       quantiles: "0.1,0.5,0.9",
+      validTimes: "union",
     });
 
-    expect(compareAtmosphericRunsSchema.parse(request)).toMatchObject({
-      dataset: "ifs-ens",
-      ensemble: {
-        members: ["p31", "p50"],
-        quantiles: [0.1, 0.5, 0.9],
-      },
+    expect(alignAtmosphereSchema.parse(request)).toMatchObject({
+      sources: [
+        { dataset: "gfs" },
+        { dataset: "ifs-ens", ensemble: { members: ["p31", "p50"], quantiles: [0.1, 0.5, 0.9] } },
+        { dataset: "gefs", ensemble: { quantiles: [0.1, 0.5, 0.9] } },
+      ],
+      geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
+      time: { at: "2026-08-28T12:00:00Z" },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      alignment: { initialization: "independent", validTimes: "union" },
     });
+    expect(request.sources[0]).not.toHaveProperty("ensemble");
+
+    expect(() => buildUnifiedAlignment({ source: ["gfs"], lat: 50.08, lon: 14.43, at: "2026-08-28T12:00:00Z", vars: "temperature", levels: "850" }))
+      .toThrow(/at least two/i);
   });
 
   it("builds historical multi-point field ranges without forecast metadata", () => {

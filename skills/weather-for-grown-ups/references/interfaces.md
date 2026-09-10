@@ -15,8 +15,7 @@ Do not alternate between transports merely because one invocation produced a met
 | discover fields and capabilities | `wfg catalog ... --json` | `search_catalog` |
 | query atmospheric state | `wfg query ... --json` | `query_atmosphere` |
 | derive layer/profile/parcel meteorology | `wfg diagnose ... --json` | `diagnose_atmosphere` |
-| compare forecast cycles | `wfg compare-runs ... --json` | `compare_runs` |
-| compare registered model pairs | `wfg compare-datasets ... --json` | `compare_datasets` |
+| align datasets, runs or member populations | `wfg align --source … --source … --json` | `align_atmosphere` |
 | verify archived forecasts | `wfg verify ... --json` | `verify_forecast` |
 | search historical analogs | `wfg analogs ... --json` | `find_analogs` |
 
@@ -29,7 +28,7 @@ Use CLI help as the syntax source of truth:
 ```bash
 wfg --help
 wfg query --help
-wfg compare-datasets --help
+wfg align --help
 ```
 
 If WFG is not globally installed, use the npm package directly:
@@ -88,6 +87,6 @@ A transport fallback is reasonable if another WFG transport is already available
 
 ### Atmospheric capability failure
 
-Examples: field absent in a dataset, pressure level unsupported, regional point outside domain, comparison pair not registered, historical coverage unavailable.
+Examples: field absent in a dataset, pressure level unsupported, regional point outside domain, an alignment source reported `status: "failed"`, historical coverage unavailable.
 
 Do not switch transport. Re-plan the meteorological investigation within declared capabilities or report the limitation.

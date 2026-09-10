@@ -90,9 +90,8 @@ export const ATMOSPHERIC_OPERATION_IDS = [
   "points_timeseries",
   "transect",
   "area_summary",
-  "run_comparison",
   "ensemble_distribution",
-  "aligned_model_comparison",
+  "alignment",
 ] as const;
 
 export type AtmosphericOperationId = (typeof ATMOSPHERIC_OPERATION_IDS)[number];
@@ -150,8 +149,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points_timeseries",
       "transect",
       "area_summary",
-      "run_comparison",
-      "aligned_model_comparison",
+      "alignment",
     ],
   },
   gfs_0p50: {
@@ -178,8 +176,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points_timeseries",
       "transect",
       "area_summary",
-      "run_comparison",
-      "aligned_model_comparison",
+      "alignment",
     ],
   },
   aigfs_0p25: {
@@ -206,7 +203,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points_timeseries",
       "transect",
       "area_summary",
-      "aligned_model_comparison",
+      "alignment",
     ],
   },
   aigefs_0p25: {
@@ -235,7 +232,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "transect",
       "area_summary",
       "ensemble_distribution",
-      "aligned_model_comparison",
+      "alignment",
     ],
   },
   hgefs_0p25: {
@@ -274,7 +271,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "transect",
       "area_summary",
       "ensemble_distribution",
-      "aligned_model_comparison",
+      "alignment",
     ],
   },
   icon_d2_0p02: {
@@ -313,7 +310,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points_timeseries",
       "transect",
       "area_summary",
-      "aligned_model_comparison",
+      "alignment",
     ],
   },
   icon_d2_eps_2p1km: {
@@ -353,7 +350,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "transect",
       "area_summary",
       "ensemble_distribution",
-      "aligned_model_comparison",
+      "alignment",
     ],
   },
   arome_0p01: {
@@ -389,7 +386,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points_timeseries",
       "transect",
       "area_summary",
-      "aligned_model_comparison",
+      "alignment",
     ],
   },
   pe_arome_0p025: {
@@ -426,7 +423,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "transect",
       "area_summary",
       "ensemble_distribution",
-      "aligned_model_comparison",
+      "alignment",
     ],
   },
   aifs_0p25: {
@@ -453,7 +450,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points_timeseries",
       "transect",
       "area_summary",
-      "aligned_model_comparison",
+      "alignment",
     ],
   },
   aifs_ens_0p25: {
@@ -482,7 +479,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "transect",
       "area_summary",
       "ensemble_distribution",
-      "aligned_model_comparison",
+      "alignment",
     ],
   },
   gefs_0p50: {
@@ -510,9 +507,8 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points_timeseries",
       "transect",
       "area_summary",
-      "run_comparison",
       "ensemble_distribution",
-      "aligned_model_comparison",
+      "alignment",
     ],
   },
   ifs_0p25: {
@@ -539,7 +535,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points_timeseries",
       "transect",
       "area_summary",
-      "run_comparison",
+      "alignment",
     ],
   },
   ifs_ens_0p25: {
@@ -567,9 +563,8 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points_timeseries",
       "transect",
       "area_summary",
-      "run_comparison",
       "ensemble_distribution",
-      "aligned_model_comparison",
+      "alignment",
     ],
   },
   gfs_grid4_analysis_0p5: {
@@ -595,6 +590,7 @@ export const ATMOSPHERIC_DATASET_CATALOG: Record<AtmosphericDatasetId, Atmospher
       "points_timeseries",
       "transect",
       "area_summary",
+      "alignment",
     ],
   },
 };

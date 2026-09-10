@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { IfsAreaSummaryService } from "../src/core/ifs-area-summary.js";
 import { IfsEnsAreaSummaryService } from "../src/core/ifs-ens-area-summary.js";
-import { GefsIfsEnsComparisonService } from "../src/core/gefs-ifs-ens-comparison.js";
-import { GfsIfsComparisonService } from "../src/core/gfs-ifs-comparison.js";
 import { IfsEnsDiagnosticTimeSeriesService } from "../src/core/ifs-ens-diagnostic-timeseries.js";
 import { IfsEnsDiagnosticsService } from "../src/core/ifs-ens-diagnostics.js";
 import { IfsEnsMemberBundleService } from "../src/core/ifs-ens-member-bundle.js";
@@ -10,12 +8,10 @@ import {
   IfsEnsPointsService,
   IfsEnsPointsTimeSeriesService,
 } from "../src/core/ifs-ens-points.js";
-import { IfsEnsRunComparisonService } from "../src/core/ifs-ens-run-comparison.js";
 import { IfsEnsTimeSeriesService } from "../src/core/ifs-ens-timeseries.js";
 import { IfsEnsTransectService } from "../src/core/ifs-ens-transect.js";
 import { IfsProfileService } from "../src/core/ifs-profile.js";
 import { IfsDiagnosticsService } from "../src/core/ifs-diagnostics.js";
-import { IfsRunComparisonService } from "../src/core/ifs-run-comparison.js";
 import { IfsDiagnosticTimeSeriesService } from "../src/core/ifs-diagnostic-timeseries.js";
 import {
   IfsPointsService,
@@ -134,45 +130,6 @@ console.log(JSON.stringify({
     pressureSummaries: ens.pressureSummaries,
     fieldSummaries: ens.fieldSummaries,
     source: ens.source,
-  },
-}, null, 2));
-
-const crossEnsemble = await new GefsIfsEnsComparisonService().compare({
-  latitude: 50.08,
-  longitude: 14.43,
-  run: "latest",
-  validTime: validTime.toISOString(),
-  variable: "temperature",
-  pressureLevelHpa: 850,
-  gefsMembers: ["c00", "p01"],
-  ifsEnsMembers: ["p01", "p02"],
-  quantiles: [0.5],
-  thresholdGte: 0,
-});
-assert.equal(crossEnsemble.gefs.summary.memberCount, 2);
-assert.equal(crossEnsemble.ifsEns.summary.memberCount, 2);
-assert.equal(crossEnsemble.comparison.quantileShifts.length, 1);
-assert(Number.isFinite(crossEnsemble.comparison.ifsEnsMinusGefsMean));
-assert(Number.isFinite(crossEnsemble.comparison.ifsEnsMinusGefsPopulationStdDev));
-assert.equal(
-  crossEnsemble.comparison.interpretation,
-  "independent_raw_ensemble_distributions_no_member_pairing_not_calibrated_uncertainty",
-);
-assert(crossEnsemble.comparison.threshold !== undefined);
-assert.equal(
-  crossEnsemble.comparison.threshold?.interpretation,
-  "raw_member_fractions_not_calibrated_probabilities",
-);
-
-console.log(JSON.stringify({
-  gefsIfsEnsComparison: {
-    run: crossEnsemble.run,
-    validTime: crossEnsemble.validTime,
-    forecastHour: crossEnsemble.forecastHour,
-    selection: crossEnsemble.selection,
-    gefs: crossEnsemble.gefs,
-    ifsEns: crossEnsemble.ifsEns,
-    comparison: crossEnsemble.comparison,
   },
 }, null, 2));
 
@@ -443,68 +400,6 @@ console.log(JSON.stringify({
   },
 }, null, 2));
 
-const ensRunComparison = await new IfsEnsRunComparisonService().compareRuns({
-  latitude: 50.08,
-  longitude: 14.43,
-  anchorRun: ens.run,
-  validTime: ens.validTime,
-  variable: "temperature",
-  pressureLevelHpa: 850,
-  members: ["p01", "p02"],
-  quantiles: [0.1, 0.5, 0.9],
-  cycles: 2,
-  cycleStrideHours: 6,
-});
-assert.equal(ensRunComparison.model, "ifs_ens_0p25");
-assert.equal(ensRunComparison.runs.length, 2);
-assert.equal(ensRunComparison.comparisons.length, 1);
-assert.equal(
-  ensRunComparison.comparisons[0]?.interpretation,
-  "distribution_shift_between_model_cycles_not_member_trajectory",
-);
-assert(Number.isFinite(ensRunComparison.comparisons[0]?.mean.delta));
-assert.equal(ensRunComparison.source.product, "ifs_0p25_enfo_ef");
-
-console.log(JSON.stringify({
-  ifsEnsRunComparison: {
-    validTime: ensRunComparison.validTime,
-    runs: ensRunComparison.runs.map((snapshot) => ({
-      run: snapshot.run,
-      forecastHour: snapshot.forecastHour,
-      mean: snapshot.summary.mean,
-    })),
-    meanShift: ensRunComparison.comparisons[0]?.mean,
-  },
-}, null, 2));
-
-const crossModelComparison = await new GfsIfsComparisonService().compare({
-  latitude: 50.08,
-  longitude: 14.43,
-  run: result.run,
-  validTime: result.validTime,
-  variable: "temperature",
-  pressureLevelHpa: 850,
-});
-assert.equal(crossModelComparison.run, result.run);
-assert.equal(crossModelComparison.validTime, result.validTime);
-assert.equal(crossModelComparison.gfs.model, "gfs_0p25");
-assert.equal(crossModelComparison.ifs.model, "ifs_0p25");
-assert(Number.isFinite(crossModelComparison.comparison.outputs[0]?.ifsMinusGfs));
-assert.equal(
-  crossModelComparison.comparison.interpretation,
-  "raw_deterministic_model_difference_not_error_or_uncertainty",
-);
-
-console.log(JSON.stringify({
-  crossModelComparison: {
-    datasets: ["gfs", "ifs"],
-    run: crossModelComparison.run,
-    validTime: crossModelComparison.validTime,
-    selection: crossModelComparison.selection,
-    comparison: crossModelComparison.comparison,
-  },
-}, null, 2));
-
 
 const sharedSelection = {
   variables: ["temperature"] as const,
@@ -681,25 +576,6 @@ assert(Number.isFinite(areaSummary.statistics.mean));
 assert.equal(areaSummary.distribution?.percentiles?.length, 3);
 assert(areaSummary.distribution?.extrema !== undefined);
 
-const runComparison = await new IfsRunComparisonService().compareRuns({
-  latitude: 50.08,
-  longitude: 14.43,
-  anchorRun: result.run,
-  validTime: result.validTime,
-  variables: ["temperature", "wind"],
-  pressureLevelsHpa: [850],
-  fields: ["wind_10m"],
-  cycles: 2,
-});
-assert.equal(runComparison.model, "ifs_0p25");
-assert.equal(runComparison.runs.length, 2);
-assert.equal(runComparison.comparisons.length, 1);
-const comparison = runComparison.comparisons[0];
-assert(comparison);
-assert(comparison.pressureLevels[0]?.changes.length);
-assert(comparison.fields.some((field) =>
-  field.id === "wind_10m" && field.comparable && field.changes.length > 0));
-
 console.log(JSON.stringify({
   diagnostics: {
     layer: layerDiagnostics.diagnostics.map((diagnostic) => diagnostic.id),
@@ -721,13 +597,6 @@ console.log(JSON.stringify({
       definedGridPoints: areaSummary.statistics.definedGridPoints,
       mean: areaSummary.statistics.mean,
       p50: areaSummary.distribution?.percentiles?.find((item) => item.percentile === 50)?.value,
-    },
-    runComparison: {
-      runs: runComparison.runs.map((snapshot) => ({
-        run: snapshot.run,
-        forecastHour: snapshot.forecastHour,
-      })),
-      transitions: runComparison.comparisons.length,
     },
     run: result.run,
   },
