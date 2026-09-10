@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/server";
+import { inspectAtmosphereCapabilities } from "./catalog/capability-inspection.js";
 import { searchAtmosphereCatalog } from "./catalog/unified-search.js";
 import {
   UnifiedAnalogService,
@@ -17,6 +18,11 @@ import {
 } from "./schema/unified-api.js";
 import { queryAtmosphereInputSchema, type PublicQueryAtmosphereInput } from "./schema/unified-query-input.js";
 import { searchAtmosphereCatalogSchema, unifiedCatalogResultSchema, type SearchAtmosphereCatalogInput } from "./schema/unified-catalog.js";
+import {
+  capabilityInspectionResultSchema,
+  inspectAtmosphereCapabilitiesSchema,
+  type InspectAtmosphereCapabilitiesInput,
+} from "./schema/capability-inspection.js";
 import {
   alignAtmosphereResultSchema,
   alignAtmosphereSchema,
@@ -43,9 +49,15 @@ export function registerUnifiedAtmosphereTools(server: McpServer): void {
 
   server.registerTool("search_catalog", {
     title: "Search atmospheric datasets and capabilities",
-    description: "Search one canonical catalog across all atmospheric datasets. Results use shared variable, field and diagnostic IDs and explicitly list which datasets support each match. Use spatialScope and coverage to discover global or limited-area datasets that fully cover a point or bounded area; capability rows expose native grid, nominal resolution, cadence and horizon. For GEFS, forecastKind can distinguish operational capabilities from the narrower GEFSv12 reforecast subset, so retrospective queries are discoverable without pretending operational-only diagnostics exist.",
+    description: "Explore one canonical catalog across all atmospheric datasets. Use this for discovery when you do not yet know the exact variable, field, diagnostic or dataset. Results list matching canonical IDs and dataset support; capability rows expose native grid, nominal resolution, cadence and horizon. For a focused yes/no planning decision about one known dataset and requested selections, use inspect_capabilities instead of parsing a broad catalog result.",
     inputSchema: describedSchema(searchAtmosphereCatalogSchema), outputSchema: unifiedCatalogResultSchema,
   }, async (query) => { try { return toolResult(searchAtmosphereCatalog(query as SearchAtmosphereCatalogInput)); } catch (error) { return toolError(error); } });
+
+  server.registerTool("inspect_capabilities", {
+    title: "Inspect exact atmospheric capabilities",
+    description: "Check declared contract support for one dataset and an optional planned operation, geometry, selection, diagnostic, run selector, ensemble selection or source override without fetching weather data. Returns a compact supported/unsupported decision, focused reasons, supported geometry types and canonical model metadata. This deliberately does not claim that a particular live initialization or valid-time window is currently available.",
+    inputSchema: describedSchema(inspectAtmosphereCapabilitiesSchema), outputSchema: capabilityInspectionResultSchema,
+  }, async (query) => { try { return toolResult(inspectAtmosphereCapabilities(query as InspectAtmosphereCapabilitiesInput)); } catch (error) { return toolError(error); } });
 
   server.registerTool("query_atmosphere", {
     title: "Query atmospheric state",

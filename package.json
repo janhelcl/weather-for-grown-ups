@@ -63,7 +63,7 @@
     "mcp:http": "tsx src/mcp-http.ts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:smoke": "node dist/entry.js --help && node dist/cli.js --help && node dist/cli.js catalog --help && node dist/cli.js catalog --search cloud --sections fields --classification raw --limit 3 --json && node dist/cli.js query --help && node dist/cli.js diagnose --help && node dist/cli.js align --help && node dist/cli.js verify --help && node dist/cli.js analogs --help && node dist/cli.js index --help",
+    "test:smoke": "node dist/entry.js --help && node dist/cli.js --help && node dist/cli.js catalog --help && node dist/cli.js catalog --search cloud --sections fields --classification raw --limit 3 --json && node dist/cli.js capabilities --help && node dist/cli.js capabilities --dataset gfs --operation transect --variables temperature --levels 850 --json && node dist/cli.js query --help && node dist/cli.js diagnose --help && node dist/cli.js align --help && node dist/cli.js verify --help && node dist/cli.js analogs --help && node dist/cli.js index --help",
     "test:live": "tsx scripts/run-live-smoke.ts live-smoke.ts",
     "test:live:bundled": "tsx scripts/run-live-smoke.ts live-smoke-bundled-decoder.ts",
     "test:live:s3": "tsx scripts/run-live-smoke.ts live-smoke-s3.ts",
