@@ -26,6 +26,7 @@ export const atmosphereAvailabilityResultSchema = z.object({
   domainCovered: z.boolean(),
   coverage: atmosphericCoverageStatusSchema,
   initialization: z.string().datetime({ offset: true }).optional(),
+  initializationValidTimeRange: validTimeRangeSchema.optional(),
   availableRequestedTime: validTimeRangeSchema.optional(),
   nativeCadenceHours: z.array(z.number().positive()),
   maxForecastHour: z.number().int().nonnegative().optional(),
