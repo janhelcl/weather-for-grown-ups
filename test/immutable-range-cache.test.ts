@@ -32,9 +32,38 @@ describe("immutable range cache", () => {
     roots.push(root);
     const cache = new ImmutableRangeCache(root);
     let calls = 0;
-    const loader = async () => new Uint8Array([++calls]);
-    expect(await cache.getOrCreate("https://example.test/file", 0, 4, loader)).toEqual(new Uint8Array([1]));
-    expect(await cache.getOrCreate("https://example.test/file", 4, 4, loader)).toEqual(new Uint8Array([2]));
+    const loader = async () => new Uint8Array([++calls, 0, 0, 0]);
+    expect(await cache.getOrCreate("https://example.test/file", 0, 4, loader)).toEqual(new Uint8Array([1, 0, 0, 0]));
+    expect(await cache.getOrCreate("https://example.test/file", 4, 4, loader)).toEqual(new Uint8Array([2, 0, 0, 0]));
+    expect(calls).toBe(2);
+  });
+
+  it("does not persist a truncated immutable range", async () => {
+    const root = await mkdtemp(join(tmpdir(), "wfg-range-cache-"));
+    roots.push(root);
+    const cache = new ImmutableRangeCache(root);
+    let calls = 0;
+
+    await expect(cache.getOrCreate(
+      "https://example.test/file.grib2",
+      100,
+      8,
+      async () => {
+        calls += 1;
+        return new TextEncoder().encode("GRIB");
+      },
+    )).rejects.toThrow("immutable range loader returned 4 bytes; expected 8");
+
+    const result = await cache.getOrCreate(
+      "https://example.test/file.grib2",
+      100,
+      8,
+      async () => {
+        calls += 1;
+        return new TextEncoder().encode("GRIBdata");
+      },
+    );
+    expect(new TextDecoder().decode(result)).toBe("GRIBdata");
     expect(calls).toBe(2);
   });
 });
