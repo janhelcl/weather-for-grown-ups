@@ -15,6 +15,7 @@ import {
   IfsTimeSeriesService,
   IfsTransectService,
 } from "../ifs-spatiotemporal.js";
+import { IfsProfileEvidenceService } from "../profile-evidence-service.js";
 import { areaScalarSelection, boundingBox, sparseSelection } from "./helpers.js";
 import type { AtmosphericQueryAdapter } from "./types.js";
 
@@ -36,11 +37,13 @@ export class IfsQueryAdapter implements AtmosphericQueryAdapter {
   private readonly areaService: Pick<IfsAreaSummaryService, "summarize">;
 
   constructor(options: IfsQueryAdapterOptions = {}) {
-    this.profile = options.ifsProfile ?? new IfsProfileService();
-    this.timeSeries = options.ifsTimeSeries ?? new IfsTimeSeriesService();
-    this.points = options.ifsPoints ?? new IfsPointsService();
-    this.pointsTimeSeries = options.ifsPointsTimeSeries ?? new IfsPointsTimeSeriesService();
-    this.transectService = options.ifsTransect ?? new IfsTransectService();
+    const profile = options.ifsProfile ?? new IfsProfileEvidenceService();
+    this.profile = profile;
+    this.timeSeries = options.ifsTimeSeries ?? new IfsTimeSeriesService({ profileGetter: profile });
+    this.points = options.ifsPoints ?? new IfsPointsService({ profileGetter: profile });
+    this.pointsTimeSeries = options.ifsPointsTimeSeries
+      ?? new IfsPointsTimeSeriesService({ profileGetter: profile });
+    this.transectService = options.ifsTransect ?? new IfsTransectService({ profileGetter: profile });
     this.areaService = options.ifsArea ?? new IfsAreaSummaryService();
   }
 
