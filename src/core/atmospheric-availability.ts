@@ -83,12 +83,17 @@ export class AtmosphericAvailabilityService {
 
     const full = await attempt(() => this.runResolver.resolve(request));
     if (full.ok) {
-      const range = requestedNativeRange(this.runResolver, request, full.run);
+      const metadata = resolvedRunMetadata(
+        this.runResolver,
+        request,
+        full.run,
+        capabilities.nativeTimeCadenceHours,
+      );
       return atmosphereAvailabilityResultSchema.parse({
         ...base,
+        ...metadata,
         coverage: "complete",
         initialization: full.run.toISOString(),
-        ...(range === undefined ? {} : { availableRequestedTime: range }),
         issues: [],
       });
     }
@@ -135,15 +140,18 @@ export class AtmosphericAvailabilityService {
       });
     }
 
-    const first = nativeTimes[0]!;
+    const partialRequest = withRangeEnd(request, longest.end);
+    const metadata = resolvedRunMetadata(
+      this.runResolver,
+      partialRequest,
+      longest.run,
+      capabilities.nativeTimeCadenceHours,
+    );
     return atmosphereAvailabilityResultSchema.parse({
       ...base,
+      ...metadata,
       coverage: "partial",
       initialization: longest.run.toISOString(),
-      availableRequestedTime: {
-        from: first.toISOString(),
-        to: longest.end.toISOString(),
-      },
       issues: [{
         path: ["time"],
         reason: `The requested window is only partially available; published coverage reaches ${longest.end.toISOString()} for initialization ${longest.run.toISOString()}.`,
@@ -191,6 +199,7 @@ export class AtmosphericAvailabilityService {
 }
 
 const HOUR_MS = 3_600_000;
+const MAX_NATIVE_WINDOW_HOURS = 1_000;
 
 function withRangeEnd(request: QueryAtmosphereRequest, end: Date): QueryAtmosphereRequest {
   if (!("from" in request.time)) throw new Error("Internal availability routing error: expected a time range");
@@ -203,26 +212,71 @@ function withRangeEnd(request: QueryAtmosphereRequest, end: Date): QueryAtmosphe
   };
 }
 
-function requestedNativeRange(
+function resolvedRunMetadata(
   resolver: AtmosphericAvailabilityRunResolver,
   request: QueryAtmosphereRequest,
   run: Date,
-): { from: string; to: string } | undefined {
-  if ("at" in request.time) {
-    const at = new Date(request.time.at).toISOString();
-    return { from: at, to: at };
-  }
-  const times = resolver.nativeValidTimes(
+  fallbackCadenceHours: readonly number[],
+): {
+  initializationValidTimeRange?: { from: string; to: string };
+  availableRequestedTime?: { from: string; to: string };
+  nativeCadenceHours: number[];
+  maxForecastHour?: number;
+} {
+  const fullTimes = resolver.nativeValidTimes(
+    request,
+    run,
+    run,
+    new Date(run.getTime() + MAX_NATIVE_WINDOW_HOURS * HOUR_MS),
+  );
+  const fullFirst = fullTimes[0];
+  const fullLast = fullTimes.at(-1);
+  const requestedTimes = requestedNativeTimes(resolver, request, run);
+  const requestedFirst = requestedTimes[0];
+  const requestedLast = requestedTimes.at(-1);
+  const cadence = cadenceHours(requestedTimes);
+
+  return {
+    ...(fullFirst === undefined || fullLast === undefined ? {} : {
+      initializationValidTimeRange: {
+        from: fullFirst.toISOString(),
+        to: fullLast.toISOString(),
+      },
+      maxForecastHour: Math.round((fullLast.getTime() - run.getTime()) / HOUR_MS),
+    }),
+    ...(requestedFirst === undefined || requestedLast === undefined ? {} : {
+      availableRequestedTime: {
+        from: requestedFirst.toISOString(),
+        to: requestedLast.toISOString(),
+      },
+    }),
+    nativeCadenceHours: cadence.length > 0 ? cadence : [...fallbackCadenceHours],
+  };
+}
+
+function requestedNativeTimes(
+  resolver: AtmosphericAvailabilityRunResolver,
+  request: QueryAtmosphereRequest,
+  run: Date,
+): Date[] {
+  if ("at" in request.time) return [new Date(request.time.at)];
+  return resolver.nativeValidTimes(
     request,
     run,
     new Date(request.time.from),
     new Date(request.time.to),
   );
-  const first = times[0];
-  const last = times.at(-1);
-  return first === undefined || last === undefined
-    ? undefined
-    : { from: first.toISOString(), to: last.toISOString() };
+}
+
+function cadenceHours(times: readonly Date[]): number[] {
+  const values = new Set<number>();
+  for (let index = 1; index < times.length; index += 1) {
+    const previous = times[index - 1]!;
+    const current = times[index]!;
+    const hours = (current.getTime() - previous.getTime()) / HOUR_MS;
+    if (hours > 0) values.add(hours);
+  }
+  return [...values].sort((left, right) => left - right);
 }
 
 function isExplicitRun(request: QueryAtmosphereRequest): boolean {
