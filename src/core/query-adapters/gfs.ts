@@ -16,6 +16,7 @@ import { BatchPointsService } from "../batch-points.js";
 import { selectAutomaticGfsPointSource } from "../gfs-point-source.js";
 import { PointsTimeSeriesService } from "../points-time-series.js";
 import type { AtmosphericProgressReporter } from "../progress.js";
+import { GfsProfileEvidenceService } from "../profile-evidence-service.js";
 import { ProfileService } from "../profile.js";
 import { TimeSeriesService } from "../time-series.js";
 import { TransectService } from "../transect.js";
@@ -45,8 +46,10 @@ export class GfsQueryAdapter implements AtmosphericQueryAdapter {
   private readonly now: () => Date;
 
   constructor(options: GfsQueryAdapterOptions = {}) {
-    this.profile = options.gfsProfile ?? new ProfileService();
+    const profile = options.gfsProfile ?? new GfsProfileEvidenceService();
+    this.profile = profile;
     this.timeSeries = options.gfsTimeSeries ?? new TimeSeriesService({
+      profileGetter: profile,
       ...(options.progress === undefined ? {} : { onProgress: options.progress }),
     });
     this.points = options.gfsPoints ?? new BatchPointsService();
