@@ -12,7 +12,10 @@ const RUN = new Date("2026-09-12T06:00:00Z");
 class FakeRunResolver implements AtmosphericAvailabilityRunResolver {
   readonly calls: QueryAtmosphereRequest[] = [];
 
-  constructor(private readonly availableThrough: Date) {}
+  constructor(
+    private readonly availableThrough: Date,
+    private readonly declaredMaxHour = 18,
+  ) {}
 
   async resolve(request: QueryAtmosphereRequest): Promise<Date> {
     this.calls.push(request);
@@ -31,7 +34,10 @@ class FakeRunResolver implements AtmosphericAvailabilityRunResolver {
     to: Date,
   ): Date[] {
     const firstHour = Math.max(0, Math.ceil((from.getTime() - run.getTime()) / HOUR_MS));
-    const lastHour = Math.floor((to.getTime() - run.getTime()) / HOUR_MS);
+    const lastHour = Math.min(
+      this.declaredMaxHour,
+      Math.floor((to.getTime() - run.getTime()) / HOUR_MS),
+    );
     return Array.from(
       { length: Math.max(0, lastHour - firstHour + 1) },
       (_, index) => new Date(run.getTime() + (firstHour + index) * HOUR_MS),
@@ -49,7 +55,7 @@ function request(from = "2026-09-12T09:00:00Z", to = "2026-09-12T15:00:00Z") {
 }
 
 describe("AtmosphericAvailabilityService", () => {
-  it("reports complete coverage when one published run serves the whole requested window", async () => {
+  it("reports complete coverage with resolved initialization range and requested cadence", async () => {
     const resolver = new FakeRunResolver(new Date("2026-09-12T18:00:00Z"));
     const result = await new AtmosphericAvailabilityService({ runResolver: resolver }).inspect(request());
 
@@ -59,10 +65,16 @@ describe("AtmosphericAvailabilityService", () => {
       domainCovered: true,
       coverage: "complete",
       initialization: RUN.toISOString(),
+      initializationValidTimeRange: {
+        from: "2026-09-12T06:00:00.000Z",
+        to: "2026-09-13T00:00:00.000Z",
+      },
       availableRequestedTime: {
         from: "2026-09-12T09:00:00.000Z",
         to: "2026-09-12T15:00:00.000Z",
       },
+      nativeCadenceHours: [1],
+      maxForecastHour: 18,
       issues: [],
     });
     expect(atmosphereAvailabilityResultSchema.parse(result)).toEqual(result);
@@ -74,10 +86,16 @@ describe("AtmosphericAvailabilityService", () => {
 
     expect(result.coverage).toBe("partial");
     expect(result.initialization).toBe(RUN.toISOString());
+    expect(result.initializationValidTimeRange).toEqual({
+      from: "2026-09-12T06:00:00.000Z",
+      to: "2026-09-13T00:00:00.000Z",
+    });
     expect(result.availableRequestedTime).toEqual({
       from: "2026-09-12T09:00:00.000Z",
       to: "2026-09-12T12:00:00.000Z",
     });
+    expect(result.nativeCadenceHours).toEqual([1]);
+    expect(result.maxForecastHour).toBe(18);
     expect(result.issues[0]?.reason).toContain("only partially available");
     expect(resolver.calls.length).toBeGreaterThan(2);
   });
