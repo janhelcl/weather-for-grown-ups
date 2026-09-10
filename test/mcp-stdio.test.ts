@@ -57,11 +57,12 @@ describe("stdio MCP", () => {
     const serverVersion = client.getServerVersion();
     expect(serverVersion?.name).toBe("weather-for-grown-ups");
     expect(serverVersion?.version).toBe(WFG_VERSION);
-    expect(client.getInstructions()).toContain("search_catalog");
+    expect(client.getInstructions()).toContain("inspect_capabilities");
 
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name)).toEqual([
       "search_catalog",
+      "inspect_capabilities",
       "query_atmosphere",
       "diagnose_atmosphere",
       "align_atmosphere",
@@ -70,7 +71,7 @@ describe("stdio MCP", () => {
     ]);
   }, 30_000);
 
-  it("serves a local search_catalog call and a typed failure envelope over stdio", async () => {
+  it("serves local discovery calls and a typed failure envelope over stdio", async () => {
     const client = await connectStdio();
 
     const success = await client.callTool({
@@ -82,7 +83,22 @@ describe("stdio MCP", () => {
     expect(payload.matches.length).toBeGreaterThan(0);
     expect(payload.matches.some((match) => match.id === "temperature")).toBe(true);
 
-    // Out-of-domain rejection happens before any source access, so this stays offline.
+    const capability = await client.callTool({
+      name: "inspect_capabilities",
+      arguments: {
+        dataset: "icon-d2",
+        geometry: { type: "point", latitude: 40.7, longitude: -74 },
+        selection: { variables: ["temperature"], pressureLevelsHpa: [850] },
+      },
+    });
+    expect(capability.isError).not.toBe(true);
+    expect(capability.structuredContent).toMatchObject({
+      basis: "declared_capability",
+      dataset: "icon-d2",
+      supported: false,
+    });
+
+    // Query rejection happens before source access, so this stays offline too.
     const failure = await client.callTool({
       name: "query_atmosphere",
       arguments: {
