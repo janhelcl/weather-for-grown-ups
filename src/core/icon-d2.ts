@@ -455,7 +455,9 @@ export class IconD2ForecastService {
     }
 
     const field = selection.fields[0]!;
-    const selector = fieldSelector(field);
+    // DWD packs sub-hourly statistical steps (e.g. 15-minute precipitation
+    // accumulations) into one hourly object; pin the selection to this lead.
+    const selector = { ...fieldSelector(field), forecastHour };
     const extracted = distributionRequested
       ? await this.areaGridDecoder.extractSelectedMessage(cached.path, box, selector)
       : undefined;

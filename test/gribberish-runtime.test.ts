@@ -162,6 +162,28 @@ describe("bundled GRIB2 point decoding", () => {
     expect(decoded?.average).toBeUndefined();
   });
 
+  it("normalizes gribberish total precipitation (TP) to the shared APCP vocabulary", () => {
+    // Real DWD ICON-D2 tot_prec message key: one provider object carries the
+    // hourly accumulation plus 15-minute sub-steps; the lead filter keeps the hour.
+    const messages = [15, 15.25, 15.5, 15.75].map((endHour) => fakeMessage({
+      key: "TP:202609100600:0 in surface:accumulation forecast",
+      code: "TP",
+      reference: "2026-09-10T06:00:00Z",
+      forecast: "2026-09-10T06:00:00Z",
+      forecastEnd: new Date(Date.UTC(2026, 8, 10, 0, 0) + endHour * 3_600_000).toISOString(),
+    }));
+
+    const atLead = messagesAtForecastHour(messages, 9);
+    expect(atLead).toHaveLength(1);
+    const [decoded] = decodePointMessages(atLead, 14, 50);
+    expect(decoded).toMatchObject({
+      code: "APCP",
+      surface: true,
+      accumulation: { startForecastHour: 0, endForecastHour: 9 },
+    });
+    expect(selectMessage(messages.slice(0, 1), { code: "APCP", gribLevel: "surface", temporalSemantics: "accumulation" })).toBe(messages[0]);
+  });
+
   it("preserves native ICON convective precipitation accumulation semantics", () => {
     for (const code of ["RAIN_CON", "SNOW_CON"] as const) {
       const [decoded] = decodePointMessages([
@@ -308,6 +330,22 @@ describe("bundled GRIB2 exact message selection", () => {
       gribLevel: "low cloud layer",
       temporalSemantics: "average",
     })).toEqual({ type: "average", startForecastHour: 3, endForecastHour: 6 });
+  });
+
+  it("resolves sub-hourly statistical steps in one object by the selector lead", () => {
+    const steps = [9, 9.25, 9.5, 9.75].map((endHour) => fakeMessage({
+      key: "TP:202609100600:0 in surface:accumulation forecast",
+      code: "TP",
+      reference: "2026-09-10T06:00:00Z",
+      forecast: "2026-09-10T06:00:00Z",
+      forecastEnd: new Date(Date.UTC(2026, 8, 10, 6, 0) + endHour * 3_600_000).toISOString(),
+    }));
+    const selector = { code: "APCP", gribLevel: "surface", temporalSemantics: "accumulation" as const };
+
+    expect(() => selectMessage(steps, selector)).toThrow(/4 matching messages/);
+    expect(selectMessage(steps, { ...selector, forecastHour: 9 })).toBe(steps[0]);
+    expect(temporalForSelector(steps[0]!, selector)).toEqual({ type: "accumulation", startForecastHour: 0, endForecastHour: 9 });
+    expect(() => selectMessage(steps, { ...selector, forecastHour: 10 })).toThrow(/did not contain/);
   });
 
   it("rejects ambiguous exact matches", () => {

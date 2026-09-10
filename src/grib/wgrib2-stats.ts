@@ -34,6 +34,8 @@ export interface AreaMessageSelector {
   code: string;
   gribLevel: string;
   temporalSemantics: FieldTemporalSemantics;
+  /** Required lead (interval end for statistics) when one object holds several steps. */
+  forecastHour?: number;
 }
 
 export type SelectedMessageTemporal =
@@ -177,6 +179,14 @@ export function parseSelectedAreaInventoryLine(
   const accumulationMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour acc(?: fcst)?:/i);
   const averageMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour ave(?: fcst)?:/i);
   const maximumMatch = line.match(/:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?) hour max(?: fcst)?:/i);
+  const intervalEnd = accumulationMatch?.[2] ?? averageMatch?.[2] ?? maximumMatch?.[2];
+  const instantMatch = line.match(/:(\d+(?:\.\d+)?) hour fcst:/i);
+  const leadHour = intervalEnd !== undefined
+    ? Number(intervalEnd)
+    : instantMatch?.[1] !== undefined
+      ? Number(instantMatch[1])
+      : /:anl:/i.test(line) ? 0 : undefined;
+  if (selector.forecastHour !== undefined && leadHour !== selector.forecastHour) return null;
 
   if (selector.temporalSemantics === "instantaneous") {
     if (accumulationMatch || averageMatch || maximumMatch) return null;

@@ -21,6 +21,12 @@ export interface GribMessageSelector {
   code: string;
   gribLevel: string;
   temporalSemantics: "instantaneous" | "accumulation" | "average" | "maximum";
+  /**
+   * Lead whose valid time (interval end for statistics) the message must carry.
+   * Providers such as DWD ship sub-hourly statistical steps in one object, so
+   * code + level + semantics alone can be ambiguous.
+   */
+  forecastHour?: number;
 }
 
 export type GribTemporal =
@@ -243,7 +249,10 @@ export function selectMessage(
   messages: readonly GribMessage[],
   selector: GribMessageSelector,
 ): GribMessage {
-  const matches = messages.filter((message) =>
+  const candidates = selector.forecastHour === undefined
+    ? messages
+    : messagesAtForecastHour(messages, selector.forecastHour);
+  const matches = candidates.filter((message) =>
     canonicalGribCode(message.varAbbrev) === selector.code
     && matchesGribLevel(message.key, selector.gribLevel)
     && matchesTemporalSemantics(message, selector.temporalSemantics));
@@ -599,6 +608,9 @@ function isDwdUpdraftHelicityCode(code: string): boolean {
 export function canonicalGribCode(code: string): string {
   const normalized = code.toUpperCase();
   if (normalized === "GP") return "HGT";
+  // gribberish abbreviates WMO total precipitation (0-1-8) as TP; the shared
+  // field vocabulary and wgrib2 inventories use APCP.
+  if (normalized === "TP") return "APCP";
   if (normalized === "VMAX_10M") return "GUST";
   if (normalized === "CEIL") return "CEILING";
   if (normalized === "U_RAF" || normalized === "UGUST" || normalized === "EFG10") return "U_RAF";
