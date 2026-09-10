@@ -31,8 +31,11 @@ import {
   IfsEnsLatestRunResolver,
   type IfsEnsLatestRunProvider,
 } from "./ifs-ens-latest-run.js";
-import { IfsEnsMemberSelectionSource } from "./ifs-ens-member-source.js";
-import { IfsProfileService, ifsIndexSelectorsForSelection } from "./ifs-profile.js";
+import {
+  IfsEnsMemberProfileEvidenceService,
+  type IfsEnsMemberProfileGetter,
+} from "./ifs-ens-profile-evidence-service.js";
+import { ifsIndexSelectorsForSelection } from "./ifs-profile.js";
 import { ifsEnsForecastHour, parseIfsRun } from "./ifs-time.js";
 
 export const DEFAULT_IFS_ENS_MEMBER_CONCURRENCY = 8;
@@ -40,6 +43,7 @@ export const DEFAULT_IFS_ENS_MEMBER_CONCURRENCY = 8;
 export interface IfsEnsMemberBundleServiceOptions {
   cacheDir?: string;
   source?: IfsSelectionSource;
+  profileGetter?: IfsEnsMemberProfileGetter;
   latestRunProvider?: IfsEnsLatestRunProvider;
   concurrency?: number;
 }
@@ -50,13 +54,14 @@ interface MemberSample {
 }
 
 export class IfsEnsMemberBundleService {
-  private readonly source: IfsSelectionSource;
+  private readonly profileGetter: IfsEnsMemberProfileGetter;
   private readonly latestRunProvider: IfsEnsLatestRunProvider;
   private readonly concurrency: number;
 
   constructor(options: IfsEnsMemberBundleServiceOptions = {}) {
     const cacheDir = options.cacheDir ?? process.env.WFG_CACHE_DIR ?? join(homedir(), ".cache", "wfg");
-    this.source = options.source ?? new IfsOpenDataSubsetCache(join(cacheDir, "ifs-open-data"));
+    const source = options.source ?? new IfsOpenDataSubsetCache(join(cacheDir, "ifs-open-data"));
+    this.profileGetter = options.profileGetter ?? new IfsEnsMemberProfileEvidenceService({ cacheDir, source });
     this.latestRunProvider = options.latestRunProvider ?? new IfsEnsLatestRunResolver({ cacheDir });
     this.concurrency = options.concurrency ?? DEFAULT_IFS_ENS_MEMBER_CONCURRENCY;
   }
@@ -76,9 +81,9 @@ export class IfsEnsMemberBundleService {
       : parseIfsRun(query.run);
     const forecastHour = ifsEnsForecastHour(run, validTime);
 
-    const samples = await mapConcurrent(members, this.concurrency, async (member): Promise<MemberSample> => {
-      const source = new IfsEnsMemberSelectionSource(this.source, ifsEnsMemberNumber(member));
-      const profile = await new IfsProfileService({ source }).getProfileSample({
+    const samples = await mapConcurrent(members, this.concurrency, async (member): Promise<MemberSample> => ({
+      member,
+      profile: await this.profileGetter.getProfile(member, {
         latitude: query.latitude,
         longitude: query.longitude,
         run: run.toISOString(),
@@ -90,12 +95,8 @@ export class IfsEnsMemberBundleService {
               pressureLevelsHpa: query.selection.pressureLevelsHpa,
             }),
         ...(query.selection.fields.length === 0 ? {} : { fields: query.selection.fields }),
-      }, {
-        forecastHourResolver: ifsEnsForecastHour,
-        sourceProduct: "ifs_0p25_enfo_ef",
-      });
-      return { member, profile };
-    });
+      }),
+    }));
 
     const first = samples[0];
     if (!first) throw new Error("IFS ENS produced no perturbation samples");
@@ -141,7 +142,6 @@ export class IfsEnsMemberBundleService {
     });
   }
 }
-
 
 function projectMember(sample: MemberSample, selection: IfsEnsSelection) {
   const pressureValues = [...selection.pressureLevelsHpa]
