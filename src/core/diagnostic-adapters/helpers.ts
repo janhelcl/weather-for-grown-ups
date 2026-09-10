@@ -4,6 +4,14 @@ import { AtmosphericLayerDiagnosticsService } from "../atmospheric-layer-diagnos
 import { AtmosphericParcelDiagnosticsService } from "../atmospheric-parcel-diagnostics-service.js";
 import { AtmosphericProfileDiagnosticsService } from "../atmospheric-profile-diagnostics-service.js";
 import { DiagnosticTimeSeriesService } from "../diagnostic-time-series.js";
+import { GefsDiagnosticTimeSeriesService } from "../gefs-diagnostic-timeseries.js";
+import {
+  GefsEnsembleProfileEvidenceService,
+  GefsMemberBundleEvidenceService,
+  GefsParcelDiagnosticsEvidenceService,
+} from "../gefs-evidence-service.js";
+import { GefsLayerDiagnosticsService } from "../gefs-layer-diagnostics.js";
+import { GefsProfileDiagnosticsService } from "../gefs-profile-diagnostics.js";
 import { IfsDiagnosticTimeSeriesService } from "../ifs-diagnostic-timeseries.js";
 import { IfsDiagnosticsService } from "../ifs-diagnostics.js";
 import { LayerDiagnosticsService } from "../layer-diagnostics.js";
@@ -41,9 +49,10 @@ export function createGenericDiagnosticServices(
 }
 
 /**
- * Build the shared diagnostic families over the same persistent profile
- * evidence boundary used by normal GFS/IFS queries. The atmospheric wrappers
- * still own model dispatch; only acquisition/materialization is shared.
+ * Build the shared diagnostic families over the same persistent point/profile
+ * evidence boundaries used by normal GFS, GEFS and IFS queries. Atmospheric
+ * wrappers still own model dispatch; only acquisition/materialization is
+ * shared. Ensemble evidence remains member-first before nonlinear derivation.
  */
 function createEvidenceAwareDiagnosticServices(): GenericDiagnosticServices {
   const gfsProfile = new GfsProfileEvidenceService();
@@ -51,20 +60,29 @@ function createEvidenceAwareDiagnosticServices(): GenericDiagnosticServices {
   const gfsProfileDiagnostics = new ProfileDiagnosticsService({ profileGetter: gfsProfile });
   const gfsParcel = new ParcelDiagnosticsService({ profileGetter: gfsProfile });
 
+  const gefsBundle = new GefsMemberBundleEvidenceService();
+  const gefsProfile = new GefsEnsembleProfileEvidenceService({ bundleGetter: gefsBundle });
+  const gefsLayer = new GefsLayerDiagnosticsService({ profileGetter: gefsProfile });
+  const gefsProfileDiagnostics = new GefsProfileDiagnosticsService({ profileGetter: gefsProfile });
+  const gefsParcel = new GefsParcelDiagnosticsEvidenceService({ bundleGetter: gefsBundle });
+
   const ifsProfile = new IfsProfileEvidenceService();
   const ifsDiagnostics = new IfsDiagnosticsService({ profileGetter: ifsProfile });
 
   return {
     layer: new AtmosphericLayerDiagnosticsService({
       gfs: gfsLayer,
+      gefs: gefsLayer,
       ifs: ifsDiagnostics,
     }),
     profile: new AtmosphericProfileDiagnosticsService({
       gfs: gfsProfileDiagnostics,
+      gefs: gefsProfileDiagnostics,
       ifs: ifsDiagnostics,
     }),
     parcel: new AtmosphericParcelDiagnosticsService({
       gfs: gfsParcel,
+      gefs: gefsParcel,
       ifs: ifsDiagnostics,
     }),
     timeSeries: new AtmosphericDiagnosticTimeSeriesService({
@@ -72,6 +90,11 @@ function createEvidenceAwareDiagnosticServices(): GenericDiagnosticServices {
         layerDiagnosticsGetter: gfsLayer,
         profileDiagnosticsGetter: gfsProfileDiagnostics,
         parcelDiagnosticsGetter: gfsParcel,
+      }),
+      gefs: new GefsDiagnosticTimeSeriesService({
+        layerDiagnosticsGetter: gefsLayer,
+        profileDiagnosticsGetter: gefsProfileDiagnostics,
+        parcelDiagnosticsGetter: gefsParcel,
       }),
       ifs: new IfsDiagnosticTimeSeriesService({ diagnostics: ifsDiagnostics }),
     }),
