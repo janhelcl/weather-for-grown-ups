@@ -1,4 +1,5 @@
 import {
+  diagnoseAtmosphereSchema,
   publicDatasetMetadata,
   type DiagnoseAtmosphereInput,
   type UnifiedAtmosphereResult,
@@ -39,33 +40,40 @@ export class UnifiedAtmosphereQueryService {
 
   async query(input: PublicQueryAtmosphereInput): Promise<UnifiedAtmosphereResult> {
     const { request, diagnostics } = parseQueryAtmosphereInput(input);
+    if (diagnostics.length > 0 && request.geometry.type !== "point") {
+      throw new Error("Bundled diagnostics require point geometry");
+    }
+
+    // Validate every derived view before paying for state acquisition. This keeps
+    // a bundled request atomic at the contract boundary: unsupported diagnostic
+    // semantics fail before the raw query starts rather than after an expensive
+    // download/decode has already completed.
+    const diagnosticRequests = diagnostics.map((diagnostic) => diagnoseAtmosphereSchema.parse({
+      dataset: request.dataset,
+      geometry: request.geometry,
+      time: request.time,
+      diagnostic,
+      ...(request.forecast === undefined ? {} : { forecast: request.forecast }),
+      ...(request.ensemble === undefined ? {} : { ensemble: request.ensemble }),
+      ...(request.source === undefined ? {} : { source: request.source }),
+    }));
+
     const metadata = publicDatasetMetadata(request.dataset);
     assertAtmosphericGeometryWithinDomain(request.dataset, metadata.internalDatasetId, request.geometry);
     assertAtmosphericQueryWithinBudget(request);
     const result = await this.adapters[request.dataset].query(request);
     const state = wrapUnifiedAtmosphereResult(request, result);
 
-    if (diagnostics.length === 0) return state;
-    if (request.geometry.type !== "point") {
-      throw new Error("Bundled diagnostics require point geometry");
-    }
+    if (diagnosticRequests.length === 0) return state;
 
     const derived: Array<{
       diagnostic: (typeof diagnostics)[number];
       result: UnifiedAtmosphereResult["result"];
     }> = [];
-    for (const diagnostic of diagnostics) {
-      const diagnosticResult = await this.diagnosticService.diagnose({
-        dataset: request.dataset,
-        geometry: request.geometry,
-        time: request.time,
-        diagnostic,
-        ...(request.forecast === undefined ? {} : { forecast: request.forecast }),
-        ...(request.ensemble === undefined ? {} : { ensemble: request.ensemble }),
-        ...(request.source === undefined ? {} : { source: request.source }),
-      });
+    for (const diagnosticRequest of diagnosticRequests) {
+      const diagnosticResult = await this.diagnosticService.diagnose(diagnosticRequest);
       derived.push({
-        diagnostic,
+        diagnostic: diagnosticRequest.diagnostic,
         result: diagnosticResult.result,
       });
     }
