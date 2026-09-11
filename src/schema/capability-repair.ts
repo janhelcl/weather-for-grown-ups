@@ -34,7 +34,8 @@ import { GFS_PRESSURE_LEVELS_HPA } from "../catalog/pressure-levels.js";
 import type { DatasetCapabilityMetadata } from "./dataset-capability-validation.js";
 
 type RepairValue = string | number;
-type RefinementIssue = Parameters<z.RefinementCtx["addIssue"]>[0];
+type RefinementIssueInput = Parameters<z.RefinementCtx["addIssue"]>[0];
+type RefinementIssue = Exclude<RefinementIssueInput, string>;
 
 export interface CapabilityRepairHint {
   kind: "unsupported_inventory" | "unsupported_capability";
@@ -67,7 +68,11 @@ export function withCapabilityRepairContext(
 ): z.RefinementCtx {
   return {
     ...context,
-    addIssue(issue: RefinementIssue): void {
+    addIssue(issue: RefinementIssueInput): void {
+      if (typeof issue === "string") {
+        context.addIssue(issue);
+        return;
+      }
       const repair = capabilityRepairHint(request, metadata, issue);
       const existingParams = "params" in issue && isRecord(issue.params)
         ? issue.params
@@ -78,7 +83,7 @@ export function withCapabilityRepairContext(
           ...existingParams,
           repair,
         },
-      } as RefinementIssue);
+      } as RefinementIssueInput);
     },
   };
 }
@@ -89,7 +94,8 @@ function capabilityRepairHint(
   issue: RefinementIssue,
 ): CapabilityRepairHint {
   const path = Array.isArray(issue.path) ? issue.path.map(String).join(".") : "";
-  const supported = supportedValues(request, metadata, path);
+  const message = typeof issue.message === "string" ? issue.message : "";
+  const supported = supportedValues(request, metadata, path, message);
   const unsupported = supported === undefined
     ? undefined
     : requestedValues(request, path).filter((value) => !supported.includes(value));
@@ -148,10 +154,14 @@ function supportedValues(
   request: any,
   metadata: DatasetCapabilityMetadata,
   path: string,
+  message: string,
 ): RepairValue[] | undefined {
   if (path === "forecast.run") {
     return ATMOSPHERIC_DATASET_CATALOG[metadata.internalDatasetId].runSelectors
       .map(runSelectorLabel);
+  }
+  if (path.startsWith("selection.") && /area summaries|cannot satisfy|variable\/level|intersection/i.test(message)) {
+    return undefined;
   }
   if (path === "selection.pressureLevelsHpa") {
     return pressureLevels(request);
