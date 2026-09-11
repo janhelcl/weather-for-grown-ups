@@ -34,7 +34,7 @@ const pointResultSchema = z.object({
   gridPoint: pointCoordinateSchema,
   pressureSummaries: gefsMemberBundleResultSchema.shape.pressureSummaries,
   fieldSummaries: gefsMemberBundleResultSchema.shape.fieldSummaries,
-  windVectorSummaries: gefsMemberBundleResultSchema.shape.windVectorSummaries,
+  windVectorSummaries: gefsMemberBundleResultSchema.shape.windVectorSummaries.default([]),
   members: gefsMemberBundleResultSchema.shape.members,
 });
 
