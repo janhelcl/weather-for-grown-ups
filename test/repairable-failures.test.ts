@@ -12,6 +12,11 @@ function publicValidationFailure(input: unknown) {
   return toPublicFailure(parsed.error);
 }
 
+function issueAt(failure: ReturnType<typeof toPublicFailure>, path: string) {
+  const issues = failure.details?.issues as Array<Record<string, any>>;
+  return issues.find((entry) => entry.path === path);
+}
+
 describe("repairable capability failures", () => {
   it("returns unsupported pressure levels and dataset-specific alternatives", () => {
     const failure = publicValidationFailure({
@@ -25,14 +30,17 @@ describe("repairable capability failures", () => {
     });
 
     expect(failure.code).toBe("INVALID_REQUEST");
-    const issues = failure.details?.issues as Array<Record<string, any>>;
-    const issue = issues.find((entry) => entry.path === "selection.pressureLevelsHpa");
+    const issue = issueAt(failure, "selection.pressureLevelsHpa");
     expect(issue?.repair).toMatchObject({
       kind: "unsupported_inventory",
       action: "choose_supported_values",
       dataset: "icon-d2",
       path: "selection.pressureLevelsHpa",
       unsupported: [777],
+      constraints: {
+        maxForecastHour: 48,
+        nativeTimeCadenceHours: [1],
+      },
     });
     expect(issue?.repair.supported).toContain(850);
     expect(issue?.repair.supported).not.toContain(777);
@@ -52,8 +60,7 @@ describe("repairable capability failures", () => {
       },
     });
 
-    const issues = failure.details?.issues as Array<Record<string, any>>;
-    const issue = issues.find((entry) => entry.path === "ensemble.members");
+    const issue = issueAt(failure, "ensemble.members");
     expect(issue?.repair).toMatchObject({
       kind: "unsupported_inventory",
       action: "choose_supported_values",
@@ -80,8 +87,7 @@ describe("repairable capability failures", () => {
       },
     });
 
-    const issues = failure.details?.issues as Array<Record<string, any>>;
-    const issue = issues.find((entry) => entry.path === "forecast.run");
+    const issue = issueAt(failure, "forecast.run");
     expect(issue?.repair).toMatchObject({
       kind: "unsupported_inventory",
       action: "choose_supported_values",
@@ -94,6 +100,91 @@ describe("repairable capability failures", () => {
         forecastKind: "reforecast",
         geometryType: "point",
       },
+    });
+  });
+
+  it("suggests removing model-specific modifiers when no alternative value applies", () => {
+    const failure = publicValidationFailure({
+      dataset: "icon-d2",
+      geometry: POINT,
+      time: TIME,
+      selection: { fields: ["temperature_2m"] },
+      forecast: { grid: "0p50" },
+    });
+
+    expect(issueAt(failure, "forecast.grid")?.repair).toMatchObject({
+      kind: "unsupported_capability",
+      action: "remove_modifier",
+      dataset: "icon-d2",
+      path: "forecast.grid",
+    });
+  });
+
+  it("returns supported field inventory when a requested field is unknown", () => {
+    const failure = publicValidationFailure({
+      dataset: "arome",
+      geometry: POINT,
+      time: TIME,
+      selection: { fields: ["not_a_real_field"] },
+    });
+
+    const repair = issueAt(failure, "selection.fields")?.repair;
+    expect(repair).toMatchObject({
+      kind: "unsupported_inventory",
+      action: "choose_supported_values",
+      dataset: "arome",
+      path: "selection.fields",
+      unsupported: ["not_a_real_field"],
+    });
+    expect(repair.supported.length).toBeGreaterThan(0);
+  });
+
+  it("returns the source required by a GFS geometry instead of silently rerouting", () => {
+    const failure = publicValidationFailure({
+      dataset: "gfs",
+      geometry: {
+        type: "points",
+        points: [POINT, { type: "point", latitude: 50.1, longitude: 14.5 }],
+      },
+      time: TIME,
+      selection: { fields: ["temperature_2m"] },
+      source: "nomads",
+    });
+
+    expect(issueAt(failure, "source")?.repair).toMatchObject({
+      kind: "unsupported_inventory",
+      action: "choose_supported_values",
+      dataset: "gfs",
+      path: "source",
+      unsupported: ["nomads"],
+      supported: ["s3"],
+    });
+  });
+
+  it("returns reforecast geometry alternatives", () => {
+    const failure = publicValidationFailure({
+      dataset: "gefs",
+      geometry: {
+        type: "area",
+        westLongitude: 14,
+        eastLongitude: 15,
+        southLatitude: 49,
+        northLatitude: 50,
+      },
+      time: TIME,
+      selection: { fields: ["temperature_2m"] },
+      forecast: {
+        kind: "reforecast",
+        run: "2020-01-01T00:00:00Z",
+      },
+    });
+
+    expect(issueAt(failure, "geometry")?.repair).toMatchObject({
+      kind: "unsupported_inventory",
+      action: "choose_supported_values",
+      dataset: "gefs",
+      path: "geometry",
+      supported: ["point", "points"],
     });
   });
 
