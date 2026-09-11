@@ -7,6 +7,7 @@ import {
   UnifiedForecastVerificationService,
 } from "../core/unified-atmosphere-api.js";
 import {
+  atmosphericDiagnosticSelectionSchema,
   PUBLIC_ATMOSPHERIC_DATASET_IDS,
   publicAtmosphericDatasetSchema,
   publicDatasetMetadata,
@@ -14,6 +15,7 @@ import {
   type PublicAtmosphericDataset,
   type QueryAtmosphereInput,
 } from "../schema/unified-api.js";
+import type { PublicQueryAtmosphereInput } from "../schema/unified-query-input.js";
 import {
   MAX_ALIGNMENT_SOURCES,
   alignAtmosphereSchema,
@@ -87,6 +89,11 @@ function registerQueryCommand(program: Command): void {
     .option("--max-grid-points <number>", "Area grid-point guardrail", numberOption("--max-grid-points"))
     .option("--max-member-grid-points <number>", "Ensemble area member × grid guardrail", numberOption("--max-member-grid-points"))
     .option("--max-member-samples <number>", "Ensemble raw member payload guardrail", numberOption("--max-member-samples"))
+    .option(
+      "--diagnostic <json>",
+      "Canonical layer/profile/parcel diagnostic selector JSON; repeat to bundle diagnostics with point state",
+      collectBundledDiagnostic,
+    )
     .option("--json", "Output JSON")
     .action(async (options) => {
       const request = buildUnifiedQuery(options);
@@ -361,11 +368,34 @@ function registerAnalogsCommand(program: Command): void {
     });
 }
 
-export function buildUnifiedQuery(options: Record<string, any>): QueryAtmosphereInput {
+export function collectBundledDiagnostic(
+  value: string,
+  previous: DiagnoseAtmosphereInput["diagnostic"][] | undefined,
+): DiagnoseAtmosphereInput["diagnostic"][] {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(value);
+  } catch {
+    throw new InvalidRequestError("Expected --diagnostic to be valid JSON", {
+      details: { option: "--diagnostic", received: value },
+    });
+  }
+
+  const parsed = atmosphericDiagnosticSelectionSchema.safeParse(decoded);
+  if (!parsed.success) {
+    throw new InvalidRequestError("Expected --diagnostic to match the canonical atmospheric diagnostic selector", {
+      details: { option: "--diagnostic", received: decoded, issues: parsed.error.issues },
+    });
+  }
+  return [...(previous ?? []), parsed.data];
+}
+
+export function buildUnifiedQuery(options: Record<string, any>): PublicQueryAtmosphereInput {
   const dataset = parseDataset(options.dataset);
   const geometry = parseGeometry(options);
   const time = parseTime(options);
   const selection = parseSelection(options, dataset);
+  const diagnostics = options.diagnostic as DiagnoseAtmosphereInput["diagnostic"][] | undefined;
 
   return {
     dataset,
@@ -377,6 +407,7 @@ export function buildUnifiedQuery(options: Record<string, any>): QueryAtmosphere
     ...ensembleInput(dataset, options),
     ...aggregateInput(options),
     ...limitsInput(options),
+    ...(diagnostics === undefined || diagnostics.length === 0 ? {} : { diagnostics }),
   };
 }
 

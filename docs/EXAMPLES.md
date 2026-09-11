@@ -60,6 +60,23 @@ Use spatial structure first; avoid drawing a regional conclusion from one point.
 
 Build the explanation from the vertical structure instead of starting from a surface verdict.
 
+When raw state and derived views refer to the same point and time, request them together rather than making separate public calls:
+
+```bash
+wfg query \
+  --dataset gfs \
+  --lat 45.77 --lon 11.73 \
+  --at 2026-09-12T12:00:00Z \
+  --fields temperature_2m,wind_10m \
+  --vars temperature,relative_humidity,u_wind,v_wind,geopotential_height \
+  --levels 1000,925,850,700,500,300 \
+  --diagnostic '{"kind":"parcel","pressureLevelsHpa":[1000,925,850,700,500,300],"parcel":"surface_2m"}' \
+  --diagnostic '{"kind":"layer","lowerPressureHpa":850,"upperPressureHpa":500,"diagnostics":["wind_shear","temperature_lapse_rate"]}' \
+  --json
+```
+
+The same `diagnostics` selectors are available on `query_atmosphere`. Raw model state stays under `result.state`; derived views stay under `result.diagnostics`. WFG reuses compatible atmospheric evidence internally instead of flattening diagnostics into model fields.
+
 ### How does the column evolve through the day?
 
 > Give me the vertical evolution over Prague tomorrow morning, midday and evening. How do temperature, moisture and wind change with height, and which features are robust across GFS and IFS?
