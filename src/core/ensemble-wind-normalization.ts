@@ -4,6 +4,7 @@ import {
   windVectorSampleFromComponents,
   windVectorSampleFromSpeedDirection,
   type WindVectorSample,
+  type WindVectorSummary,
 } from "./ensemble-statistics.js";
 
 const DEFAULT_QUANTILES = [0.1, 0.5, 0.9] as const;
@@ -20,6 +21,7 @@ interface FieldWindDescriptor {
 }
 
 type WindDescriptor = PressureWindDescriptor | FieldWindDescriptor;
+type PublicWindVectorSummary = WindDescriptor & WindVectorSummary;
 
 interface WindEvidence {
   descriptor: WindDescriptor;
@@ -98,8 +100,9 @@ function augmentParallelResult(
   for (const key of PARALLEL_COLLECTION_KEYS) {
     const targetCollection = target[key];
     if (!Array.isArray(targetCollection)) continue;
-    const memberCollections = memberStates.map((member) => member[key]);
-    if (!memberCollections.every(Array.isArray)) continue;
+    const candidateCollections = memberStates.map((member) => member[key]);
+    if (!candidateCollections.every(isUnknownArray)) continue;
+    const memberCollections = candidateCollections as unknown[][];
     if (!memberCollections.every((collection) => collection.length === targetCollection.length)) {
       throw new Error(`Ensemble wind normalization found inconsistent ${key} lengths across members`);
     }
@@ -120,11 +123,11 @@ function augmentParallelResult(
 function summarizeMemberStates(
   memberStates: readonly Record<string, unknown>[],
   quantiles: readonly number[],
-) {
+): PublicWindVectorSummary[] {
   if (memberStates.length < 2) return [];
   const evidenceByMember = memberStates.map(extractWindEvidence);
   const keys = new Set(evidenceByMember.flatMap((evidence) => [...evidence.keys()]));
-  const summaries = [];
+  const summaries: PublicWindVectorSummary[] = [];
 
   for (const key of keys) {
     const evidence = evidenceByMember.map((member) => member.get(key));
@@ -325,6 +328,10 @@ function isMemberPayloadArray(value: unknown): value is Record<string, unknown>[
   return Array.isArray(value)
     && value.length >= 2
     && value.every((item) => isRecord(item) && typeof item.member === "string");
+}
+
+function isUnknownArray(value: unknown): value is unknown[] {
+  return Array.isArray(value);
 }
 
 function finiteNumber(value: unknown): number | undefined {
