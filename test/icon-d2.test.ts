@@ -7,6 +7,8 @@ import {
   bunzip2,
 } from "../src/cache/icon-d2-open-data-cache.js";
 import {
+  ICON_D2_FIELD_IDS,
+  ICON_D2_RAW_PRESSURE_VARIABLE_IDS,
   expandIconD2RequestedFields,
   expandIconD2RequestedVariables,
   isIconD2Field,
@@ -316,6 +318,38 @@ describe("ICON-D2 selected-object cache", () => {
       expect.stringContaining("_925_u.grib2.bz2"),
       expect.stringContaining("/cape_ml/"),
     ]));
+  });
+
+  it("maps every advertised raw product into an exact availability probe", async () => {
+    const fetchFn = vi.fn(async () => new Response(null, { status: 200 }));
+    const cache = new IconD2OpenDataCache(
+      rootDir,
+      fetchFn as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+    );
+
+    await expect(cache.isForecastAvailable(
+      new Date("2026-08-31T00:00:00Z"),
+      6,
+      {
+        pressure: true,
+        surface: true,
+        variables: expandIconD2RequestedVariables(ICON_D2_RAW_PRESSURE_VARIABLE_IDS),
+        pressureLevelsHpa: [850],
+        fields: expandIconD2RequestedFields(ICON_D2_FIELD_IDS),
+      },
+    )).resolves.toBe(true);
+
+    const urls = fetchFn.mock.calls.map(([input]) => String(input));
+    expect(urls).toHaveLength(23);
+    for (const parameter of [
+      "t", "relhum", "u", "v", "fi", "omega",
+      "t_2m", "u_10m", "v_10m", "vmax_10m", "cape_ml", "cin_ml",
+      "uh_max", "pmsl", "tot_prec", "rain_con", "snow_con", "vis",
+      "ceiling", "hbas_sc", "htop_sc", "htop_dc", "dbz_cmax",
+    ]) {
+      expect(urls.some((url) => url.includes(`/${parameter}/`))).toBe(true);
+    }
   });
 
   it("bundles a pure-JavaScript bzip2 decoder", async () => {

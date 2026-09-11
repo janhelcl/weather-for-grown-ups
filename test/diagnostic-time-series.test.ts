@@ -201,6 +201,47 @@ describe("DiagnosticTimeSeriesService", () => {
     }));
   });
 
+  it("propagates an explicit grid through every diagnostic family", async () => {
+    const getLayerDiagnostics = vi.fn(async (query: LayerDiagnosticsQueryInput) => layerResult(query));
+    const getProfileDiagnostics = vi.fn(async (query: ProfileDiagnosticsQueryInput) => profileResult(query));
+    const getParcelDiagnostics = vi.fn(async (query: ParcelDiagnosticsQueryInput) => parcelResult(query));
+    const service = new DiagnosticTimeSeriesService({
+      layerDiagnosticsGetter: { getLayerDiagnostics },
+      profileDiagnosticsGetter: { getProfileDiagnostics },
+      parcelDiagnosticsGetter: { getParcelDiagnostics },
+    });
+    const common = {
+      latitude: requestedPoint.latitude,
+      longitude: requestedPoint.longitude,
+      run,
+      grid: "0p50" as const,
+      startTime: "2026-08-19T00:00:00Z",
+      endTime: "2026-08-19T00:00:00Z",
+    };
+
+    await service.getDiagnosticTimeSeries({ ...common, diagnostic: layerBase.diagnostic });
+    await service.getDiagnosticTimeSeries({
+      ...common,
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [850, 700],
+        diagnostics: ["temperature_inversion_layers"],
+      },
+    });
+    await service.getDiagnosticTimeSeries({
+      ...common,
+      diagnostic: {
+        kind: "parcel",
+        pressureLevelsHpa: [950, 900, 850, 800, 700, 600, 500, 400, 300, 250],
+        parcel: "surface_2m",
+      },
+    });
+
+    expect(getLayerDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ grid: "0p50" }));
+    expect(getProfileDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ grid: "0p50" }));
+    expect(getParcelDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ grid: "0p50" }));
+  });
+
   it("composes whole-profile diagnostics and normalizes duplicate pressure levels", async () => {
     const getProfileDiagnostics = vi.fn(async (query: ProfileDiagnosticsQueryInput) => profileResult(query));
     const service = new DiagnosticTimeSeriesService({ profileDiagnosticsGetter: { getProfileDiagnostics } });

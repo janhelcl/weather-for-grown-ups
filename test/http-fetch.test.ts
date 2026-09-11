@@ -2,6 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 import { fetchBinaryWithRetry, fetchTextWithRetry, fetchWithRetry } from "../src/access/http-fetch.js";
 
 describe("fetchWithRetry", () => {
+  it("uses the global fetch implementation when no override is supplied", async () => {
+    const fetchFn = vi.fn(async () => new Response("inventory", { status: 200 }));
+    vi.stubGlobal("fetch", fetchFn);
+    try {
+      const response = await fetchWithRetry("https://example.test/data", undefined);
+      const text = await fetchTextWithRetry("https://example.test/inventory", undefined);
+
+      expect(response.status).toBe(200);
+      expect(text.text).toBe("inventory");
+      expect(fetchFn).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("adds a per-attempt timeout while preserving a caller abort signal", async () => {
     const caller = new AbortController();
     const signals: AbortSignal[] = [];

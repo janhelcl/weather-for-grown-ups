@@ -363,15 +363,16 @@ describe("ICON-D2-EPS source defensive branches", () => {
       6,
       {
         pressure: true,
-        surface: false,
+        surface: true,
         variables: [VARIABLE_CATALOG.temperature],
         pressureLevelsHpa: [850, 300],
-        fields: [],
+        fields: [NON_ISOBARIC_FIELD_CATALOG.mean_layer_cape],
       },
     )).resolves.toBe(false);
     expect(fetchFn.mock.calls.map(([input]) => String(input))).toEqual([
       expect.stringContaining("_850_t.grib2.bz2"),
       expect.stringContaining("_300_t.grib2.bz2"),
+      expect.stringContaining("/cape_ml/"),
     ]);
   });
 
