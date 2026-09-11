@@ -13,11 +13,6 @@ import { createAtmosphericQueryAdapterRegistry } from "./query-adapters/registry
 import type { AtmosphericProgressReporter } from "./progress.js";
 import type { AtmosphericQueryAdapterRegistry } from "./query-adapters/types.js";
 import { assertAtmosphericGeometryWithinDomain } from "./atmospheric-domain.js";
-import {
-  normalizeEnsembleWindResult,
-  queryRequestsEnsembleWindSummary,
-  requestWithEnsembleWindMembers,
-} from "./ensemble-wind-normalization.js";
 import { UnifiedAtmosphereDiagnosticService } from "./unified-atmosphere-diagnostics.js";
 import { wrapUnifiedAtmosphereResult } from "./unified-atmosphere-result.js";
 
@@ -66,16 +61,7 @@ export class UnifiedAtmosphereQueryService {
     const metadata = publicDatasetMetadata(request.dataset);
     assertAtmosphericGeometryWithinDomain(request.dataset, metadata.internalDatasetId, request.geometry);
     assertAtmosphericQueryWithinBudget(request);
-
-    const normalizeWind = metadata.kind === "ensemble"
-      && queryRequestsEnsembleWindSummary(request);
-    const adapterRequest = normalizeWind
-      ? requestWithEnsembleWindMembers(request)
-      : request;
-    const rawResult = await this.adapters[request.dataset].query(adapterRequest);
-    const result = normalizeWind
-      ? normalizeEnsembleWindResult(request, rawResult)
-      : rawResult;
+    const result = await this.adapters[request.dataset].query(request);
     const state = wrapUnifiedAtmosphereResult(request, result);
 
     if (diagnosticRequests.length === 0) return state;
