@@ -46,6 +46,37 @@ This is the live proof that the normal npm path does not require native `wgrib2`
 
 `npm run test:live:s3` exercises deterministic GFS selected-message access and higher-level composition against NOAA AWS Open Data.
 
+### Fetching across time, space and selection size
+
+`npm run test:live:fetch` runs `scripts/live-smoke-fetch-matrix.ts` with an isolated temporary cache, then removes it. It pins a completed GFS run and covers:
+
+- 1, 12 and 36 selected pressure messages;
+- five points spanning Prague, Sydney, both sides of the dateline and a polar grid edge;
+- hourly outputs and three-hour outputs at forecast hours 240–246;
+- 0.25° and 0.5° grids, plus 1° and 10° NOMADS areas;
+- two-member GEFS and AIGEFS pressure/surface selections;
+- a 2017 GEFS reforecast spanning forecast hours 237, 240 and 246 across archive blocks.
+
+Each case runs twice. Assertions check returned levels, finite meteorological values/distributions, native time steps, and zero HTTP requests on repeats or spatial expansions of a cached selection. Stderr reports progress; stdout contains JSON with timings, HTTP/range counts, statuses and consumed body bytes. Run `npm run --silent test:live:fetch > fetch-results.json` to save it. Per-request timeouts are 60 seconds; any failed case sets a nonzero exit status. The matrix is opt-in, separate from `test:live:all`.
+
+On 2026-09-11, using GFS run `2026-09-11T12:00:00Z`, the initial matrix measured:
+
+| Request | First pass | Repeat | First-pass HTTP / body bytes |
+| --- | ---: | ---: | ---: |
+| Point, one message | 1.19 s | 0.15 s | 2 / 0.85 MiB |
+| Five global points, same message | 0.14 s | 0.14 s | 0 / 0 |
+| Point, 12 messages | 2.90 s | 0.45 s | 6 / 10.04 MiB |
+| Five points × three hourly steps, 12 messages/step | 9.25 s | 0.61 s | 21 / 30.25 MiB |
+| Five points × f240/243/246, one message/step | 1.57 s | 0.33 s | 6 / 2.56 MiB |
+| Point, 36 messages | 8.99 s | 0.55 s | 18 / 28.05 MiB |
+| 0.5° point, 12 messages | 1.65 s | 0.04 s | 7 / 3.07 MiB |
+| 10° area, one field | 11.40 s | 0.002 s | 1 / 1,860 B |
+| 2017 reforecast, two members × three steps | 2.11 s | 0.46 s | 12 / 2.87 MiB |
+
+These are observations from one sequential run, not performance thresholds or before/after speedup claims. Cases share their temporary cache: later selections reuse inventories, and adding coordinates reuses the same assembled GRIB subset. Widening a selection still downloads its selected ranges again. The 10° area timing includes NOMADS's 11-second pacing after the preceding area request. Body-byte counts include consumed inventories and GRIB, not protocol overhead.
+
+A follow-up run on the same GFS cycle passed all 26 first/repeat checks after adding the operational ensembles. GEFS used 8 requests / 0.77 MiB (1.33 s), and AIGEFS used 10 requests / 4.52 MiB (3.87 s); their repeats made no HTTP requests.
+
 ### AIGFS
 
 `npm run test:live:aigfs` makes one bounded mixed pressure/surface query through the public `dataset: "aigfs"` path. It verifies the operational NOMADS directory/index format, partial HTTP Range transport, bundled GRIB2 decoding, canonical pressure/surface normalization, derived wind, 6-hour lead semantics and unified result identity. The test deliberately uses a valid time well behind the publication edge so it checks source compatibility rather than racing the newest cycle.

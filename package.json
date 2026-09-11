@@ -67,6 +67,7 @@
     "test:live": "tsx scripts/run-live-smoke.ts live-smoke.ts",
     "test:live:bundled": "tsx scripts/run-live-smoke.ts live-smoke-bundled-decoder.ts",
     "test:live:s3": "tsx scripts/run-live-smoke.ts live-smoke-s3.ts",
+    "test:live:fetch": "tsx scripts/live-smoke-fetch-matrix.ts",
     "test:live:history": "tsx scripts/run-live-smoke.ts live-smoke-history.ts",
     "test:live:gfs-routing": "npm run test:live:gfs-operational-parity && npm run test:live:gfs-analysis-routing",
     "test:live:ifs": "tsx scripts/run-live-smoke.ts live-smoke-ifs.ts",

@@ -174,6 +174,8 @@ Source modules own product naming, URLs/object keys, upstream inventories, archi
 
 Provider policies are independent. NOMADS pacing is not inherited by NOAA AWS, NCEI, NCAR/GDEX, IGRA, ECMWF, DWD or Météo-France merely because they all provide weather data. NOAA AWS range downloads hold a policy slot for the full GET, including the response body.
 
+GFS, GEFS, AIGEFS and GEFS reforecast inventories and byte ranges use the shared `fetchTextWithRetry` / `fetchBinaryWithRetry` helpers; GFS NOMADS subsets use the binary helper too. Each attempt holds its provider slot through body consumption or cancellation, releases it before backoff, and reacquires it for a retry. Transport failures while reading a body retry the complete GET. Range callers require HTTP 206 before buffering, so a server that ignores `Range` cannot cause a full global file to be buffered. Sources retain provider-specific HTTP failure mapping and GRIB validation. The response-only `fetchWithRetry` helper covers headers; callers needing body retries and transfer concurrency must use a consuming helper.
+
 ### `cache/`: immutable reuse
 
 Cache decorators own local immutable artifact reuse. A cache hit bypasses upstream access policy; a cache miss still goes through the provider/source policy. Cache keys represent the product/request identity, not whichever transient URL happened to serve it.
