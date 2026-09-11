@@ -223,13 +223,11 @@ This is especially important for regional models with short horizons. An agent s
 
 Implemented as `wfg availability` / `inspect_availability` using the same request contract as `query_atmosphere`. Static capability and domain checks happen before source access; `latest` resolution reuses dataset-native product/index probes, while explicit runs are identified as declared-window checks rather than falsely described as live-verified. The result exposes the resolved initialization, its native valid-time range and horizon, cadence over the requested portion, the available requested subrange, and `complete` / `partial` / `absent` coverage without decoding forecast payloads.
 
-## 6. Make failures directly repairable
+## 6. Make failures directly repairable ✅
 
-Structured capability failures should tell the caller how to repair a request whenever WFG knows the answer.
+Structured capability failures now preserve machine-readable repair hints through the public failure envelope. When WFG knows the exact answer, failures identify the unsupported values and relevant supported alternatives for dataset inventory such as fields, pressure levels, ensemble members, forecast kind/run and source routing. Repair metadata also carries declared horizon/cadence context and points callers back to capability inspection when no truthful flat alternative exists.
 
-For example, an unsupported pressure selection should identify the unsupported levels and the supported alternatives relevant to that dataset. Missing fields should distinguish unsupported inventory from temporarily unavailable upstream data. Domain, horizon, cadence and member-selection failures should preserve similarly actionable context.
-
-Do not silently substitute another dataset, field, level, run or member population.
+Temporary or upstream `DATA_UNAVAILABLE` failures remain distinct from unsupported inventory, and WFG never silently substitutes another dataset, field, level, run, source or member population.
 
 ## 7. Support richer evidence selection without collapsing semantics
 
@@ -296,172 +294,15 @@ The central distinction should remain:
 - `verify_forecast` evaluates one forecast against one reference case;
 - **model skill** summarizes how forecast systems perform over an explicitly defined historical sample.
 
-Historical skill is therefore a composition capability above the normal `dataset × geometry × time × selection` query language, not another model-specific namespace.
+Historical skill should preserve sample definition, lead-time semantics, verification source, spatial matching and comparable-variable rules as first-class metadata. Model-to-model scoreboards should be a derived presentation over those explicit samples, not a hidden universal ranking.
 
-## 1. Generalized evaluation-case and corpus semantics
+The next major line should therefore focus on:
 
-Define one normalized evaluation-case boundary that can represent:
+1. comparable sample definitions across forecast systems;
+2. multi-model archived forecast access where provider history permits it;
+3. observation/reference-source expansion beyond IGRA where scientifically useful;
+4. regional and regime-conditioned skill summaries;
+5. explicit missingness and sample-selection provenance;
+6. agent-friendly questions such as “which model has lower 850-hPa temperature RMSE over this Alpine region at +24 h during summer?” without collapsing the underlying verification semantics.
 
-- forecast dataset and native initialization/lead;
-- reference dataset or observation source;
-- requested and actually sampled location/grid/station;
-- canonical variable/field/level selection;
-- valid time and forecast lead;
-- deterministic value, ensemble distribution or event outcome as appropriate;
-- source/model version and provenance needed to interpret historical changes.
-
-The current local GFS verification JSONL corpus is an implementation seed, not a permanent public storage contract. Storage, backfill and settlement mechanics must remain below the public skill semantics.
-
-Missing cases stay explicit. A skill result must disclose selected cases, materialized/evaluable cases, failures, exclusions and coverage rate rather than silently scoring whatever happened to download.
-
-## 2. Truthful historical coverage and settlement
-
-Generalize resumable verification backfill into a dataset-aware settlement pipeline.
-
-Priorities:
-
-- preserve the long-lived GFS archive as the first deep deterministic corpus;
-- add other physics models only where truthful forecast archives and comparable references exist;
-- accumulate AI, hybrid and regional forecast cases forward when deep public archives do not exist;
-- never imply historical skill for periods where the forecast population was unavailable;
-- record model/product version changes so a long sample does not masquerade as one stationary forecast system.
-
-The architecture should support local materialization first while keeping the corpus abstraction replaceable by a database/object-store implementation later.
-
-## 3. Deterministic skill summaries
-
-Lift the existing GFS bias/MAE/RMSE kernels into a dataset-neutral scoring layer.
-
-Initial statistics:
-
-- count and coverage;
-- bias;
-- MAE;
-- RMSE;
-- circular error treatment for direction-like quantities;
-- anomaly/correlation-oriented scores only where a reference climatology is explicitly defined.
-
-Every statistic must retain variable, level/field, lead-time and sample provenance. Aggregation across physically different quantities or unmatched samples is forbidden.
-
-## 4. Same-sample model skill comparison
-
-Add explicit forecast-system comparison over a **shared evaluation sample**.
-
-A pairwise skill comparison must:
-
-- intersect cases by valid time, location/reference, selection and lead;
-- report how many cases each model had before and after same-sample intersection;
-- compare metrics only on that common sample;
-- preserve each model's native grid/source provenance;
-- avoid interpreting a lower error from a different sample as superior skill.
-
-This is a specialized historical evaluation operation, not a reason to restore generic single-case comparison verbs.
-
-## 5. Ensemble and probabilistic verification
-
-Extend scoring only where the stored corpus preserves member-level or distribution-level information required by the metric.
-
-High-value targets:
-
-- CRPS for continuous scalar ensemble forecasts;
-- Brier score for declared threshold events;
-- reliability and resolution summaries where sample size supports them;
-- rank/PIT-style diagnostics where the reference and ensemble semantics permit them;
-- spread-skill diagnostics;
-- explicit raw-versus-calibrated probability labeling.
-
-Member-first physics remains unchanged. Verification must score the forecast distribution that actually existed, not a synthetic ensemble reconstructed from aggregate quantiles.
-
-## 6. Stratification and regime-aware skill
-
-Allow bounded skill queries by scientifically meaningful dimensions such as:
-
-- forecast lead;
-- variable/field/pressure level;
-- geographic point or bounded region;
-- month/season;
-- initialization cycle;
-- declared weather regime or threshold event.
-
-Stratification must disclose sample counts and avoid producing apparently precise metrics from tiny subsets.
-
-## 7. Spatial verification
-
-Treat precipitation and other scale-sensitive regional fields separately from point error metrics.
-
-Potential methods include neighborhood/event scores and scale-aware spatial verification, but no method should be generalized until its alignment and regridding semantics are explicit. A kilometre-scale regional forecast and a coarse global analysis must not be scored as if they were collocated measurements on one grid.
-
-## Model-skill roadmap definition of done
-
-The line is complete when:
-
-1. evaluation cases and corpus coverage are dataset-neutral and provenance-complete;
-2. deterministic skill can be summarized for more than one forecast system where historical evidence genuinely exists;
-3. pairwise model skill uses explicit same-sample intersection;
-4. at least one ensemble family supports proper probabilistic scoring from preserved distribution/member evidence;
-5. sample coverage, exclusions and model-version caveats are first-class output;
-6. CLI and MCP expose the same normal skill capability from one application service;
-7. corpus storage/backfill remains replaceable infrastructure rather than part of the public weather schema;
-8. tests prevent single-case comparison semantics from leaking into historical skill comparison.
-
-# Following major axes
-
-## Waves and marine forecasting
-
-Add a new geophysical-domain axis using NOAA and ECMWF wave products.
-
-Potential matrix:
-
-~~~text
-                   deterministic       ensemble
-NOAA physics       GFS Wave            GEFS Wave
-ECMWF physics      IFS Wave            IFS ENS Wave
-ECMWF AI           AIFS Wave           AIFS ENS Wave
-~~~
-
-The architectural question is whether the existing dataset × geometry × time × selection contract can generalize from atmospheric forecasts to another physical domain while keeping domain-specific variables and diagnostics explicit.
-
-Wave products should be first-class datasets/domain metadata, not miscellaneous fields hidden inside atmospheric datasets.
-
-## Extended and subseasonal range
-
-Extend the temporal-scale axis from medium-range weather toward weeks 3–4 and subseasonal guidance.
-
-At longer horizons, useful semantics increasingly include:
-
-- weekly means;
-- anomalies;
-- threshold/event probabilities;
-- climatology-relative quantities;
-- calibrated ensemble distributions.
-
-This should be designed as a real temporal-scale capability rather than merely accepting larger forecast-hour numbers.
-
-## Additional meteorological diagnostics
-
-Continue deepening the atmospheric diagnostic layer between major roadmap lines.
-
-Candidates include:
-
-- storm-relative helicity;
-- precipitable-water and integrated-moisture diagnostics;
-- Richardson-number / stability diagnostics;
-- tropopause and isentropic structure;
-- additional severe-convection ingredients.
-
-These are valuable additions but are not, by themselves, the next architectural roadmap.
-
-# Architectural guardrails
-
-Every roadmap line must preserve:
-
-1. **One public query language.** New datasets plug into the existing dataset/capability registry.
-2. **Truthful capabilities.** No synthetic symmetry where the upstream model does not provide it.
-3. **Native semantics.** Domain, run cadence, grid, member population, horizon and provenance remain visible.
-4. **Member-first ensemble physics.** Aggregate only after per-member nonlinear diagnostics.
-5. **Source/access separation.** Provider etiquette, authentication, retries, concurrency, caching and transport remain access-policy concerns.
-6. **CLI/MCP parity.** New normal capabilities appear through both surfaces from the same core.
-7. **Composition over analytical verbs.** WFG owns meteorological semantics, compatibility and necessary alignment; calling agents own comparative interpretation wherever the evidence can be composed safely from lower-level primitives.
-8. **Domain boundaries stay explicit.** Atmospheric evidence, future wave evidence and any activity-specific interpretation remain separate concerns.
-
-The long-term value is not the number of model names. It is that an agent can ask the **same physical question across providers, model classes, uncertainty representations and spatial scales without learning another API**.
+This line should start only after the agent-ergonomics roadmap is complete enough that assembling the required historical evidence does not recreate the same discovery/retrieval problems at larger scale.
