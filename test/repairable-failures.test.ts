@@ -103,6 +103,87 @@ describe("repairable capability failures", () => {
     });
   });
 
+  it("returns reforecast-specific field, variable, and member inventories", () => {
+    const failure = publicValidationFailure({
+      dataset: "gefs",
+      geometry: POINT,
+      time: TIME,
+      selection: {
+        fields: ["visibility"],
+        variables: ["relative_humidity"],
+        pressureLevelsHpa: [850],
+      },
+      forecast: {
+        kind: "reforecast",
+        run: "2020-01-01T00:00:00Z",
+      },
+      ensemble: {
+        members: ["p11"],
+      },
+    });
+
+    expect(issueAt(failure, "selection.fields")?.repair).toMatchObject({
+      kind: "unsupported_inventory",
+      action: "choose_supported_values",
+      unsupported: ["visibility"],
+    });
+    expect(issueAt(failure, "selection.variables")?.repair).toMatchObject({
+      kind: "unsupported_inventory",
+      action: "choose_supported_values",
+      unsupported: ["relative_humidity"],
+    });
+    expect(issueAt(failure, "ensemble.members")?.repair).toMatchObject({
+      kind: "unsupported_inventory",
+      action: "choose_supported_values",
+      unsupported: ["p11"],
+    });
+  });
+
+  it("does not offer a misleading flat inventory for variable-dependent pressure intersections", () => {
+    const failure = publicValidationFailure({
+      dataset: "gefs",
+      geometry: POINT,
+      time: TIME,
+      selection: {
+        variables: ["specific_humidity"],
+        pressureLevelsHpa: [50],
+      },
+      forecast: {
+        kind: "reforecast",
+        run: "2020-01-01T00:00:00Z",
+      },
+    });
+
+    expect(issueAt(failure, "selection.pressureLevelsHpa")?.repair).toMatchObject({
+      kind: "unsupported_capability",
+      action: "inspect_capabilities",
+      dataset: "gefs",
+      path: "selection.pressureLevelsHpa",
+    });
+  });
+
+  it("rejects reforecast on non-GEFS datasets with an operational repair", () => {
+    const failure = publicValidationFailure({
+      dataset: "icon-d2",
+      geometry: POINT,
+      time: TIME,
+      selection: { fields: ["temperature_2m"] },
+      forecast: {
+        kind: "reforecast",
+        run: "2020-01-01T00:00:00Z",
+      },
+    });
+
+    expect(issueAt(failure, "forecast.kind")?.repair).toMatchObject({
+      kind: "unsupported_inventory",
+      action: "choose_supported_values",
+      dataset: "icon-d2",
+      path: "forecast.kind",
+      unsupported: ["reforecast"],
+      supported: ["operational"],
+    });
+  });
+
   it("suggests removing model-specific modifiers when no alternative value applies", () => {
     const failure = publicValidationFailure({
       dataset: "icon-d2",
@@ -117,6 +198,23 @@ describe("repairable capability failures", () => {
       action: "remove_modifier",
       dataset: "icon-d2",
       path: "forecast.grid",
+    });
+  });
+
+  it("suggests removing a source override from datasets that do not expose one", () => {
+    const failure = publicValidationFailure({
+      dataset: "icon-d2",
+      geometry: POINT,
+      time: TIME,
+      selection: { fields: ["temperature_2m"] },
+      source: "s3",
+    });
+
+    expect(issueAt(failure, "source")?.repair).toMatchObject({
+      kind: "unsupported_capability",
+      action: "remove_modifier",
+      dataset: "icon-d2",
+      path: "source",
     });
   });
 
@@ -139,11 +237,58 @@ describe("repairable capability failures", () => {
     expect(repair.supported.length).toBeGreaterThan(0);
   });
 
-  it("returns the source required by a GFS geometry instead of silently rerouting", () => {
+  it("returns the source required by a GFS multi-point geometry instead of silently rerouting", () => {
     const failure = publicValidationFailure({
       dataset: "gfs",
       geometry: {
         type: "points",
+        points: [POINT, { type: "point", latitude: 50.1, longitude: 14.5 }],
+      },
+      time: TIME,
+      selection: { fields: ["temperature_2m"] },
+      source: "nomads",
+    });
+
+    expect(issueAt(failure, "source")?.repair).toMatchObject({
+      kind: "unsupported_inventory",
+      action: "choose_supported_values",
+      dataset: "gfs",
+      path: "source",
+      unsupported: ["nomads"],
+      supported: ["s3"],
+    });
+  });
+
+  it("returns NOMADS as the repair for a GFS area source override", () => {
+    const failure = publicValidationFailure({
+      dataset: "gfs",
+      geometry: {
+        type: "area",
+        westLongitude: 14,
+        eastLongitude: 15,
+        southLatitude: 49,
+        northLatitude: 50,
+      },
+      time: TIME,
+      selection: { fields: ["temperature_2m"] },
+      source: "s3",
+    });
+
+    expect(issueAt(failure, "source")?.repair).toMatchObject({
+      kind: "unsupported_inventory",
+      action: "choose_supported_values",
+      dataset: "gfs",
+      path: "source",
+      unsupported: ["s3"],
+      supported: ["nomads"],
+    });
+  });
+
+  it("returns S3 as the repair for a GFS transect source override", () => {
+    const failure = publicValidationFailure({
+      dataset: "gfs",
+      geometry: {
+        type: "transect",
         points: [POINT, { type: "point", latitude: 50.1, longitude: 14.5 }],
       },
       time: TIME,
@@ -185,6 +330,23 @@ describe("repairable capability failures", () => {
       dataset: "gefs",
       path: "geometry",
       supported: ["point", "points"],
+    });
+  });
+
+  it("uses capability inspection for non-inventory capability failures", () => {
+    const failure = publicValidationFailure({
+      dataset: "icon-d2",
+      geometry: POINT,
+      time: TIME,
+      selection: { fields: ["temperature_2m"] },
+      ensemble: { includeMembers: true },
+    });
+
+    expect(issueAt(failure, "ensemble")?.repair).toMatchObject({
+      kind: "unsupported_capability",
+      action: "inspect_capabilities",
+      dataset: "icon-d2",
+      path: "ensemble",
     });
   });
 
