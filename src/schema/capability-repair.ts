@@ -157,6 +157,9 @@ function supportedValues(
   message: string,
 ): RepairValue[] | undefined {
   if (path === "forecast.run") {
+    if (request.dataset === "gefs" && request.forecast?.kind === "reforecast") {
+      return ["explicit ISO cycle"];
+    }
     return ATMOSPHERIC_DATASET_CATALOG[metadata.internalDatasetId].runSelectors
       .map(runSelectorLabel);
   }
