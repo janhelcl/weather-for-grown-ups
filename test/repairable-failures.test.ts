@@ -72,6 +72,30 @@ describe("repairable capability failures", () => {
     expect(issue?.repair.supported).not.toContain("not-a-member");
   });
 
+  it("returns supported operational run selectors when a selector is unsupported", () => {
+    const failure = publicValidationFailure({
+      dataset: "hgefs",
+      geometry: POINT,
+      time: TIME,
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+      },
+      forecast: {
+        run: "latest_complete",
+      },
+    });
+
+    expect(issueAt(failure, "forecast.run")?.repair).toMatchObject({
+      kind: "unsupported_inventory",
+      action: "choose_supported_values",
+      dataset: "hgefs",
+      path: "forecast.run",
+      unsupported: ["latest_complete"],
+      supported: ["latest", "explicit ISO cycle"],
+    });
+  });
+
   it("uses reforecast run selectors rather than operational GEFS selectors", () => {
     const failure = publicValidationFailure({
       dataset: "gefs",
