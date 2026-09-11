@@ -3,6 +3,7 @@ import { AIFS_PRESSURE_LEVELS_HPA } from "./aifs.js";
 import { AIGFS_PRESSURE_LEVELS_HPA } from "./aigfs.js";
 import { getGefsCatalog } from "./gefs-catalog.js";
 import { ICON_D2_PRESSURE_LEVELS_HPA } from "./icon-d2.js";
+import { ICON_D2_EPS_PRESSURE_LEVELS_HPA } from "./icon-d2-eps.js";
 import { IFS_PRESSURE_LEVELS_HPA } from "./ifs.js";
 import { GFS_PRESSURE_LEVELS_HPA } from "./pressure-levels.js";
 import { searchAtmosphereCatalog } from "./unified-search.js";
@@ -313,8 +314,8 @@ function declaredPressureLevels(dataset: InspectAtmosphereCapabilitiesRequest["d
     case "aigfs":
     case "aigefs":
     case "hgefs": return AIGFS_PRESSURE_LEVELS_HPA;
-    case "icon-d2":
-    case "icon-d2-eps": return ICON_D2_PRESSURE_LEVELS_HPA;
+    case "icon-d2": return ICON_D2_PRESSURE_LEVELS_HPA;
+    case "icon-d2-eps": return ICON_D2_EPS_PRESSURE_LEVELS_HPA;
     case "ifs":
     case "ifs-ens": return IFS_PRESSURE_LEVELS_HPA;
     case "aifs":

@@ -16,7 +16,9 @@ export const DEFAULT_ATMOSPHERIC_PRESSURE_VARIABLES = [
   "geopotential_height",
 ] as const;
 export const DEFAULT_ATMOSPHERIC_PRESSURE_LEVELS_HPA = [1000, 925, 850, 700, 500] as const;
+export const DEFAULT_ICON_D2_PRESSURE_LEVELS_HPA = [1000, 950, 850, 700, 500] as const;
 const FIELD_ONLY_DATASETS = new Set<PublicAtmosphericDataset>(["arome", "pe-arome"]);
+const ICON_D2_DATASETS = new Set<PublicAtmosphericDataset>(["icon-d2", "icon-d2-eps"]);
 
 export const queryAtmosphereInputSchema = z.strictObject({
   ...queryAtmosphereSchema.shape,
@@ -49,7 +51,9 @@ export function defaultAtmosphericSelection(
   if (FIELD_ONLY_DATASETS.has(dataset)) return { fields: ["temperature_2m"] };
   return {
     variables: [...DEFAULT_ATMOSPHERIC_PRESSURE_VARIABLES],
-    pressureLevelsHpa: [...DEFAULT_ATMOSPHERIC_PRESSURE_LEVELS_HPA],
+    pressureLevelsHpa: ICON_D2_DATASETS.has(dataset)
+      ? [...DEFAULT_ICON_D2_PRESSURE_LEVELS_HPA]
+      : [...DEFAULT_ATMOSPHERIC_PRESSURE_LEVELS_HPA],
   };
 }
 

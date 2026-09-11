@@ -1,9 +1,5 @@
 import type { Command } from "commander";
 import { InvalidRequestError } from "../failure.js";
-import { HistoricalIndexBackfillService } from "../core/history-backfill.js";
-import { HistoricalIndexService } from "../core/history-index.js";
-import { VerificationIndexBackfillService } from "../core/verification-index-backfill.js";
-import { VerificationIndexSkillService } from "../core/verification-index-skill.js";
 import {
   DEFAULT_HISTORICAL_BACKFILL_MAX_FETCHES,
   historicalIndexBackfillResultSchema,
@@ -44,6 +40,7 @@ export function registerIndexCommand(program: Command): void {
     .option("--max-steps <number>", "Maximum selected cycles materialized by this call", numberOption("--max-steps"), DEFAULT_HISTORICAL_TIME_SERIES_MAX_STEPS)
     .option("--json", "Output JSON")
     .action(async (options) => {
+      const { HistoricalIndexService } = await import("../core/history-index.js");
       assertAnalysisDataset(options.dataset);
       const result = historicalIndexBuildResultSchema.parse(await new HistoricalIndexService().materialize({
         latitude: options.lat,
@@ -75,6 +72,7 @@ export function registerIndexCommand(program: Command): void {
     .option("--continue-on-error", "Continue after an archive/profile error")
     .option("--json", "Output JSON")
     .action(async (options) => {
+      const { HistoricalIndexBackfillService } = await import("../core/history-backfill.js");
       assertAnalysisDataset(options.dataset);
       const result = historicalIndexBackfillResultSchema.parse(await new HistoricalIndexBackfillService().backfill({
         latitude: options.lat,
@@ -113,6 +111,7 @@ export function registerIndexCommand(program: Command): void {
     .option("--continue-on-error", "Continue after an archive/observation error")
     .option("--json", "Output JSON")
     .action(async (options) => {
+      const { VerificationIndexBackfillService } = await import("../core/verification-index-backfill.js");
       const result = verificationIndexBackfillResultSchema.parse(
         await new VerificationIndexBackfillService().backfill({
           referenceDataset: parseReference(options.reference),
@@ -156,6 +155,7 @@ export function registerIndexCommand(program: Command): void {
     .option("--max-station-distance-km <number>", "Filter IGRA cases by actual station distance", numberOption("--max-station-distance-km"))
     .option("--json", "Output JSON")
     .action(async (options) => {
+      const { VerificationIndexSkillService } = await import("../core/verification-index-skill.js");
       const result = verificationIndexSkillResultSchema.parse(
         await new VerificationIndexSkillService().summarize({
           referenceDataset: parseReference(options.reference),

@@ -8,7 +8,7 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
-import { fetchWithRetry } from "../access/http-fetch.js";
+import { fetchBinaryWithRetry, fetchTextWithRetry } from "../access/http-fetch.js";
 import type {
   AigfsAvailabilityRequirement,
   AigfsDataRequest,
@@ -162,7 +162,7 @@ export class AigefsS3SubsetCache implements AigfsSubsetCache {
     }
 
     await mkdir(this.memberRootDir, { recursive: true });
-    const response = await fetchWithRetry(
+    const { response, text } = await fetchTextWithRetry(
       url,
       { headers: { "user-agent": WFG_USER_AGENT } },
       { fetchFn: this.memberFetchFn, accessPolicy: this.memberAccessPolicy },
@@ -177,7 +177,6 @@ export class AigefsS3SubsetCache implements AigfsSubsetCache {
         details: { run: run.toISOString(), forecastHour, member: this.member, product },
       });
     }
-    const text = await response.text();
     await writeFile(path, text, "utf8");
     return text;
   }
@@ -192,7 +191,7 @@ export class AigefsS3SubsetCache implements AigfsSubsetCache {
     if (await exists(path)) return true;
 
     await mkdir(this.memberRootDir, { recursive: true });
-    const response = await fetchWithRetry(
+    const { response, text } = await fetchTextWithRetry(
       url,
       { headers: { "user-agent": WFG_USER_AGENT } },
       { fetchFn: this.memberFetchFn, accessPolicy: this.memberAccessPolicy },
@@ -206,7 +205,6 @@ export class AigefsS3SubsetCache implements AigfsSubsetCache {
         statusText: response.statusText,
       });
     }
-    const text = await response.text();
     await writeFile(path, text, "utf8");
     return true;
   }
@@ -219,7 +217,7 @@ export class AigefsS3SubsetCache implements AigfsSubsetCache {
     const chunks: Uint8Array[] = [];
     for (const range of ranges) {
       const rangeValue = `bytes=${range.start}-${range.end ?? ""}`;
-      const response = await fetchWithRetry(
+      const { response, bytes } = await fetchBinaryWithRetry(
         url,
         {
           headers: {
@@ -227,7 +225,7 @@ export class AigefsS3SubsetCache implements AigfsSubsetCache {
             "user-agent": WFG_USER_AGENT,
           },
         },
-        { fetchFn: this.memberFetchFn, accessPolicy: this.memberAccessPolicy },
+        { expectedStatus: 206, fetchFn: this.memberFetchFn, accessPolicy: this.memberAccessPolicy },
       );
       if (response.status !== 206) {
         throw upstreamHttpFailure({
@@ -237,7 +235,6 @@ export class AigefsS3SubsetCache implements AigfsSubsetCache {
           statusText: response.statusText,
         });
       }
-      const bytes = new Uint8Array(await response.arrayBuffer());
       if (
         bytes.length < 4
         || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB"

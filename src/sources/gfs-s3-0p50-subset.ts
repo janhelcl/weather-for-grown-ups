@@ -2,7 +2,7 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
-import { fetchBinaryWithRetry, fetchWithRetry } from "../access/http-fetch.js";
+import { fetchBinaryWithRetry, fetchTextWithRetry } from "../access/http-fetch.js";
 import { upstreamHttpFailure } from "../access/http-failure.js";
 import type { HttpRetryExecutionOptions } from "../access/http-retry.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
@@ -77,7 +77,7 @@ export class GfsS30p50SubsetClient {
   }
 
   private async fetchIndex(url: string, run: Date, forecastHour: number): Promise<string> {
-    const response = await fetchWithRetry(
+    const { response, text } = await fetchTextWithRetry(
       url,
       { headers: { "user-agent": WFG_USER_AGENT } },
       {
@@ -96,7 +96,7 @@ export class GfsS30p50SubsetClient {
         details: { run: run.toISOString(), forecastHour, grid: "0p50" },
       });
     }
-    return response.text();
+    return text;
   }
 
   private async fetchRanges(url: string, ranges: ByteRange[]): Promise<Uint8Array> {
@@ -127,6 +127,7 @@ export class GfsS30p50SubsetClient {
       },
       {
         ...this.retryOptions,
+        expectedStatus: 206,
         fetchFn: this.fetchFn,
         ...(this.accessPolicy === undefined ? {} : { accessPolicy: this.accessPolicy }),
       },

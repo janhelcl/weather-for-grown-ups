@@ -1,12 +1,5 @@
 import type { Command } from "commander";
 import {
-  UnifiedAnalogService,
-  UnifiedAtmosphereAlignmentService,
-  UnifiedAtmosphereDiagnosticService,
-  UnifiedAtmosphereQueryService,
-  UnifiedForecastVerificationService,
-} from "../core/unified-atmosphere-api.js";
-import {
   atmosphericDiagnosticSelectionSchema,
   PUBLIC_ATMOSPHERIC_DATASET_IDS,
   publicAtmosphericDatasetSchema,
@@ -16,6 +9,7 @@ import {
   type QueryAtmosphereInput,
 } from "../schema/unified-api.js";
 import type { PublicQueryAtmosphereInput } from "../schema/unified-query-input.js";
+import { defaultAtmosphericSelection } from "../schema/unified-query-input.js";
 import {
   MAX_ALIGNMENT_SOURCES,
   alignAtmosphereSchema,
@@ -97,6 +91,7 @@ function registerQueryCommand(program: Command): void {
     .option("--json", "Output JSON")
     .action(async (options) => {
       const request = buildUnifiedQuery(options);
+      const { UnifiedAtmosphereQueryService } = await import("../core/unified-atmosphere-api.js");
       const result = await new UnifiedAtmosphereQueryService({
         progress: reportCliProgress,
       }).query(request);
@@ -119,7 +114,7 @@ function registerDiagnoseCommand(program: Command): void {
     .option("--max-steps <number>", "Maximum time steps", numberOption("--max-steps"))
     .option("--lower <hpa>", "Layer lower pressure surface", numberOption("--lower"))
     .option("--upper <hpa>", "Layer upper pressure surface", numberOption("--upper"))
-    .option("--levels <list>", "Profile/parcel pressure levels in hPa", DEFAULT_LEVELS)
+    .option("--levels <list>", "Profile/parcel pressure levels in hPa")
     .option("--diagnostics <list>", "Layer/profile diagnostic IDs")
     .option("--parcel <surface_2m|mixed_layer_100hpa|most_unstable_300hpa>", "Parcel definition")
     .option("--run <iso|latest|latest_complete>", "Forecast initialization")
@@ -132,7 +127,10 @@ function registerDiagnoseCommand(program: Command): void {
     .option("--json", "Output JSON")
     .action(async (options) => {
       const request = buildUnifiedDiagnostic(options);
-      const result = await new UnifiedAtmosphereDiagnosticService().diagnose(request);
+      const { UnifiedAtmosphereDiagnosticService } = await import("../core/unified-atmosphere-api.js");
+      const result = await new UnifiedAtmosphereDiagnosticService({
+        progress: reportCliProgress,
+      }).diagnose(request);
       printResult(result, Boolean(options.json));
     });
 }
@@ -160,7 +158,10 @@ function registerAlignCommand(program: Command): void {
     .option("--valid-times <intersection|union>", "Time-range axis across sources", "intersection")
     .option("--json", "Output JSON")
     .action(async (options) => {
-      const result = await new UnifiedAtmosphereAlignmentService().align(buildUnifiedAlignment(options));
+      const { UnifiedAtmosphereAlignmentService } = await import("../core/unified-atmosphere-api.js");
+      const result = await new UnifiedAtmosphereAlignmentService({
+        progress: reportCliProgress,
+      }).align(buildUnifiedAlignment(options));
       printResult(result, Boolean(options.json));
     });
 }
@@ -260,7 +261,11 @@ export function buildUnifiedAlignment(options: Record<string, any>): AlignAtmosp
     sources,
     geometry: { type: "point" as const, latitude: options.lat, longitude: options.lon },
     time: parseTime(options),
-    selection: parseSelection({ vars: options.vars, levels: options.levels, fields: options.fields }),
+    selection: parseSelection(
+      { vars: options.vars, levels: options.levels, fields: options.fields },
+      undefined,
+      sources.map((source) => source.dataset),
+    ),
     ...(Object.keys(alignment).length === 0 ? {} : { alignment }),
   };
   return alignAtmosphereSchema.parse(request) as AlignAtmosphereInput;
@@ -335,6 +340,7 @@ function registerVerifyCommand(program: Command): void {
             leadHours: leads,
           };
 
+      const { UnifiedForecastVerificationService } = await import("../core/unified-atmosphere-api.js");
       const result = await new UnifiedForecastVerificationService().verify(request);
       printResult(result, Boolean(options.json));
     });
@@ -354,6 +360,7 @@ function registerAnalogsCommand(program: Command): void {
     .option("--no-fetch-target", "Do not fetch and materialize the target when missing")
     .option("--json", "Output JSON")
     .action(async (options) => {
+      const { UnifiedAnalogService } = await import("../core/unified-atmosphere-api.js");
       const result = await new UnifiedAnalogService().find({
         dataset: "gfs-analysis",
         geometry: { type: "point", latitude: options.lat, longitude: options.lon },
@@ -433,7 +440,7 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
     }
     diagnostic = {
       kind: "profile",
-      pressureLevelsHpa: parseNumberList(options.levels, "--levels"),
+      pressureLevelsHpa: parsePressureLevels(options.levels, dataset),
       diagnostics: parseStringList(options.diagnostics) as any,
     };
   } else if (kind === "parcel") {
@@ -442,7 +449,7 @@ export function buildUnifiedDiagnostic(options: Record<string, any>): DiagnoseAt
     }
     diagnostic = {
       kind: "parcel",
-      pressureLevelsHpa: parseNumberList(options.levels, "--levels"),
+      pressureLevelsHpa: parsePressureLevels(options.levels, dataset),
       parcel: options.parcel,
     } as DiagnoseAtmosphereInput["diagnostic"];
   } else {
@@ -527,22 +534,51 @@ function parseTime(options: Record<string, any>): QueryAtmosphereInput["time"] {
 function parseSelection(
   options: Record<string, any>,
   dataset?: PublicAtmosphericDataset,
+  alignmentDatasets: readonly PublicAtmosphericDataset[] = [],
 ): QueryAtmosphereInput["selection"] {
   const fields = options.fields === undefined ? undefined : parseStringList(options.fields);
   const explicitPressure = options.vars !== undefined || options.levels !== undefined;
   if (fields !== undefined && !explicitPressure) return { fields };
-  if (!explicitPressure && fields === undefined && isFieldOnlyDataset(dataset)) {
+  if (!explicitPressure && fields === undefined && dataset !== undefined) {
+    return defaultAtmosphericSelection(dataset);
+  }
+  if (!explicitPressure && fields === undefined && alignmentDatasets.some(isFieldOnlyDataset)) {
     return { fields: ["temperature_2m"] };
   }
   return {
     variables: parseStringList(options.vars ?? DEFAULT_UNIFIED_VARIABLES),
-    pressureLevelsHpa: parseNumberList(options.levels ?? DEFAULT_LEVELS, "--levels"),
+    pressureLevelsHpa: parsePressureLevels(options.levels, dataset, alignmentDatasets),
     ...(fields === undefined ? {} : { fields }),
   };
 }
 
-function isFieldOnlyDataset(dataset: PublicAtmosphericDataset | undefined): boolean {
+function parsePressureLevels(
+  value: unknown,
+  dataset: PublicAtmosphericDataset | undefined,
+  alignmentDatasets: readonly PublicAtmosphericDataset[] = [],
+): number[] {
+  if (value !== undefined) return parseNumberList(value, "--levels");
+  if (dataset !== undefined) {
+    const selection = defaultAtmosphericSelection(dataset);
+    if ("pressureLevelsHpa" in selection && selection.pressureLevelsHpa !== undefined) {
+      return [...selection.pressureLevelsHpa];
+    }
+  }
+  if (alignmentDatasets.some(isIconD2Dataset)) {
+    const onlyIconD2 = alignmentDatasets.every(isIconD2Dataset);
+    return onlyIconD2
+      ? [1000, 950, 850, 700, 500]
+      : [1000, 850, 700, 500];
+  }
+  return parseNumberList(DEFAULT_LEVELS, "--levels");
+}
+
+function isFieldOnlyDataset(dataset: PublicAtmosphericDataset): boolean {
   return dataset === "arome" || dataset === "pe-arome";
+}
+
+function isIconD2Dataset(dataset: PublicAtmosphericDataset): boolean {
+  return dataset === "icon-d2" || dataset === "icon-d2-eps";
 }
 
 function forecastInput(
@@ -623,7 +659,9 @@ function limitsInput(options: Record<string, any>) {
 function reportCliProgress(progress: AtmosphericStepProgress): void {
   const operation = progress.operation === "points_time_series"
     ? "GFS multi-point time series"
-    : "GFS time series";
+    : progress.operation === "diagnostic_time_series"
+      ? "GFS diagnostic time series"
+      : "GFS time series";
   const source = progress.source === "s3" ? "AWS S3" : "NOMADS";
 
   if (progress.phase === "start") {

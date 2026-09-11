@@ -72,6 +72,22 @@ describe("stdio MCP", () => {
     ]);
   }, 30_000);
 
+  it("advertises read-only tools and continues catalog pages over the actual protocol", async () => {
+    const client = await connectStdio();
+    const { tools } = await client.listTools();
+    const catalog = tools.find(tool => tool.name === "search_catalog")!;
+    expect(catalog.annotations).toMatchObject({ readOnlyHint: true, openWorldHint: false });
+    expect(catalog.inputSchema.properties).toHaveProperty("offset");
+    const first = await client.callTool({ name: "search_catalog", arguments: { search: "wind", limit: 2 } });
+    const page = first.structuredContent as { nextOffset: number; matches: Array<{ id: string }> };
+    expect(page.nextOffset).toBe(2);
+    const second = await client.callTool({ name: "search_catalog", arguments: { search: "wind", limit: 2, offset: page.nextOffset } });
+    expect(second.isError).not.toBe(true);
+    const next = second.structuredContent as { matches: Array<{ id: string }> };
+    expect(next.matches).toHaveLength(2);
+    expect(next.matches).not.toEqual(page.matches);
+  }, 30_000);
+
   it("serves local discovery calls and a typed failure envelope over stdio", async () => {
     const client = await connectStdio();
 

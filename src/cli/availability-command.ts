@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { AtmosphericAvailabilityService } from "../core/atmospheric-availability.js";
+import type { AtmosphericAvailabilityService } from "../core/atmospheric-availability.js";
 import { PUBLIC_ATMOSPHERIC_DATASET_IDS } from "../schema/unified-api.js";
 import { collectPoint, numberOption } from "./shared.js";
 import { buildUnifiedQuery } from "./unified-atmosphere-command.js";
@@ -33,6 +33,7 @@ export function registerAvailabilityCommand(program: Command): void {
     .option("--json", "Output JSON")
     .action(async (options) => {
       const request = buildUnifiedQuery(options);
+      const { AtmosphericAvailabilityService } = await import("../core/atmospheric-availability.js");
       const result = await new AtmosphericAvailabilityService().inspect(request);
       if (options.json) {
         console.log(JSON.stringify(result, null, 2));

@@ -23,6 +23,7 @@ import {
 } from "./atmospheric-evidence.js";
 import { mapConcurrent } from "./concurrency.js";
 import { UnifiedAtmosphereQueryService } from "./unified-atmosphere-query.js";
+import type { AtmosphericProgressReporter } from "./progress.js";
 
 /**
  * Sources usually live on different providers, and every provider keeps its own
@@ -38,6 +39,7 @@ export interface AlignmentQueryService {
 export interface UnifiedAtmosphereAlignmentServiceOptions {
   queryService?: AlignmentQueryService;
   sourceConcurrency?: number;
+  progress?: AtmosphericProgressReporter;
 }
 
 type SourceOutcome =
@@ -55,7 +57,9 @@ export class UnifiedAtmosphereAlignmentService {
   private readonly sourceConcurrency: number;
 
   constructor(options: UnifiedAtmosphereAlignmentServiceOptions = {}) {
-    this.queryService = options.queryService ?? new UnifiedAtmosphereQueryService();
+    this.queryService = options.queryService ?? new UnifiedAtmosphereQueryService({
+      ...(options.progress === undefined ? {} : { progress: options.progress }),
+    });
     this.sourceConcurrency = options.sourceConcurrency ?? DEFAULT_ALIGNMENT_SOURCE_CONCURRENCY;
   }
 

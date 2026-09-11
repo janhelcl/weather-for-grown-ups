@@ -242,6 +242,35 @@ describe("unified CLI request builders", () => {
       .toThrow(/at least two/i);
   });
 
+  it("uses pressure defaults shared by every aligned regional and global source", () => {
+    const mixed = buildUnifiedAlignment({
+      source: ["icon-d2", "gfs", "ifs-ens"],
+      lat: 45.81,
+      lon: 11.73,
+      at: "2026-09-12T12:00:00Z",
+    });
+    const iconOnly = buildUnifiedAlignment({
+      source: ["icon-d2", "icon-d2-eps"],
+      lat: 45.81,
+      lon: 11.73,
+      at: "2026-09-12T12:00:00Z",
+    });
+
+    expect(mixed.selection.pressureLevelsHpa).toEqual([1000, 850, 700, 500]);
+    expect(iconOnly.selection.pressureLevelsHpa).toEqual([1000, 950, 850, 700, 500]);
+  });
+
+  it("uses a common surface field when an alignment includes a field-only dataset", () => {
+    const request = buildUnifiedAlignment({
+      source: ["arome", "gfs"],
+      lat: 48.7,
+      lon: 2.35,
+      at: "2026-09-12T12:00:00Z",
+    });
+
+    expect(request.selection).toEqual({ fields: ["temperature_2m"] });
+  });
+
   it("builds historical multi-point field ranges without forecast metadata", () => {
     const request = buildUnifiedQuery({
       dataset: "gfs-analysis",
@@ -367,6 +396,19 @@ describe("unified CLI request builders", () => {
     expect(request).not.toHaveProperty("limits");
   });
 
+  it("uses native ICON-D2 pressure defaults when no selection or levels are supplied", () => {
+    for (const dataset of ["icon-d2", "icon-d2-eps"] as const) {
+      const request = buildUnifiedQuery({
+        dataset,
+        lat: 45.81,
+        lon: 11.73,
+        at: "2026-09-12T12:00:00Z",
+      });
+
+      expect(request.selection.pressureLevelsHpa).toEqual([1000, 950, 850, 700, 500]);
+    }
+  });
+
   it("validates CLI geometry and time forms before service dispatch", () => {
     expect(() => buildUnifiedQuery({
       dataset: "bogus",
@@ -480,6 +522,32 @@ describe("unified CLI request builders", () => {
       diagnostic: { kind: "parcel", parcel: "surface_2m" },
     });
     expect(parcel).not.toHaveProperty("forecast");
+  });
+
+  it("uses native ICON-D2 levels for profile and parcel diagnostic defaults", () => {
+    const profile = buildUnifiedDiagnostic({
+      dataset: "icon-d2",
+      lat: 45.81,
+      lon: 11.73,
+      at: "2026-09-12T12:00:00Z",
+      kind: "profile",
+      diagnostics: "freezing_level_crossings",
+    });
+    const parcel = buildUnifiedDiagnostic({
+      dataset: "icon-d2-eps",
+      lat: 45.81,
+      lon: 11.73,
+      at: "2026-09-12T12:00:00Z",
+      kind: "parcel",
+      parcel: "surface_2m",
+    });
+
+    expect(profile.diagnostic).toMatchObject({
+      pressureLevelsHpa: [1000, 950, 850, 700, 500],
+    });
+    expect(parcel.diagnostic).toMatchObject({
+      pressureLevelsHpa: [1000, 950, 850, 700, 500],
+    });
   });
 
   it("fails early for incomplete or unknown diagnostic selections", () => {

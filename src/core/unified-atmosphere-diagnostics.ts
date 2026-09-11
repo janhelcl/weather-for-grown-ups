@@ -8,9 +8,11 @@ import { createAtmosphericDiagnosticAdapterRegistry } from "./diagnostic-adapter
 import type { AtmosphericDiagnosticAdapterRegistry } from "./diagnostic-adapters/types.js";
 import { assertAtmosphericGeometryWithinDomain } from "./atmospheric-domain.js";
 import { wrapUnifiedAtmosphereResult } from "./unified-atmosphere-result.js";
+import type { AtmosphericProgressReporter } from "./progress.js";
 
 export interface UnifiedAtmosphereDiagnosticServiceOptions {
   adapters?: Partial<AtmosphericDiagnosticAdapterRegistry>;
+  progress?: AtmosphericProgressReporter;
 }
 
 export class UnifiedAtmosphereDiagnosticService {
@@ -18,6 +20,7 @@ export class UnifiedAtmosphereDiagnosticService {
 
   constructor(options: UnifiedAtmosphereDiagnosticServiceOptions = {}) {
     this.adapters = createAtmosphericDiagnosticAdapterRegistry({
+      ...(options.progress === undefined ? {} : { progress: options.progress }),
       ...(options.adapters === undefined ? {} : { adapters: options.adapters }),
     });
   }

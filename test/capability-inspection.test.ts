@@ -58,6 +58,26 @@ describe("inspectAtmosphereCapabilities", () => {
     )).toBe(true);
   });
 
+  it("distinguishes deterministic and ensemble ICON-D2 pressure inventories", () => {
+    const deterministic = inspectAtmosphereCapabilities({
+      dataset: "icon-d2",
+      selection: { variables: ["temperature"], pressureLevelsHpa: [250] },
+    });
+    const ensemble = inspectAtmosphereCapabilities({
+      dataset: "icon-d2-eps",
+      selection: { variables: ["temperature"], pressureLevelsHpa: [250] },
+    });
+
+    expect(deterministic.supported).toBe(true);
+    expect(ensemble.supported).toBe(false);
+    expect(ensemble.unsupported).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: ["selection", "pressureLevelsHpa"],
+        reason: expect.stringContaining("250"),
+      }),
+    ]));
+  });
+
   it("checks limited-area domain coverage without touching a provider", () => {
     const result = inspectAtmosphereCapabilities({
       dataset: "icon-d2",

@@ -16,16 +16,16 @@ import type { VariableId } from "../schema/query.js";
  * Keep this inventory explicit rather than inheriting a broader global-model list.
  */
 export const ICON_D2_PRESSURE_LEVELS_HPA = [
+  200,
+  250,
   300,
   400,
   500,
   600,
   700,
-  800,
   850,
-  900,
-  925,
   950,
+  975,
   1000,
 ] as const;
 

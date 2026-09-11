@@ -31,6 +31,7 @@ const RETRYABLE_TRANSPORT_ERROR_CODES = new Set([
 ]);
 
 export function isRetryableHttpTransportError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === "TimeoutError") return true;
   if (!(error instanceof TypeError)) return false;
   const cause = (error as TypeError & { cause?: unknown }).cause;
   const code = typeof cause === "object" && cause !== null && "code" in cause

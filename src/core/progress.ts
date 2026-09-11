@@ -2,7 +2,7 @@ export type AtmosphericProgressPhase = "start" | "step" | "complete";
 
 export interface AtmosphericStepProgress {
   dataset: "gfs";
-  operation: "time_series" | "points_time_series";
+  operation: "time_series" | "points_time_series" | "diagnostic_time_series";
   phase: AtmosphericProgressPhase;
   completedSteps: number;
   totalSteps: number;

@@ -84,7 +84,7 @@ export class IconD2RunResolver implements IconD2RunProvider {
   }
 
   async resolveLatestCompleteRun(products: IconD2AvailabilityRequirement): Promise<Date> {
-    const key = `complete:${products.pressure ? "p" : ""}${products.surface ? "s" : ""}`;
+    const key = `complete:${productsKey(products)}`;
     const cached = this.cached(key);
     if (cached) return cached;
 
@@ -183,12 +183,22 @@ function requirementKey(requirement: IconD2RunRequirement): string {
     ? {
         type: requirement.type,
         validTime: requirement.validTime.toISOString(),
-        products: requirement.products,
+        products: productsKey(requirement.products),
       }
     : {
         type: requirement.type,
         startTime: requirement.startTime.toISOString(),
         endTime: requirement.endTime.toISOString(),
-        products: requirement.products,
+        products: productsKey(requirement.products),
       });
+}
+
+function productsKey(products: IconD2AvailabilityRequirement): string {
+  return JSON.stringify({
+    pressure: products.pressure,
+    surface: products.surface,
+    variables: [...new Set((products.variables ?? []).map((variable) => variable.id))].sort(),
+    pressureLevelsHpa: [...new Set(products.pressureLevelsHpa ?? [])].sort((a, b) => b - a),
+    fields: [...new Set((products.fields ?? []).map((field) => field.id))].sort(),
+  });
 }

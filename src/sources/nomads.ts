@@ -1,5 +1,5 @@
 import type { UpstreamAccessPolicy } from "../access/access-policy.js";
-import { fetchWithRetry } from "../access/http-fetch.js";
+import { fetchBinaryWithRetry } from "../access/http-fetch.js";
 import type { HttpRetryExecutionOptions } from "../access/http-retry.js";
 import { formatHttpStatus } from "../access/http-failure.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
@@ -62,7 +62,7 @@ export class NomadsSource implements NomadsPointGribSource, NomadsAreaGribSource
   }
 
   private async fetchGrib(url: string): Promise<Uint8Array> {
-    const response = await fetchWithRetry(
+    const { response, bytes } = await fetchBinaryWithRetry(
       url,
       { headers: { "user-agent": WFG_USER_AGENT } },
       {
@@ -97,7 +97,6 @@ export class NomadsSource implements NomadsPointGribSource, NomadsAreaGribSource
       );
     }
 
-    const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
       throw new UpstreamUnavailableError("NOAA NOMADS returned invalid non-GRIB content", {
         retryable: true,

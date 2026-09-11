@@ -2,7 +2,7 @@ import {
   UPSTREAM_ACCESS_POLICIES,
   type UpstreamAccessPolicy,
 } from "../access/access-policy.js";
-import { fetchBinaryWithRetry, fetchWithRetry } from "../access/http-fetch.js";
+import { fetchBinaryWithRetry, fetchTextWithRetry } from "../access/http-fetch.js";
 import { upstreamHttpFailure } from "../access/http-failure.js";
 import type { HttpRetryExecutionOptions } from "../access/http-retry.js";
 import { WFG_USER_AGENT } from "../access/user-agent.js";
@@ -73,7 +73,7 @@ export class GfsS3Source implements GfsS3SubsetSource {
 
   async fetchIndex(request: ProfileDataRequest): Promise<string> {
     const grid = request.grid ?? "0p25";
-    const response = await fetchWithRetry(
+    const { response, text } = await fetchTextWithRetry(
       buildGfsS3ForecastIndexUrl(request.run, request.forecastHour, grid),
       { headers: { "user-agent": WFG_USER_AGENT } },
       {
@@ -92,7 +92,7 @@ export class GfsS3Source implements GfsS3SubsetSource {
         details: { run: request.run.toISOString(), forecastHour: request.forecastHour, grid },
       });
     }
-    return response.text();
+    return text;
   }
 
   async fetchSubset(request: ProfileDataRequest, indexText: string): Promise<Uint8Array> {
@@ -134,6 +134,7 @@ export class GfsS3Source implements GfsS3SubsetSource {
       },
       {
         ...this.retryOptions,
+        expectedStatus: 206,
         fetchFn: this.fetchFn,
         ...(this.accessPolicy === undefined ? {} : { accessPolicy: this.accessPolicy }),
       },

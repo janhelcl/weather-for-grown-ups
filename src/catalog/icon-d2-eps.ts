@@ -4,12 +4,10 @@ import {
   ICON_D2_AREA_PRESSURE_VARIABLE_IDS,
   ICON_D2_DERIVED_PRESSURE_VARIABLE_IDS,
   ICON_D2_FIELD_IDS,
-  ICON_D2_PRESSURE_LEVELS_HPA,
   ICON_D2_PRESSURE_VARIABLE_IDS,
   ICON_D2_RAW_PRESSURE_VARIABLE_IDS,
   expandIconD2RequestedFields,
   expandIconD2RequestedVariables,
-  isIconD2PressureLevel,
   isIconD2PressureVariable,
 } from "./icon-d2.js";
 
@@ -22,15 +20,31 @@ export const ICON_D2_EPS_MEMBERS = [
 
 export type IconD2EpsMember = (typeof ICON_D2_EPS_MEMBERS)[number];
 
+/** Pressure levels present in DWD's ICON-D2-EPS pressure-level objects. */
+export const ICON_D2_EPS_PRESSURE_LEVELS_HPA = [
+  500,
+  700,
+  850,
+  950,
+  975,
+  1000,
+] as const;
+
+const ICON_D2_EPS_PRESSURE_LEVEL_SET = new Set<number>(
+  ICON_D2_EPS_PRESSURE_LEVELS_HPA,
+);
+
+export function isIconD2EpsPressureLevel(value: number): boolean {
+  return ICON_D2_EPS_PRESSURE_LEVEL_SET.has(value);
+}
+
 export {
   ICON_D2_AREA_FIELD_IDS as ICON_D2_EPS_AREA_FIELD_IDS,
   ICON_D2_AREA_PRESSURE_VARIABLE_IDS as ICON_D2_EPS_AREA_PRESSURE_VARIABLE_IDS,
   ICON_D2_DERIVED_PRESSURE_VARIABLE_IDS as ICON_D2_EPS_DERIVED_PRESSURE_VARIABLE_IDS,
-  ICON_D2_PRESSURE_LEVELS_HPA as ICON_D2_EPS_PRESSURE_LEVELS_HPA,
   ICON_D2_PRESSURE_VARIABLE_IDS as ICON_D2_EPS_PRESSURE_VARIABLE_IDS,
   ICON_D2_RAW_PRESSURE_VARIABLE_IDS as ICON_D2_EPS_RAW_PRESSURE_VARIABLE_IDS,
   expandIconD2RequestedVariables as expandIconD2EpsRequestedVariables,
-  isIconD2PressureLevel as isIconD2EpsPressureLevel,
   isIconD2PressureVariable as isIconD2EpsPressureVariable,
 };
 

@@ -25,12 +25,13 @@ export function registerCatalogCommand(program: Command): void {
       `Comma-separated catalog sections (${UNIFIED_CATALOG_SECTIONS.join("|")}); dataset capabilities are always included`,
     )
     .option("--classification <raw|derived>", "Raw or derived entries")
-    .option("--temporal <instantaneous|accumulation|average>", "Temporal semantics")
+    .option("--temporal <instantaneous|accumulation|average|maximum>", "Temporal semantics")
     .option("--spatial-scope <global|limited-area>", "Dataset spatial-domain filter")
     .option("--covers-point <lat,lon>", "Return only datasets covering this point")
     .option("--covers-area <west,east,south,north>", "Return only datasets fully covering this bounded area")
     .option("--forecast-kind <operational|reforecast>", "GEFS forecast population capability filter")
-    .option("--limit <number>", "Maximum matches", numberOption("--limit"), 30)
+    .option("--limit <number>", "Matches per page (1-100)", numberOption("--limit"), 30)
+    .option("--offset <number>", "Continue from nextOffset with the same filters", numberOption("--offset"))
     .option("--json", "Output JSON")
     .action((options) => {
       const dataset = parseDataset(options.dataset);
@@ -45,6 +46,7 @@ export function registerCatalogCommand(program: Command): void {
         ...(coverage === undefined ? {} : { coverage }),
         ...(options.forecastKind === undefined ? {} : { forecastKind: options.forecastKind }),
         limit: options.limit,
+        ...(options.offset === undefined ? {} : { offset: options.offset }),
       });
 
       if (options.json) {
@@ -143,7 +145,13 @@ function printCatalog(result: UnifiedCatalogResult): void {
     forecastKinds: capability.forecastKinds.join(","),
     runSelectors: capability.runSelectors.join(","),
   })));
-  console.log(`Atmospheric catalog: ${result.totalMatches} canonical matches${result.truncated ? `, showing ${result.matches.length}` : ""}`);
+  console.log(`Atmospheric catalog: ${result.totalMatches} canonical matches, showing ${result.matches.length}`);
+  if (result.nextOffset !== undefined) {
+    console.log(`More matches: repeat the same filters with --offset ${result.nextOffset}`);
+  }
+  if (result.totalMatches === 0) {
+    console.log("No matches. Try fewer search words or broader dataset/section filters; every search word must match.");
+  }
   console.table(result.matches.map((match) => ({
     section: match.section,
     id: match.id,

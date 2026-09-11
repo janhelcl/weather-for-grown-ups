@@ -167,6 +167,81 @@ describe("DiagnosticTimeSeriesService", () => {
     expect(getLayerDiagnostics.mock.calls.every(([query]) => query.run === run && query.source === "s3")).toBe(true);
   });
 
+  it("reports progress for long-running diagnostic ranges", async () => {
+    const onProgress = vi.fn();
+    const service = new DiagnosticTimeSeriesService({
+      layerDiagnosticsGetter: {
+        getLayerDiagnostics: vi.fn(async (query: LayerDiagnosticsQueryInput) => layerResult(query)),
+      },
+      onProgress,
+    });
+
+    await service.getDiagnosticTimeSeries({
+      ...layerBase,
+      startTime: "2026-08-19T00:00:00Z",
+      endTime: "2026-08-19T01:00:00Z",
+    });
+
+    expect(onProgress.mock.calls.map(([progress]) => progress.phase)).toEqual([
+      "start",
+      "step",
+      "step",
+      "complete",
+    ]);
+    expect(onProgress).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      operation: "diagnostic_time_series",
+      completedSteps: 0,
+      totalSteps: 2,
+      source: "s3",
+    }));
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({
+      operation: "diagnostic_time_series",
+      completedSteps: 2,
+      totalSteps: 2,
+    }));
+  });
+
+  it("propagates an explicit grid through every diagnostic family", async () => {
+    const getLayerDiagnostics = vi.fn(async (query: LayerDiagnosticsQueryInput) => layerResult(query));
+    const getProfileDiagnostics = vi.fn(async (query: ProfileDiagnosticsQueryInput) => profileResult(query));
+    const getParcelDiagnostics = vi.fn(async (query: ParcelDiagnosticsQueryInput) => parcelResult(query));
+    const service = new DiagnosticTimeSeriesService({
+      layerDiagnosticsGetter: { getLayerDiagnostics },
+      profileDiagnosticsGetter: { getProfileDiagnostics },
+      parcelDiagnosticsGetter: { getParcelDiagnostics },
+    });
+    const common = {
+      latitude: requestedPoint.latitude,
+      longitude: requestedPoint.longitude,
+      run,
+      grid: "0p50" as const,
+      startTime: "2026-08-19T00:00:00Z",
+      endTime: "2026-08-19T00:00:00Z",
+    };
+
+    await service.getDiagnosticTimeSeries({ ...common, diagnostic: layerBase.diagnostic });
+    await service.getDiagnosticTimeSeries({
+      ...common,
+      diagnostic: {
+        kind: "profile",
+        pressureLevelsHpa: [850, 700],
+        diagnostics: ["temperature_inversion_layers"],
+      },
+    });
+    await service.getDiagnosticTimeSeries({
+      ...common,
+      diagnostic: {
+        kind: "parcel",
+        pressureLevelsHpa: [950, 900, 850, 800, 700, 600, 500, 400, 300, 250],
+        parcel: "surface_2m",
+      },
+    });
+
+    expect(getLayerDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ grid: "0p50" }));
+    expect(getProfileDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ grid: "0p50" }));
+    expect(getParcelDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ grid: "0p50" }));
+  });
+
   it("composes whole-profile diagnostics and normalizes duplicate pressure levels", async () => {
     const getProfileDiagnostics = vi.fn(async (query: ProfileDiagnosticsQueryInput) => profileResult(query));
     const service = new DiagnosticTimeSeriesService({ profileDiagnosticsGetter: { getProfileDiagnostics } });
