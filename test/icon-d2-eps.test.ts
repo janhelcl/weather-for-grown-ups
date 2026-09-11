@@ -14,9 +14,11 @@ import { concat, nativeIconMessage, sectionMap } from "./icon-d2-fixtures.js";
 import {
   ICON_D2_EPS_FIELD_IDS,
   ICON_D2_EPS_MEMBERS,
+  ICON_D2_EPS_PRESSURE_LEVELS_HPA,
   expandIconD2EpsRequestedFields,
   iconD2EpsMemberOrdinal,
   isIconD2EpsField,
+  isIconD2EpsPressureLevel,
   sortIconD2EpsMembers,
 } from "../src/catalog/icon-d2-eps.js";
 import { ATMOSPHERIC_DATASET_CATALOG } from "../src/catalog/models.js";
@@ -39,6 +41,9 @@ describe("ICON-D2-EPS source and catalog", () => {
   it("preserves the native 20-member population and DWD object naming", () => {
     const run = new Date("2026-08-31T00:00:00Z");
     expect(ICON_D2_EPS_MEMBERS).toHaveLength(20);
+    expect(ICON_D2_EPS_PRESSURE_LEVELS_HPA).toEqual([500, 700, 850, 950, 975, 1000]);
+    expect(isIconD2EpsPressureLevel(975)).toBe(true);
+    expect(isIconD2EpsPressureLevel(300)).toBe(false);
     expect(iconD2EpsMemberOrdinal("p01")).toBe(1);
     expect(iconD2EpsMemberOrdinal("p20")).toBe(20);
     expect(sortIconD2EpsMembers(["p20", "p01", "p10"])).toEqual(["p01", "p10", "p20"]);
@@ -342,6 +347,32 @@ describe("ICON-D2-EPS source defensive branches", () => {
       6,
       { pressure: true, surface: false },
     )).rejects.toThrow("rejected the ICON-D2-EPS availability request (HTTP 403");
+  });
+
+  it("probes the concrete EPS products requested by the caller", async () => {
+    const fetchFn = vi.fn(async (input: string | URL) =>
+      new Response(null, { status: String(input).includes("_300_") ? 404 : 200 }));
+    const cache = new IconD2EpsOpenDataCache(
+      rootDir,
+      fetchFn as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+    );
+
+    await expect(cache.isForecastAvailable(
+      new Date("2026-08-31T00:00:00Z"),
+      6,
+      {
+        pressure: true,
+        surface: false,
+        variables: [VARIABLE_CATALOG.temperature],
+        pressureLevelsHpa: [850, 300],
+        fields: [],
+      },
+    )).resolves.toBe(false);
+    expect(fetchFn.mock.calls.map(([input]) => String(input))).toEqual([
+      expect.stringContaining("_850_t.grib2.bz2"),
+      expect.stringContaining("_300_t.grib2.bz2"),
+    ]);
   });
 
   it("rejects bad download status and malformed decompressed objects", async () => {

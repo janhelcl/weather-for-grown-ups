@@ -4,9 +4,13 @@ import {
   type HttpRetryExecutionOptions,
 } from "./http-retry.js";
 
+export const DEFAULT_HTTP_REQUEST_TIMEOUT_MS = 60_000;
+
 export interface RetryableFetchOptions extends HttpRetryExecutionOptions {
   fetchFn?: typeof fetch;
   accessPolicy?: UpstreamAccessPolicy;
+  /** Per-attempt deadline covering headers and, for consumed helpers, the response body. */
+  timeoutMs?: number;
 }
 
 export interface ConsumedFetchOptions extends RetryableFetchOptions {
@@ -25,12 +29,13 @@ export async function fetchWithRetry(
   init: RequestInit | undefined,
   options: RetryableFetchOptions = {},
 ): Promise<Response> {
+  const timeoutMs = requestTimeout(options.timeoutMs);
   const fetchFn = options.fetchFn ?? globalThis.fetch;
   const run = <T>(operation: () => Promise<T>) =>
     options.accessPolicy?.run(operation) ?? operation();
 
   const result = await runWithHttpRetry(async () => {
-    const response = await run(() => fetchFn(input, init));
+    const response = await run(() => fetchFn(input, withAttemptTimeout(init, timeoutMs)));
     return {
       status: response.status,
       retryAfter: response.headers.get("retry-after"),
@@ -79,13 +84,14 @@ async function fetchConsumedWithRetry<T>(
   consume: (response: Response) => Promise<T>,
   empty: T,
 ): Promise<{ response: Response; value: T }> {
+  const timeoutMs = requestTimeout(options.timeoutMs);
   const fetchFn = options.fetchFn ?? globalThis.fetch;
   const run = <T>(operation: () => Promise<T>) =>
     options.accessPolicy?.run(operation) ?? operation();
 
   return runWithHttpRetry(() =>
     run(async () => {
-      const response = await fetchFn(input, init);
+      const response = await fetchFn(input, withAttemptTimeout(init, timeoutMs));
       const accepted = options.expectedStatus === undefined
         ? response.status >= 200 && response.status < 300
         : response.status === options.expectedStatus;
@@ -109,4 +115,25 @@ async function fetchConsumedWithRetry<T>(
 async function cancelResponseBody(response: Response): Promise<void> {
   // Preserve the HTTP status or original transport failure if cleanup fails.
   await response.body?.cancel().catch(() => undefined);
+}
+
+function requestTimeout(value: number | undefined): number {
+  const timeoutMs = value ?? DEFAULT_HTTP_REQUEST_TIMEOUT_MS;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("HTTP timeoutMs must be a positive finite number");
+  }
+  return timeoutMs;
+}
+
+function withAttemptTimeout(
+  init: RequestInit | undefined,
+  timeoutMs: number,
+): RequestInit {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return {
+    ...init,
+    signal: init?.signal == null
+      ? timeout
+      : AbortSignal.any([init.signal, timeout]),
+  };
 }

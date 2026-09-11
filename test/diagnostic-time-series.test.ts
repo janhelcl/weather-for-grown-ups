@@ -167,6 +167,40 @@ describe("DiagnosticTimeSeriesService", () => {
     expect(getLayerDiagnostics.mock.calls.every(([query]) => query.run === run && query.source === "s3")).toBe(true);
   });
 
+  it("reports progress for long-running diagnostic ranges", async () => {
+    const onProgress = vi.fn();
+    const service = new DiagnosticTimeSeriesService({
+      layerDiagnosticsGetter: {
+        getLayerDiagnostics: vi.fn(async (query: LayerDiagnosticsQueryInput) => layerResult(query)),
+      },
+      onProgress,
+    });
+
+    await service.getDiagnosticTimeSeries({
+      ...layerBase,
+      startTime: "2026-08-19T00:00:00Z",
+      endTime: "2026-08-19T01:00:00Z",
+    });
+
+    expect(onProgress.mock.calls.map(([progress]) => progress.phase)).toEqual([
+      "start",
+      "step",
+      "step",
+      "complete",
+    ]);
+    expect(onProgress).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      operation: "diagnostic_time_series",
+      completedSteps: 0,
+      totalSteps: 2,
+      source: "s3",
+    }));
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({
+      operation: "diagnostic_time_series",
+      completedSteps: 2,
+      totalSteps: 2,
+    }));
+  });
+
   it("composes whole-profile diagnostics and normalizes duplicate pressure levels", async () => {
     const getProfileDiagnostics = vi.fn(async (query: ProfileDiagnosticsQueryInput) => profileResult(query));
     const service = new DiagnosticTimeSeriesService({ profileDiagnosticsGetter: { getProfileDiagnostics } });

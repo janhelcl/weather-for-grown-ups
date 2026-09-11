@@ -24,6 +24,8 @@ describe("HTTP retry helpers", () => {
     expect(isRetryableHttpTransportError(new TypeError("network request failed"))).toBe(true);
     expect(isRetryableHttpTransportError(new TypeError("bad application input"))).toBe(false);
     expect(isRetryableHttpTransportError(new Error("fetch failed"))).toBe(false);
+    expect(isRetryableHttpTransportError(new DOMException("timed out", "TimeoutError"))).toBe(true);
+    expect(isRetryableHttpTransportError(new DOMException("cancelled", "AbortError"))).toBe(false);
   });
 
   it("computes exponential backoff with deterministic jitter injection", () => {

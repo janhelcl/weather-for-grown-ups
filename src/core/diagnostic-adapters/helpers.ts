@@ -21,12 +21,14 @@ import {
   GfsProfileEvidenceService,
   IfsProfileEvidenceService,
 } from "../profile-evidence-service.js";
+import type { AtmosphericProgressReporter } from "../progress.js";
 
 export interface GenericDiagnosticAdapterOptions {
   layer?: Pick<AtmosphericLayerDiagnosticsService, "getLayerDiagnostics">;
   profile?: Pick<AtmosphericProfileDiagnosticsService, "getProfileDiagnostics">;
   parcel?: Pick<AtmosphericParcelDiagnosticsService, "getParcelDiagnostics">;
   timeSeries?: Pick<AtmosphericDiagnosticTimeSeriesService, "getDiagnosticTimeSeries">;
+  progress?: AtmosphericProgressReporter;
 }
 
 export interface GenericDiagnosticServices {
@@ -39,7 +41,7 @@ export interface GenericDiagnosticServices {
 export function createGenericDiagnosticServices(
   options: GenericDiagnosticAdapterOptions,
 ): GenericDiagnosticServices {
-  const defaults = createEvidenceAwareDiagnosticServices();
+  const defaults = createEvidenceAwareDiagnosticServices(options.progress);
   return {
     layer: options.layer ?? defaults.layer,
     profile: options.profile ?? defaults.profile,
@@ -54,7 +56,9 @@ export function createGenericDiagnosticServices(
  * wrappers still own model dispatch; only acquisition/materialization is
  * shared. Ensemble evidence remains member-first before nonlinear derivation.
  */
-function createEvidenceAwareDiagnosticServices(): GenericDiagnosticServices {
+function createEvidenceAwareDiagnosticServices(
+  progress?: AtmosphericProgressReporter,
+): GenericDiagnosticServices {
   const gfsProfile = new GfsProfileEvidenceService();
   const gfsLayer = new LayerDiagnosticsService({ profileGetter: gfsProfile });
   const gfsProfileDiagnostics = new ProfileDiagnosticsService({ profileGetter: gfsProfile });
@@ -90,6 +94,7 @@ function createEvidenceAwareDiagnosticServices(): GenericDiagnosticServices {
         layerDiagnosticsGetter: gfsLayer,
         profileDiagnosticsGetter: gfsProfileDiagnostics,
         parcelDiagnosticsGetter: gfsParcel,
+        ...(progress === undefined ? {} : { onProgress: progress }),
       }),
       gefs: new GefsDiagnosticTimeSeriesService({
         layerDiagnosticsGetter: gefsLayer,

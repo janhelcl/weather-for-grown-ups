@@ -22,7 +22,10 @@ import {
   ICON_D2_PRESSURE_LEVELS_HPA,
   ICON_D2_PRESSURE_VARIABLE_IDS,
 } from "../catalog/icon-d2.js";
-import { ICON_D2_EPS_MEMBERS } from "../catalog/icon-d2-eps.js";
+import {
+  ICON_D2_EPS_MEMBERS,
+  ICON_D2_EPS_PRESSURE_LEVELS_HPA,
+} from "../catalog/icon-d2-eps.js";
 import {
   AIFS_FIELD_IDS,
   AIFS_PRESSURE_LEVELS_HPA,
@@ -223,8 +226,8 @@ function pressureLevels(request: any): RepairValue[] | undefined {
     case "aigfs":
     case "aigefs":
     case "hgefs": return [...AIGFS_PRESSURE_LEVELS_HPA];
-    case "icon-d2":
-    case "icon-d2-eps": return [...ICON_D2_PRESSURE_LEVELS_HPA];
+    case "icon-d2": return [...ICON_D2_PRESSURE_LEVELS_HPA];
+    case "icon-d2-eps": return [...ICON_D2_EPS_PRESSURE_LEVELS_HPA];
     case "aifs":
     case "aifs-ens": return [...AIFS_PRESSURE_LEVELS_HPA];
     default: return undefined;

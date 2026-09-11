@@ -2,6 +2,56 @@ import { describe, expect, it, vi } from "vitest";
 import { fetchBinaryWithRetry, fetchTextWithRetry, fetchWithRetry } from "../src/access/http-fetch.js";
 
 describe("fetchWithRetry", () => {
+  it("adds a per-attempt timeout while preserving a caller abort signal", async () => {
+    const caller = new AbortController();
+    const signals: AbortSignal[] = [];
+    const fetchFn = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      signals.push(init?.signal as AbortSignal);
+      return new Response("ok");
+    });
+
+    await fetchWithRetry("https://example.test/data", { signal: caller.signal }, {
+      fetchFn,
+      timeoutMs: 1_000,
+    });
+
+    expect(signals[0]).toBeInstanceOf(AbortSignal);
+    expect(signals[0]).not.toBe(caller.signal);
+    expect(signals[0]?.aborted).toBe(false);
+    caller.abort();
+    expect(signals[0]?.aborted).toBe(true);
+  });
+
+  it("rejects invalid request timeout configuration", async () => {
+    await expect(fetchWithRetry("https://example.test/data", undefined, {
+      fetchFn: vi.fn(),
+      timeoutMs: 0,
+    })).rejects.toThrow(/timeoutMs/);
+  });
+
+  it("bounds and retries timed-out attempts with a fresh deadline", async () => {
+    const signals: AbortSignal[] = [];
+    const fetchFn = vi.fn((_input: string | URL | Request, init?: RequestInit) => {
+      const signal = init?.signal as AbortSignal;
+      signals.push(signal);
+      return new Promise<Response>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    });
+
+    await expect(fetchWithRetry("https://example.test/data", undefined, {
+      fetchFn: fetchFn as typeof fetch,
+      timeoutMs: 5,
+      maxAttempts: 2,
+      baseDelayMs: 0,
+      jitterRatio: 0,
+    })).rejects.toMatchObject({ name: "TimeoutError" });
+
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(signals[0]).not.toBe(signals[1]);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+  });
+
   it("runs every HTTP attempt through the supplied access policy", async () => {
     const run = vi.fn(async <T>(operation: () => Promise<T>) => operation());
     const fetchFn = vi.fn()

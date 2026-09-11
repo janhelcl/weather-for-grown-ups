@@ -286,6 +286,38 @@ describe("ICON-D2 selected-object cache", () => {
     expect(fetchFn.mock.calls.every(([, init]) => init?.method === "HEAD")).toBe(true);
   });
 
+  it("probes every concrete pressure and surface product in the requested selection", async () => {
+    const fetchFn = vi.fn(async (input: string | URL) =>
+      new Response(null, { status: String(input).includes("_925_") ? 404 : 200 }));
+    const cache = new IconD2OpenDataCache(
+      rootDir,
+      fetchFn as typeof fetch,
+      { run: <T>(operation: () => Promise<T>) => operation() },
+    );
+
+    await expect(cache.isForecastAvailable(
+      new Date("2026-08-31T00:00:00Z"),
+      6,
+      {
+        pressure: true,
+        surface: true,
+        variables: [VARIABLE_CATALOG.temperature, VARIABLE_CATALOG.u_wind],
+        pressureLevelsHpa: [950, 925],
+        fields: [NON_ISOBARIC_FIELD_CATALOG.mean_layer_cape],
+      },
+    )).resolves.toBe(false);
+
+    const urls = fetchFn.mock.calls.map(([input]) => String(input));
+    expect(urls).toHaveLength(5);
+    expect(urls).toEqual(expect.arrayContaining([
+      expect.stringContaining("_950_t.grib2.bz2"),
+      expect.stringContaining("_925_t.grib2.bz2"),
+      expect.stringContaining("_950_u.grib2.bz2"),
+      expect.stringContaining("_925_u.grib2.bz2"),
+      expect.stringContaining("/cape_ml/"),
+    ]));
+  });
+
   it("bundles a pure-JavaScript bzip2 decoder", async () => {
     const compressed = Uint8Array.from([
       66, 90, 104, 57, 49, 65, 89, 38, 83, 89, 193, 192, 128, 226,
@@ -317,7 +349,7 @@ describe("ICON-D2 unified capabilities", () => {
       dataset: "icon-d2",
       geometry: { type: "point", latitude: 50.08, longitude: 14.43 },
       time: { at: "2026-08-31T06:00:00Z" },
-      selection: { variables: ["temperature"], pressureLevelsHpa: [250] },
+      selection: { variables: ["temperature"], pressureLevelsHpa: [925] },
     })).toThrow("ICON-D2 pressure levels not supported");
 
     expect(() => queryAtmosphereSchema.parse({
@@ -1264,6 +1296,11 @@ describe("ICON-D2 guard and inventory branches", () => {
 
   it("keeps the ICON-D2 inventory and expansion failures explicit", () => {
     expect(isIconD2PressureLevel(850)).toBe(true);
+    expect(isIconD2PressureLevel(975)).toBe(true);
+    expect(isIconD2PressureLevel(250)).toBe(true);
+    expect(isIconD2PressureLevel(925)).toBe(false);
+    expect(isIconD2PressureLevel(900)).toBe(false);
+    expect(isIconD2PressureLevel(800)).toBe(false);
     expect(isIconD2PressureLevel(750)).toBe(false);
     expect(isIconD2PressureVariable("wind")).toBe(true);
     expect(isIconD2PressureVariable("specific_humidity")).toBe(false);

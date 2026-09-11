@@ -97,6 +97,8 @@ A follow-up run on the same GFS cycle passed all 26 first/repeat checks after ad
 
 `npm run test:live:icon-d2` checks the deterministic DWD regional transport, bzip2 decode path, pressure/surface normalization and the distinction between the model's native ~2.1 km icosahedral mesh and the 0.02° regular-lat/lon Open Data access product.
 
+The deterministic and ensemble smoke selections stay inside their distinct DWD pressure inventories. Deterministic ICON-D2 exposes 200/250/300/400/500/600/700/850/950/975/1000 hPa; ICON-D2-EPS exposes 500/700/850/950/975/1000 hPa. Offline capability tests reject absent levels before retrieval, and run-resolution tests verify that availability probes use the caller's concrete products instead of a fixed representative level.
+
 `npm run test:live:icon-d2-eps` makes one bounded two-member query through public `dataset: "icon-d2-eps"`. DWD publishes this ensemble on its provider-native triangular grid, so the smoke exercises the in-process remap: WFG downloads DWD's official `target_grid_icon_d2_002.txt` and `weights_icon_d2_002.nc`, remaps each selected all-member object once to 0.02° regular lat/lon through the provider's nearest-neighbour index, then splits the requested members by their GRIB2 perturbation number. No native executable is involved. The smoke checks that transport/remap/member-extraction chain, one pressure distribution, the 20-member population contract and member-first aggregation. The `p01,p02` selection is deliberately a source-compatibility smoke rather than a representative probabilistic sample.
 
 ### Météo-France AROME

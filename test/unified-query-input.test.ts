@@ -35,6 +35,17 @@ describe("shared atmospheric query defaults", () => {
     });
   });
 
+  it("uses the provider-native lower-level profile defaults for ICON-D2 products", () => {
+    for (const dataset of ["icon-d2", "icon-d2-eps"] as const) {
+      const request = normalizeQueryAtmosphereInput({
+        dataset,
+        geometry: { type: "point", latitude: 45.77, longitude: 11.73 },
+        time: { at: "2026-09-12T12:00:00Z" },
+      });
+      expect(request.selection.pressureLevelsHpa).toEqual([1000, 950, 850, 700, 500]);
+    }
+  });
+
   it("leaves an explicit selection unchanged", () => {
     const request = normalizeQueryAtmosphereInput({
       dataset: "gfs",

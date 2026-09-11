@@ -41,6 +41,7 @@ import type {
   SourceProvenance,
 } from "./types.js";
 import { InvalidRequestError } from "../failure.js";
+import type { AtmosphericProgressReporter } from "./progress.js";
 
 export const DEFAULT_DIAGNOSTIC_TIME_SERIES_CONCURRENCY = 4;
 
@@ -62,6 +63,7 @@ export interface DiagnosticTimeSeriesServiceOptions {
   parcelDiagnosticsGetter?: ParcelDiagnosticsGetter;
   latestRunProvider?: LatestRunProvider;
   concurrency?: number;
+  onProgress?: AtmosphericProgressReporter;
 }
 
 type TaggedDiagnosticResult =
@@ -75,6 +77,7 @@ export class DiagnosticTimeSeriesService {
   private readonly parcelDiagnosticsGetter: ParcelDiagnosticsGetter;
   private readonly latestRunProvider: LatestRunProvider;
   private readonly concurrency: number;
+  private readonly onProgress: AtmosphericProgressReporter | undefined;
 
   constructor(options: DiagnosticTimeSeriesServiceOptions = {}) {
     this.layerDiagnosticsGetter = options.layerDiagnosticsGetter ?? new LayerDiagnosticsService();
@@ -82,6 +85,7 @@ export class DiagnosticTimeSeriesService {
     this.parcelDiagnosticsGetter = options.parcelDiagnosticsGetter ?? new ParcelDiagnosticsService();
     this.latestRunProvider = options.latestRunProvider ?? new LatestRunResolver();
     this.concurrency = options.concurrency ?? DEFAULT_DIAGNOSTIC_TIME_SERIES_CONCURRENCY;
+    this.onProgress = options.onProgress;
   }
 
   async getDiagnosticTimeSeries(input: DiagnosticTimeSeriesQueryInput): Promise<DiagnosticTimeSeriesResult> {
@@ -107,14 +111,25 @@ export class DiagnosticTimeSeriesService {
       );
     }
 
+    this.onProgress?.({
+      dataset: "gfs",
+      operation: "diagnostic_time_series",
+      phase: "start",
+      completedSteps: 0,
+      totalSteps: forecastHours.length,
+      source: query.source,
+    });
+
+    let completedSteps = 0;
     const taggedResults = await mapConcurrent(
       forecastHours,
       this.concurrency,
       async (forecastHourValue): Promise<TaggedDiagnosticResult> => {
         const validTime = validTimeForForecastHour(run, forecastHourValue).toISOString();
+        let tagged: TaggedDiagnosticResult;
         switch (diagnostic.kind) {
           case "layer":
-            return {
+            tagged = {
               kind: "layer",
               result: await this.layerDiagnosticsGetter.getLayerDiagnostics({
                 latitude: query.latitude,
@@ -128,8 +143,9 @@ export class DiagnosticTimeSeriesService {
                 source: query.source,
               }),
             };
+            break;
           case "profile":
-            return {
+            tagged = {
               kind: "profile",
               result: await this.profileDiagnosticsGetter.getProfileDiagnostics({
                 latitude: query.latitude,
@@ -142,8 +158,9 @@ export class DiagnosticTimeSeriesService {
                 source: query.source,
               }),
             };
+            break;
           case "parcel":
-            return {
+            tagged = {
               kind: "parcel",
               result: await this.parcelDiagnosticsGetter.getParcelDiagnostics({
                 latitude: query.latitude,
@@ -156,7 +173,21 @@ export class DiagnosticTimeSeriesService {
                 source: query.source,
               }),
             };
+            break;
         }
+        completedSteps += 1;
+        this.onProgress?.({
+          dataset: "gfs",
+          operation: "diagnostic_time_series",
+          phase: "step",
+          completedSteps,
+          totalSteps: forecastHours.length,
+          source: query.source,
+          forecastHour: forecastHourValue,
+          validTime,
+          cacheHit: tagged.result.source.cacheHit,
+        });
+        return tagged;
       },
     );
 
@@ -173,6 +204,15 @@ export class DiagnosticTimeSeriesService {
         first.source,
       );
     }
+
+    this.onProgress?.({
+      dataset: "gfs",
+      operation: "diagnostic_time_series",
+      phase: "complete",
+      completedSteps: forecastHours.length,
+      totalSteps: forecastHours.length,
+      source: query.source,
+    });
 
     return {
       model: first.model,

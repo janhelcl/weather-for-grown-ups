@@ -35,7 +35,12 @@ import {
   ICON_D2_PRESSURE_VARIABLE_IDS,
 } from "../catalog/icon-d2.js";
 import { AIFS_ENS_MEMBERS } from "../catalog/aifs-ens.js";
-import { ICON_D2_EPS_MEMBERS } from "../catalog/icon-d2-eps.js";
+import {
+  ICON_D2_EPS_AREA_FIELD_IDS,
+  ICON_D2_EPS_FIELD_IDS,
+  ICON_D2_EPS_MEMBERS,
+  ICON_D2_EPS_PRESSURE_LEVELS_HPA,
+} from "../catalog/icon-d2-eps.js";
 import {
   AIFS_AREA_FIELD_IDS,
   AIFS_FIELD_IDS,
@@ -551,11 +556,17 @@ function validateIconD2Modifiers(
   request: any,
   context: z.RefinementCtx,
 ): void {
+  const ensemble = request.dataset === "icon-d2-eps";
+  const label = ensemble ? "ICON-D2-EPS" : "ICON-D2";
   const variableSet = new Set<string>(ICON_D2_PRESSURE_VARIABLE_IDS);
-  const pressureLevelSet = new Set<number>(ICON_D2_PRESSURE_LEVELS_HPA);
-  const fieldSet = new Set<string>(ICON_D2_FIELD_IDS);
+  const pressureLevelSet = new Set<number>(
+    ensemble ? ICON_D2_EPS_PRESSURE_LEVELS_HPA : ICON_D2_PRESSURE_LEVELS_HPA,
+  );
+  const fieldSet = new Set<string>(ensemble ? ICON_D2_EPS_FIELD_IDS : ICON_D2_FIELD_IDS);
   const areaVariableSet = new Set<string>(ICON_D2_AREA_PRESSURE_VARIABLE_IDS);
-  const areaFieldSet = new Set<string>(ICON_D2_AREA_FIELD_IDS);
+  const areaFieldSet = new Set<string>(
+    ensemble ? ICON_D2_EPS_AREA_FIELD_IDS : ICON_D2_AREA_FIELD_IDS,
+  );
 
   if (request.selection !== undefined) {
     const variables = request.selection.variables ?? [];
@@ -569,7 +580,7 @@ function validateIconD2Modifiers(
       context.addIssue({
         code: "custom",
         path: ["selection", "variables"],
-        message: `ICON-D2 pressure variables not supported: ${unsupportedVariables.join(", ")}`,
+        message: `${label} pressure variables not supported: ${unsupportedVariables.join(", ")}`,
       });
     }
 
@@ -580,7 +591,7 @@ function validateIconD2Modifiers(
       context.addIssue({
         code: "custom",
         path: ["selection", "pressureLevelsHpa"],
-        message: `ICON-D2 pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
+        message: `${label} pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
       });
     }
 
@@ -589,7 +600,7 @@ function validateIconD2Modifiers(
       context.addIssue({
         code: "custom",
         path: ["selection", "fields"],
-        message: `ICON-D2 fields not supported: ${unsupportedFields.join(", ")}`,
+        message: `${label} fields not supported: ${unsupportedFields.join(", ")}`,
       });
     }
 
@@ -601,7 +612,7 @@ function validateIconD2Modifiers(
         context.addIssue({
           code: "custom",
           path: ["selection", "variables"],
-          message: `ICON-D2 area summaries require a native scalar pressure variable; unsupported: ${unsupportedAreaVariables.join(", ")}`,
+          message: `${label} area summaries require a native scalar pressure variable; unsupported: ${unsupportedAreaVariables.join(", ")}`,
         });
       }
       const unsupportedAreaFields = fields.filter(
@@ -611,7 +622,7 @@ function validateIconD2Modifiers(
         context.addIssue({
           code: "custom",
           path: ["selection", "fields"],
-          message: `ICON-D2 area summaries require a native scalar field; unsupported: ${unsupportedAreaFields.join(", ")}`,
+          message: `${label} area summaries require a native scalar field; unsupported: ${unsupportedAreaFields.join(", ")}`,
         });
       }
     }
@@ -622,7 +633,7 @@ function validateIconD2Modifiers(
       context.addIssue({
         code: "custom",
         path: ["diagnostic"],
-        message: "ICON-D2 parcel diagnostics are not exposed by the current Open Data subset",
+        message: `${label} parcel diagnostics are not exposed by the current Open Data subset`,
       });
       return;
     }
@@ -636,7 +647,7 @@ function validateIconD2Modifiers(
       context.addIssue({
         code: "custom",
         path: ["diagnostic"],
-        message: `ICON-D2 diagnostic pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
+        message: `${label} diagnostic pressure levels not supported: ${unsupportedLevels.join(", ")} hPa`,
       });
     }
   }

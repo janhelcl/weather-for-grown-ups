@@ -77,29 +77,19 @@ export class IconD2EpsOpenDataCache implements IconD2SubsetCache {
     requirement: IconD2AvailabilityRequirement,
   ): Promise<boolean> {
     if (!requirement.pressure && !requirement.surface) return false;
-    const urls: string[] = [];
-    if (requirement.pressure) {
-      urls.push(buildIconD2EpsOpenDataUrl(run, forecastHour, {
-        type: "pressure",
-        parameter: "t",
-        pressureHpa: 850,
-      }));
-    }
-    if (requirement.surface) {
-      urls.push(buildIconD2EpsOpenDataUrl(run, forecastHour, {
-        type: "single",
-        parameter: "t_2m",
-      }));
-    }
-    for (const url of urls) {
-      const response = await fetchWithRetry(
+    const urls = availabilityUrls(run, forecastHour, requirement);
+    const responses = await Promise.all(urls.map(async (url) => ({
+      url,
+      response: await fetchWithRetry(
         url,
         {
           method: "HEAD",
           headers: { "user-agent": WFG_USER_AGENT },
         },
         { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
-      );
+      ),
+    })));
+    for (const { url, response } of responses) {
       if (response.status === 404) return false;
       if (!response.ok) {
         throw upstreamHttpFailure({
@@ -161,6 +151,50 @@ export class IconD2EpsOpenDataCache implements IconD2SubsetCache {
     }
     return bytes;
   }
+}
+
+function availabilityUrls(
+  run: Date,
+  forecastHour: number,
+  requirement: IconD2AvailabilityRequirement,
+): string[] {
+  const variables = requirement.variables ?? [];
+  const pressureLevelsHpa = requirement.pressureLevelsHpa ?? [];
+  const fields = requirement.fields ?? [];
+  const urls: string[] = [];
+
+  if (requirement.pressure && variables.length > 0 && pressureLevelsHpa.length > 0) {
+    urls.push(...selectedUrls({
+      run,
+      forecastHour,
+      variables: [...variables],
+      pressureLevelsHpa: [...pressureLevelsHpa],
+      fields: [],
+    }));
+  } else if (requirement.pressure) {
+    urls.push(buildIconD2EpsOpenDataUrl(run, forecastHour, {
+      type: "pressure",
+      parameter: "t",
+      pressureHpa: 850,
+    }));
+  }
+
+  if (requirement.surface && fields.length > 0) {
+    urls.push(...selectedUrls({
+      run,
+      forecastHour,
+      variables: [],
+      pressureLevelsHpa: [],
+      fields: [...fields],
+    }));
+  } else if (requirement.surface) {
+    urls.push(buildIconD2EpsOpenDataUrl(run, forecastHour, {
+      type: "single",
+      parameter: "t_2m",
+    }));
+  }
+
+  return [...new Set(urls)];
 }
 
 /**

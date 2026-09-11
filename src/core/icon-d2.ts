@@ -206,17 +206,18 @@ export class IconD2ForecastService {
     if (request.diagnostic.kind === "parcel") {
       throw new Error("ICON-D2 parcel diagnostics are not supported");
     }
+    const products = productsFor(expandedDiagnosticSelection(request));
     return "at" in request.time
       ? this.resolveRun(request.forecast?.run ?? "latest", {
           type: "valid_time",
           validTime: new Date(request.time.at),
-          products: { pressure: true, surface: false },
+          products,
         })
       : this.resolveRun(request.forecast?.run ?? "latest", {
           type: "time_range",
           startTime: new Date(request.time.from),
           endTime: new Date(request.time.to),
-          products: { pressure: true, surface: false },
+          products,
         });
   }
 
@@ -514,13 +515,8 @@ export class IconD2ForecastService {
       throw new Error("ICON-D2 parcel diagnostics are not supported");
     }
     const validTime = new Date(request.time.at);
-    const pressureLevelsHpa = request.diagnostic.kind === "layer"
-      ? [request.diagnostic.lowerPressureHpa, request.diagnostic.upperPressureHpa]
-      : request.diagnostic.pressureLevelsHpa;
-    const variableIds = request.diagnostic.kind === "layer"
-      ? expandLayerDiagnosticVariables(request.diagnostic.diagnostics)
-      : expandProfileDiagnosticVariables(request.diagnostic.diagnostics);
-    const selection = expandSelection(variableIds, pressureLevelsHpa, []);
+    const selection = expandedDiagnosticSelection(request);
+    const pressureLevelsHpa = selection.pressureLevelsHpa;
     const run = explicitRun ?? await this.resolveRun(request.forecast?.run ?? "latest", {
       type: "valid_time",
       validTime,
@@ -573,11 +569,12 @@ export class IconD2ForecastService {
     }
     const startTime = new Date(request.time.from);
     const endTime = new Date(request.time.to);
+    const products = productsFor(expandedDiagnosticSelection(request));
     const run = await this.resolveRun(request.forecast?.run ?? "latest", {
       type: "time_range",
       startTime,
       endTime,
-      products: { pressure: true, surface: false },
+      products,
     });
     const forecastHours = boundedForecastHours(
       run,
@@ -795,7 +792,23 @@ function productsFor(selection: ExpandedSelection) {
   return {
     pressure: selection.variables.length > 0,
     surface: selection.fields.length > 0,
+    variables: selection.variables,
+    pressureLevelsHpa: selection.pressureLevelsHpa,
+    fields: selection.fields,
   };
+}
+
+function expandedDiagnosticSelection(request: DiagnoseAtmosphereRequest): ExpandedSelection {
+  if (request.diagnostic.kind === "parcel") {
+    throw new Error("ICON-D2 parcel diagnostics are not supported");
+  }
+  const pressureLevelsHpa = request.diagnostic.kind === "layer"
+    ? [request.diagnostic.lowerPressureHpa, request.diagnostic.upperPressureHpa]
+    : request.diagnostic.pressureLevelsHpa;
+  const variableIds = request.diagnostic.kind === "layer"
+    ? expandLayerDiagnosticVariables(request.diagnostic.diagnostics)
+    : expandProfileDiagnosticVariables(request.diagnostic.diagnostics);
+  return expandSelection(variableIds, pressureLevelsHpa, []);
 }
 
 function dataRequest(
