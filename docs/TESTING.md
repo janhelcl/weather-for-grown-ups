@@ -94,3 +94,11 @@ It runs weekly on Monday at 05:17 UTC plus manual dispatch, never as a normal PR
 ## Meteorology reference validation
 
 Implementation tests are complemented by independent golden meteorology cases for the physical kernels. See [METEOROLOGY_VALIDATION.md](METEOROLOGY_VALIDATION.md) for reference sources, formulas and tolerances.
+
+## Agent discovery and workflow regression checks
+
+`npm run bench:discovery` measures compiled CLI help, catalog and capability startup, MCP registration, and 1,000 repeated local catalog searches. It is offline and reports observations rather than timing gates. Run it on the same machine and Node version when comparing changes.
+
+`npm run test:live:agent` exercises the compiled CLI from discovery and capability/availability inspection through GFS fields, narrow/wide profiles, points, time series, transects, area distributions, layer diagnostics, two-member GEFS wind summaries and an IFS field. It checks numeric payloads, cardinality, shared-point consistency, cache reuse and structured size/domain failures. It contacts NOAA/ECMWF and uses the normal `WFG_CACHE_DIR` cache and provider policies; it is separate from offline CI.
+
+Offline regression tests additionally protect lazy transport registration, concurrent adapter initialization, injected-service lifetimes, catalog mutation isolation, ranking, pagination and operational/reforecast separation. Existing model-native suites cover larger member populations, spatial/time budgets, supported diagnostic families and meteorological calculations without unbounded live downloads.

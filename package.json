@@ -2,7 +2,7 @@
   "name": "weather-for-grown-ups",
   "version": "0.5.5",
   "mcpName": "io.github.janhelcl/weather-for-grown-ups",
-  "description": "Unified agent-native access to global and regional NOAA/DWD/Météo-France/ECMWF atmospheric forecasts, ensembles, reforecasts, and historical GFS analysis.",
+  "description": "Unified agent-native access to global and regional NOAA/DWD/M\u00e9t\u00e9o-France/ECMWF atmospheric forecasts, ensembles, reforecasts, and historical GFS analysis.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -93,7 +93,9 @@
     "test:live:icon-d2": "tsx scripts/run-live-smoke.ts live-smoke-icon-d2.ts",
     "test:live:icon-d2-eps": "tsx scripts/run-live-smoke.ts live-smoke-icon-d2-eps.ts",
     "test:live:arome": "tsx scripts/run-live-smoke.ts live-smoke-arome.ts",
-    "test:live:pe-arome": "tsx scripts/run-live-smoke.ts live-smoke-pe-arome.ts"
+    "test:live:pe-arome": "tsx scripts/run-live-smoke.ts live-smoke-pe-arome.ts",
+    "bench:discovery": "npm run build && node scripts/bench-agent-discovery.mjs",
+    "test:live:agent": "npm run build && node scripts/live-smoke-agent-workflow.mjs"
   },
   "dependencies": {
     "@mattnucc/gribberish": "^1.6.0",

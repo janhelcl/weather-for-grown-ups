@@ -1,12 +1,5 @@
 import type { Command } from "commander";
 import {
-  UnifiedAnalogService,
-  UnifiedAtmosphereAlignmentService,
-  UnifiedAtmosphereDiagnosticService,
-  UnifiedAtmosphereQueryService,
-  UnifiedForecastVerificationService,
-} from "../core/unified-atmosphere-api.js";
-import {
   atmosphericDiagnosticSelectionSchema,
   PUBLIC_ATMOSPHERIC_DATASET_IDS,
   publicAtmosphericDatasetSchema,
@@ -97,6 +90,7 @@ function registerQueryCommand(program: Command): void {
     .option("--json", "Output JSON")
     .action(async (options) => {
       const request = buildUnifiedQuery(options);
+      const { UnifiedAtmosphereQueryService } = await import("../core/unified-atmosphere-api.js");
       const result = await new UnifiedAtmosphereQueryService({
         progress: reportCliProgress,
       }).query(request);
@@ -132,6 +126,7 @@ function registerDiagnoseCommand(program: Command): void {
     .option("--json", "Output JSON")
     .action(async (options) => {
       const request = buildUnifiedDiagnostic(options);
+      const { UnifiedAtmosphereDiagnosticService } = await import("../core/unified-atmosphere-api.js");
       const result = await new UnifiedAtmosphereDiagnosticService().diagnose(request);
       printResult(result, Boolean(options.json));
     });
@@ -160,6 +155,7 @@ function registerAlignCommand(program: Command): void {
     .option("--valid-times <intersection|union>", "Time-range axis across sources", "intersection")
     .option("--json", "Output JSON")
     .action(async (options) => {
+      const { UnifiedAtmosphereAlignmentService } = await import("../core/unified-atmosphere-api.js");
       const result = await new UnifiedAtmosphereAlignmentService().align(buildUnifiedAlignment(options));
       printResult(result, Boolean(options.json));
     });
@@ -335,6 +331,7 @@ function registerVerifyCommand(program: Command): void {
             leadHours: leads,
           };
 
+      const { UnifiedForecastVerificationService } = await import("../core/unified-atmosphere-api.js");
       const result = await new UnifiedForecastVerificationService().verify(request);
       printResult(result, Boolean(options.json));
     });
@@ -354,6 +351,7 @@ function registerAnalogsCommand(program: Command): void {
     .option("--no-fetch-target", "Do not fetch and materialize the target when missing")
     .option("--json", "Output JSON")
     .action(async (options) => {
+      const { UnifiedAnalogService } = await import("../core/unified-atmosphere-api.js");
       const result = await new UnifiedAnalogService().find({
         dataset: "gfs-analysis",
         geometry: { type: "point", latitude: options.lat, longitude: options.lon },

@@ -70,6 +70,8 @@ Variable, field and diagnostic catalogs define canonical IDs, raw dependencies, 
 
 The catalog is descriptive truth. Execution still validates the concrete request before source access.
 
+Catalog entry factories preserve dataset inventories independently of search. Search lazily indexes normalized metadata once per dataset and forecast population; this finite cache never retains arbitrary search strings or caller results. Pagination slices the deterministic ranking after filtering and grouping, so support rows and scores do not change between pages.
+
 ### Unified application services: validate once, dispatch once
 
 `src/core/unified-atmosphere-api.ts` is the public composition entry point.
@@ -79,7 +81,7 @@ The catalog is descriptive truth. Execution still validates the concrete request
 - run comparison, verification and analog search dispatch through `core/specialized-adapters/`.
 - cross-dataset comparison dispatches through `core/comparison-strategies/`.
 
-Unified services do not contain per-model routing switches. The registry chooses the dataset-native implementation.
+Unified services do not contain per-model routing switches. The registry chooses the dataset-native implementation. Query and diagnostic registry entries lazily import and initialize the selected adapter only after public validation succeeds. Concurrent first calls share initialization, while every request still executes independently. Injected adapters bypass default construction, and failed initialization can be retried.
 
 ### Dataset adapters: translate, do not reinterpret
 
@@ -231,7 +233,7 @@ ICON-D2-EPS remapping is implemented in-process from DWD's official grid/weights
 
 ## CLI / MCP parity
 
-The CLI and MCP call the same services and schemas.
+The CLI and MCP call the same services and schemas. Command registration, help, MCP tool discovery and local catalog/capability inspection do not load weather application services. CLI actions load services on invocation; MCP retains lazily initialized services per server. Tool annotations identify read-only operations and distinguish local discovery from external weather access.
 
 CLI atmospheric commands are intentionally compact:
 

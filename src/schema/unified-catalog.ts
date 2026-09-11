@@ -50,7 +50,9 @@ export const catalogCoverageGeometrySchema = z.discriminatedUnion("type", [
 ]);
 
 export const searchAtmosphereCatalogSchema = z.strictObject({
-  search: z.string().min(1).optional(),
+  search: z.string().min(1).optional().describe(
+    "Search canonical IDs, descriptions and output units. All words must match; case, accents, underscores and hyphens are normalized.",
+  ),
   datasets: z.array(publicAtmosphericDatasetSchema).min(1).max(PUBLIC_ATMOSPHERIC_DATASET_IDS.length)
     .default([...PUBLIC_ATMOSPHERIC_DATASET_IDS]),
   sections: z.array(unifiedCatalogSectionSchema).min(1).max(UNIFIED_CATALOG_SECTIONS.length)
@@ -66,7 +68,10 @@ export const searchAtmosphereCatalogSchema = z.strictObject({
   forecastKind: z.enum(["operational", "reforecast"]).optional().describe(
     "Forecast population filter. Currently supported only with datasets=[gefs]; reforecast selects the GEFSv12 retrospective capability subset.",
   ),
-  limit: z.number().int().min(1).max(100).default(30),
+  limit: z.number().int().min(1).max(100).default(30).describe("Maximum matches per page (1–100)."),
+  offset: z.number().int().nonnegative().optional().describe(
+    "Zero-based match offset, default 0. Continue with nextOffset from the previous result and keep all filters unchanged.",
+  ),
 }).superRefine((query, context) => {
   if (new Set(query.datasets).size !== query.datasets.length) {
     context.addIssue({ code: "custom", path: ["datasets"], message: "datasets must not contain duplicates" });
@@ -160,6 +165,9 @@ export const unifiedCatalogResultSchema = z.object({
   datasetCapabilities: z.array(unifiedDatasetCapabilitiesSchema),
   totalMatches: z.number().int().nonnegative(),
   truncated: z.boolean(),
+  nextOffset: z.number().int().nonnegative().optional().describe(
+    "Offset of the next page when more matches remain. Omitted on the final page.",
+  ),
   matches: z.array(unifiedCatalogMatchSchema),
 });
 
