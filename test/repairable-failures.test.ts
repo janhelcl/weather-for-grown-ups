@@ -65,6 +65,38 @@ describe("repairable capability failures", () => {
     expect(issue?.repair.supported).not.toContain("not-a-member");
   });
 
+  it("uses reforecast run selectors rather than operational GEFS selectors", () => {
+    const failure = publicValidationFailure({
+      dataset: "gefs",
+      geometry: POINT,
+      time: TIME,
+      selection: {
+        variables: ["temperature"],
+        pressureLevelsHpa: [850],
+      },
+      forecast: {
+        kind: "reforecast",
+        run: "latest",
+      },
+    });
+
+    const issues = failure.details?.issues as Array<Record<string, any>>;
+    const issue = issues.find((entry) => entry.path === "forecast.run");
+    expect(issue?.repair).toMatchObject({
+      kind: "unsupported_inventory",
+      action: "choose_supported_values",
+      dataset: "gefs",
+      path: "forecast.run",
+      unsupported: ["latest"],
+      supported: ["explicit ISO cycle"],
+      inspect: {
+        dataset: "gefs",
+        forecastKind: "reforecast",
+        geometryType: "point",
+      },
+    });
+  });
+
   it("keeps temporary data availability failures distinct from unsupported inventory", () => {
     const failure = toPublicFailure(new DataUnavailableError(
       "Requested field is temporarily unavailable upstream",
