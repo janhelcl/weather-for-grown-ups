@@ -96,6 +96,41 @@ export const gefsNumericDistributionSchema = z.object({
   })).min(1),
 });
 
+const windVectorPayloadSchema = z.object({
+  memberCount: z.number().int().min(2),
+  vectorMean: z.object({
+    uWindMs: z.number(),
+    vWindMs: z.number(),
+    speedMs: z.number().nonnegative(),
+    directionDeg: z.number().min(0).lt(360).nullable(),
+  }),
+  speedDistribution: gefsNumericDistributionSchema,
+  directionalConcentration: z.object({
+    memberCount: z.number().int().nonnegative(),
+    meanDirectionDeg: z.number().min(0).lt(360).nullable(),
+    resultantLength: z.number().min(0).max(1).nullable(),
+  }),
+  calm: z.object({
+    operator: z.literal("lt"),
+    thresholdSpeedMs: z.number().nonnegative(),
+    count: z.number().int().nonnegative(),
+    fraction: z.number().min(0).max(1),
+  }),
+});
+
+export const gefsWindVectorSummarySchema = z.union([
+  z.object({
+    kind: z.literal("pressure_level"),
+    pressureLevelHpa: z.number().positive(),
+    ...windVectorPayloadSchema.shape,
+  }),
+  z.object({
+    kind: z.literal("field"),
+    field: z.literal("wind_10m"),
+    ...windVectorPayloadSchema.shape,
+  }),
+]);
+
 export const gefsFieldTemporalResultSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("instantaneous") }),
   z.object({
@@ -173,6 +208,7 @@ export const gefsMemberBundleResultSchema = z.object({
   }),
   pressureSummaries: z.array(pressureSummarySchema),
   fieldSummaries: z.array(gefsFieldSummarySchema),
+  windVectorSummaries: z.array(gefsWindVectorSummarySchema),
   members: z.array(z.object({
     member: gefsMemberSchema,
     cacheHit: z.boolean(),
