@@ -223,13 +223,11 @@ This is especially important for regional models with short horizons. An agent s
 
 Implemented as `wfg availability` / `inspect_availability` using the same request contract as `query_atmosphere`. Static capability and domain checks happen before source access; `latest` resolution reuses dataset-native product/index probes, while explicit runs are identified as declared-window checks rather than falsely described as live-verified. The result exposes the resolved initialization, its native valid-time range and horizon, cadence over the requested portion, the available requested subrange, and `complete` / `partial` / `absent` coverage without decoding forecast payloads.
 
-## 6. Make failures directly repairable
+## 6. Make failures directly repairable ✅
 
-Structured capability failures should tell the caller how to repair a request whenever WFG knows the answer.
+Structured capability failures now preserve machine-readable repair hints through the public failure envelope. When WFG knows the exact answer, failures identify unsupported values and relevant supported alternatives for dataset inventory such as fields, pressure levels, ensemble members, forecast kind/run and source routing. Repair metadata also carries declared horizon/cadence context and points callers back to capability inspection when no truthful flat alternative exists.
 
-For example, an unsupported pressure selection should identify the unsupported levels and the supported alternatives relevant to that dataset. Missing fields should distinguish unsupported inventory from temporarily unavailable upstream data. Domain, horizon, cadence and member-selection failures should preserve similarly actionable context.
-
-Do not silently substitute another dataset, field, level, run or member population.
+Temporary or upstream `DATA_UNAVAILABLE` failures remain distinct from unsupported inventory, and WFG never silently substitutes another dataset, field, level, run, source or member population.
 
 ## 7. Support richer evidence selection without collapsing semantics
 
