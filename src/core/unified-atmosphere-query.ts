@@ -50,7 +50,11 @@ export class UnifiedAtmosphereQueryService {
       throw new Error("Bundled diagnostics require point geometry");
     }
 
-    const derived = await Promise.all(diagnostics.map(async (diagnostic) => {
+    const derived: Array<{
+      diagnostic: (typeof diagnostics)[number];
+      result: UnifiedAtmosphereResult["result"];
+    }> = [];
+    for (const diagnostic of diagnostics) {
       const diagnosticResult = await this.diagnosticService.diagnose({
         dataset: request.dataset,
         geometry: request.geometry,
@@ -60,11 +64,11 @@ export class UnifiedAtmosphereQueryService {
         ...(request.ensemble === undefined ? {} : { ensemble: request.ensemble }),
         ...(request.source === undefined ? {} : { source: request.source }),
       });
-      return {
+      derived.push({
         diagnostic,
         result: diagnosticResult.result,
-      };
-    }));
+      });
+    }
 
     return {
       ...state,
