@@ -1,4 +1,13 @@
-import type { PublicAtmosphericDataset } from "../../schema/unified-api.js";
+import {
+  publicDatasetMetadata,
+  type PublicAtmosphericDataset,
+  type QueryAtmosphereRequest,
+} from "../../schema/unified-api.js";
+import {
+  normalizeEnsembleWindResult,
+  queryRequestsEnsembleWindSummary,
+  requestWithEnsembleWindMembers,
+} from "../ensemble-wind-normalization.js";
 import { AigfsQueryAdapter, type AigfsQueryAdapterOptions } from "./aigfs.js";
 import { AifsQueryAdapter, type AifsQueryAdapterOptions } from "./aifs.js";
 import { AifsEnsQueryAdapter, type AifsEnsQueryAdapterOptions } from "./aifs-ens.js";
@@ -69,8 +78,31 @@ export function createAtmosphericQueryAdapterRegistry(
     "ifs-ens": new IfsEnsQueryAdapter(options),
     "gfs-analysis": new GfsAnalysisQueryAdapter(options),
   };
-  return {
+  const configured: AtmosphericQueryAdapterRegistry = {
     ...defaults,
     ...options.adapters,
+  };
+
+  return Object.fromEntries(
+    Object.entries(configured).map(([dataset, adapter]) => [
+      dataset,
+      publicDatasetMetadata(dataset as PublicAtmosphericDataset).kind === "ensemble"
+        ? withEnsembleWindNormalization(adapter)
+        : adapter,
+    ]),
+  ) as AtmosphericQueryAdapterRegistry;
+}
+
+function withEnsembleWindNormalization(
+  adapter: AtmosphericQueryAdapter,
+): AtmosphericQueryAdapter {
+  return {
+    async query(request: QueryAtmosphereRequest): Promise<unknown> {
+      if (!queryRequestsEnsembleWindSummary(request)) {
+        return adapter.query(request);
+      }
+      const rawResult = await adapter.query(requestWithEnsembleWindMembers(request));
+      return normalizeEnsembleWindResult(request, rawResult);
+    },
   };
 }
