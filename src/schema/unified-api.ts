@@ -21,6 +21,7 @@ import {
   type AtmosphericSpatialDomain,
 } from "../catalog/models.js";
 import { areaThresholdSchema } from "./area-summary.js";
+import { withCapabilityRepairContext } from "./capability-repair.js";
 import { validateDatasetCapabilityModifiers } from "./dataset-capability-validation.js";
 import { gfsGridSchema } from "./gfs-grid.js";
 import { isoDateTimeSchema, pointCoordinateSchema } from "./query.js";
@@ -479,7 +480,8 @@ export function validateDatasetModifiers(
   }
 
   const metadata = publicDatasetMetadata(request.dataset as PublicAtmosphericDataset);
-  validateDatasetCapabilityModifiers(request, context, metadata);
+  const repairContext = withCapabilityRepairContext(request, context, metadata);
+  validateDatasetCapabilityModifiers(request, repairContext, metadata);
 }
 
 
