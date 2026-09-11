@@ -98,7 +98,9 @@ function withEnsembleWindNormalization(
 ): AtmosphericQueryAdapter {
   return {
     async query(request: QueryAtmosphereRequest): Promise<unknown> {
-      if (!queryRequestsEnsembleWindSummary(request)) {
+      const operationalGefsHasNativeWindVectors = request.dataset === "gefs"
+        && request.forecast?.kind !== "reforecast";
+      if (operationalGefsHasNativeWindVectors || !queryRequestsEnsembleWindSummary(request)) {
         return adapter.query(request);
       }
       const rawResult = await adapter.query(requestWithEnsembleWindMembers(request));
