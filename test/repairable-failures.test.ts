@@ -103,7 +103,7 @@ describe("repairable capability failures", () => {
     });
   });
 
-  it("returns reforecast-specific field, variable, and member inventories", () => {
+  it("returns reforecast-specific field and variable inventories", () => {
     const failure = publicValidationFailure({
       dataset: "gefs",
       geometry: POINT,
@@ -117,9 +117,6 @@ describe("repairable capability failures", () => {
         kind: "reforecast",
         run: "2020-01-01T00:00:00Z",
       },
-      ensemble: {
-        members: ["p11"],
-      },
     });
 
     expect(issueAt(failure, "selection.fields")?.repair).toMatchObject({
@@ -132,11 +129,30 @@ describe("repairable capability failures", () => {
       action: "choose_supported_values",
       unsupported: ["relative_humidity"],
     });
-    expect(issueAt(failure, "ensemble.members")?.repair).toMatchObject({
+  });
+
+  it("returns the reforecast member population for an unsupported member", () => {
+    const failure = publicValidationFailure({
+      dataset: "gefs",
+      geometry: POINT,
+      time: TIME,
+      selection: { fields: ["temperature_2m"] },
+      forecast: {
+        kind: "reforecast",
+        run: "2020-01-01T00:00:00Z",
+      },
+      ensemble: { members: ["p11"] },
+    });
+
+    const repair = issueAt(failure, "ensemble.members")?.repair;
+    expect(repair).toMatchObject({
       kind: "unsupported_inventory",
       action: "choose_supported_values",
+      dataset: "gefs",
       unsupported: ["p11"],
     });
+    expect(repair.supported).toContain("p10");
+    expect(repair.supported).not.toContain("p11");
   });
 
   it("does not offer a misleading flat inventory for variable-dependent pressure intersections", () => {
@@ -289,7 +305,8 @@ describe("repairable capability failures", () => {
       dataset: "gfs",
       geometry: {
         type: "transect",
-        points: [POINT, { type: "point", latitude: 50.1, longitude: 14.5 }],
+        start: POINT,
+        end: { latitude: 50.1, longitude: 14.5 },
       },
       time: TIME,
       selection: { fields: ["temperature_2m"] },
