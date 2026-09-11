@@ -141,7 +141,7 @@ describe("repairable capability failures", () => {
         kind: "reforecast",
         run: "2020-01-01T00:00:00Z",
       },
-      ensemble: { members: ["p11"] },
+      ensemble: { members: ["p01", "p11"] },
     });
 
     const repair = issueAt(failure, "ensemble.members")?.repair;
