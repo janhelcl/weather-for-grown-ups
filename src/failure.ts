@@ -17,6 +17,12 @@ export interface PublicFailure {
   details?: Record<string, unknown>;
 }
 
+export interface PublicValidationIssue {
+  path: string;
+  message: string;
+  repair?: Record<string, unknown>;
+}
+
 export interface WfgErrorOptions extends ErrorOptions {
   retryable?: boolean;
   details?: Record<string, unknown>;
@@ -210,6 +216,7 @@ interface ZodLikeIssue {
   path?: unknown[];
   message?: unknown;
   errors?: unknown;
+  params?: unknown;
 }
 
 interface ZodLikeError {
@@ -228,7 +235,7 @@ function isZodError(error: unknown): error is ZodLikeError {
  * Lead with the first issue and its field path so an agent can correct the
  * request from the message alone; the bounded full list stays in details.issues.
  */
-function zodFailureMessage(issues: Array<{ path: string; message: string }>): string {
+function zodFailureMessage(issues: PublicValidationIssue[]): string {
   if (issues.length === 0) return "Request validation failed";
   const [first] = issues;
   const lead = first!.path.length === 0
@@ -241,7 +248,7 @@ function zodFailureMessage(issues: Array<{ path: string; message: string }>): st
 
 const MAX_REPORTED_ISSUES = 8;
 
-function zodIssueDetails(error: ZodLikeError): Array<{ path: string; message: string }> {
+function zodIssueDetails(error: ZodLikeError): PublicValidationIssue[] {
   if (!Array.isArray(error.issues)) return [];
   return flattenZodIssues(error.issues, []).slice(0, MAX_REPORTED_ISSUES);
 }
@@ -255,17 +262,22 @@ function zodIssueDetails(error: ZodLikeError): Array<{ path: string; message: st
 function flattenZodIssues(
   issues: ZodLikeIssue[],
   prefix: string[],
-): Array<{ path: string; message: string }> {
-  const out: Array<{ path: string; message: string }> = [];
+): PublicValidationIssue[] {
+  const out: PublicValidationIssue[] = [];
   for (const issue of issues) {
     const path = [...prefix, ...(Array.isArray(issue.path) ? issue.path.map(String) : [])];
     const branches = issue.code === "invalid_union" && Array.isArray(issue.errors)
       ? (issue.errors as unknown[]).filter((branch): branch is ZodLikeIssue[] => Array.isArray(branch))
       : [];
     if (branches.length === 0) {
+      const repair = isSafeDetails(issue.params)
+        && isSafeDetails(issue.params.repair)
+        ? issue.params.repair
+        : undefined;
       out.push({
         path: path.join("."),
         message: typeof issue.message === "string" ? issue.message : "Invalid value",
+        ...(repair === undefined ? {} : { repair }),
       });
       continue;
     }
