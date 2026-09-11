@@ -94,6 +94,7 @@ describe("Streamable HTTP MCP", () => {
       expect(names).toEqual([
         "search_catalog",
         "inspect_capabilities",
+        "inspect_availability",
         "query_atmosphere",
         "diagnose_atmosphere",
         "align_atmosphere",

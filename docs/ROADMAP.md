@@ -173,7 +173,7 @@ A run should remain a selector on a dataset, not require a separate analytical w
 
 Existing comparison implementations may be deleted, collapsed or reused internally. The roadmap outcome is not required to preserve the current commands if a smaller compositional surface is cleaner.
 
-## 2. Eliminate unsafe memory behavior and bound ordinary queries
+## 2. Eliminate unsafe memory behavior and bound ordinary queries ✅
 
 A valid point/time-series request must never terminate Node with an out-of-memory/core-dump failure.
 
@@ -181,7 +181,7 @@ Profile current GRIB acquisition, decoding, buffering and result assembly, espec
 
 If a genuinely excessive request cannot be served safely, reject it before expensive work with a structured WFG error that explains the limiting dimension. Increasing `NODE_OPTIONS` must not be a normal workaround.
 
-## 3. Reuse atmospheric evidence across query and diagnostics
+## 3. Reuse atmospheric evidence across query and diagnostics ✅
 
 Repeated `query` / `diagnose` calls over the same dataset, run, location, times and pressure column should not repeatedly pay the full upstream acquisition and decode cost.
 
@@ -195,7 +195,7 @@ Introduce a clean internal evidence/acquisition boundary so one retrieved atmosp
 
 Caching and reuse remain implementation concerns below the public atmospheric schema. The goal is that asking one additional diagnostic over already-fetched evidence becomes cheap without creating a wrapper API around WFG.
 
-## 4. Make capability discovery compact and decision-oriented
+## 4. Make capability discovery compact and decision-oriented ✅
 
 The catalog remains the source of truth, but agents should not have to inspect hundreds or thousands of lines to answer simple planning questions.
 
@@ -209,7 +209,7 @@ Add compact capability inspection for questions such as:
 
 Search remains useful for exploration, but exact support checks should return focused machine-readable answers rather than broad catalog dumps.
 
-## 5. Make requested-window availability first-class
+## 5. Make requested-window availability first-class ✅
 
 For a dataset plus requested geometry/time window, expose enough planning metadata to determine before retrieval:
 
@@ -220,6 +220,8 @@ For a dataset plus requested geometry/time window, expose enough planning metada
 - whether requested coverage is complete, partial or absent.
 
 This is especially important for regional models with short horizons. An agent should be able to learn immediately that a model covers Saturday morning but not the afternoon flying window without probing forecast requests until one fails.
+
+Implemented as `wfg availability` / `inspect_availability` using the same request contract as `query_atmosphere`. Static capability and domain checks happen before source access; `latest` resolution reuses dataset-native product/index probes, while explicit runs are identified as declared-window checks rather than falsely described as live-verified. The result exposes the resolved initialization, its native valid-time range and horizon, cadence over the requested portion, the available requested subrange, and `complete` / `partial` / `absent` coverage without decoding forecast payloads.
 
 ## 6. Make failures directly repairable
 
