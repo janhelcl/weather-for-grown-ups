@@ -24,6 +24,9 @@ import type {
 import {
   summarizeCircularDegrees,
   summarizeNumericDistribution,
+  summarizeWindVectorDistribution,
+  windVectorSampleFromComponents,
+  windVectorSampleFromSpeedDirection,
 } from "./ensemble-statistics.js";
 import { deriveGefsProfileValue, gefsRawPressureKey } from "./gefs-profile-derivation.js";
 import type { DecodedValue } from "../types/decoded.js";
@@ -187,12 +190,80 @@ export function summarizeGefsMemberBundles(
     };
   });
 
-  return { pressureSummaries, fieldSummaries };
+  const windVectorSummaries = summarizeGefsWindVectors(samples, selection, quantiles);
+  return { pressureSummaries, fieldSummaries, windVectorSummaries };
 }
 
 export function bundleScalarOutputCount(selection: PreparedGefsBundleSelection): number {
   return selection.variables.length * selection.pressureLevelsHpa.length
     + selection.fields.reduce((sum, id) => sum + GEFS_PGRB2A_FIELD_CATALOG[id].outputs.length, 0);
+}
+
+function summarizeGefsWindVectors(
+  samples: readonly DecodedGefsMemberBundle[],
+  selection: PreparedGefsBundleSelection,
+  quantiles: readonly number[],
+) {
+  const summaries = [];
+  const hasPressureComponents = selection.variables.includes("u_wind")
+    && selection.variables.includes("v_wind");
+  if (hasPressureComponents) {
+    for (const pressureLevelHpa of selection.pressureLevelsHpa) {
+      summaries.push({
+        kind: "pressure_level" as const,
+        pressureLevelHpa,
+        ...summarizeWindVectorDistribution(
+          samples.map((sample) => windVectorSampleFromComponents(
+            requiredMemberPressureValue(sample, "u_wind", pressureLevelHpa),
+            requiredMemberPressureValue(sample, "v_wind", pressureLevelHpa),
+          )),
+          quantiles,
+        ),
+      });
+    }
+  }
+
+  if (selection.fields.includes("wind_10m")) {
+    summaries.push({
+      kind: "field" as const,
+      field: "wind_10m" as const,
+      ...summarizeWindVectorDistribution(
+        samples.map((sample) => {
+          const values = requiredMemberField(sample, "wind_10m").values;
+          return windVectorSampleFromSpeedDirection(
+            requiredOutput(values, "windSpeedMs", "wind_10m"),
+            requiredOutput(values, "windDirectionDeg", "wind_10m"),
+          );
+        }),
+        quantiles,
+      ),
+    });
+  } else if (
+    selection.fields.includes("u_wind_10m")
+    && selection.fields.includes("v_wind_10m")
+  ) {
+    summaries.push({
+      kind: "field" as const,
+      field: "wind_10m" as const,
+      ...summarizeWindVectorDistribution(
+        samples.map((sample) => windVectorSampleFromComponents(
+          requiredOutput(
+            requiredMemberField(sample, "u_wind_10m").values,
+            "uWindMs",
+            "u_wind_10m",
+          ),
+          requiredOutput(
+            requiredMemberField(sample, "v_wind_10m").values,
+            "vWindMs",
+            "v_wind_10m",
+          ),
+        )),
+        quantiles,
+      ),
+    });
+  }
+
+  return summaries;
 }
 
 function expandRawPressureDependencies(variables: readonly GefsProfileVariableId[]): RawPressureVariable[] {

@@ -127,6 +127,7 @@ export class GefsBundleTimeSeriesService {
         forecastHour: result.forecastHour,
         pressureSummaries: result.pressureSummaries,
         fieldSummaries: result.fieldSummaries,
+        windVectorSummaries: result.windVectorSummaries,
         ...(query.includeMembers ? { members: result.members } : {}),
         allCacheHit: result.source.allCacheHit,
       })),
