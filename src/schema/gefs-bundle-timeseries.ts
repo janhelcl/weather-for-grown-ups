@@ -43,7 +43,7 @@ export const gefsBundleTimeSeriesQuerySchema = z.object({
 
 const stepSchema = z.object({
   validTime: isoDateTimeSchema,
-  forecastHour: z.number().int().max(384),
+  forecastHour: z.number().int().min(0).max(384),
   pressureSummaries: gefsMemberBundleResultSchema.shape.pressureSummaries,
   fieldSummaries: gefsMemberBundleResultSchema.shape.fieldSummaries,
   windVectorSummaries: gefsMemberBundleResultSchema.shape.windVectorSummaries,
