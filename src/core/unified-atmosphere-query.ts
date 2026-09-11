@@ -34,9 +34,7 @@ export class UnifiedAtmosphereQueryService {
       ...(options.progress === undefined ? {} : { progress: options.progress }),
       ...(options.adapters === undefined ? {} : { adapters: options.adapters }),
     });
-    this.diagnosticService = options.diagnosticService ?? new UnifiedAtmosphereDiagnosticService({
-      ...(options.progress === undefined ? {} : { progress: options.progress }),
-    });
+    this.diagnosticService = options.diagnosticService ?? new UnifiedAtmosphereDiagnosticService();
   }
 
   async query(input: PublicQueryAtmosphereInput): Promise<UnifiedAtmosphereResult> {
