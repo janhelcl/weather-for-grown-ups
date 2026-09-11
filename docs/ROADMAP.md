@@ -223,7 +223,7 @@ This is especially important for regional models with short horizons. An agent s
 
 Implemented as `wfg availability` / `inspect_availability` using the same request contract as `query_atmosphere`. Static capability and domain checks happen before source access; `latest` resolution reuses dataset-native product/index probes, while explicit runs are identified as declared-window checks rather than falsely described as live-verified. The result exposes the resolved initialization, its native valid-time range and horizon, cadence over the requested portion, the available requested subrange, and `complete` / `partial` / `absent` coverage without decoding forecast payloads.
 
-## 6. Make failures directly repairable
+## 6. Make failures directly repairable ✅
 
 Structured capability failures should tell the caller how to repair a request whenever WFG knows the answer.
 
@@ -231,7 +231,7 @@ For example, an unsupported pressure selection should identify the unsupported l
 
 Do not silently substitute another dataset, field, level, run or member population.
 
-## 7. Support richer evidence selection without collapsing semantics
+## 7. Support richer evidence selection without collapsing semantics ✅
 
 Investigate whether one atmospheric request can cleanly select a coherent bundle of evidence such as:
 
