@@ -55,6 +55,22 @@ describe("public failure contract", () => {
     });
   });
 
+  it("maps transport failures without a structured cause from their message", () => {
+    expect(toPublicFailure(new TypeError("network socket closed"))).toEqual({
+      code: "UPSTREAM_UNAVAILABLE",
+      message: "Upstream provider could not be reached after retries",
+      retryable: true,
+    });
+  });
+
+  it("recognizes statusCode-style upstream HTTP failures", () => {
+    expect(toPublicFailure({ statusCode: 503 })).toEqual({
+      code: "UPSTREAM_UNAVAILABLE",
+      message: "Upstream provider unavailable after retries (HTTP 503)",
+      retryable: true,
+    });
+  });
+
   it("preserves actionable plain Error messages under INTERNAL_ERROR for local reporting", () => {
     const failure = toPublicFailure(new Error(
       "Requested time range contains 120 native GFS outputs, exceeding maxSteps=8. Narrow the range or raise maxSteps.",
