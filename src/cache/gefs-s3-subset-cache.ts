@@ -17,7 +17,7 @@ import {
   type ByteRange,
   type NonIsobaricGribSelector,
 } from "../grib/index.js";
-import { fetchWithRetry } from "../access/http-fetch.js";
+import { fetchBinaryWithRetry, fetchTextWithRetry } from "../access/http-fetch.js";
 import { upstreamHttpFailure } from "../access/http-failure.js";
 import {
   buildGefsS3ForecastIndexUrl,
@@ -171,7 +171,7 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
       // Forecast inventories are immutable after publication and can be reused indefinitely.
     }
 
-    const response = await fetchWithRetry(
+    const { response, text } = await fetchTextWithRetry(
       url,
       { headers: { "user-agent": WFG_USER_AGENT } },
       { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
@@ -186,14 +186,13 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
         url,
       });
     }
-    const text = await response.text();
     await writeFile(path, text, "utf8");
     return text;
   }
 
   private async fetchRange(url: string, range: ByteRange): Promise<Uint8Array> {
     const rangeValue = `bytes=${range.start}-${range.end ?? ""}`;
-    const response = await fetchWithRetry(
+    const { response, bytes } = await fetchBinaryWithRetry(
       url,
       {
         headers: {
@@ -201,7 +200,7 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
           "user-agent": WFG_USER_AGENT,
         },
       },
-      { fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
+      { expectedStatus: 206, fetchFn: this.fetchFn, accessPolicy: this.accessPolicy },
     );
     if (response.status !== 206) {
       throw upstreamHttpFailure({
@@ -211,7 +210,6 @@ export class GefsS3SubsetCache implements GefsMemberSource, GefsMemberSelectionS
         statusText: response.statusText,
       });
     }
-    const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length < 4 || new TextDecoder().decode(bytes.slice(0, 4)) !== "GRIB") {
       throw new Error(`NOAA GEFS AWS range did not start with a GRIB message (${rangeValue})`);
     }

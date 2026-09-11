@@ -173,9 +173,32 @@ describe("GfsS3SubsetCache", () => {
   });
 
   it("fails rather than accepting a server that ignores the Range header", async () => {
+    const cancel = vi.fn();
+    const fullFile = new Response(new ReadableStream({ cancel }), { status: 200 });
+    const readBody = vi.spyOn(fullFile, "arrayBuffer");
     const fetchFn = vi.fn(async (input: string | URL | Request) =>
-      String(input).endsWith(".idx") ? new Response(indexText, { status: 200 }) : new Response(new TextEncoder().encode("GRIB0000"), { status: 200 }));
+      String(input).endsWith(".idx") ? new Response(indexText, { status: 200 }) : fullFile);
     await expect(makeCache(fetchFn as typeof fetch).fetch(request(["temperature"], [850]))).rejects.toThrow(/rejected the GFS byte-range request \(HTTP 200\)/);
+    expect(readBody).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("retries interrupted inventories and ranges, then caches only the complete artifact", async () => {
+    const broken = (status: number) => new Response(new ReadableStream({
+      start(controller) {
+        controller.error(new TypeError("terminated", { cause: { code: "UND_ERR_SOCKET" } }));
+      },
+    }), { status });
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(broken(200))
+      .mockResolvedValueOnce(new Response(indexText))
+      .mockResolvedValueOnce(broken(206))
+      .mockResolvedValueOnce(new Response("GRIB0000GRIB1111", { status: 206 }));
+    const cache = makeCache(fetchFn);
+    const first = await cache.fetch(request());
+    expect(await readFile(first.path, "utf8")).toBe("GRIB0000GRIB1111");
+    expect(await cache.fetch(request())).toEqual({ path: first.path, cacheHit: true });
+    expect(fetchFn).toHaveBeenCalledTimes(4);
   });
 
   it("rejects byte ranges that do not begin with a GRIB message", async () => {
