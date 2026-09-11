@@ -46,7 +46,7 @@ const stepSchema = z.object({
   forecastHour: z.number().int().min(0).max(384),
   pressureSummaries: gefsMemberBundleResultSchema.shape.pressureSummaries,
   fieldSummaries: gefsMemberBundleResultSchema.shape.fieldSummaries,
-  windVectorSummaries: gefsMemberBundleResultSchema.shape.windVectorSummaries,
+  windVectorSummaries: gefsMemberBundleResultSchema.shape.windVectorSummaries.default([]),
   members: gefsMemberBundleResultSchema.shape.members,
   allCacheHit: z.boolean(),
 });
