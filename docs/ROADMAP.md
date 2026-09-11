@@ -248,7 +248,7 @@ The goal is fewer round trips for investigations that clearly need one atmospher
 
 This should be implemented only if the shared query contract remains cleaner than a proliferation of special-purpose commands. Do not introduce activity-specific endpoints such as `paragliding` or `convective_window`.
 
-## 8. Normalize native ensemble vector summaries
+## 8. Normalize native ensemble vector summaries ✅
 
 Wind is a first-class vector quantity and should not require callers to reconstruct ensemble direction statistics from separate `u` and `v` distributions.
 
