@@ -23,7 +23,7 @@ The v0.4 line completed WFG's first global physics/AI/hybrid model-class matrix.
 NOAA physics             GFS                  GEFS
 NOAA AI                  AIGFS                AIGEFS
 ECMWF physics            IFS                  IFS ENS
-ECMWF AI                 AIFS                 AIFS ENS
+ECMWF AI                  AIFS                 AIFS ENS
 NOAA hybrid                                   HGEFS
 
 DWD regional             ICON-D2              ICON-D2-EPS
